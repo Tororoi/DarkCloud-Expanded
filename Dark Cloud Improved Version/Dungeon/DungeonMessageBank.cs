@@ -7,7 +7,7 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// The dungeon overlay loads <c>dun/message/ww_mes/dunmsd00_&lt;lang&gt;.mes</c> into a pool at GameInit and hands the
     /// address to ClsMes — <c>SetBuff__6ClsMes</c> (0x14DA00) stores it at +0x17A0. The mod overwrites two of those messages
-    /// with its own text (<see cref="Dayuppy"/>). In a vanilla dungeon they sit at 0x20998BB8 (message 10) and 0x20999EE8
+    /// with its own text (<see cref="DayRandomizers"/>). In a vanilla dungeon they sit at 0x20998BB8 (message 10) and 0x20999EE8
     /// (message 3319), the bank at 0x00998840 plus each message's own offset — but those are not constants: GameInit carves
     /// every dungeon pool out of one 27 MB buffer in order, so the mod's 55,000-unit bigger character heap pushes everything
     /// carved after it, this bank included, up by 880,512 B. A write to a captured vanilla address lands in the TEXTURE pool

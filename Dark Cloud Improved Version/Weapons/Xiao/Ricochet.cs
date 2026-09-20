@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// Hardshooter — ricochet: a pellet that lands on an enemy spawns a second pellet at the exact impact point that flies at
+    /// The Hardshooter's ricochet: a pellet that lands on an enemy spawns a second pellet at the exact impact point that flies at
     /// the next nearest enemy (the living one nearest the enemy just hit, within <see cref="NextEnemyRange"/>), or in a
     /// random direction when none is near. A ricochet never ricochets again; two pellets landing together (Double Impact's
     /// pair) take different targets. The second pellet is a real one in the
@@ -24,9 +24,9 @@ namespace Dark_Cloud_Improved_Version
     /// still on the driver's steps, collision is turned on at once and the game resolves that hit. Double Impact drives this
     /// for its pair, and Super Steve carrying a Hardshooter SynthSphere has it too (<see cref="CustomXiaoEffects.SuperSteveEffect"/>).
     /// </summary>
-    internal static class Hardshooter
+    internal static class Ricochet
     {
-        private const string Tag = "[Hardshooter] ";
+        private const string Tag = "[Ricochet] ";
         private const float PelletRadius   = 2f;     // checkCollision's radius for a pellet
         private const float NextEnemyRange = 120f;   // the next target must be within this of the enemy hit
         private const float DefaultSpeed   = 4f;     // when the first pellet's ground speed cannot be read
@@ -42,9 +42,9 @@ namespace Dark_Cloud_Improved_Version
         private static readonly List<(int enemy, DateTime at)> _claims = new List<(int, DateTime)>();
 
         /// <summary>Whether the pellet in <paramref name="slot"/> is a ricochet (Double Impact leaves those untwinned).</summary>
-        internal static bool IsRicochet(int slot) => _bounced[slot];
+        internal static bool IsBounced(int slot) => _bounced[slot];
 
-        /// <summary>Drive every tick while the Hardshooter is equipped; <paramref name="active"/> false holds everything.</summary>
+        /// <summary>Drive every tick while a weapon carrying the ricochet is equipped; <paramref name="active"/> false holds everything.</summary>
         internal static void Drive(bool active)
         {
             if (!active) return;
@@ -58,11 +58,11 @@ namespace Dark_Cloud_Improved_Version
                 if (!_live[i]) continue;
                 _live[i] = false;
                 bool bounced = _bounced[i]; _bounced[i] = false;
-                if (!bounced) Ricochet(pool, i);
+                if (!bounced) Bounce(pool, i);
             }
         }
 
-        private static void Ricochet(long pool, int slot)
+        private static void Bounce(long pool, int slot)
         {
             long pa = PlayerShotPool.PosAddr(pool, slot), va = PlayerShotPool.VelAddr(pool, slot);
             float x = Memory.ReadFloat(pa), h = Memory.ReadFloat(pa + 4), y = Memory.ReadFloat(pa + 8);   // the death point: the slot keeps it

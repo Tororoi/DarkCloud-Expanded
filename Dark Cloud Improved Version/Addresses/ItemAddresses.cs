@@ -146,7 +146,7 @@ namespace Dark_Cloud_Improved_Version
         /// ItemPutListTbl0..13 — the floor item-drop POOLS (which items can drop). CONFIRMED + DECODED.
         /// The pointer array <c>ItemPutListPtr</c> @native 0x002763D0 holds 14 table pointers, selected by
         /// <b>index = dungeon + 7*backfloor</b> (0-6 = dungeon fronts, 7-13 = dungeon backs). == the
-        /// Addresses.ItemTbl* used by Dayuppy. Read by the floor drop picker PresetSmallItemNo_Get (ELF
+        /// Addresses.ItemTbl* used by DayRandomizers. Read by the floor drop picker PresetSmallItemNo_Get (ELF
         /// 0x1BFEF0): it picks <c>itemId = group[rand % count]</c> then gates it by the item's
         /// <see cref="ItemDropRateLists"/> weight.
         ///

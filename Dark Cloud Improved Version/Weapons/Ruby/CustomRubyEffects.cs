@@ -95,7 +95,7 @@ namespace Dark_Cloud_Improved_Version
                         fullyCharged = true;
 
                         //Display current damage
-                        Dayuppy.DisplayMessage(message, height, width, sleep + 500);
+                        DungeonMessages.DisplayMessage(message, height, width, sleep + 500);
 
                         Thread.Sleep(sleep);
 

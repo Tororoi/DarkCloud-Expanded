@@ -62,7 +62,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static bool Native =>
             (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew
-            && (uint)Memory.ReadInt(ElfPatches.GuardBypassHookAddrMmu) == (0x08000000u | (CodeCaves.DunCave.CatGuardBypass >> 2));
+            && (uint)Memory.ReadInt(ElfCatPatches.GuardBypassHookAddrMmu) == (0x08000000u | (CodeCaves.DunCave.CatGuardBypass >> 2));
 
         /// <summary>Drive every tick (16 ms) while the Matador (or Super Steve with its sphere) is equipped; <paramref name="active"/> false HOLDS everything
         /// as it stands (pause, menu, chest, conversation — the pellet and the prop's slot stand still natively).

@@ -18,7 +18,7 @@ namespace Dark_Cloud_Improved_Version
         };
 
         /// <summary>Who is holding the Frozen Tuna (or its sphere): character id + the raw HP/status
-        /// addresses the driver heals/freezes. Mirrors the CurseAddrs pattern in CustomToanEffects.</summary>
+        /// addresses the driver heals/freezes. Mirrors the CurseAddrs pattern in ToanCurses.</summary>
         internal sealed class FrozenTunaWielder
         {
             public readonly int CharId; public readonly int Hp, MaxHp, Status, StatusTimer;

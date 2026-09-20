@@ -160,7 +160,7 @@ namespace Dark_Cloud_Improved_Version
 
             // Hurt-sphere fixes baked into the monster scripts (dun\monstor\*.stb, redirected into the tail): Blizzard takes
             // Titan's four spheres, Sam and Billy take Mr. Blare's two, and Minotaur Joe's face admits the Divine Beast
-            // cat's kick at 100 % (ElfPatches.PatchCatSpherePercent reads the armed spare table).
+            // cat's kick at 100 % (ElfCatPatches.PatchCatSpherePercent reads the armed spare table).
             progress("Baking monster script fixes (hurt spheres, mimic wake guard) …");
             BakeMonsterSpheres(outIso, progress);
 

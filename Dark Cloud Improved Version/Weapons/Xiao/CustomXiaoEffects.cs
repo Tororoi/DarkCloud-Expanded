@@ -61,16 +61,16 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── Hardshooter ────────────────────────────────────────────────────────────────────
-        /// <summary>Xiao's Hardshooter thread: hands every tick to <see cref="Hardshooter.Drive"/> while the weapon is equipped,
+        /// <summary>Xiao's Hardshooter thread: hands every tick to <see cref="Ricochet.Drive"/> while the weapon is equipped,
         /// and stands it down once when it goes.</summary>
         public static void HardshooterEffect()
         {
             while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.hardshooter)
             {
-                Hardshooter.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                Ricochet.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
                 Thread.Sleep(16);
             }
-            Hardshooter.Stop();
+            Ricochet.Stop();
         }
 
         // ── Steel Slingshot ────────────────────────────────────────────────────────────────
@@ -172,7 +172,7 @@ namespace Dark_Cloud_Improved_Version
         /// off the record — no stat-fingerprinting needed.
         ///
         /// This is the master dispatch loop: read the single attached sphere, then pulse each ability's driver
-        /// with <c>active &amp;&amp; sphere == Items.X</c>. Enemy-side abilities reuse the CustomToanEffects
+        /// with <c>active &amp;&amp; sphere == Items.X</c>. Enemy-side abilities reuse the Toan weapon classes'
         /// drivers verbatim (they only touch enemy data); the Xiao body adaptations live in
         /// <see cref="SuperSteveAbilities"/>. Every driver is pulsed each tick (enabled or not) so it
         /// self-restores the instant the sphere is swapped — no explicit per-swap teardown needed.
@@ -187,10 +187,10 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         public static void SuperSteveEffect()
         {
-            var ssSun = new CustomToanEffects.SunHarvestState(EnemyAddresses.FloorSlots.Count);
-            var xiaoCurse = new CustomToanEffects.CurseAddrs(Player.Xiao.status, Player.Xiao.statusTimer, Player.Xiao.hp);
-            var ssEvilcise = new CustomToanEffects.CurseState();
-            var ssManeater = new CustomToanEffects.CurseState();
+            var ssSun = new SunSword.SunHarvestState(EnemyAddresses.FloorSlots.Count);
+            var xiaoCurse = new ToanCurses.CurseAddrs(Player.Xiao.status, Player.Xiao.statusTimer, Player.Xiao.hp);
+            var ssEvilcise = new ToanCurses.CurseState();
+            var ssManeater = new ToanCurses.CurseState();
             var xiaoTuna = new CustomGoroEffects.FrozenTunaWielder(Player.XiaoId, Player.Xiao.hp, Player.Xiao.maxHP,
                                                                    Player.Xiao.status, Player.Xiao.statusTimer);
             var ssTuna = new CustomGoroEffects.FrozenTunaState();
@@ -214,8 +214,8 @@ namespace Dark_Cloud_Improved_Version
 
                 // Toan Effects
                 // Divine Guard (7th Heaven) + Guard Crush (Dark Cloud; 7th Heaven inherits Guard Crush by lineage).
-                CustomToanEffects.SeventhHeavenSoftenAttacks(active && sphere == Items.seventhheaven);
-                CustomToanEffects.DarkCloudDriveGuards(active && (sphere == Items.seventhheaven || sphere == Items.darkcloud));
+                SeventhHeaven.SeventhHeavenSoftenAttacks(active && sphere == Items.seventhheaven);
+                DarkCloud.DarkCloudDriveGuards(active && (sphere == Items.seventhheaven || sphere == Items.darkcloud));
 
                 // Defensive Legacy (Aga's Sword): +15 Xiao defense.
                 SuperSteveAbilities.DriveAgasSword(active && sphere == Items.agassword);
@@ -230,14 +230,14 @@ namespace Dark_Cloud_Improved_Version
                 SuperSteveAbilities.DriveBraveArk(active && sphere == Items.braveark);
 
                 // Bone Rapier: bone-door bypass (the Xiao dispatcher no longer force-clears it, so this owns it).
-                CustomToanEffects.BoneRapierEffect(active && (sphere == Items.bonerapier || sphere == Items.boneslingshot));
+                BoneRapier.BoneRapierEffect(active && (sphere == Items.bonerapier || sphere == Items.boneslingshot));
 
                 // Solar Harvest (Sun Sword / Big Bang): ~1% of the floor's enemies drop a Sun attachment.
-                CustomToanEffects.SunHarvestDrive(sphere == Items.sunsword || sphere == Items.bigbang, ssSun);
+                SunSword.SunHarvestDrive(sphere == Items.sunsword || sphere == Items.bigbang, ssSun);
 
                 // Curses (full inherit): curse Xiao. Not pause-gated — mirrors the Toan loops.
-                CustomToanEffects.EvilciseDrive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);
-                CustomToanEffects.ManeaterDrive(sphere == Items.maneater, xiaoCurse, rec, ssManeater);
+                ToanCurses.EvilciseDrive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);
+                ToanCurses.ManeaterDrive(sphere == Items.maneater, xiaoCurse, rec, ssManeater);
 
                 // Quick Draw (Small Sword / Tsukikage / Heaven's Cloud): instant fire-on-release + rate-of-fire.
                 SuperSteveAbilities.DriveSmallSword(active && (sphere == Items.smallsword || sphere == Items.tsukikage || sphere == Items.heavenscloud));
@@ -272,8 +272,8 @@ namespace Dark_Cloud_Improved_Version
                 DoubleImpact.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.doubleimpact);
 
                 // Hardshooter: a pellet that lands on an enemy ricochets at the next one.
-                if (lastSphere == Items.hardshooter && sphere != Items.hardshooter) Hardshooter.Stop();
-                Hardshooter.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.hardshooter);
+                if (lastSphere == Items.hardshooter && sphere != Items.hardshooter) Ricochet.Stop();
+                Ricochet.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.hardshooter);
 
                 // Steel Slingshot: half the WHP per shot while the weapon's WHP is low (the level-up bonus stays the Steel's own).
                 if (lastSphere == Items.steelslingshot && sphere != Items.steelslingshot) SteelSlingshot.Stop();
@@ -318,12 +318,12 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // Restore everything on unequip / character-switch / dungeon exit (no-ops if not driven).
-            CustomToanEffects.SeventhHeavenSoftenAttacks(false);
-            CustomToanEffects.DarkCloudDriveGuards(false);
-            CustomToanEffects.BoneRapierEffect(false);
-            CustomToanEffects.SunHarvestDrive(false, ssSun);
-            CustomToanEffects.EvilciseDrive(false, xiaoCurse, ssEvilcise);
-            CustomToanEffects.ManeaterDrive(false, xiaoCurse, 0, ssManeater);
+            SeventhHeaven.SeventhHeavenSoftenAttacks(false);
+            DarkCloud.DarkCloudDriveGuards(false);
+            BoneRapier.BoneRapierEffect(false);
+            SunSword.SunHarvestDrive(false, ssSun);
+            ToanCurses.EvilciseDrive(false, xiaoCurse, ssEvilcise);
+            ToanCurses.ManeaterDrive(false, xiaoCurse, 0, ssManeater);
             SuperSteveAbilities.DriveSmallSword(false);
             SuperSteveAbilities.DriveTsukikage(false);
             SuperSteveAbilities.DriveHeavensCloud(false);   // resets slingshot + flash latch
@@ -339,7 +339,7 @@ namespace Dark_Cloud_Improved_Version
             DoubleImpact.Stop();
             BanditSlingshot.Stop();
             SteelSlingshot.Stop();
-            Hardshooter.Stop();
+            Ricochet.Stop();
         }
 
         /// <summary>Pack three contiguous floats for a single batched write. Position and velocity are

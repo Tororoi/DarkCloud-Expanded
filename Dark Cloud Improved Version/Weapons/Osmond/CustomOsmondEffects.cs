@@ -69,7 +69,7 @@ namespace Dark_Cloud_Improved_Version
                     Player.Inventory.GetBagAttachmentsFirstAvailableSlot() >= 0)
                 {
                     Player.Inventory.SetBagAttachments(Items.synthsphere);
-                    Dayuppy.DisplayMessage("The Star Breaker sent\nyou a shooting star!", 2, 21);
+                    DungeonMessages.DisplayMessage("The Star Breaker sent\nyou a shooting star!", 2, 21);
                 }
             }
             st.PrevHp = cur;

@@ -79,17 +79,17 @@ namespace Dark_Cloud_Improved_Version
             new(0x01DAC464, 0x344545C0, 0x3445D090, "dungeon read buffer 280000 → 250000 units (ori)"),
             // Divine Beast cat: the dungeon step loop's once-per-frame `jal step__5CSHOT` (a0 = player shot pool)
             // → the native pellet-follower cave, which performs that call and then pins the cat's chara slot to the
-            // pellet the Mailbox names (ElfPatches.PatchCatPelletFollow writes the cave).
+            // pellet the Mailbox names (ElfCatPatches.PatchCatPelletFollow writes the cave).
             new(CatFollowHookAddr, CatFollowHookOrig, CatFollowHookNew, "cat pellet follower hook (jal step__5CSHOT → cave)"),
             // Divine Beast cat glow: the draw loop's two torch passes → the glow cave's entries, which perform the pass
-            // and then draw the cat's glow disc with the same routine (ElfPatches.PatchCatGlowDraw writes the cave).
+            // and then draw the cat's glow disc with the same routine (ElfCatPatches.PatchCatGlowDraw writes the cave).
             new(0x01DAEBF8, 0x0C071030, 0x0C000000u | (CodeCaves.ElfCave.CatGlowDrawEntryA >> 2), "cat glow hook A (jal DrawFire__11CDungeonMap → cave)"),
             new(0x01DAEC10, 0x0C070F30, 0x0C000000u | (CodeCaves.ElfCave.CatGlowDrawEntryB >> 2), "cat glow hook B (jal DrawFireFreeStyle → cave)"),
             // Mirage haze: the draw loop's raster pass → the haze cave, which performs the pass and then draws one raster at
             // the clone's root (ElfPatches.PatchMirageHazeDraw writes the cave).
             new(MirageHazeHookAddr, MirageHazeHookOrig, MirageHazeHookNew, "mirage haze hook (jal DrawRaster__11CDungeonMap → cave)"),
             // Super Steve's sphere icon: the HUD's status pass → the icon cave, which performs it and then draws the sphere
-            // weapon's icon over Steve (ElfPatches.PatchSuperSteveIconDraw writes the cave).
+            // weapon's icon over Steve (ElfWeaponPatches.PatchSuperSteveIconDraw writes the cave).
             new(SsIconHookAddr, SsIconHookOrig, SsIconHookNew, "super steve icon hook (jal topStatusInfo → cave)"),
             // The loader's `jal MemoryMapDump` (dun 0x1DB9568) was the Gemron cave's first hook; the cave now sits at the head of
             // the per-frame chain instead, and an ISO patched with that first hook gets the vanilla word back.

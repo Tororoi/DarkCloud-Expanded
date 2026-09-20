@@ -455,13 +455,13 @@ namespace Dark_Cloud_Improved_Version
         {
             /// <summary>tools/stubs/cat_guard_bypass.s over MemoryMapDump's body (a printf-only debug routine whose three callers
             /// DunPatches nops): the cat's hits and the Matador's charged pellet ignore an enemy's guard window; Dragon's Y's
-            /// shot gets its kick without the bypass (main-ELF hook 0x1DAC78, ElfPatches.PatchCatGuardBypass).</summary>
+            /// shot gets its kick without the bypass (main-ELF hook 0x1DAC78, ElfCatPatches.PatchCatGuardBypass).</summary>
             internal const uint CatGuardBypass = 0x01DAC070;   // 332 B → 0x1DAC1BC = MemoryMapDump's whole span
             internal const uint CatGuardBypassSpan = 0x14C;
         }
 
         /// <summary>A cave INSIDE a dead main-ELF function: the body of DebugInfomationDraw (0x1B3780, 3,952 B), the developers'
-        /// on-screen debug overlay. ElfPatches.PatchSharedShots turns its first word into `jr ra` — its one caller (dun.bin's
+        /// on-screen debug overlay. ElfWeaponPatches.PatchSharedShots turns its first word into `jr ra` — its one caller (dun.bin's
         /// DrawProcess, behind a debug flag) returns at once — and writes the cave from +8. The band (<see cref="ElfCave"/>) is
         /// full and may not grow; a dead function's body is the home for a cave of this size.</summary>
         internal static class DebugInfoCave
@@ -610,7 +610,7 @@ namespace Dark_Cloud_Improved_Version
             internal const uint CatPalette         = 0x01FB2700;   // 344 B → 0x1FB2858: the colour table, then the code
             internal const uint CatPaletteEntry    = CatPalette + 0x18;   // the entry point, past the colour table
             /// <summary>The GLOW disc's six per-element palettes: 512 B each, in element order (00 Fire … 05 None). Pure
-            /// DATA, written at patch time by ElfPatches.PatchCatGlowPalettes from the blob `build_cat_pack.py --palettes`
+            /// DATA, written at patch time by ElfCatPatches.PatchCatGlowPalettes from the blob `build_cat_pack.py --palettes`
             /// bakes off the same index map as the disc — regenerate BOTH together, or the ramp will not match the
             /// pixels. Patch-time data in a code page is fine; a RUNTIME write here would SIGBUS PCSX2.</summary>
             internal const uint CatGlowPalTables   = 0x01FB2880;   // 4608 B → 0x1FB3A80 (9 rows: 6 elements + 3 weapon looks)
@@ -793,7 +793,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CatCopyJobStride  = 0x30;
         /// <summary>Where a find/replace job's old→new pairs live, just past the jobs: 16 B each.</summary>
         internal const int  CatCopyPairsOff   = 0x10 + CatCopyQueueJobs * CatCopyJobStride;   // 0x910
-        /// <summary>How many old→new pairs a sweep can carry. MUST cover every name in DivineBeastCat.CatTextureNames —
+        /// <summary>How many old→new pairs a sweep can carry. MUST cover every name in CatTextures.CatTextureNames —
         /// there are TEN. A name that does not fit is silently dropped, and a dropped name's register keeps pointing into her
         /// old block (catcape is one the MASK draws with: dropped, the mask draws black). The count is checked against this
         /// rather than truncated.</summary>

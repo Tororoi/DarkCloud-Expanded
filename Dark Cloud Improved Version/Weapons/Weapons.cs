@@ -4002,7 +4002,7 @@ namespace Dark_Cloud_Improved_Version
             new Thread(ReachLoop) { IsBackground = true }.Start();
         }
 
-        // ── HC reach control (data-side; driven by CustomToanEffects.HeavensCloudEffect's charge ramp) ──
+        // ── HC reach control (data-side; driven by HeavensCloud.HeavensCloudEffect's charge ramp) ──
         // Everything is keyed to a blade `factor` (1.0 = original). Three writes:
         //   • blade mesh "w14" scaled by factor → the visible blade AND its dcol hit point grow together;
         //   • whirlwind effect (c01_fuusya) scaled to match: WhirlVisualScale = stockZ*factor / visualRadius;
@@ -4346,7 +4346,7 @@ namespace Dark_Cloud_Improved_Version
         {
             // Whirlwind VISUAL scale applies to ALL of Toan's weapons (the fuusya effect is character-, not
             // weapon-bound), sized to each weapon's own dcol1 reach — EXCEPT Heaven's Cloud, whose blade/whirl/
-            // hitbox are driven per-charge by CustomToanEffects.HeavensCloudEffect (which owns the shared whirl state
+            // hitbox are driven per-charge by HeavensCloud.HeavensCloudEffect (which owns the shared whirl state
             // while HC is equipped, so this loop must not also write it). Recompute on weapon swap.
             if (Player.CurrentCharacterNum() != Player.ToanId) return;
             int wid = GetEquippedWeaponId();

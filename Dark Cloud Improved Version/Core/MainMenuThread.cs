@@ -28,7 +28,7 @@ namespace Dark_Cloud_Improved_Version
             Shop.UpdateShopPrices();
             Enemies.EnableEnemyDrops();   // let the "can't drop" species (flyers, Gol/Sil) drop on death (static species-table patch)
             WeaponDescriptions.StartDescriptionPatcher();   // keep weapon menu descriptions = WeaponData.ModDescription
-            CustomToanEffects.ApplyAbsCodePatches();   // ABS rollover display patches (EE code; menu/HUD code is still cold here)
+            MachoSword.ApplyAbsCodePatches();   // ABS rollover display patches (EE code; menu/HUD code is still cold here)
             Mirage.ArmColdPatch();   // Ungaga's Mirage: host clean _GET_POSITION + _GET_DISTANCE in cold-PINE caves (per-slot target)
             GuardianReflector.ArmBlockPatch();   // Angel Gear shield: MoveCheck2's enemy-block addend becomes a data word (cold; enemy code never ran yet)
             GuardianReflector.ArmShotPatch();    // Angel Gear shield: checkCollision's player position becomes a pointer (cold) — shots can collide with the pouch

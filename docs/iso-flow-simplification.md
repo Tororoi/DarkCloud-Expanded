@@ -15,4 +15,4 @@ In particular revisit `GameDataFiles` + the Iso9660 reader: with a user-selected
 path we know the exact disc up front and could patch/extract deterministically instead of the
 current on-the-fly `~/ROMs` / app-dir / config search.
 
-Runtime on-demand callers today: `HarderEnemyAI`, `WeaponTextureSwap`, `CustomToanEffects`.
+Runtime on-demand callers today: `HarderEnemyAI`, `WeaponTextureSwap`, `MachoSword`.

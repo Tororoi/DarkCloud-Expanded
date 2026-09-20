@@ -1,8 +1,12 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using static Dark_Cloud_Improved_Version.CatCape;
+using static Dark_Cloud_Improved_Version.CatFlight;
+using static Dark_Cloud_Improved_Version.CatCopy;
+using static Dark_Cloud_Improved_Version.CatTextures;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -28,13 +32,13 @@ namespace Dark_Cloud_Improved_Version
     internal static class DivineBeastCat
     {
         internal static bool Enabled = true;
-        internal static bool Active { get; private set; }
+        internal static bool Active { get; set; }
 
         private const string Tag = "[DivineBeastCat] ";
         private const int  XiaoId = 1;
-        private const int  Slot   = 1;                 // DungeonCharaDraw host (0 = Mirage clone, 3 = Angel Gear slingshot)
-        private const int  CharCopySize = 0xD60, MotionStructSize = 0xC0;
-        private const int  TickMs = 16, IdleMs = 100;
+        internal const int  Slot   = 1;                 // DungeonCharaDraw host (0 = Mirage clone, 3 = Angel Gear slingshot)
+        internal const int  CharCopySize = 0xD60, MotionStructSize = 0xC0;
+        internal const int  TickMs = 16, IdleMs = 100;
         /// <summary>How long after arming the build waits for the texture manager to settle. The cat's VRAM window is claimed
         /// by writing a block's base and top DIRECTLY rather than through the allocator, so claiming it before the manager has
         /// finished handing out addresses lets later textures land on top of it.</summary>
@@ -42,50 +46,50 @@ namespace Dark_Cloud_Improved_Version
 
         // The cat's motion channel on HER (build_cat_pack.py: MOTION 1 in c04b.chr's base.cfg, KEY_START 64; track
         // bone ids are relative to the cat root, which is the copy's node 0).
-        private const int  CatChannel = 1;
-        private const int  MaxTreeNodes = 160;         // her array: 79 body + 37 cat (+ headroom for the scan)
-        private const int  KeyBase = 64, KeyCount = 9;
-        private const int  KeyStand = 64, KeyReady = 65, KeyRun = 66, KeyTakeOff = 67, KeyLeap = 68, KeyLand = 69, KeyWalk = 70, KeyFloat = 71, KeySit = 72;   // walk = s86 KEY 2 at 1.0; float = the town ladder jump's vertical leap (e04c04cat #5); sit = s86 KEY 1
-        private const float  MoveFrac      = 0.20f;    // ground speed after the landing, as a fraction of the pellet's speed; below this it loses enemies
+        internal const int  CatChannel = 1;
+        internal const int  MaxTreeNodes = 160;         // her array: 79 body + 37 cat (+ headroom for the scan)
+        internal const int  KeyBase = 64, KeyCount = 9;
+        internal const int  KeyStand = 64, KeyReady = 65, KeyRun = 66, KeyTakeOff = 67, KeyLeap = 68, KeyLand = 69, KeyWalk = 70, KeyFloat = 71, KeySit = 72;   // walk = s86 KEY 2 at 1.0; float = the town ladder jump's vertical leap (e04c04cat #5); sit = s86 KEY 1
+        internal const float  MoveFrac      = 0.20f;    // ground speed after the landing, as a fraction of the pellet's speed; below this it loses enemies
         // A full-charge pellet flies 5.0 u/frame, a lighter one 3.5, so a fraction made the walk jump between 0.56 and
         // 0.80. Pinned as an absolute speed instead: 16% of 3.5.
-        private static float MoveSpeedAbs => 0.20f * 3.5f * Stride;
+        internal static float MoveSpeedAbs => 0.20f * 3.5f * Stride;
         // Walk clip rate from the ground speed, the TOWN's mapping for this very rig (EdMoveChara 0x16A160: rate =
         // 0.8·(0.2 + stick) capped at 0.85, ground = 1.6·stick → rate = 0.16 + 0.5·ground). Planted feet would need
         // 5× that (the clip's real stride is 0.196 u/clip-frame) and looked far too fast; this is the tuned look.
         // Calibrated by eye against the town: the walk reaches its cap at WalkCapSpeed units/frame —
         // 20% of the 3.5 u/frame pellet — rather than at the 1.36 u/frame the town formula literally implies (the two
         // contexts' units-per-frame do not read the same on screen). Slope = (cap − base) / that speed.
-        private const float  RateBase = 0.16f, RateMax = 0.85f, WalkCapSpeed = 0.20f * 3.5f;   // cap and ground speed both at 20%
-        private static float RatePerSpeed => (RateMax - RateBase) / (WalkCapSpeed * Stride);   // ≈ 0.99 per unit of ground speed at the tuned size
-        private const double LifetimeSeconds = 20.0;   // from the bind: the cat stays until it lands a hit or this passes
-        private const float  ProbeUp       = 8f;       // floor probe reach above the cat's root (catches a tread it is flying into)
-        private const float  ProbeDown     = 40f;      // … and below (a drop off a ledge still finds the floor)
+        internal const float  RateBase = 0.16f, RateMax = 0.85f, WalkCapSpeed = 0.20f * 3.5f;   // cap and ground speed both at 20%
+        internal static float RatePerSpeed => (RateMax - RateBase) / (WalkCapSpeed * Stride);   // ≈ 0.99 per unit of ground speed at the tuned size
+        internal const double LifetimeSeconds = 20.0;   // from the bind: the cat stays until it lands a hit or this passes
+        internal const float  ProbeUp       = 8f;       // floor probe reach above the cat's root (catches a tread it is flying into)
+        internal const float  ProbeDown     = 40f;      // … and below (a drop off a ledge still finds the floor)
         // Extra casts ahead of and behind the root along its direction; the cat stands on the HIGHEST of the three, so a
         // ten-unit body on stairs rides on its uphill end (front paws ≈ z 2, hind paws ≈ z −2 in cat space).
-        private const float  ProbeFront    = 3f, ProbeBack = 2f;
-        private const string CatRootName = "catroot";
-        private const float  HideScale   = 0.001f;     // must match build_cat_pack.py HIDE_SCALE
-        private const int    ChanKeyStart = 0x3E0;     // CCharacter: channel[i] first key id (CommandKEY_START)
-        private const int    ChanKeyEnd   = 0x400;     // CCharacter: channel[i] key id end (CommandMOTION_END)
-        private const int    MotListHead  = 0x04;      // MOTION_TYPE +0x04 → the .mot track list (shared, read-only)
-        private const int    ShadowModel  = 0xC0;      // CCharacter: shadow rig root (CommandSHADOW_MODEL); 0 = no shadow
-        private const int    ShadowSlotBase = 0xC40;   // CCharacter: shadow channel[i] ptr (ShadowStep__10CCharacter)
+        internal const float  ProbeFront    = 3f, ProbeBack = 2f;
+        internal const string CatRootName = "catroot";
+        internal const float  HideScale   = 0.001f;     // must match build_cat_pack.py HIDE_SCALE
+        internal const int    ChanKeyStart = 0x3E0;     // CCharacter: channel[i] first key id (CommandKEY_START)
+        internal const int    ChanKeyEnd   = 0x400;     // CCharacter: channel[i] key id end (CommandMOTION_END)
+        internal const int    MotListHead  = 0x04;      // MOTION_TYPE +0x04 → the .mot track list (shared, read-only)
+        internal const int    ShadowModel  = 0xC0;      // CCharacter: shadow rig root (CommandSHADOW_MODEL); 0 = no shadow
+        internal const int    ShadowSlotBase = 0xC40;   // CCharacter: shadow channel[i] ptr (ShadowStep__10CCharacter)
         // CNPCharacter tail (Initialize__12CNPCharacter 0x1569E0 / ClearSeq 0x156350 / SetFootSound / SetEvent)
-        private const int    FootTable = 0xD60, FootStride = 0x14, FootSlots = 6;      // frame < 0 = free
-        private const int    EventTable = 0xDE8, EventStride = 0x14, EventSlots = 32;  // frame < 0 = free
-        private const int    SeqEnable = 0x11B0;       // ClearSeq sets 1 (+0x11B4/8 = 0, 8 × 0x50 entries @+0x11C0 = 0)
-        private const int    SeqWord1490 = 0x1490;     // Initialize sets -1
+        internal const int    FootTable = 0xD60, FootStride = 0x14, FootSlots = 6;      // frame < 0 = free
+        internal const int    EventTable = 0xDE8, EventStride = 0x14, EventSlots = 32;  // frame < 0 = free
+        internal const int    SeqEnable = 0x11B0;       // ClearSeq sets 1 (+0x11B4/8 = 0, 8 × 0x50 entries @+0x11C0 = 0)
+        internal const int    SeqWord1490 = 0x1490;     // Initialize sets -1
 
         // Charge + launch.
         private const double ChargeSeconds = 0.5;      // hold this long → the shot is the cat
-        private const double GrowSeconds   = 0.1;      // the pellet grows into the cat over this long after it is fired
-        private const int    GrowFrames    = 6;        // the same, in frames, for the native follower (60 fps)
-        private const float  Gravity       = 0.05f;    // units/frame² — the pounce arc
-        private const float  FallGravity   = 0.08f;    // units/frame² — the fall off the pellet's line at full size (cave)
+        internal const double GrowSeconds   = 0.1;      // the pellet grows into the cat over this long after it is fired
+        internal const int    GrowFrames    = 6;        // the same, in frames, for the native follower (60 fps)
+        internal const float  Gravity       = 0.05f;    // units/frame² — the pounce arc
+        internal const float  FallGravity   = 0.08f;    // units/frame² — the fall off the pellet's line at full size (cave)
         // The land clip is s86 c04cat motion 7, frames 215..227 (KEY 69 in build_cat_pack.py keeps the absolute frames):
         // the paws first touch the ground at 219 — that is where the forward momentum stops; at 227 the run begins.
-        private const float  LandStopFrame = 219f, LandEndFrame = 227f;   // the paws touch at 219 (the land clip's lead-in aligns it with the touchdown)
+        internal const float  LandStopFrame = 219f, LandEndFrame = 227f;   // the paws touch at 219 (the land clip's lead-in aligns it with the touchdown)
         // The WINGED cat pounces from 50 units, and keeps
         // re-aiming at the target past the apex until it has fallen halfway from the apex to the floor (the cave's height
         // rule, Mailbox.CatTrackHalf). Dormant chest-mimics keep the 30-unit range.
@@ -93,45 +97,45 @@ namespace Dark_Cloud_Improved_Version
         private const float  LandClipStart = 215f, LandClipSpeed = 0.36f;   // KEY 69 in build_cat_pack.py (frames/frame)
         // The clip lowers the cat itself (hips 5.5 → 4.6 over 215..219), so it must start this many frames BEFORE the
         // physical touchdown for the paws to meet the floor at 219; the cave predicts the touchdown from the fall.
-        private const float  LandLeadFrames = (LandStopFrame - LandClipStart) / LandClipSpeed;
-        private static float CatScale => _look.Scale;                  // the cat's size for this look; the cave grows the cat to this via Mailbox.CatScaleMul
+        internal const float  LandLeadFrames = (LandStopFrame - LandClipStart) / LandClipSpeed;
+        internal static float CatScale => _look.Scale;                  // the cat's size for this look; the cave grows the cat to this via Mailbox.CatScaleMul
         /// <summary>The ground speeds and glow are stated for the 1.0 cat and scale with its size, so the walk clip keeps
         /// the same rate whatever the look's size.</summary>
         private static float Stride => CatScale;
         // Ground game.
-        private static float RunSpeed => 1.3f * Stride;   // units/frame
-        private const float  PounceRange   = 30f;      // start the pounce within this of the target; the leap re-sizes itself at launch
-        private const float  MaxTargetDistance = 300f; // PickTarget: only enemies within the vanilla render distance of Xiao
-        private const float  KickStrength  = 2.0f, KickDecay = 0.3f;   // the hit's kickback, sized like Toan's heavier combo hits (1.2..3.0 / 0.2..0.4, type 2)
-        private const int    CatKickType   = 2;                        // the hit's kick type (+0x98): melee-style reaction; also the value a hurt sphere's spare[1] must hold to admit the cat at spare[0] % (ELF PatchCatSpherePercent; disc-baked on Minotaur Joe's face)
-        private const float  PounceFrames  = 32f;      // leap flight time (frames) to the enemy — most enemies
-        private const float  PounceFramesTall = 40f;   // … for the tall/large/flying set (EnemySpecies.VerticalLeapTargets) and minibosses: a higher, longer arc
-        private const float  HitRadius     = 4f;       // planted hit sphere at the struck enemy
+        internal static float RunSpeed => 1.3f * Stride;   // units/frame
+        internal const float  PounceRange   = 30f;      // start the pounce within this of the target; the leap re-sizes itself at launch
+        internal const float  MaxTargetDistance = 300f; // PickTarget: only enemies within the vanilla render distance of Xiao
+        internal const float  KickStrength  = 2.0f, KickDecay = 0.3f;   // the hit's kickback, sized like Toan's heavier combo hits (1.2..3.0 / 0.2..0.4, type 2)
+        internal const int    CatKickType   = 2;                        // the hit's kick type (+0x98): melee-style reaction; also the value a hurt sphere's spare[1] must hold to admit the cat at spare[0] % (ELF PatchCatSpherePercent; disc-baked on Minotaur Joe's face)
+        internal const float  PounceFrames  = 32f;      // leap flight time (frames) to the enemy — most enemies
+        internal const float  PounceFramesTall = 40f;   // … for the tall/large/flying set (EnemySpecies.VerticalLeapTargets) and minibosses: a higher, longer arc
+        internal const float  HitRadius     = 4f;       // planted hit sphere at the struck enemy
         private const float  TouchRadius   = 3f;       // the cat's own touch radius in the cave's body-sphere test
         // Pounce clips (KEY 65 ready 95..105 @0.4, 67 take-off 190..204 @0.5, 68 leap 205..214 @0.5, 69 land 215..227 @0.36):
         // in place through the ready and the first take-off frames, forward momentum ramps over 194..198 and holds
         // through the leap and into the landing until the paws touch at 219. The clips carry the height.
-        private const float  ReadyStartFrame = 95f, ReadyEndFrame = 105f;   // every pounce is the ready crouch + float-up vertical leap; the take-off path is gone
+        internal const float  ReadyStartFrame = 95f, ReadyEndFrame = 105f;   // every pounce is the ready crouch + float-up vertical leap; the take-off path is gone
         // The float-up clip is the town float's first ten frames (e04c04cat #5, source 160..169) at 285..294, play-once.
         // The cat keeps turning to the target through the whole clip and the jump is locked in the moment source
         // frame 169 arrives. A play-once clip holds just short of its last frame (Step stops the
         // rate once frame + rate reaches the end), so the launch test is end − 1, the same margin the other clips use.
-        private const float  FloatStartFrame = 285f, FloatSourceStart = 160f, FloatFeetOffSource = 169f;
-        private const float  FloatLaunchFrame = FloatStartFrame + (FloatFeetOffSource - FloatSourceStart) - 1f;   // 293
-        private const float  FloatRate       = 0.75f;   // the float-up's play rate (its KEY rate is 0.6)
-        private const float  FallBlendSteps  = 16f;     // the float-up → fall fade, in steps (the engine's default is 10)
-        private const float  BlendDefault    = 0.1f;    // the engine's own per-step blend increment (MOTION_END seeds it)
-        private const double LandSeconds   = 0.45, TakeOffSeconds = 0.4, RunTimeoutSeconds = 6.0, StraightRunSeconds = 1.5;
-        private const int    FadeTicks     = 30;       // ≈ 0.5 s at the 16 ms tick
-        private const int    GlowFadeTicks = FadeTicks; // the glow SHRINKS over the same ≈ 0.5 s the cat fades
-        private static int   _glowFade = -1;           // ticks into the glow's shrink (−1 = full size and following the cat; ≥ GlowFadeTicks = done: OFF until the next bind)
+        internal const float  FloatStartFrame = 285f, FloatSourceStart = 160f, FloatFeetOffSource = 169f;
+        internal const float  FloatLaunchFrame = FloatStartFrame + (FloatFeetOffSource - FloatSourceStart) - 1f;   // 293
+        internal const float  FloatRate       = 0.75f;   // the float-up's play rate (its KEY rate is 0.6)
+        internal const float  FallBlendSteps  = 16f;     // the float-up → fall fade, in steps (the engine's default is 10)
+        internal const float  BlendDefault    = 0.1f;    // the engine's own per-step blend increment (MOTION_END seeds it)
+        internal const double LandSeconds   = 0.45, TakeOffSeconds = 0.4, RunTimeoutSeconds = 6.0, StraightRunSeconds = 1.5;
+        internal const int    FadeTicks     = 30;       // ≈ 0.5 s at the 16 ms tick
+        internal const int    GlowFadeTicks = FadeTicks; // the glow SHRINKS over the same ≈ 0.5 s the cat fades
+        internal static int   _glowFade = -1;           // ticks into the glow's shrink (−1 = full size and following the cat; ≥ GlowFadeTicks = done: OFF until the next bind)
         private const float  DamageMult    = 1.5f;     // × the weapon's attack (a charged pellet's worth)
-        private const int    PlantedLifeTicks = 4;   // ~4 frames for the enemy's CheckDmg to find the entry
+        internal const int    PlantedLifeTicks = 4;   // ~4 frames for the enemy's CheckDmg to find the entry
 
         // Hit-entry plumbing (CCollisionData pool, as GuardianReflector.PlantReflectedHit).
-        private const long BattleWeaponAttack = WeaponHave.BattleWeaponRecord + 0x04;
+        internal const long BattleWeaponAttack = WeaponHave.BattleWeaponRecord + 0x04;
 
-        private enum Phase { Resident, Flying, Falling, Landing, Running, TakeOff, Leaping, LandEnd, Fading }   // Resident = built, hidden, waiting
+        internal enum Phase { Resident, Flying, Falling, Landing, Running, TakeOff, Leaping, LandEnd, Fading }   // Resident = built, hidden, waiting
 
         private static Thread _thread;
         private static readonly bool[] _seenPellet = new bool[PlayerShotPool.SlotCount];
@@ -140,38 +144,38 @@ namespace Dark_Cloud_Improved_Version
         private static double _holdSeconds;
 
         // The copy.
-        private static uint  _liveRoot, _copyRoot;
-        private static int   _nodeCount, _catIndex;
-        private static int   _key = -1;
-        private static float _alpha = 1f;
+        internal static uint  _liveRoot, _copyRoot;
+        internal static int   _nodeCount, _catIndex;
+        internal static int   _key = -1;
+        internal static float _alpha = 1f;
         // Flight state (world: x, h = height, y).
-        private static Phase _phase;
-        private static DateTime _phaseStart;
-        private static float _x, _h, _y, _yaw, _vx, _vh, _vy, _floor, _dirX, _dirY;
-        private static float _scale = 1f;                    // growth 0 → 1 over GrowSeconds (× CatScale)
-        private static long  _pool;                          // the shot pool the cat is pinned to
-        private static int   _pelletSlot = -1;               // its pellet's slot while that pellet lives, else −1
-        private static bool  _native;                        // the ISO carries the pellet catcher/follower cave
+        internal static Phase _phase;
+        internal static DateTime _phaseStart;
+        internal static float _x, _h, _y, _yaw, _vx, _vh, _vy, _floor, _dirX, _dirY;
+        internal static float _scale = 1f;                    // growth 0 → 1 over GrowSeconds (× CatScale)
+        internal static long  _pool;                          // the shot pool the cat is pinned to
+        internal static int   _pelletSlot = -1;               // its pellet's slot while that pellet lives, else −1
+        internal static bool  _native;                        // the ISO carries the pellet catcher/follower cave
         private static bool  _nativeWarned;
         private const  double ArmPendingSeconds = 1.0;       // how long a released charge keeps trying to arm while the copy rebuilds
         private static DateTime _armPendingUntil = DateTime.MinValue;
-        private static bool  _caveOwns;                      // cave armed (waiting) or following: slot 1's pos/scale/opacity are its
-        private static int   _disarmTicks;                   // after a shot-less release: ticks until the waiting cave is disarmed
+        internal static bool  _caveOwns;                      // cave armed (waiting) or following: slot 1's pos/scale/opacity are its
+        internal static int   _disarmTicks;                   // after a shot-less release: ticks until the waiting cave is disarmed
         private static DateTime _spawnFailedAt = DateTime.MinValue;
-        private static float _flightFrame0;                  // copy's motion frame at the bind (fall-pose check in the log)
-        private static DateTime _boundAt = DateTime.MinValue, _armedSince = DateTime.MinValue;
-        private static bool _gaitLogged, _blockedLogged;
-        private static int   _target = -1;
-        private static float _px, _ph, _py;                 // the flight POINT (where the pellet would be) — the head rides it
-        private static float _headX, _headH, _headZ;        // head rest offset in cat space (FindHead)
-        private const string HeadNodeName = "cat_kao";
+        internal static float _flightFrame0;                  // copy's motion frame at the bind (fall-pose check in the log)
+        internal static DateTime _boundAt = DateTime.MinValue, _armedSince = DateTime.MinValue;
+        internal static bool _gaitLogged, _blockedLogged;
+        internal static int   _target = -1;
+        internal static float _px, _ph, _py;                 // the flight POINT (where the pellet would be) — the head rides it
+        internal static float _headX, _headH, _headZ;        // head rest offset in cat space (FindHead)
+        internal const string HeadNodeName = "cat_kao";
 
         // ── how the cat LOOKS: the glow's geometry, then the per-weapon and per-element looks ──────────────
-        private const string GlowNodeA = "cat_kosibone", GlowNodeB = "cat_sebone2";   // hips + upper spine: the glow sits at their midpoint (the middle of the torso)
-        private static float GlowScale => 0.5f * Stride;   // the torch routine's scale: the flame sprite is 45 × 22.5 units at 1.0 (a 90-unit haze, half of it z-culled by the floor); 0.5 ≈ 22.5 × 11 around the torso
-        private const int    GlowFlags = 2;            // 1 = the steady glow pair (18 × 9 at 1.0), 2 = the flickering flame sprite (45 × 22.5 at 1.0), 3 = both (two sizes → two glows)
-        private const float  GlowLift  = 0f;           // units added to the glow's height (negative lowers it)
-        private const float  GlowPull  = 5.0f;         // how far toward the camera the sprite is pulled (the torches use 15 to clear their wall; the cat only needs to clear its own body)
+        internal const string GlowNodeA = "cat_kosibone", GlowNodeB = "cat_sebone2";   // hips + upper spine: the glow sits at their midpoint (the middle of the torso)
+        internal static float GlowScale => 0.5f * Stride;   // the torch routine's scale: the flame sprite is 45 × 22.5 units at 1.0 (a 90-unit haze, half of it z-culled by the floor); 0.5 ≈ 22.5 × 11 around the torso
+        internal const int    GlowFlags = 2;            // 1 = the steady glow pair (18 × 9 at 1.0), 2 = the flickering flame sprite (45 × 22.5 at 1.0), 3 = both (two sizes → two glows)
+        internal const float  GlowLift  = 0f;           // units added to the glow's height (negative lowers it)
+        internal const float  GlowPull  = 5.0f;         // how far toward the camera the sprite is pulled (the torches use 15 to clear their wall; the cat only needs to clear its own body)
         private const string CapeTexture = "catcape";  // the cape AND the mask draw from it (wing_bake.MASK_TEX)
         /// <summary>The element glow: ONE 8-bit disc carrying all six colours, repainted by ElfCave.CatGlowPalette the way
         /// the cape is — 5,184 B for every colour, against 16,448 B for a single 32-bit disc. The colours live in
@@ -181,7 +185,7 @@ namespace Dark_Cloud_Improved_Version
         // with a WHITE glow and a neutral add; the Angel Gear the wings with a GOLD glow and a gold-white add. Every look
         // draws the SAME 8-bit disc, differing only in the palette row (PalRow → Mailbox.CatGlowPalRow; the rows themselves
         // are build_cat_pack.GLOW_LOOKS 6-8). Wings are two mesh nodes the copy hides by zeroing their geometry.
-        private sealed class WeaponLook { public int PalRow; public float[] Tint; public bool Wings; public bool Cape; public float Range = PounceRange; public bool Track; public float Scale = 1.0f; }
+        internal sealed class WeaponLook { public int PalRow; public float[] Tint; public bool Wings; public bool Cape; public float Range = PounceRange; public bool Track; public float Scale = 1.0f; }
         private const int SuperSteveShooterKey = -2, SuperSteveGearKey = -3;   // Super Steve's look per sphere, keyed privately so a sphere swap rebuilds the copy
         // Super Steve: the BLUE cat of the Divine Beast Title, with a red cape. The mask's red cannot come from here — a
         // mesh has its tint ADDED to its lit colour, so this blue lands on the mask too and turns red to pink. The mask is
@@ -195,7 +199,7 @@ namespace Dark_Cloud_Improved_Version
             { SuperSteveShooterKey,   SuperSteveLook(1.1f) },
             { SuperSteveGearKey,      SuperSteveLook(1.2f) },
         };
-        private static WeaponLook _look = Looks[Items.divinebeasttitle];
+        internal static WeaponLook _look = Looks[Items.divinebeasttitle];
         /// <summary>The look key for the equipped weapon: its own id, or −1 for none — the cat stays down. Super Steve
         /// inherits the cat from its attached SynthSphere: a Divine Beast Title sphere gives the Title's cat exactly, while an
         /// Angel Shooter or Angel Gear sphere gives the BLUE cat (the Title's look, no wings) wearing a solid-yellow cloth
@@ -234,22 +238,22 @@ namespace Dark_Cloud_Improved_Version
         private static readonly float[] ElementAmbient = { 20f, 20f, 20f };
         private const int  NoElement = 5;                // elementHUD: 00 Fire, 01 Ice, 02 Thunder, 03 Wind, 04 Holy, 05 None
         private static int _weapon = -1;                                    // the weapon the resident copy was built for
-        private static readonly string[] WingMeshNodes = { "cat_rwingm", "cat_lwingm" };   // build_cat_pack / wing_bake.MESH_NAMES
-        private const string MaskNodeName = "cat_mask";                                    // wing_bake.MASK_NODE — the Super Steve
-        private static int _maskMeshIdx = -1;                                              // cat's domino mask, rigid to cat_kao
-        private static long _maskVisual;                                                   // …and its own copied CVisualMDT
-        private const string CapeNodeName = "cat_cape", CapeAnchorName = "cat_sebone2";     // wing_bake.CAPE_NODE / cat_wings.CAPE_ANCHOR
+        internal static readonly string[] WingMeshNodes = { "cat_rwingm", "cat_lwingm" };   // build_cat_pack / wing_bake.MESH_NAMES
+        internal const string MaskNodeName = "cat_mask";                                    // wing_bake.MASK_NODE — the Super Steve
+        internal static int _maskMeshIdx = -1;                                              // cat's domino mask, rigid to cat_kao
+        internal static long _maskVisual;                                                   // …and its own copied CVisualMDT
+        internal const string CapeNodeName = "cat_cape", CapeAnchorName = "cat_sebone2";     // wing_bake.CAPE_NODE / cat_wings.CAPE_ANCHOR
         /// <summary>The cape's body-collision capsules, in the order the .clo lists them — IN STEP WITH cat_wings.CAPE_BOUNDS.
         /// Every BOUND in the record names the cape node (the only name that resolves in HER tree at load); at spawn each cloned
         /// CBound is re-pointed at the cat copy's own bone, so the capsules ride the cat's spine and the cape drapes over it.</summary>
-        private static readonly string[] CapeBoundBones = { "cat_sebone2", "cat_sebone1", "cat_kosibone", "cat_kao" };
-        private static readonly List<int> _wingMeshIdx = new List<int>();
-        private const float  HeadFallbackHeight = 6f;
-        private static bool  _hitDone;
-        private static int   _fade;
-        private static readonly List<(int idx, int ticks, bool native)> _planted = new();   // native = planted by the cave (the cat's hit)
-        private static bool _hitFade;                        // the hit landed: the flight follows through while the cat fades out
-        private static int  _aimLoggedFor = -1;              // last target the aim choice was logged for
+        internal static readonly string[] CapeBoundBones = { "cat_sebone2", "cat_sebone1", "cat_kosibone", "cat_kao" };
+        internal static readonly List<int> _wingMeshIdx = new List<int>();
+        internal const float  HeadFallbackHeight = 6f;
+        internal static bool  _hitDone;
+        internal static int   _fade;
+        internal static readonly List<(int idx, int ticks, bool native)> _planted = new();   // native = planted by the cave (the cat's hit)
+        internal static bool _hitFade;                        // the hit landed: the flight follows through while the cat fades out
+        internal static int  _aimLoggedFor = -1;              // last target the aim choice was logged for
 
         // ──────────────────────────────────────── the mod's thread ─────────────────────────────────────────
 
@@ -346,7 +350,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── the PAUSE screen ───────────────────────────────────────────────────────────────────────────────
-        private static bool _held;   // the slot is drawn but not stepped: motion, cape cloth and shadow all stand still
+        internal static bool _held;   // the slot is drawn but not stepped: motion, cape cloth and shadow all stand still
         /// <summary>Hold the copy while the PAUSE screen or a menu is up. The engine keeps stepping a chara-slot character
         /// there, so the slot is marked skip-step in the loop's own table (<see cref="DungeonCharaDraw.StepSkipTable"/>):
         /// still drawn, nothing inside it touched. <see cref="Maintain"/> keeps the mark while held. The cave hooks the
@@ -366,346 +370,6 @@ namespace Dark_Cloud_Improved_Version
             _held = false;
             if (Active) Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, 0);
             Log($"resumed — clocks held for {GameClock.HeldTotal.TotalSeconds:F1} s in all");
-        }
-
-        // ── the Super Steve cape (CCloth 0x8550) ───────────────────────────────────────────────────────────
-        private static long _capeObj;
-        private static uint _capeTemplate;                                    // her CCloth for cat_cape, taken out of her draw list by TakeHerCape
-        private static int _capeSweepTick;
-
-        /// <summary>The cape's cloth record lives in HER pack, so the engine builds it for XIAO and hangs it off her own cloth
-        /// list — anchored to the hidden cat_cape node at her origin, where it draws as a sheet at her feet whether or not the cat
-        /// is out. Take it out of her list the moment it appears (every reload rebuilds it) and keep the object as the template
-        /// the cat's copy is cloned from.</summary>
-        private static void TakeHerCape()
-        {
-            uint herList = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.ClothList);
-            if (!Memory.IsValidGuest(herList)) return;
-            for (int i = 0; i < CCloth.ClothMaxPieces; i++)
-            {
-                uint obj = Memory.ReadGuestPtr(Memory.ToMmu(herList) + i * 4);
-                if (!Memory.IsValidGuest(obj)) continue;
-                uint frame = Memory.ReadGuestPtr(Memory.ToMmu(obj) + CCloth.ClothAttach);
-                if (!Memory.IsValidGuest(frame) || ReadName(frame) != CapeNodeName) continue;
-                Memory.WriteInt(Memory.ToMmu(herList) + i * 4, 0);
-                if (_capeTemplate != obj) Log($"cape: took her own copy out of her cloth list (entry {i}, 0x{obj:X}) — it is the clone template");
-                _capeTemplate = obj;
-                return;
-            }
-        }
-        private static int  _capeWatch;
-        /// <summary>Clone her cape's CCloth onto the copy, CharacterClone.CopyCloth's recipe: the whole object, two private
-        /// draw packets (the engine rebuilds the packet from the particles every draw), the anchor re-pointed at the copy's
-        /// cat_sebone2 where the rest lattice was authored, no body capsules, the Verlet "previous" seeded from "current" so
-        /// the first step is quiet, and the copy's +0xC74 pointing at a one-entry list. Her own list entry is zeroed so she
-        /// neither steps nor draws it. The dungeon chara loop steps every slot's cloth while MirageSceneGateFlag == 1 (the
-        /// Mirage pnach's ClothStep swap), which the cat already sets; Draw__10CCharacter draws the list.</summary>
-        private static void SpawnCape()
-        {
-            _capeObj = 0;
-            TakeHerCape();                                                        // a reload rebuilds her copy: re-cache it first
-            uint herList = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.ClothList);
-            if (!Memory.IsValidGuest(herList)) { Log("cape: she has no cloth list — is the ISO patched with the cape?"); return; }
-            uint template = 0; int entry = -1;
-            for (int i = 0; i < CCloth.ClothMaxPieces; i++)
-            {
-                uint obj = Memory.ReadGuestPtr(Memory.ToMmu(herList) + i * 4);
-                if (!Memory.IsValidGuest(obj)) continue;
-                uint frame = Memory.ReadGuestPtr(Memory.ToMmu(obj) + CCloth.ClothAttach);
-                if (Memory.IsValidGuest(frame) && ReadName(frame) == CapeNodeName) { template = obj; entry = i; break; }
-            }
-            if (template == 0 && Memory.IsValidGuest(_capeTemplate))              // cleared from her list by an earlier spawn: still hers, still intact
-            {
-                uint frame = Memory.ReadGuestPtr(Memory.ToMmu(_capeTemplate) + CCloth.ClothAttach);
-                if (Memory.IsValidGuest(frame) && ReadName(frame) == CapeNodeName) template = _capeTemplate;
-            }
-            if (template == 0) { Log("cape: no cloth anchored to " + CapeNodeName + " in her list — is the ISO patched with the cape?"); return; }
-            {
-                int i = entry; uint obj = template;
-                byte[] o = Memory.ReadBytesBatch(Memory.ToMmu(obj), CCloth.ClothObjSize);
-                if (o == null) { Log("cape: template read failed"); return; }
-                int wide = BitConverter.ToInt32(o, 0x2C), hang = BitConverter.ToInt32(o, 0x30);   // outer (across the back) × inner (down the cape; index 0 pinned)
-                uint b0 = (uint)BitConverter.ToInt32(o, CCloth.ClothBuf0) & Memory.PhysAddrMask, b1 = (uint)BitConverter.ToInt32(o, CCloth.ClothBuf0 + 4) & Memory.PhysAddrMask;
-                // How big a draw packet this cloth builds. Take it from the cloth's OWN figure (+0x1C, what CreateVUData returned
-                // at init, in 16-byte units) and never from a guess: the packet is rebuilt into these buffers from scratch every
-                // draw, so one byte short is an overrun straight through the rest of the cave (a 12 × 16 lattice needs 17,760 B).
-                // The pointer gap is only a cross-check; the packet figure wins.
-                int packet = BitConverter.ToInt32(o, CCloth.ClothPacketUnits) * 16;
-                int gap = (int)(b1 - b0);
-                int bufSize = Math.Max(packet, gap > 0 && gap < 0x20000 ? gap : 0);
-                bufSize = (bufSize + 0x3F) & ~0x3F;
-                if (packet <= 0 || bufSize > 0x20000)
-                {
-                    Log($"cape: refusing to clone — packet {packet} B, pointer gap {gap} B, neither is a sane buffer size");
-                    return;
-                }
-                long cObj = TakeCave(CCloth.ClothObjSize, out uint cObjG);
-                long cB0 = TakeCave(bufSize, out uint cB0G), cB1 = TakeCave(bufSize, out uint cB1G), cList = TakeCave(16, out uint cListG);
-                if (cObj == 0 || cB0 == 0 || cB1 == 0 || cList == 0) { Log("cape: no cave room — no cape"); return; }
-                int anchor = NodeIndexOf(CapeAnchorName);
-                if (anchor < 0) { Log("cape: no " + CapeAnchorName + " in the copy — no cape"); return; }
-                BitConverter.GetBytes(cB0G).CopyTo(o, CCloth.ClothActive);
-                BitConverter.GetBytes(cB0G).CopyTo(o, CCloth.ClothBuf0);
-                BitConverter.GetBytes(cB1G).CopyTo(o, CCloth.ClothBuf0 + 4);
-                BitConverter.GetBytes((uint)(CodeCaves.NodePoolGuest + anchor * CFrameVu1.NodeStride)).CopyTo(o, CCloth.ClothAttach);
-                uint bounds = CloneBounds((uint)BitConverter.ToInt32(o, CCloth.ClothBounds) & Memory.PhysAddrMask, out int nb);
-                BitConverter.GetBytes(bounds).CopyTo(o, CCloth.ClothBounds);                 // the cat's own body capsules
-                ScaleClothToCat(o, wide, hang);
-                BitConverter.GetBytes(0).CopyTo(o, 0x50);                                    // wind: the step refreshes it from the character
-                Array.Copy(o, CCloth.ClothCur, o, CCloth.ClothPrev, CCloth.ClothArrayBytes);                                    // previous = current: a quiet first step
-                Memory.WriteBytesBatch(cObj, o);
-                Memory.WriteBytesBatch(cB0, Memory.ReadBytesBatch(Memory.ToMmu(b0), bufSize) ?? new byte[bufSize]);
-                Memory.WriteBytesBatch(cB1, Memory.ReadBytesBatch(Memory.ToMmu(b0), bufSize) ?? new byte[bufSize]);
-                byte[] list = new byte[16]; BitConverter.GetBytes(cObjG).CopyTo(list, 0);
-                Memory.WriteBytesBatch(cList, list);
-                Memory.WriteUInt(SlotAddr() + CCharacter.ClothList, cListG);
-                if (i >= 0) Memory.WriteInt(Memory.ToMmu(herList) + i * 4, 0);                 // she neither steps nor draws the template
-                _capeObj = cObj; _capeTemplate = obj; _capeWatch = 0; _capeWide = wide; _capeHang = hang;
-                // The wind's taper watches ONE particle — the middle of the hem, the point that swings furthest from the shape the
-                // cape is meant to hold. Its slot is (column × 0x100 + row × 0x10), and BOTH indices come from the cloth itself, so
-                // re-tessellating the cape in the bake cannot leave the runtime watching some point up its middle.
-                _capeHemParticle = (_capeWide / 2) * CCloth.ClothColumnStride + (_capeHang - 1) * CCloth.ClothParticleStride;
-                _capeRest = Memory.ReadBytesBatch(cObj + CCloth.ClothRest, _capeWide * CCloth.ClothColumnStride);   // read ONCE: the wind rides on it
-                if (_capeRest != null)                                                   // its own length, for the lift's geometry
-                {
-                    int mid = (_capeWide / 2) * CCloth.ClothColumnStride;
-                    _capeSpan = Math.Abs(BitConverter.ToSingle(_capeRest, mid) - BitConverter.ToSingle(_capeRest, mid + (_capeHang - 1) * 0x10));
-                }
-                TintCape();
-                string V(int off) => $"({BitConverter.ToSingle(o, off):F2},{BitConverter.ToSingle(o, off + 4):F2},{BitConverter.ToSingle(o, off + 8):F2})";
-                Log($"cape physics: cat scale {CatScale:F2}, K {V(CCloth.ClothK)} gravity {V(CCloth.ClothGravity)} follow {V(CCloth.ClothFollow)} wind {BitConverter.ToSingle(o, CCloth.ClothWindScale):F2} normal {BitConverter.ToSingle(o, CCloth.ClothNormal):F2} floor {BitConverter.ToSingle(o, 0x4C):F1} (flag {BitConverter.ToInt32(o, 0x48)})");
-                Log($"cape: {wide} wide × {hang} down cloth cloned from 0x{obj:X} → 0x{cObjG:X} (buffers 0x{bufSize:X} ×2 for a {packet} B packet, her gap was 0x{gap:X}), anchored to the copy's {CapeAnchorName} (n{anchor}), {nb} body capsule(s) on {string.Join("/", CapeBoundBones.Take(nb))}{(i >= 0 ? $"; her entry {i} cleared" : "")}");
-            }
-        }
-
-        /// <summary>The index of a bone in the cat copy's node pool, or −1.</summary>
-        private static int NodeIndexOf(string name)
-        {
-            for (int k = 0; k < _nodeCount; k++) if (ReadName((uint)(CodeCaves.NodePoolGuest + k * CFrameVu1.NodeStride)) == name) return k;
-            return -1;
-        }
-
-        /// <summary>Clone the template cape's CBound chain into the cave, re-pointing capsule <i>i</i> at the cat copy's
-        /// <see cref="CapeBoundBones"/>[i] (in the .clo's own order) so the cloth collides with the cat instead of her. Returns the
-        /// guest pointer to the head of the new chain (0 = none), and how many capsules it holds.</summary>
-        /// <summary>Size the cloth's world-unit terms to the cat. The sim's targets come through the anchor's matrix and so
-        /// carry the cat's scale, but the StretchBind rest lengths (<see cref="CCloth.ClothTie"/>) were measured from the
-        /// lattice at load in rig units and stay there — left alone, every tie is CatScale× too short for the sheet the
-        /// spring is pulling toward, and the cape bunches toward the collar. The wind gain is a world velocity, sized with
-        /// the sheet so the flutter reads the same. K, follow and the mod's own breeze are fractions or anchor-space: untouched.</summary>
-        private static void ScaleClothToCat(byte[] o, int wide, int hang)
-        {
-            for (int a = 0; a < wide; a++)
-                for (int b = 0; b < hang; b++)
-                {
-                    int t = CCloth.ClothTie + a * CCloth.ClothColumnStride + b * CCloth.ClothParticleStride;
-                    BitConverter.GetBytes(BitConverter.ToSingle(o, t)     * CatScale).CopyTo(o, t);       // across
-                    BitConverter.GetBytes(BitConverter.ToSingle(o, t + 4) * CatScale).CopyTo(o, t + 4);   // along the hang
-                }
-            BitConverter.GetBytes(BitConverter.ToSingle(o, CCloth.ClothWindScale) * CatScale).CopyTo(o, CCloth.ClothWindScale);
-        }
-
-        /// <summary>Clone the cape's body capsules onto the copy's own bones (<see cref="CapeBoundBones"/>), radii sized to the
-        /// cat: the capsule's endpoints ride the bone's scaled matrix, its radii are world constants.</summary>
-        private static uint CloneBounds(uint bnd, out int count)
-        {
-            uint head = 0; long prev = 0; count = 0;
-            while (Memory.IsValidGuest(bnd) && count < CapeBoundBones.Length)
-            {
-                byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(bnd), CBound.BoundSize);
-                if (b == null) break;
-                uint next = (uint)BitConverter.ToInt32(b, CBound.BoundNext) & Memory.PhysAddrMask;
-                int bone = NodeIndexOf(CapeBoundBones[count]);
-                if (bone < 0) { Log("cape: no " + CapeBoundBones[count] + " in the copy — capsule skipped"); break; }
-                long cB = TakeCave(CBound.BoundSize, out uint cBG);
-                if (cB == 0) { Log("cape: no cave room for the body capsules"); break; }
-                BitConverter.GetBytes((uint)(CodeCaves.NodePoolGuest + bone * CFrameVu1.NodeStride)).CopyTo(b, CBound.BoundFrameA);
-                BitConverter.GetBytes(0).CopyTo(b, CBound.BoundFrameB);                       // A alone carries both endpoints
-                BitConverter.GetBytes(0).CopyTo(b, CBound.BoundNext);                         // the chain is re-linked below
-                for (int r = 0; r < 12; r += 4)
-                {
-                    float radius = BitConverter.ToSingle(b, CBound.BoundRadii + r) * CatScale;
-                    BitConverter.GetBytes(radius).CopyTo(b, CBound.BoundRadii + r);
-                    BitConverter.GetBytes(radius > 0f ? 1f / radius : 0f).CopyTo(b, CBound.BoundRadiiInv + r);
-                }
-                Memory.WriteBytesBatch(cB, b);
-                if (prev != 0) Memory.WriteUInt(prev + CBound.BoundNext, cBG); else head = cBG;
-                prev = cB; count++; bnd = next;
-            }
-            return head;
-        }
-
-        /// <summary>Diagnostics while the cape is up: is it being stepped (particle 0 leaves its rest-local spot for the world) and
-        /// drawn (the active packet pointer flips between the two buffers)? Logged every ~1 s.</summary>
-        private static void WatchCape()
-        {
-            if (_capeObj == 0 || ++_capeWatch % 60 != 0) return;
-            byte[] o = Memory.ReadBytesBatch(_capeObj, CCloth.ClothCur + _capeWide * CCloth.ClothColumnStride);   // through the last current position
-            if (o == null) return;
-            string P(int off) => $"({BitConverter.ToSingle(o, off):F2},{BitConverter.ToSingle(o, off + 4):F2},{BitConverter.ToSingle(o, off + 8):F2})";
-            uint active = (uint)BitConverter.ToInt32(o, CCloth.ClothActive), anchor = (uint)BitConverter.ToInt32(o, CCloth.ClothAttach);
-            long s = SlotAddr();
-            int Rest(int a, int b) => CCloth.ClothRest + a * CCloth.ClothColumnStride + b * CCloth.ClothParticleStride;
-            int Cur(int a, int b)  => CCloth.ClothCur  + a * CCloth.ClothColumnStride + b * CCloth.ClothParticleStride;
-            int aEnd = _capeWide - 1, bEnd = _capeHang - 1;   // the lattice: a across the collar, b down the hang (0 = the collar edge, bEnd = the hem)
-            Log($"cape watch: cur a0b0 {P(Cur(0, 0))} a0b1 {P(Cur(0, 1))} a0b{bEnd} {P(Cur(0, bEnd))} a{aEnd}b0 {P(Cur(aEnd, 0))} a{aEnd}b{bEnd} {P(Cur(aEnd, bEnd))} | rest a0b0 {P(Rest(0, 0))} a0b1 {P(Rest(0, 1))} a1b0 {P(Rest(1, 0))} | anchor-centroid {P(CCloth.ClothAnchorWorld)} local {P(CCloth.ClothAnchorLocal)} active 0x{active:X}");
-            uint bnd = (uint)BitConverter.ToInt32(o, CCloth.ClothBounds) & Memory.PhysAddrMask;
-            var caps = new List<string>();
-            while (Memory.IsValidGuest(bnd) && caps.Count < 4)
-            {
-                byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(bnd), CBound.BoundSize);
-                if (b == null) break;
-                caps.Add($"{ReadName((uint)BitConverter.ToInt32(b, CBound.BoundFrameA) & Memory.PhysAddrMask)} c({BitConverter.ToSingle(b, CBound.BoundCentre):F1},{BitConverter.ToSingle(b, CBound.BoundCentre + 4):F1},{BitConverter.ToSingle(b, CBound.BoundCentre + 8):F1}) r({BitConverter.ToSingle(b, CBound.BoundRadii):F1},{BitConverter.ToSingle(b, CBound.BoundRadii + 4):F1},{BitConverter.ToSingle(b, CBound.BoundRadii + 8):F1})");
-                bnd = (uint)BitConverter.ToInt32(b, CBound.BoundNext) & Memory.PhysAddrMask;
-            }
-            Log("cape watch: capsules " + (caps.Count == 0 ? "none" : string.Join(" | ", caps)));
-            // how far each particle is from the rest shape the engine is pulling it to (+0x7550 = LW(anchor) × rest, refreshed every step)
-            byte[] tg = Memory.ReadBytesBatch(_capeObj + CCloth.ClothTarget, _capeHang * CCloth.ClothParticleStride);   // column 0
-            if (tg != null)
-            {
-                float Sag(int b)
-                {
-                    int t = b * CCloth.ClothParticleStride, c = Cur(0, b);
-                    float dx = BitConverter.ToSingle(tg, t)     - BitConverter.ToSingle(o, c);
-                    float dy = BitConverter.ToSingle(tg, t + 4) - BitConverter.ToSingle(o, c + 4);
-                    float dz = BitConverter.ToSingle(tg, t + 8) - BitConverter.ToSingle(o, c + 8);
-                    return (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
-                }
-                int hem = bEnd * CCloth.ClothParticleStride;
-                Log($"cape watch: column 0 off the rest shape by b1 {Sag(1):F2} b3 {Sag(3):F2} b{bEnd} {Sag(bEnd):F2} | b{bEnd} target ({BitConverter.ToSingle(tg, hem):F1},{BitConverter.ToSingle(tg, hem + 4):F1},{BitConverter.ToSingle(tg, hem + 8):F1})");
-            }
-            byte[] lw = Memory.ReadBytesBatch(Memory.ToMmu(anchor) + CFrameVu1.WorldMatrix, 0x40);
-            string rows = lw == null ? "?" : string.Join(" | ", new[] { 0, 1, 2, 3 }.Select(r => $"({BitConverter.ToSingle(lw, r * 16):F2},{BitConverter.ToSingle(lw, r * 16 + 4):F2},{BitConverter.ToSingle(lw, r * 16 + 8):F2},{BitConverter.ToSingle(lw, r * 16 + 12):F2})"));
-            Log($"cape watch: anchor LW rows {rows} | cat at ({Memory.ReadFloat(s + CCharacter.CharPos):F1},{Memory.ReadFloat(s + CCharacter.CharPos + 4):F1},{Memory.ReadFloat(s + CCharacter.CharPos + 8):F1}) yaw {Memory.ReadFloat(s + CCharacter.CharRotY):F2} scale {Memory.ReadFloat(s + CCharacter.CharScale):F2} opacity {Memory.ReadFloat(s + CCharacter.NpcOpacity):F0}");
-        }
-
-        private const float CapeWindLift = 2.6f;         // how far the hem flies off the back
-        private const float CapeWindEase = 1.6f;         // profile along the hang: > 1 keeps the shoulders down, flies the tail
-        private const float CapeTearSpan = 20f;          // collar corner to mid-hem, per unit of cat scale; past this the cloth is torn and gets reseated
-        private static int _capeTearLog;
-        private static int  _capeHemParticle;                                // the hem's middle, from the cloth's own dimensions
-        private static byte[] _capeRest;                                     // the rest shape as baked — the wind's baseline
-        private static float _capeSpan;                                      // collar to hem along the cape, measured from that shape
-        private const float CapeRippleAmp = 0.65f;       // units of swell at the crest
-        private const float CapeRippleReach = 0.5f;      // fraction down the cape where the swell reaches full
-        private const float CapeRippleRows = 10.0f;      // rows per wavelength — one swell visible at a time
-        private const float CapeRippleSeconds = 0.5f;    // one crest, collar to hem
-        private static double _ripplePhase;
-        private static int _capeWide, _capeHang;      // the cloth's own dimensions: across the back × down the cape
-        /// <summary>The wind: the cloth's REST SHAPE is rewritten each tick as the blown shape — every row carried back along
-        /// the cape and lifted off the back, eased along the hang, with a travelling ripple on top — rather than a force being
-        /// applied, which a pinned sheet answers by buckling. Rows draw in as they rise so the sheet never has to lengthen.
-        /// All in the anchor's frame (+x toward the collar, −y off the back); gravity stays zero. Reseats the cloth if it has
-        /// been left behind by a teleport.</summary>
-        private static void BreezeCape()
-        {
-            if (_capeObj == 0 || _capeRest == null) return;
-            if (_capeWide <= 0 || _capeWide > 16 || _capeHang <= 1 || _capeHang > 16) return;   // the engine's grid is 16 × 16
-            byte[] cur = Memory.ReadBytesBatch(_capeObj + CCloth.ClothCur + _capeHemParticle, 12);
-            byte[] pin = Memory.ReadBytesBatch(_capeObj + CCloth.ClothCur, 12);       // the pinned corner: the sheet's own anchor end
-            if (cur != null && pin != null)
-            {
-                float sx = BitConverter.ToSingle(cur, 0) - BitConverter.ToSingle(pin, 0);
-                float sy = BitConverter.ToSingle(cur, 4) - BitConverter.ToSingle(pin, 4);
-                float sz = BitConverter.ToSingle(cur, 8) - BitConverter.ToSingle(pin, 8);
-                float span = (float)Math.Sqrt(sx * sx + sy * sy + sz * sz);
-                if (span > CapeTearSpan * CatScale || float.IsNaN(span))
-                {
-                    if (--_capeTearLog <= 0) { _capeTearLog = 60; Log($"cape: torn — {span:F0} units from collar to hem; reseating the cloth"); }
-                    ReseedCape();
-                    return;
-                }
-            }
-            StiffenCape();
-            _ripplePhase += 2 * Math.PI * (TickMs / 1000.0) / CapeRippleSeconds;
-            byte[] rest = (byte[])_capeRest.Clone();
-            for (int b = 1; b < _capeHang; b++)                                       // b = 0 is the pinned collar edge: leave it
-            {
-                float t = (float)b / (_capeHang - 1);
-                float f = (float)Math.Pow(t, CapeWindEase);                            // nothing at the collar, everything at the hem
-                float swell = CapeRippleAmp * Math.Min(1f, t / CapeRippleReach);
-                float lift = CapeWindLift * f + swell * (float)Math.Sin(_ripplePhase - b * 2 * Math.PI / CapeRippleRows);
-                float d = _capeSpan * t;                                               // how far down the cape this row sits
-                float trim = d - (float)Math.Sqrt(Math.Max(0f, d * d - lift * lift));  // …and how much it must draw in to rise that far
-                for (int a = 0; a < _capeWide; a++)
-                {
-                    int o = a * CCloth.ClothColumnStride + b * CCloth.ClothParticleStride;
-                    BitConverter.GetBytes(BitConverter.ToSingle(_capeRest, o) + trim).CopyTo(rest, o);          // +x = back toward the collar
-                    BitConverter.GetBytes(BitConverter.ToSingle(_capeRest, o + 4) - lift).CopyTo(rest, o + 4);  // −y = up off the back
-                }
-            }
-            Memory.WriteBytesBatch(_capeObj + CCloth.ClothRest, rest);
-        }
-
-        private const float CapeSpringSide = 0.42f;      // across the cape: holds the width, and with it the authored flare
-        private const float CapeSpringAlong = 0.12f;     // along it: low, so the wind can lift the sheet and carry a wave down it
-        private const float CapeSpringUp = 0.16f;        // vertical: between the two — it fights the lift, but also the sagging
-        /// <summary>The cat's facing as a GUARANTEED unit vector — the cave leaves it (0, 0) with no target in range, and
-        /// <see cref="StiffenCape"/> mixes by the squares of these, which only sums correctly when they are normalised.</summary>
-        private static void Facing(out float dx, out float dz)
-        {
-            float l = (float)Math.Sqrt(_dirX * _dirX + _dirY * _dirY);
-            if (l > 1e-3f) { dx = _dirX / l; dz = _dirY / l; } else { dx = 0f; dz = 1f; }
-        }
-
-        /// <summary>Rebuild the cloth's spring (CCloth +0xE0/+0xE4/+0xE8, a per-axis vector) from the cat's facing: stiff
-        /// across the cape, slack fore-and-aft, mixed by the squares of the facing so the pair rotates through the diagonals.
-        /// The engine's axes are WORLD axes, so a constant would only be right while the cat faced one way.</summary>
-        private static void StiffenCape()
-        {
-            Facing(out float fdx, out float fdz);
-            float fx = fdx * fdx, fz = fdz * fdz;                                      // normalised, so fx + fz = 1 always
-            byte[] k = new byte[12];
-            BitConverter.GetBytes(CapeSpringAlong * fx + CapeSpringSide * fz).CopyTo(k, 0);
-            BitConverter.GetBytes(CapeSpringUp).CopyTo(k, 4);
-            BitConverter.GetBytes(CapeSpringAlong * fz + CapeSpringSide * fx).CopyTo(k, 8);
-            Memory.WriteBytesBatch(_capeObj + CCloth.ClothK, k);
-        }
-
-        /// <summary>Put the whole cloth exactly on its rest shape at the cat's new place. Called when the copy teleports — the
-        /// bind to the pellet's birth frame — where the anchor jumps the length of the room in one step.
-        ///
-        /// The engine's own guard (Step teleports the sheet when the anchor's centroid moves more than 10 units) does not cover
-        /// this: the pinned collar is re-pinned to the anchor on every constraint pass, so the instant it snaps to the new
-        /// position while the rest of the sheet is still at the old one, the cape is stretched and the constraints tear it
-        /// apart. So place every particle here — current AND previous = LW(anchor) × rest, velocities zeroed, and the mark the
-        /// teleport test compares against moved to match: the state Clear__6CCloth builds.</summary>
-        private static void ReseedCape()
-        {
-            if (_capeObj == 0 || _capeRest == null) return;
-            uint anchor = Memory.ReadGuestPtr(_capeObj + CCloth.ClothAttach);
-            byte[] lw = Memory.IsValidGuest(anchor) ? Memory.ReadBytesBatch(Memory.ToMmu(anchor) + CFrameVu1.WorldMatrix, 0x40) : null;
-            if (lw == null) { Log("cape: cannot reseed — the anchor's matrix did not read"); return; }
-            float[] m = new float[16];
-            for (int i = 0; i < 16; i++) m[i] = BitConverter.ToSingle(lw, i * 4);
-            // row-vector convention, as everywhere in this engine: world = x·row0 + y·row1 + z·row2 + row3
-            void Place(byte[] dst, int o, float x, float y, float z)
-            {
-                BitConverter.GetBytes(x * m[0] + y * m[4] + z * m[8] + m[12]).CopyTo(dst, o);
-                BitConverter.GetBytes(x * m[1] + y * m[5] + z * m[9] + m[13]).CopyTo(dst, o + 4);
-                BitConverter.GetBytes(x * m[2] + y * m[6] + z * m[10] + m[14]).CopyTo(dst, o + 8);
-                BitConverter.GetBytes(1f).CopyTo(dst, o + 12);
-            }
-            byte[] cur = new byte[_capeWide * CCloth.ClothColumnStride];
-            for (int a = 0; a < _capeWide; a++)
-                for (int b = 0; b < _capeHang; b++)
-                {
-                    int o = a * CCloth.ClothColumnStride + b * CCloth.ClothParticleStride;
-                    Place(cur, o, BitConverter.ToSingle(_capeRest, o), BitConverter.ToSingle(_capeRest, o + 4), BitConverter.ToSingle(_capeRest, o + 8));
-                }
-            Memory.WriteBytesBatch(_capeObj + CCloth.ClothCur, cur);
-            Memory.WriteBytesBatch(_capeObj + CCloth.ClothPrev, cur);                  // no history: nothing to whip back toward
-            Memory.WriteBytesBatch(_capeObj + CCloth.ClothVel, new byte[_capeWide * CCloth.ClothColumnStride]);
-            byte[] c = Memory.ReadBytesBatch(_capeObj + CCloth.ClothAnchorLocal, 12);  // and the mark the teleport test compares to
-            if (c != null)
-            {
-                byte[] w = new byte[12];
-                float lx = BitConverter.ToSingle(c, 0), ly = BitConverter.ToSingle(c, 4), lz = BitConverter.ToSingle(c, 8);
-                BitConverter.GetBytes(lx * m[0] + ly * m[4] + lz * m[8] + m[12]).CopyTo(w, 0);
-                BitConverter.GetBytes(lx * m[1] + ly * m[5] + lz * m[9] + m[13]).CopyTo(w, 4);
-                BitConverter.GetBytes(lx * m[2] + ly * m[6] + lz * m[10] + m[14]).CopyTo(w, 8);
-                Memory.WriteBytesBatch(_capeObj + CCloth.ClothAnchorWorld, w);
-            }
         }
 
         // ── the cape, mask and GLOW follow the equipped weapon's ELEMENT ───────────────────────────────────
@@ -760,7 +424,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Point the glow cave at this look: the palette ROW it should paint (CatGlowPalRow), the disc to bind —
         /// always the same one — and CatGlowReady = 0 so it binds again, since the copy's texture entries are remade per
         /// spawn.</summary>
-        private static void WriteGlowName()
+        internal static void WriteGlowName()
         {
             // EVERY look draws the same 8-bit disc and differs only in the palette row the cave paints into it. Row 0
             // means "derive it from the equipped element", which is what the cape look wants.
@@ -800,7 +464,7 @@ namespace Dark_Cloud_Improved_Version
         /// cat's colour and not by anything of its own — the material rows do nothing. ElfCave.CatCapeTint wraps that one
         /// cloth's draw and adds <see cref="_capeTint"/> as a delta on top of the cat's, so it is written as
         /// (cape − cat); every other cloth in the game is untouched.</summary>
-        private static void TintCape()
+        internal static void TintCape()
         {
             if (_capeObj == 0) { Memory.WriteUInt(CodeCaves.Mailbox.CatCapeCloth, 0); return; }
             Array.Copy(ElementLooks[ElementNow()].Tint, _capeTint, 3);   // seed before the first write: SpawnCape calls this
@@ -992,1365 +656,9 @@ namespace Dark_Cloud_Improved_Version
             Log("cat resident (hidden) — " + (_native ? "native catcher" : "thread follower"));
         }
 
-        // ─────────────────────────────────────── the cave handshake ────────────────────────────────────────
-
-        /// <summary>At the charge threshold: give the cave the growth reciprocal and the head rest offset (cat space ×
-        /// scale), zero its counters, hide the copy (scale 0 — the cave owns position/scale/opacity from here) and set
-        /// state 3: the next NEW pellet binds on its birth frame. Arming while a previous cat still rides its pellet
-        /// clears it, so a new charged shot always starts clean.</summary>
-        private static void ArmCave()
-        {
-            Memory.WriteInt  (CodeCaves.Mailbox.CatPelletSlot, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatState, 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGrowInv, 1f / GrowFrames);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatHeadX, CatScale * _headX);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatHeadH, CatScale * _headH);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatHeadZ, CatScale * _headZ);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGrowFrames, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGrowN, GrowFrames);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGravity, FallGravity);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatFloorH, Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4));
-            Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatLandStopFrame, LandStopFrame);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatLandEndFrame, LandEndFrame);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatTrackHalf, _look.Track ? 1f : 0f);   // the winged cat re-aims until halfway down from the apex
-            Memory.WriteFloat(CodeCaves.Mailbox.CatLandLead, LandLeadFrames);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatMoveKey, KeyWalk);                // a brisk walk reads better than the run
-            Memory.WriteFloat(CodeCaves.Mailbox.CatMoveFrac, MoveFrac);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatMoveAbs, MoveSpeedAbs);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatFloatLaunch, FloatLaunchFrame);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatFloatStart, FloatStartFrame);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatFloatRate, CharacterMotion.MotionSpeedUseKey);   // KEY rate — FloatRate is baked into the KEY entry at spawn (see RegisterSlot)
-            Memory.WriteFloat(CodeCaves.Mailbox.CatFallBlend, 1f / FallBlendSteps);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatFallBlendFrames, FallBlendSteps);   // the cave switches float → fall this many frames before the land clip starts
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, GlowScale);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatScaleMul, CatScale);          // the size the cave grows the cat to on the pellet
-            _glowFade = -1;
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, GlowFlags);
-            WriteGlowName();                                                      // (clears CatGlowReady: the copy's texture entries are remade per spawn — rebind)
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, GlowPull);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, GlowLift);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatBlendDefault, BlendDefault);
-            Memory.WriteFloat(CodeCaves.MotionCave + MotionType.StateSpeed, BlendDefault);   // the copy's channel: a hit mid-fall can leave the slow fade armed
-            Memory.WriteInt  (CodeCaves.Mailbox.CatSitKey, KeySit);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatProbeUp, ProbeUp);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatProbeDown, ProbeDown);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatProbeFront, ProbeFront);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatProbeBack, ProbeBack);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatRateBase, RateBase);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatRatePerSpeed, RatePerSpeed);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatRateMax, RateMax);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatIdleKey, KeyStand);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatBlocked, 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceRange, RangeFor(_target));
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceFrames, PounceFrames);   // per target: ApplyFlightTime
-            Memory.WriteInt  (CodeCaves.Mailbox.CatHitEntry, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatHitLatch, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatHitDamage, 0);                 // 0 = not stamped yet: the cave tests no touch until WriteHitStamps at bind. A stale non-zero value lets the hidden copy deal a 1-damage hit on its first frame
-            Memory.WriteInt  (CodeCaves.Mailbox.CatHitAttr, 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatKickStrength, KickStrength);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatKickDecay, KickDecay);
-            _hitFade = false;
-            Memory.WriteFloat(CodeCaves.Mailbox.CatReadyEnd, ReadyEndFrame);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatPounceFly, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatFloatKey, KeyFloat);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatReadyStart, ReadyStartFrame);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceMaxDist, RangeFor(_target) * 2f);
-            long sl = SlotAddr();
-            Memory.WriteVec3(sl + CCharacter.CharScale, 0f, 0f, 0f);
-            Memory.WriteFloat(sl + CCharacter.NpcOpacity, 0f);
-            _scale = 0f; _alpha = 0f; _pelletSlot = -1; _fade = 0; _caveOwns = true; _disarmTicks = 0;
-            _phase = Phase.Resident; _phaseStart = GameClock.Now;
-            Memory.WriteInt  (CodeCaves.Mailbox.CatState, 3);                   // waiting — armed
-            Log("shot released — the cave binds the next pellet on its birth frame");
-        }
-
-        private static void DisarmCave()
-        {
-            if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }   // CatGlowOn is PollCave's (the glow may linger past the cat)
-            _caveOwns = false; _disarmTicks = 0;
-        }
-
-        private static bool _pounceLogged, _sitLogged;
-        private static int _retargetTick;
-        private static int _pounceKind;               // 1 ground, 2 flying (log only)
-        /// <summary>Follow the cave's state: 1 = it bound a pellet (note it, face along the pellet, log), 2 = that
-        /// pellet ended (hold the last placed spot, fade, then hide again). A shot-less release disarms it.</summary>
-        private static void PollCave()
-        {
-            if (!Active) return;
-            int state = Memory.ReadInt(CodeCaves.Mailbox.CatState);
-            if (_disarmTicks > 0 && --_disarmTicks == 0 && state == 3) { DisarmCave(); Hide(); Log("charge released without a shot — cat stays hidden"); return; }
-            if (_target >= 0 && state >= 4) WriteTargetAim();                                                  // the aim point follows the target's body every tick
-            // A lock-on made after the cat picked its target wins, or it keeps a far one: checked every ~0.5 s
-            // while walking or crouched. A closed mimic keeps the cat crouched (the cave holds the ready clip on its last frame on CatHoldReady).
-            if (_target >= 0 && (state == 6 || state == 10) && ++_retargetTick >= 30) { _retargetTick = 0; RetargetToLockOn(state); }
-            // Hold the crouch while the target cannot be hit: a chest-mimic still shut, or any enemy inside its invincibility
-            // frames (`_STATUS_SET_MUTEKI`: 9 after a hit, 100 when a mimic wakes, 1000 dying) — CheckDmg skips every hit then.
-            if (state == 1 || state == 4 || state == 5 || state == 8 || state == 11) CrushGuardsNearCat();
-            bool hold = _target >= 0 && state >= 4 && (IsUnopenedMimic(_target) || Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(_target, EnemySlotOffsets.HitStunTimer)) > 0);
-            Memory.WriteInt(CodeCaves.Mailbox.CatHoldReady, hold ? 1 : 0);
-            if (hold != _holdLogged)
-            {
-                _holdLogged = hold;
-                Log((hold ? $"target slot {_target} cannot be hit yet (shut mimic / invincibility frames) — crouching until it can" : "target hittable — leaping"));
-                // Released: a chest-mimic's init label ran when it woke (its guard windows — the disc bake makes the wake a
-                // guard — are registered only now); crush them for this flight so the leap lands through the guard.
-                if (!hold && _target >= 0) CrushGuard(_target, again: true);
-            }
-            // The glow follows the cat's visibility. While the cat fades out (hit or 20 s expiry: opacity over FadeTicks) the glow
-            // SHRINKS on its own, longer clock (GlowFadeTicks), so it lingers a beat where the cat vanished — size is the
-            // fade, since the torch tint global does not take. Its clock starts with the fade and keeps running past Hide();
-            // a new bind resets it. Once the shrink has run out the glow stays OFF until the next bind: PollCave runs before
-            // Step in the tick, so snapping back to "follow the cat" here would show one full-size frame before Step hid it.
-            bool fading = _hitFade || _phase == Phase.Fading;
-            if (fading && _glowFade < 0) _glowFade = 0;
-            if (_glowFade >= 0 && _glowFade < GlowFadeTicks) _glowFade++;
-            bool shrinking = _glowFade >= 0 && _glowFade < GlowFadeTicks, done = _glowFade >= GlowFadeTicks;
-            bool glow = !done && ((state != 0 && state != 3) || shrinking);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, glow ? 1 : 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, GlowScale * (shrinking ? 1f - _glowFade / (float)GlowFadeTicks : done ? 0f : 1f));
-            int ent = Memory.ReadInt(CodeCaves.Mailbox.CatHitEntry);
-            if (ent != 0)                                                        // the cave planted a damage entry at a contact (the pellet's own recipe)
-            {
-                Memory.WriteInt(CodeCaves.Mailbox.CatHitEntry, 0);
-                lock (_planted) _planted.Add((ent - 1, PlantedLifeTicks, true));
-                int hitAttr = Memory.ReadInt(CodeCaves.Mailbox.CatHitAttr);
-                Log($"cat contact — damage entry {ent - 1} planted natively (base {Memory.ReadInt(CodeCaves.Mailbox.CatHitDamage)}, attr 0x{hitAttr:X} = {ElementNameOf(hitAttr)})");
-            }
-            if (state >= 4 && state <= 11 && state != 9)                        // every cave-owned state: face the cave's live direction (it re-aims in the ready crouch, the float wind-up and the take-off)
-            {
-                float ddx = Memory.ReadFloat(CodeCaves.Mailbox.CatDirX), ddz = Memory.ReadFloat(CodeCaves.Mailbox.CatDirZ);
-                if (ddx * ddx + ddz * ddz > 1e-6f) { _dirX = ddx; _dirY = ddz; _yaw = (float)Math.Atan2(ddx, ddz); }
-            }
-            if (state >= 4 && state <= 11 && LifetimeOver()) { FadeKeepingPose(); return; }   // the lifetime is absolute from the bind: on the ground, crouched at a shut mimic or mid-leap alike, it shrinks and fades as it stands
-            switch (state)
-            {
-                case 1:
-                    if (_phase != Phase.Flying)
-                    {
-                        long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
-                        int slot = Memory.ReadInt(CodeCaves.Mailbox.CatPelletSlot) - 1;
-                        if (!Memory.IsValidGuest(pool) || slot < 0) break;
-                        _pool = pool; _pelletSlot = slot; _alpha = 1f; _fade = 0; _glowFade = -1; _caveOwns = true; _disarmTicks = 0;
-                        ReseedCape();
-                        long va = PlayerShotPool.VelAddr(pool, slot);
-                        FaceAlong(Memory.ReadFloat(va), Memory.ReadFloat(va + 8));
-                        _target = PickTarget();                                   // locked-on first, else the nearest to Xiao
-                        _floor = _target >= 0 ? Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(_target) + 4)
-                                              : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
-                        _pelletDamage = Memory.ReadInt(PlayerShotPool.DamageAddr(pool, slot));
-                        WriteHitStamps();                                         // the entry the cave will plant: pellet + attack, the weapon's element
-                        CrushGuard(_target);                                      // Guard Crush: the target's guard windows are dropped for this flight
-                        ApplyFlightTime();
-                        _phase = Phase.Flying; _phaseStart = GameClock.Now; _hitDone = false; _boundAt = GameClock.Now; _gaitLogged = false; _blockedLogged = false; _pounceLogged = false; _pounceKind = 0; _sitLogged = false; _retargetTick = 0;
-                        _flightFrame0 = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
-                        Memory.WriteFloat(CodeCaves.Mailbox.CatFloorH, _floor);
-                        WriteTargetAim();
-                        Log(
-                            $"cat bound to pellet slot {slot} on its birth frame" + (_target >= 0 ? $", locked enemy slot {_target}" : "") + $" (motion frame {_flightFrame0:F1})");
-                    }
-                    break;
-                case 4:                                                          // falling: off the pellet's line, or a flying pounce's arc
-                    if (_phase != Phase.Falling)
-                    {
-                        _phase = Phase.Falling; _phaseStart = GameClock.Now;
-                        if (Memory.ReadInt(CodeCaves.Mailbox.CatPounceFly) != 0)
-                        {
-                            Log($"vertical leap at flying enemy slot {_target}, v=({Memory.ReadFloat(CodeCaves.Mailbox.CatVx):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVh):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVz):F2})/frame (decided at distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1})");
-                            break;
-                        }
-                        Log(
-                            $"full size after {Memory.ReadInt(CodeCaves.Mailbox.CatGrowFrames)} frames — off the pellet's line, v=({Memory.ReadFloat(CodeCaves.Mailbox.CatVx):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVh):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVz):F2})/frame, run speed {Memory.ReadFloat(CodeCaves.Mailbox.CatRunSpeed):F2}");
-                    }
-                    break;
-                case 5:                                                          // land clip started (ahead of touchdown); the cave stops momentum at paw contact and runs at clip end
-                    if (_phase != Phase.Landing)
-                    {
-                        _phase = Phase.Landing; _phaseStart = GameClock.Now;
-                        long lp = SlotAddr() + CCharacter.CharPos;
-                        Log($"land clip started at ({Memory.ReadFloat(lp):F1},{Memory.ReadFloat(lp + 4):F1},{Memory.ReadFloat(lp + 8):F1}), {Memory.ReadFloat(lp + 4) - Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2} above the floor, motion frame {Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1}");
-                    }
-                    break;
-                case 6:                                                          // running (cave moves it); face along its direction, decide the end
-                {
-                    if (_phase != Phase.Running)
-                    {
-                        _phase = Phase.Running; _phaseStart = GameClock.Now; _pounceLogged = false; _pounceKind = 0;
-                        Log($"land clip done (frame {Memory.ReadFloat(CodeCaves.Mailbox.CatPrevFrame):F1}) — moving off, floor {Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2}");
-                    }
-                    long rp = SlotAddr() + CCharacter.CharPos;
-                    _x = Memory.ReadFloat(rp); _h = Memory.ReadFloat(rp + 4); _y = Memory.ReadFloat(rp + 8);
-                    double rt = (GameClock.Now - _phaseStart).TotalSeconds;
-                    float dist = float.MaxValue;
-                    if (_target >= 0 && !Enemies.IsLive(_target))
-                    {
-                        int was = _target;
-                        _target = PickTarget();                                   // the next nearest, if any
-                        WriteTargetAim();
-                        CrushGuard(_target); ApplyFlightTime();
-                        Log($"target slot {was} is gone — now {(_target >= 0 ? $"slot {_target}" : "none (walking straight)")}");
-                    }
-                    if (_target >= 0)
-                    {
-                        long tp = EnemyAddresses.CharObjects.PosAddr(_target);
-                        float ex = Memory.ReadFloat(tp) - _x, ey = Memory.ReadFloat(tp + 8) - _y; dist = (float)Math.Sqrt(ex * ex + ey * ey);
-                    }
-                    if (_target < 0)
-                    {
-                        if (!_sitLogged) { _sitLogged = true; Log($"no enemy within {MaxTargetDistance:F0} — sitting"); }
-                        if (++_retargetTick >= 30)                                 // look again every ~0.5 s
-                        {
-                            _retargetTick = 0;
-                            _target = PickTarget();
-                            if (_target >= 0)
-                            {
-                                WriteTargetAim();
-                                CrushGuard(_target); ApplyFlightTime();
-                                _sitLogged = false; _gaitLogged = false;
-                                Log($"enemy slot {_target} came within range — up and after it");
-                            }
-                        }
-                    }
-                    else if (!_gaitLogged && Memory.ReadInt(CodeCaves.Mailbox.CatBlocked) == 0)
-                    {
-                        _gaitLogged = true;
-                        Log($"walking at {Memory.ReadFloat(CodeCaves.Mailbox.CatRunSpeed):F3}/frame, clip rate {Memory.ReadFloat(SlotAddr() + CharacterMotion.MotionSpeedOffset):F2} (town mapping)");
-                    }
-                    bool blocked = Memory.ReadInt(CodeCaves.Mailbox.CatBlocked) != 0;
-                    if (blocked && !_blockedLogged) { _blockedLogged = true; Log("a wall stops the cat — waiting"); }
-                    if (!blocked) _blockedLogged = false;
-                    break;
-                }
-                case 11:                                                         // float-up wind-up: in place, turning, until the feet-off frame launches the leap
-                    if (_pounceKind != 3) { _pounceKind = 3; _phase = Phase.TakeOff; Log($"float wind-up at enemy slot {_target} — jump at frame {FloatLaunchFrame:F0}"); }
-                    break;
-                case 10:                                                         // ready: in place before the jump, or held there while the target cannot be hit
-                    if (!_pounceLogged) { _pounceLogged = true; _phase = Phase.TakeOff; _phaseStart = GameClock.Now; Log($"readying a pounce at enemy slot {_target} (cave compared distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1} vs range {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgRange):F1})"); }
-                    break;
-                case 2:
-                {
-                    long sp = SlotAddr() + CCharacter.CharPos;                       // hold the last placed spot through the fade
-                    _x = Memory.ReadFloat(sp); _h = Memory.ReadFloat(sp + 4); _y = Memory.ReadFloat(sp + 8);
-                    int frames = Memory.ReadInt(CodeCaves.Mailbox.CatGrowFrames);
-                    float mf = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
-                    _scale = 1f; _pelletSlot = -1;
-                    Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
-                    _caveOwns = false;
-                    Log($"pellet ended after {frames} frames; motion frame {_flightFrame0:F1} → {mf:F1}");
-                    Enter(Phase.Fading, KeyLeap);
-                    break;
-                }
-            }
-        }
-
-        /// <summary>Thread fallback (unpatched ISO): pin the resident copy to the new charged pellet from here on.</summary>
-        private static void Bind(long pool, int slot)
-        {
-            long pa = PlayerShotPool.PosAddr(pool, slot), va = PlayerShotPool.VelAddr(pool, slot);
-            _px = Memory.ReadFloat(pa); _ph = Memory.ReadFloat(pa + 4); _py = Memory.ReadFloat(pa + 8);
-            FaceAlong(Memory.ReadFloat(va), Memory.ReadFloat(va + 8));
-            _target = LockedTarget();
-            _floor = _target >= 0 ? Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(_target) + 4)
-                                  : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
-            _pool = pool; _pelletSlot = slot; _scale = 0f; _alpha = 1f; _fade = 0; _glowFade = -1;
-            PlaceRootUnderHead();
-            _phase = Phase.Flying; _phaseStart = GameClock.Now; _hitDone = false;
-            Maintain();
-            Log(
-                $"cat pinned to pellet slot {slot} from ({_px:F1},{_ph:F1},{_py:F1})" + (_target >= 0 ? $", locked enemy slot {_target}" : "") + " [thread follower]");
-        }
-
-        /// <summary>Back to resident: invisible, scale 0, fall pose looping, ready for the next charge.</summary>
-        private static void Hide()
-        {
-            _alpha = 0f; _scale = 0f; _pelletSlot = -1; _fade = 0; _caveOwns = false; _hitFade = false;
-            RestoreGuardsNow();
-            _phase = Phase.Resident; _phaseStart = GameClock.Now;
-            SetKey(KeyLeap);
-            Maintain();
-        }
-
-        /// <summary>True once the cat has been out for <see cref="LifetimeSeconds"/> since its bind, releasing the cave
-        /// (state 0) so the caller can fade it from wherever it stands. Not applied while it still rides the pellet
-        /// (states 1–3): the pellet's own life ends that flight far sooner.</summary>
-        private static bool LifetimeOver()
-        {
-            if ((GameClock.Now - _boundAt).TotalSeconds < LifetimeSeconds) return false;
-            Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
-            _scale = 1f; _caveOwns = false;
-            Log("20 s lifetime over — shrinking away");
-            return true;
-        }
-
-        /// <summary>Fade out from the current pose without restarting the clip (the cave left the key as it stood).</summary>
-        private static void FadeKeepingPose()
-        {
-            _key = Memory.ReadInt(SlotAddr() + CCharacter.MotionId);
-            _phase = Phase.Fading; _phaseStart = GameClock.Now; _fade = 0;
-        }
-
-        // ───────────────────────────────────────── aim + targeting ─────────────────────────────────────────
-
-        /// <summary>Yaw the cat along a horizontal direction; a pellet going straight up or down keeps her facing.</summary>
-        private static void FaceAlong(float vx, float vy)
-        {
-            float hl = (float)Math.Sqrt(vx * vx + vy * vy);
-            if (hl < 1e-3f)
-            {
-                float yaw = Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
-                vx = (float)Math.Sin(yaw); vy = (float)Math.Cos(yaw); hl = 1f;
-            }
-            _dirX = vx / hl; _dirY = vy / hl;
-            _yaw = (float)Math.Atan2(_dirX, _dirY);
-        }
-
-        /// <summary>The leap's flight time to the target (the cave reads it at launch): the tall/large/flying set in
-        /// <see cref="EnemySpecies.VerticalLeapTargets"/> and minibosses get the higher 40-frame arc, everything else
-        /// the quick 27-frame one.</summary>
-        private static void ApplyFlightTime()
-        {
-            float frames = PounceFrames; string why = "";
-            if (_target >= 0)
-            {
-                ushort species = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(_target, EnemySlotOffsets.EnemySpeciesId));
-                float scale = Memory.ReadFloat(ModelScaleOffsets.ModelBase + (long)_target * ModelScaleOffsets.ModelStride + ModelScaleOffsets.ScaleX);
-                if (EnemySpecies.VerticalLeapTargets.TryGetValue(species, out string name)) { frames = PounceFramesTall; why = name; }
-                else if (MiniBoss.miniBossEnemyNumbers.Contains(_target) || scale >= 1.25f) { frames = PounceFramesTall; why = $"miniboss (model scale {scale:F2})"; }
-            }
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceFrames, frames);
-            if (why.Length > 0) Log($"target slot {_target}: {frames:F0}-frame leap ({why})");
-        }
-
-        /// <summary>The pounce range for this target: the look's (50 for the winged cat) — but a dormant chest-mimic is
-        /// always approached to 30.</summary>
-        private static float RangeFor(int target)
-            => target >= 0 && _look.Range > PounceRange && IsUnopenedMimic(target) ? PounceRange : _look.Range;
-
-        /// <summary>The point the cave walks to and jumps at: the centre of the target's BIGGEST active body sphere (the
-        /// Dragon's torso, a bat's body, a Titan's chest) rather than its root at the feet. Written into the mailbox every
-        /// tick; CatTargetPtr points at that vector. No target → pointer 0 (the cat sits).</summary>
-        private static void WriteTargetAim()
-        {
-            if (_target < 0) { Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, 0); return; }
-            float range = RangeFor(_target);                                     // per target, every tick (a mimic may open mid-approach)
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceRange, range);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceMaxDist, range * 2f);
-            long root = EnemyAddresses.CharObjects.PosAddr(_target);
-            float x = Memory.ReadFloat(root), h = Memory.ReadFloat(root + 4), y = Memory.ReadFloat(root + 8);
-            if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(_target, EnemySlotOffsets.RenderStatus)) != 2)
-            {
-                // Dormant (a chest-mimic that has not opened): its script has not declared any spheres, so the sphere table
-                // is whatever the slot's previous occupant left — aiming at that sent the cat wandering off.
-                // The root is the chest's spot (SetMimicEvent places the box at the enemy's spawn position).
-                Memory.WriteVec3(CodeCaves.Mailbox.CatAimPos, x, h, y);
-                Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, (int)Memory.ToGuest(CodeCaves.Mailbox.CatAimPos));
-                if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Log($"aim at enemy slot {_target}: dormant (chest) — its root at ({x:F1},{h:F1},{y:F1})"); }
-                return;
-            }
-            long tbl = BodyCollision.SlotBase(_target);
-            const int n = BodyCollision.MaxBodyParts;
-            byte[] active = Memory.ReadBytesBatch(tbl + BodyCollision.ActiveArray, n * 4), radii = Memory.ReadBytesBatch(tbl + BodyCollision.RadiusArray, n * BodyCollision.BodyPartStride), centres = Memory.ReadBytesBatch(tbl + BodyCollision.CentreArray, n * BodyCollision.CentreStride);
-            byte[] pct = Memory.ReadBytesBatch(tbl + BodyCollision.DamagePctArray, n * BodyCollision.DamagePctStride);           // per sphere: damage % by attacker character (_SET_BODY_COL_PARA 10+char); Xiao = +4
-            byte[] spare = Memory.ReadBytesBatch(tbl + BodyCollision.SpareArray, n * BodyCollision.SpareStride);         // per sphere: the spare 5-int table — [1] = kick type admitted for Xiao at [0] % (disc-baked on Joe's face; ELF PatchCatSpherePercent)
-            if (active != null && radii != null && centres != null)
-            {
-                // The biggest hurt sphere that can actually damage (Xiao % > 0 — Master Utan's neck/face/hands are 0 for her,
-                // only the toes count); among equals, the one furthest FORWARD along the enemy's facing (Statue Dog's front
-                // sphere, the Black Knight Mount's fore-body), then the root as a last resort.
-                float yaw = Memory.ReadFloat(EnemyAddresses.CharObjects.CharAddr(_target) + CCharacter.CharRotY);
-                float fx = (float)Math.Sin(yaw), fz = (float)Math.Cos(yaw);
-                float best = -1f, bestFwd = float.MinValue; bool anyDamaging = false;
-                for (int pass = 0; pass < 2 && best < 0; pass++)                     // pass 0: damaging spheres only; pass 1: any
-                {
-                    for (int j = 0; j < 16; j++)
-                    {
-                        if (BitConverter.ToInt32(active, j * 4) == 0) continue;
-                        int p = pct == null ? 100 : BitConverter.ToInt32(pct, j * 0x18 + 4);
-                        if (spare != null && BitConverter.ToInt32(spare, j * 0x14 + 4) == CatKickType) p = BitConverter.ToInt32(spare, j * 0x14);   // the cat's own % on this sphere
-                        if (pass == 0 && p <= 0) continue;
-                        float r = BitConverter.ToSingle(radii, j * 4);
-                        float cx = BitConverter.ToSingle(centres, j * 0x10), ch = BitConverter.ToSingle(centres, j * 0x10 + 4), cy = BitConverter.ToSingle(centres, j * 0x10 + 8);
-                        float fwd = (cx - Memory.ReadFloat(root)) * fx + (cy - Memory.ReadFloat(root + 8)) * fz;
-                        if (r > best + 0.01f || (Math.Abs(r - best) <= 0.01f && fwd > bestFwd)) { best = r; bestFwd = fwd; x = cx; h = ch; y = cy; anyDamaging = pass == 0; }
-                    }
-                }
-                if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Log($"aim at enemy slot {_target}: sphere r={best:F1} at ({x:F1},{h:F1},{y:F1}){(anyDamaging ? "" : " — NO sphere can take Xiao's damage; aiming at the biggest anyway")}"); }
-            }
-            Memory.WriteVec3(CodeCaves.Mailbox.CatAimPos, x, h, y);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, (int)Memory.ToGuest(CodeCaves.Mailbox.CatAimPos));
-        }
-
-        // A chest-mimic waits as a DORMANT slot; while the cat's target is one, the cat crouches and waits.
-        private static readonly HashSet<ushort> KingMimics = new() { (ushort)EnemySpecies.KingMimicDBC.Id, (ushort)EnemySpecies.KingMimicSMT.Id, (ushort)EnemySpecies.KingMimicMS.Id, (ushort)EnemySpecies.KingMimicWOF.Id, (ushort)EnemySpecies.KingMimicSW.Id, (ushort)EnemySpecies.KingMimicGoT.Id, (ushort)EnemySpecies.KingMimicDS.Id };
-        private static readonly HashSet<ushort> Mimics     = new() { (ushort)EnemySpecies.MimicDBC.Id, (ushort)EnemySpecies.MimicSMT.Id, (ushort)EnemySpecies.MimicMS.Id, (ushort)EnemySpecies.MimicWOF.Id, (ushort)EnemySpecies.MimicSW.Id, (ushort)EnemySpecies.MimicGoT.Id, (ushort)EnemySpecies.MimicDS.Id };
-        private static bool _holdLogged;
-
-        /// <summary>A native chest-mimic is a DORMANT enemy slot (RenderStatus 1: its view gate is 0, so it is never promoted
-        /// to 2 and never drawn — the treasure box drawn at its position is the disguise, see ChestAddresses). Opening the
-        /// box sets the gate and the slot goes to 2: its script declares the hurt spheres right then, so the cat leaps at
-        /// that moment and not after the "appear" clip.</summary>
-        private static bool IsUnopenedMimic(int slot)
-        {
-            ushort species = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.EnemySpeciesId));
-            if (!KingMimics.Contains(species) && !Mimics.Contains(species)) return false;
-            return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.RenderStatus)) != 2;   // dormant: the chest
-        }
-
-        /// <summary>A lock-on onto a different live enemy retargets the cat. Crouched (state 10) it is sent back to walking
-        /// (state 6, the crouch's play-once cleared so the walk loops) so the cave closes the distance before leaping again.</summary>
-        private static void RetargetToLockOn(int state)
-        {
-            int locked = LockedTarget();
-            if (locked < 0 || locked == _target || !Enemies.IsLive(locked)) return;
-            int was = _target; _target = locked;
-            WriteTargetAim(); CrushGuard(_target); ApplyFlightTime();
-            _gaitLogged = false; _pounceLogged = false; _sitLogged = false;
-            if (state == 10)
-            {
-                SetMotionFlags(clear: CCharacter.MotionPlayOnce);
-                Memory.WriteInt(CodeCaves.Mailbox.CatState, 6);
-            }
-            Log($"lock-on moved: target slot {was} → {locked}{(state == 10 ? " (leaving the crouch, walking)" : "")}");
-        }
-
-        /// <summary>Locked-on enemy first; otherwise the live enemy nearest to Xiao; −1 when none.</summary>
-        private static int PickTarget()
-        {
-            int locked = LockedTarget();
-            if (locked >= 0) return locked;
-            float px = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos), py = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 8);
-            int best = -1; float bestD = float.MaxValue;
-            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
-            {
-                if (!Enemies.IsLive(s)) continue;
-                long p = EnemyAddresses.CharObjects.PosAddr(s);
-                float dx = Memory.ReadFloat(p) - px, dy = Memory.ReadFloat(p + 8) - py, d = dx * dx + dy * dy;
-                if (d < bestD && d <= MaxTargetDistance * MaxTargetDistance) { bestD = d; best = s; }
-            }
-            return best;
-        }
-
-        /// <summary>The locked-on enemy slot, if it is still alive.</summary>
-        private static int LockedTarget()
-        {
-            int s = Memory.ReadInt(PlayerAction.LockOnTargetSlot);
-            if (s < 0 || s >= EnemyAddresses.FloorSlots.Count) return -1;
-            return Enemies.IsLive(s) ? s : -1;
-        }
-
-        // ───────────────────────────── the hit's element, and the guard crush ──────────────────────────────
-
-        /// <summary>The element a stamped attr bit stands for. Named in the contact log so "did the DAMAGE follow the
-        /// element, or only the hit visual?" is answerable from the log alone, without decoding a hex bit.</summary>
-        private static string ElementNameOf(int attr) => attr switch
-        {
-            0x01 => "Fire", 0x02 => "Ice", 0x04 => "Thunder", 0x08 => "Wind", 0x10 => "Holy",
-            0 => "none (no element, or the selected one has no build-up level)",
-            _ => "unexpected — more than one bit"
-        };
-
-        private static int _pelletDamage;
-        /// <summary>The damage entry the cave plants at a contact carries the pellet's damage plus the weapon's attack
-        /// (the "attack doubled" rule) and the weapon's element. Written at bind, and re-written by <see cref="Maintain"/>
-        /// whenever the live element stops matching the stamped one while a cat is already flying — the attack and the
-        /// element are read LIVE here, so re-calling is all that is needed; only _pelletDamage is captured, at bind.</summary>
-        private static void WriteHitStamps()
-        {
-            int attack = Memory.ReadShort(BattleWeaponAttack);
-            uint elem = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
-            uint attr = (elem != 0 && (elem & (elem - 1)) == 0) ? elem : 0u;      // one pure element bit or none
-            Memory.WriteInt(CodeCaves.Mailbox.CatHitDamage, Math.Max(1, _pelletDamage + attack));
-            Memory.WriteInt(CodeCaves.Mailbox.CatHitAttr, (int)attr);
-        }
-
-        private static readonly List<(int slot, int ticks, ushort[] flags)> _guardRestore = new();
-        /// <summary>Guard Crush for the cat: the target's guard-frame windows are zeroed for the flight (a guarding enemy
-        /// would otherwise take the hit on its guard); restored by <see cref="RetirePlanted"/> after the cat's lifetime
-        /// or at once by <see cref="RestoreGuardsNow"/>.</summary>
-        private static void CrushGuard(int enemy, bool again = false)
-        {
-            if (enemy < 0 || enemy >= EnemyAddresses.FloorSlots.Count) return;
-            lock (_planted)
-            {
-                int have = _guardRestore.FindIndex(g => g.slot == enemy);
-                if (have >= 0 && !again) return;                                     // already crushed this flight
-                if (have >= 0)
-                {   // again: windows registered AFTER the first crush (a chest-mimic's init label runs when it wakes) — zero
-                    // them too; the snapshot keeps the first non-zero flag per window so the restore puts everything back
-                    var (slot, ticks, snap) = _guardRestore[have];
-                    bool more = false;
-                    for (int w = 0; w < snap.Length; w++)
-                    {
-                        long a = EnemyAddresses.GuardWindows.FlagAddr(enemy, w);
-                        ushort cur = Memory.ReadUShort(a);
-                        if (cur != 0) { Memory.WriteUShort(a, 0); if (snap[w] == 0) snap[w] = cur; more = true; }
-                    }
-                    if (more) Log($"guard windows of enemy slot {enemy} zeroed again (registered since the first crush)");
-                    return;
-                }
-            }
-            var snap0 = new ushort[EnemyAddresses.GuardWindows.WindowCount];
-            bool any = false;
-            for (int w = 0; w < snap0.Length; w++)
-            {
-                long a = EnemyAddresses.GuardWindows.FlagAddr(enemy, w);
-                snap0[w] = Memory.ReadUShort(a);
-                if (snap0[w] != 0) { Memory.WriteUShort(a, 0); any = true; }
-            }
-            if (!any) return;
-            lock (_planted) _guardRestore.Add((enemy, (int)(LifetimeSeconds * 60) + 120, snap0));
-            Log($"guard windows of enemy slot {enemy} zeroed for this flight (Guard Crush)");
-        }
-
-        private const float GuardCrushRadius = 30f;      // the cat's reach while it is airborne
-        private const int   GuardSweepTicks  = 45;       // how long a swept crush holds after the last sweep (~1.5 s)
-        /// <summary>Guard Crush, every tick the cat can deal damage. <see cref="CrushGuard"/> covers only the chosen target and
-        /// only when called, but an enemy re-registers its guard windows whenever its script runs <c>_SET_GUARD_FRAME</c>, and
-        /// the cat's contact test hits whatever body sphere it touches — which need not be the target. CheckDmg (0x1D9F10)
-        /// offers the attacker no "unguardable" flag: the window IS the guard, so it has to be down at the instant of contact.
-        /// Reads every slot's window flags in one block and crushes those live and within <see cref="GuardCrushRadius"/> (the
-        /// target always counts); <see cref="RetirePlanted"/> restores them.</summary>
-        private static void CrushGuardsNearCat()
-        {
-            int n = EnemyAddresses.FloorSlots.Count, wc = EnemyAddresses.GuardWindows.WindowCount;
-            byte[] blk = Memory.ReadBytesBatch(EnemyAddresses.GuardWindows.FlagAddr(0, 0), n * EnemyAddresses.GuardWindows.Stride);
-            if (blk == null) return;
-            long sl = SlotAddr();
-            float cx = Memory.ReadFloat(sl + CCharacter.CharPos), cy = Memory.ReadFloat(sl + CCharacter.CharPos + 8);
-            for (int slot = 0; slot < n; slot++)
-            {
-                var cur = new ushort[wc];
-                bool any = false;
-                for (int w = 0; w < wc; w++)
-                {
-                    cur[w] = BitConverter.ToUInt16(blk, slot * EnemyAddresses.GuardWindows.Stride + w * 2);
-                    if (cur[w] != 0) any = true;
-                }
-                if (!any) continue;                                                  // nothing registered: nothing to crush
-                if (slot != _target)
-                {
-                    long p = EnemyAddresses.CharObjects.PosAddr(slot);
-                    float dx = Memory.ReadFloat(p) - cx, dy = Memory.ReadFloat(p + 8) - cy;
-                    if (dx * dx + dy * dy > GuardCrushRadius * GuardCrushRadius) continue;
-                }
-                for (int w = 0; w < wc; w++) if (cur[w] != 0) Memory.WriteUShort(EnemyAddresses.GuardWindows.FlagAddr(slot, w), 0);
-                lock (_planted)
-                {
-                    int i = _guardRestore.FindIndex(g => g.slot == slot);
-                    if (i < 0)
-                    {
-                        _guardRestore.Add((slot, GuardSweepTicks, cur));
-                        Log($"guard windows of enemy slot {slot} zeroed (in the cat's reach)");
-                    }
-                    else
-                    {
-                        var (s2, ticks, snap) = _guardRestore[i];
-                        for (int w = 0; w < wc && w < snap.Length; w++) if (snap[w] == 0 && cur[w] != 0) snap[w] = cur[w];
-                        _guardRestore[i] = (s2, Math.Max(ticks, GuardSweepTicks), snap);
-                    }
-                }
-            }
-        }
-
-        private static void RestoreGuardsNow()
-        {
-            lock (_planted)
-            {
-                foreach (var (slot, _, flags) in _guardRestore)
-                    for (int w = 0; w < flags.Length; w++) if (flags[w] != 0) Memory.WriteUShort(EnemyAddresses.GuardWindows.FlagAddr(slot, w), flags[w]);
-                _guardRestore.Clear();
-            }
-        }
-
-        // ───────────────────────────────────────────── flight ──────────────────────────────────────────────
-
-        /// <summary>The thread-side flight state machine, used when the ISO has no pellet-catcher cave. With the cave present
-        /// nearly every phase returns immediately (<c>if (_native) break;</c>) and this only mirrors what the cave drives,
-        /// ending in <see cref="Maintain"/> either way.</summary>
-        private static void Step()
-        {
-            double t = (GameClock.Now - _phaseStart).TotalSeconds;
-            if (_hitFade)                                                        // after a landed hit: keep flying/landing under the cave, fade out meanwhile
-            {
-                _fade++; _alpha = Math.Max(0f, 1f - _fade / (float)FadeTicks);
-                if (_fade >= FadeTicks) { DisarmCave(); Hide(); return; }      // the cave stops driving the (now invisible) cat
-            }
-            if (_target >= 0 && !Enemies.IsLive(_target)) _target = -1;
-            float tx = 0, th = 0, ty = 0;
-            if (_target >= 0)
-            {
-                long p = EnemyAddresses.CharObjects.PosAddr(_target);
-                tx = Memory.ReadFloat(p); th = Memory.ReadFloat(p + 4); ty = Memory.ReadFloat(p + 8);
-            }
-            switch (_phase)
-            {
-                case Phase.Resident:
-                    break;                                                       // hidden; the cave (or Bind) wakes it
-                case Phase.Flying:
-                {
-                    if (_native) break;                                          // the cave owns position/scale; PollCave handles the end
-                    // Thread follower (unpatched ISO): the head sits on the pellet's point, the body grows in behind it.
-                    if (Memory.ReadInt(PlayerShotPool.FlagAddr(_pool, _pelletSlot)) == 0)
-                    {
-                        _pelletSlot = -1;                                        // the pellet ended (hit, wall or lifetime)
-                        Enter(Phase.Fading, KeyLeap);                            // landing / run / pounce parked while the flight is tuned
-                        break;
-                    }
-                    long pa = PlayerShotPool.PosAddr(_pool, _pelletSlot), va = PlayerShotPool.VelAddr(_pool, _pelletSlot);
-                    _px = Memory.ReadFloat(pa); _ph = Memory.ReadFloat(pa + 4); _py = Memory.ReadFloat(pa + 8);
-                    FaceAlong(Memory.ReadFloat(va), Memory.ReadFloat(va + 8));
-                    _scale = (float)Math.Min(1.0, t / GrowSeconds);
-                    Memory.WriteFloat(PlayerShotPool.ScaleAddr(_pool, _pelletSlot), 1f - _scale);   // sprite only; the hitbox is untouched
-                    PlaceRootUnderHead();
-                    break;
-                }
-                case Phase.Falling:
-                    break;                                                       // the cave flies it; PollCave sees the landing
-                case Phase.Landing:
-                    if (_native) break;                                          // the cave runs the clip and hands over to the run at its end
-                    if (t >= LandSeconds) Enter(Phase.Running, KeyWalk);
-                    break;
-                case Phase.Running:
-                {
-                    if (_native) break;                                          // the cave runs it; PollCave ends the run
-                    float dx = _dirX, dy = _dirY, dist = float.MaxValue;
-                    if (_target >= 0)
-                    {
-                        dx = tx - _x; dy = ty - _y; dist = (float)Math.Sqrt(dx * dx + dy * dy);
-                        if (dist > 1e-3f) { dx /= dist; dy /= dist; _dirX = dx; _dirY = dy; }
-                        _floor = th;
-                    }
-                    _yaw = (float)Math.Atan2(dx, dy);
-                    _x += dx * RunSpeed; _y += dy * RunSpeed; _h = _floor;
-                    bool go = _target >= 0 ? dist <= PounceRange : t >= StraightRunSeconds;
-                    if (go) Enter(Phase.TakeOff, KeyTakeOff);
-                    else if (t >= RunTimeoutSeconds) Enter(Phase.Fading, KeyStand);
-                    break;
-                }
-                case Phase.TakeOff:
-                    if (_native) break;                                          // the cave runs the take-off, the leap and the landing; PollCave only mirrors them
-                    if (_target >= 0) { float dx = tx - _x, dy = ty - _y; if (dx * dx + dy * dy > 1e-3f) _yaw = (float)Math.Atan2(dx, dy); }
-                    if (t >= TakeOffSeconds)
-                    {
-                        // Leap: reach the target (or PounceRange straight ahead) in PounceFrames with a small arc.
-                        float ex = _target >= 0 ? tx : _x + _dirX * PounceRange, ey = _target >= 0 ? ty : _y + _dirY * PounceRange;
-                        float dx = ex - _x, dy = ey - _y;
-                        _vx = dx / PounceFrames; _vy = dy / PounceFrames; _vh = Gravity * PounceFrames * 0.5f;
-                        _dirX = dx; _dirY = dy;
-                        float l = (float)Math.Sqrt(dx * dx + dy * dy);
-                        if (l > 1e-3f) { _dirX /= l; _dirY /= l; _yaw = (float)Math.Atan2(_dirX, _dirY); }
-                        Enter(Phase.Leaping, KeyLeap);
-                    }
-                    break;
-                case Phase.Leaping:
-                {
-                    if (_native) break;                                          // cave-owned (see TakeOff)
-                    _x += _vx; _y += _vy; _h += _vh; _vh -= Gravity;
-                    bool near = _target >= 0 && (tx - _x) * (tx - _x) + (ty - _y) * (ty - _y) <= HitRadius * HitRadius * 0.5f;
-                    if (!_hitDone && (near || (_vh < 0 && _h <= _floor + 1f))) { _hitDone = true; PlantHit(_x, _h + 3f, _y, HitRadius, Math.Max(1, _pelletDamage + Memory.ReadShort(BattleWeaponAttack)), _x, _h, _y); }
-                    if (_vh < 0 && _h <= _floor) { _h = _floor; Enter(Phase.LandEnd, KeyLand); }
-                    break;
-                }
-                case Phase.LandEnd:
-                    if (_native) break;                                          // thread follower only
-                    if (t >= LandSeconds) Enter(Phase.Fading, KeyStand);
-                    break;
-                case Phase.Fading:
-                    _fade++;
-                    _alpha = Math.Max(0f, 1f - _fade / (float)FadeTicks);
-                    if (_fade >= FadeTicks) { Hide(); return; }
-                    break;
-            }
-            Maintain();
-        }
-
-        /// <summary>Root = flight point − the head's rest offset (at the current growth scale) turned by the yaw
-        /// (model +Z → world (sin yaw, cos yaw)), so the head stays on the pellet while the body grows behind it.</summary>
-        private static void PlaceRootUnderHead()
-        {
-            float cy = (float)Math.Cos(_yaw), sy = (float)Math.Sin(_yaw), k = _scale * CatScale;
-            _x = _px - k * (_headX * cy + _headZ * sy);
-            _y = _py - k * (-_headX * sy + _headZ * cy);
-            _h = _ph - k * _headH;
-        }
-
-        /// <summary>Enter a flight phase: stamp the phase clock and play its clip.</summary>
-        private static void Enter(Phase p, int key)
-        {
-            _phase = p; _phaseStart = GameClock.Now;
-            SetKey(key);
-        }
-
-        // ──────────────────────────────────────────── the copy ─────────────────────────────────────────────
-
-        /// <summary>Wall-clock through the build. The copy crosses the PINE socket a batch at a time, so the seconds
-        /// between the switch and a firable cat are mostly real work rather than a wait. Every milestone reports
-        /// milliseconds since Spawn began.</summary>
-        private static System.Diagnostics.Stopwatch _buildClock;
-        private static long _tripMark;
-        private static void BuildStep(string what)
-        {
-            if (_buildClock == null) return;
-            Log($"  build +{_buildClock.ElapsedMilliseconds,5} ms  {Memory.Trips - _tripMark,5} trip(s)  {what}");
-            _tripMark = Memory.Trips;
-        }
-
-        /// <summary>Deep-copy the cat subtree out of XIAO's live frame tree into the NodePool (the bake appends the 37
-        /// `cat_` nodes after her 79 body nodes, so they are one contiguous run ending the array), make the copied cat root
-        /// a free-standing root, un-hide it, give it its own skin buffers and motion channel, and host it in a dungeon
-        /// chara slot.</summary>
-        private static bool Spawn()
-        {
-            if (Active) return true;
-            _buildClock = System.Diagnostics.Stopwatch.StartNew();
-            Memory.ResetTrips(); _tripMark = 0;
-            if (FindTexEntry(CatTextureNames[0]) == 0 && RecreateCatEntries() < CatTextureNames.Length)
-            {
-                if (!_texDeferLogged) { _texDeferLogged = true; Log("her cat textures are not in the manager and none are remembered — spawn deferred (retrying)"); }
-                return false;
-            }
-            _texDeferLogged = false;
-            uint playerRoot = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel);
-            if (!Memory.IsValidGuest(playerRoot)) { Log("no player model"); return false; }
-            _liveRoot = playerRoot;
-
-            // Her frames are ONE contiguous 0x270 array from the model root (.mds node order): walk it while the
-            // names stay printable and the parent pointers stay inside the array. The cat root is the first
-            // `catroot`; everything after it is the cat.
-            var names = new List<string>();
-            int catIdx = -1;
-            for (int i = 0; i < MaxTreeNodes; i++)
-            {
-                uint n = playerRoot + (uint)(i * CFrameVu1.NodeStride);
-                if (!Memory.IsValidGuest(n)) break;
-                string nm = ReadName(n);
-                uint par = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.Parent);
-                // Every body node's parent is inside the array; the cat root is UNPARENTED (the bake gives it parent
-                // -1 so she never draws or skins it) and its children parent back into the cat run.
-                bool parOk = i == 0 || nm == CatRootName || (par >= playerRoot && par < n && (par - playerRoot) % CFrameVu1.NodeStride == 0);
-                if (nm.Length == 0 || !parOk || nm == CapeNodeName) break;      // the cape's cloth FRAME node follows the cat run: hers, not the copy's
-                bool printable = true;
-                foreach (char ch in nm) if (ch < 0x20 || ch > 0x7E) { printable = false; break; }
-                if (!printable) break;
-                names.Add(nm);
-                if (catIdx < 0 && nm == CatRootName) catIdx = i;
-            }
-            string chanInfo = "";
-            for (int c = 0; c < CCharacter.MotionSlots; c++)
-            {
-                uint cp = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.MotionSlotBase + c * 4);
-                if (!Memory.IsValidGuest(cp)) continue;
-                chanInfo += $" ch{c}=0x{cp:X} keys {Memory.ReadInt(CCharacter.Base + ChanKeyStart + c * 4)}..{Memory.ReadInt(CCharacter.Base + ChanKeyEnd + c * 4)}";
-            }
-            Log($"live player tree @0x{playerRoot:X}: {names.Count} node(s); channels:{chanInfo}");
-            BuildStep("player tree scanned");
-            if (catIdx < 0)
-            {
-                Log("nodes: " + string.Join(",", names));
-                Log("no '" + CatRootName + "' in her tree — the loaded c04b.chr has no cat (ISO not patched, or PCSX2 still on the old image)");
-                return false;
-            }
-            _catIndex  = catIdx;
-            _nodeCount = names.Count - catIdx;
-            uint min = playerRoot + (uint)(catIdx * CFrameVu1.NodeStride);
-            uint max = min + (uint)((_nodeCount - 1) * CFrameVu1.NodeStride);
-            int blockSize = _nodeCount * CFrameVu1.NodeStride;
-            if (_nodeCount > CodeCaves.MaxNodes) { Log($"{_nodeCount} cat nodes exceed the NodePool"); return false; }
-            byte[] block = Memory.ReadBytesBatch(Memory.ToMmu(min), blockSize);
-            if (block == null) return false;
-
-            _skinNodes.Clear();
-            uint poolG = (uint)CodeCaves.NodePoolGuest;
-            for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
-            {
-                bool isRoot = o == 0;
-                Memory.Rebase(block, o + CFrameVu1.Parent,      min, max, poolG, isRoot);   // cat root's parent (her root) → none
-                Memory.Rebase(block, o + CFrameVu1.RootChild,   min, max, poolG, false);
-                Memory.Rebase(block, o + CFrameVu1.RootSibling, min, max, poolG, isRoot);   // ...and its sibling chain → none
-                BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheA);
-                BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheB);
-                Array.Clear(block, o + CFrameVu1.WorldMatrix, 0x40);
-            }
-            // Un-hide: the bake scaled the cat root's bind 3x3 by HideScale so SHE never shows it.
-            for (int r = 0; r < 3; r++)
-                for (int c = 0; c < 3; c++)
-                {
-                    int b = CFrameVu1.LocalMatrix + r * 0x10 + c * 4;
-                    BitConverter.GetBytes(BitConverter.ToSingle(block, b) / HideScale).CopyTo(block, b);
-                }
-            BitConverter.GetBytes(0f).CopyTo(block, CFrameVu1.LocalTransX);           // root sits at the object origin
-            BitConverter.GetBytes(0f).CopyTo(block, CFrameVu1.LocalTransY);
-            BitConverter.GetBytes(0f).CopyTo(block, CFrameVu1.LocalTransZ);
-            BitConverter.GetBytes(1f).CopyTo(block, CFrameVu1.TrsScaleX);
-            BitConverter.GetBytes(1f).CopyTo(block, CFrameVu1.TrsScaleX + 4);
-            BitConverter.GetBytes(1f).CopyTo(block, CFrameVu1.TrsScaleX + 8);
-            BitConverter.GetBytes(0).CopyTo(block, CFrameVu1.DirtyTrs);
-            Memory.WriteBytesBatch(CodeCaves.NodePool, block);
-            _copyRoot = poolG;
-            FindHead(block);
-            _wingMeshIdx.Clear();
-            foreach (string nm in WingMeshNodes) { int wi = FindNode(block, nm); if (wi >= 0) _wingMeshIdx.Add(wi); }
-            _maskMeshIdx = FindNode(block, MaskNodeName); _maskVisual = 0;
-
-            if (!CopyMeshes()) return false;
-            if (!RegisterSlot(min, blockSize)) return false;
-            Active = true;
-            BuildStep("channel + slot registered");
-            Log($"cat copy up: {_nodeCount} nodes (her n{_catIndex}..n{_catIndex + _nodeCount - 1}) → 0x{_copyRoot:X}, slot {Slot}, built in {_buildClock.ElapsedMilliseconds:N0} ms over {Memory.Trips:N0} round trip(s), {Memory.TripBytes:N0} B");
-            _buildClock = null;                    // the stamps are for the BUILD: left running they reported a despawn's
-            return true;                           // texture restore as a 70 s, half-million-trip step (it was 70 s of play)
-        }
-
-        /// <summary>The head's rest position in the cat's own space (row-vector chain of local matrices from
-        /// `cat_kao` up to the root), so the flight can keep the HEAD on the pellet's line.</summary>
-        private static int FindNode(byte[] block, string name)
-        {
-            for (int i = 0; i < _nodeCount; i++)
-            {
-                int o = i * CFrameVu1.NodeStride + CFrameVu1.Name, len = 0;
-                while (len < 0x20 && block[o + len] != 0) len++;
-                if (System.Text.Encoding.ASCII.GetString(block, o, len) == name) return i;
-            }
-            return -1;
-        }
-
-        /// <summary>Locate the frames the cave needs and measure the head's rest offset. Publishes the pool addresses of
-        /// <see cref="HeadNodeName"/> (the cave's contact point) and the two glow anchors to the mailbox, clears CatGlowReady
-        /// so the glow rebinds, then walks the head's local matrices up to the root for its position in cat space — the
-        /// offset the flight keeps on the pellet's line. Falls back to the root height if the head is missing.</summary>
-        private static void FindHead(byte[] block)
-        {
-            _headX = 0f; _headH = HeadFallbackHeight; _headZ = 0f;
-            int head = -1;
-            for (int i = 0; i < _nodeCount; i++)
-            {
-                int o = i * CFrameVu1.NodeStride + CFrameVu1.Name, len = 0;
-                while (len < 0x20 && block[o + len] != 0) len++;
-                if (System.Text.Encoding.ASCII.GetString(block, o, len) == HeadNodeName) { head = i; break; }
-            }
-            Memory.WriteInt(CodeCaves.Mailbox.CatHeadNode, head >= 0 ? (int)(CodeCaves.NodePoolGuest + head * CFrameVu1.NodeStride) : 0);   // the cave's contact point = this frame's posed position
-            int ga = FindNode(block, GlowNodeA), gb = FindNode(block, GlowNodeB);                                                              // the glow's anchor frames
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowNodeA, ga >= 0 ? (int)(CodeCaves.NodePoolGuest + ga * CFrameVu1.NodeStride) : 0);
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowNodeB, gb >= 0 ? (int)(CodeCaves.NodePoolGuest + gb * CFrameVu1.NodeStride) : 0);
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowReady, 0);
-            if (ga < 0 || gb < 0) Log($"glow anchors: {GlowNodeA} n{ga}, {GlowNodeB} n{gb} — falling back to the root");
-            if (head < 0) return;
-            uint poolG = (uint)CodeCaves.NodePoolGuest;
-            float[] p = { 0f, 0f, 0f, 1f };
-            int n = head;
-            for (int guard = 0; guard < 64 && n > 0; guard++)
-            {
-                int b = n * CFrameVu1.NodeStride + CFrameVu1.LocalMatrix;
-                float[] q = new float[4];
-                for (int c = 0; c < 4; c++)
-                    q[c] = p[0] * BitConverter.ToSingle(block, b + c * 4) + p[1] * BitConverter.ToSingle(block, b + 0x10 + c * 4)
-                         + p[2] * BitConverter.ToSingle(block, b + 0x20 + c * 4) + p[3] * BitConverter.ToSingle(block, b + 0x30 + c * 4);
-                p = q;
-                uint par = (uint)BitConverter.ToInt32(block, n * CFrameVu1.NodeStride + CFrameVu1.Parent) & Memory.PhysAddrMask;
-                n = par >= poolG ? (int)((par - poolG) / CFrameVu1.NodeStride) : 0;
-            }
-            _headX = p[0]; _headH = p[1]; _headZ = p[2];
-            Log($"head ({HeadNodeName}, n{head}) rests at ({_headX:F2},{_headH:F2},{_headZ:F2}) in cat space");
-        }
-
-        /// <summary>A frame's name (0x20 bytes, NUL-terminated); empty when the read fails.</summary>
-        private static string ReadName(uint node)
-        {
-            byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(node) + CFrameVu1.Name, 0x20);
-            if (b == null) return "";
-            int len = 0; while (len < b.Length && b[len] != 0) len++;
-            return System.Text.Encoding.ASCII.GetString(b, 0, len);
-        }
-
-        private static long _ovFree;
-        /// <summary>Hand out cave space from two arenas: every mesh's visual, first VU buffer and MDT go in the MeshCave
-        /// (below the Angel Gear prop's region); the SECOND VU buffers and the skin sources take whatever fits — the
-        /// MeshCave's remainder, else the overflow cave borrowed from CharacterClone's cloth caves, idle while Xiao is
-        /// the active character. Returns 0 when neither has room.</summary>
-        private static long TakeCave(int bytes, out uint guest)
-        {
-            long need = Memory.Align16(bytes);
-            if (_caveFree + need <= CodeCaves.CatMeshCaveEnd) { long a = _caveFree; _caveFree += need; guest = Memory.ToGuest(a); return a; }
-            if (_ovFree + need <= CodeCaves.CatOverflowCave + CodeCaves.CatOverflowCaveSize) { long a = _ovFree; _ovFree += need; guest = Memory.ToGuest(a); return a; }
-            guest = 0; return 0;
-        }
-        /// <summary>Give the mask the CAPE's colour rather than the cat's. A cloth is easy — Draw__10CCharacter walks its cloth
-        /// list calling Draw__6CCloth, so ElfCave.CatCapeTint wraps that one call — but a mesh has no such seam: the ambient is
-        /// set once, MGDraw runs over the whole frame tree, and a mesh's tint is ADDED to its lit colour rather than multiplied
-        /// through its texture, so the cat's blue lands on the mask and turns red to pink. Meshes draw through C++ virtual
-        /// calls and <see cref="CopyMeshes"/> has already given every cat mesh a PRIVATE CVisualMDT in the mod's cave, so this
-        /// copies __vt__13CVisualMDTVu1, points its two DrawVu1 slots at ElfCave.CatMaskTint, and writes that copy into the
-        /// mask's visual alone — no engine code touched, and the only pointer to the cave is in an object the mod allocated.
-        /// The cave adds Mailbox.CatCapeTint, the same delta the cape uses, so the two match by construction. ⚠ The vptr is at
-        /// +0x08, not offset 0; refuses unless the visual really holds the stock vtable, so a layout surprise is a no-op.</summary>
-        private static void MaskTint()
-        {
-            if (_maskVisual == 0) { Log("mask tint: the mask has no copied visual — it keeps the cat's colour"); return; }
-            uint vt = Memory.ReadGuestPtr(_maskVisual + CVisualMDT.VisVtable);
-            if (vt != CVisualMDT.Vu1Vtable)
-            { Log($"mask tint: the mask visual's vtable is 0x{vt:X}, not the expected 0x{CVisualMDT.Vu1Vtable:X} — leaving it alone"); return; }
-            byte[] tbl = Memory.ReadBytesBatch(Memory.ToMmu(CVisualMDT.Vu1Vtable), CVisualMDT.Vu1VtableBytes);
-            if (tbl == null) { Log("mask tint: could not read the vtable"); return; }
-            BitConverter.GetBytes(CodeCaves.ElfCave.CatMaskTint).CopyTo(tbl, CVisualMDT.Vu1VtableDrawSlot);           // the uint* overload
-            BitConverter.GetBytes(CodeCaves.ElfCave.CatMaskTint + 0x0Cu).CopyTo(tbl, CVisualMDT.Vu1VtableDrawSlot + 4);  // the packet overload
-            long cave = TakeCave(CVisualMDT.Vu1VtableBytes, out uint caveG);
-            if (cave == 0) { Log("mask tint: no cave room for the vtable copy"); return; }
-            Memory.WriteBytesBatch(cave, tbl);
-            Memory.WriteUInt(_maskVisual + CVisualMDT.VisVtable, caveG);
-            Log($"mask tint: the mask draws through its own vtable at 0x{caveG:X} → cave 0x{CodeCaves.ElfCave.CatMaskTint:X}, under the cape's ambient");
-        }
-
-        /// <summary>Give the cat's software-skinned meshes their own copies in the MeshCave (CopyMeshNodes' recipe). HER copy
-        /// of the cat skin sits collapsed under the hidden root, and MotionProc2 would skin a shared buffer for whichever
-        /// character stepped last, so the copy must own it or the spawn is refused.</summary>
-        private static bool CopyMeshes()
-        {
-            _copied.Clear(); _jobs.Clear(); _pending.Clear();
-            long cave = CodeCaves.MeshCave, caveGuest = CodeCaves.MeshCaveGuest;
-            long caveEnd = CodeCaves.CatMeshCaveEnd;                                // above it: the Angel Gear prop's meshes, then its track cave
-            _ovFree = CodeCaves.CatOverflowCave;
-            int copied = 0;
-            var second = new List<(long vis, byte[] vuB, int vuSz, int idx)>();
-            byte[] pool = Memory.ReadBytesBatch(CodeCaves.NodePool, _nodeCount * CFrameVu1.NodeStride);   // every node in one read
-            if (pool == null) { Log("could not read the copy's node pool"); return false; }
-            for (int i = 0; i < _nodeCount; i++)
-            {
-                long node = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
-                int po = i * CFrameVu1.NodeStride;
-                uint vis = (uint)BitConverter.ToInt32(pool, po + CFrameVu1.GeomPtr) & Memory.PhysAddrMask;
-                if (!Memory.IsValidGuest(vis)) continue;
-                if (!_look.Wings && _wingMeshIdx.Contains(i)) continue;              // a wingless look: the wings are never copied (HideMeshes unlinks their runs and nulls their geometry)
-                if (!_look.Cape && i == _maskMeshIdx) continue;                      // and the mask belongs to Super Steve alone
-                int visSz = CVisualMDT.VisualSize;
-                // One read for the whole visual, one for the MDT's header — per-field round trips cost milliseconds each.
-                byte[] visB = Memory.ReadBytesBatch(Memory.ToMmu(vis), visSz);
-                if (visB == null) continue;
-                uint mdt  = (uint)BitConverter.ToInt32(visB, CVisualMDT.VisMDT) & Memory.PhysAddrMask;
-                uint vu   = (uint)BitConverter.ToInt32(visB, CVisualMDT.VisVU)  & Memory.PhysAddrMask;
-                int  vuSz = BitConverter.ToInt32(visB, CVisualMDT.VisVU + 4) * 16;
-                if (!Memory.IsValidGuest(mdt)) continue;
-                byte[] mdtHdr = Memory.ReadBytesBatch(Memory.ToMmu(mdt), 16);
-                if (mdtHdr == null || (uint)BitConverter.ToInt32(mdtHdr, 0) != CVisualMDT.MdtMagic) continue;
-                int mdtSz = BitConverter.ToInt32(mdtHdr, CVisualMDT.MdtSizeField);
-                if (vu == 0 || vuSz <= 0 || vuSz > 0x40000 || mdtSz <= 0 || mdtSz > 0x40000) continue;
-                int need = Memory.Align16(visSz) + Memory.Align16(vuSz) + Memory.Align16(mdtSz);
-                if (cave + need > caveEnd) { Log("cat meshes do not fit the MeshCave"); return false; }
-                long cVis = cave;              uint cVisG = (uint)caveGuest;
-                long cVU  = cave + Memory.Align16(visSz); uint cVUG  = (uint)(caveGuest + Memory.Align16(visSz));
-                long cMDT = cVU + Memory.Align16(vuSz);   uint cMDTG = (uint)(caveGuest + Memory.Align16(visSz) + Memory.Align16(vuSz));
-                // The two BIG blocks go to the machine; the visual is 0x30 B and needs fields poked into it anyway, so it
-                // stays here. A job carries the copy and both rebases, exactly what RebaseRange does to vuB/mdtB below.
-                _jobs.Add(new CopyJob(vu, cVUG, vuSz, vu, vuSz, cVUG, mdt, mdtSz, cMDTG));
-                _jobs.Add(new CopyJob(mdt, cMDTG, mdtSz, vu, vuSz, cVUG, mdt, mdtSz, cMDTG));
-                Memory.RebaseRange(visB, vu, vuSz, cVUG); Memory.RebaseRange(visB, mdt, mdtSz, cMDTG);
-                byte[] vuB = null;
-                // The engine writes the skinned draw packet into buffer[DBuffID] (+0x28 / +0x2C) every frame while
-                // the GIF is still reading the other. A single-buffered copy tears (flicker); give the copy both — the
-                // second one is placed after every mesh's primary data has a home (second pass below).
-                BitConverter.GetBytes(cVUG).CopyTo(visB, 0x18);
-                BitConverter.GetBytes(cVUG).CopyTo(visB, 0x28);
-                BitConverter.GetBytes(cVUG).CopyTo(visB, 0x2c);
-                Memory.WriteBytesBatch(cVis, visB);
-                _pending.Add((cVU, vuSz, cMDT, mdtSz, vis, vu, mdt, cVUG, cMDTG));
-                Memory.WriteUInt(node + CFrameVu1.GeomPtr, cVisG);
-                if (i == _maskMeshIdx) _maskVisual = cVis;                           // the mask's visual is ours alone — MaskTint retints it
-                cave += need; caveGuest += need; copied++;
-                _skinNodes.Add((i, cMDT, mdtSz, cVU, 0L, vuSz));
-                second.Add((cVis, vuB, vuSz, _skinNodes.Count - 1));
-                int nl = 0; while (nl < 0x20 && pool[po + CFrameVu1.Name + nl] != 0) nl++;     // the name is in the pool we read
-                Log($"mesh n{i} ({System.Text.Encoding.ASCII.GetString(pool, po + CFrameVu1.Name, nl)}): vis 0x{visSz:X} + vu 0x{vuSz:X} + mdt 0x{mdtSz:X} copied");
-            }
-            _caveFree = cave;
-            if (copied == 0) { Log("no software-skinned cat mesh found — refusing to share her collapsed copy of the skin"); return false; }
-            foreach (var (vis, vuB, vuSz, idx) in second)                          // second VU buffers: MeshCave remainder, else the overflow cave
-            {
-                long cVU2 = TakeCave(vuSz, out uint cVU2G);
-                if (cVU2 == 0) { Log($"mesh n{_skinNodes[idx].node}: no room for a second VU buffer — single-buffered (may flicker)"); continue; }
-                var pe = _pending[idx];
-                _jobs.Add(new CopyJob(pe.vu, Memory.ToGuest(cVU2), vuSz, pe.vu, vuSz, pe.cVUG, pe.mdt, pe.mdtSz, pe.cMDTG));
-                Memory.WriteUInt(vis + 0x2c, cVU2G);
-                var e = _skinNodes[idx]; _skinNodes[idx] = (e.node, e.mdt, e.mdtSz, e.vu, cVU2, e.vuSz);
-            }
-            if (!RunCopyJobs() && !CopyJobsBySocket()) return false;               // the machine does it, or we do it the slow way
-            Log($"mesh caves: main {_caveFree - CodeCaves.MeshCave:N0} of {CodeCaves.CatMeshCaveEnd - CodeCaves.MeshCave:N0} B, overflow {_ovFree - CodeCaves.CatOverflowCave:N0} of {CodeCaves.CatOverflowCaveSize:N0} B");
-            BuildStep("meshes copied");
-            return true;
-        }
-
-        private static readonly List<(int node, long mdt, int mdtSz, long vu, long vu2, int vuSz)> _skinNodes = new();
-        private static long _caveFree;
-
-        /// <summary>Every block CopyMeshes wrote, by the address it went to. RelocateCatTextures has to hunt TEX0 register
-        /// words through all of it, and scans these bytes rather than re-reading 300 KB back over PINE, writing back only
-        /// what it changed. The
-        /// second draw buffer gets a CLONE, not the same array: the two blocks hold identical bytes, and sharing one array
-        /// would let the first patch mark the second clean and leave it unpatched on screen.</summary>
-        private static readonly Dictionary<long, byte[]> _copied = new();
-
-        /// <summary>The mesh copy, handed to the machine. Each job is "move `size` bytes src → dst, then re-point every
-        /// pointer-looking word of the copy that falls in one of two source ranges". ElfCave's CatCopyQueue does it in one
-        /// frame; the C# below does the same a batch at a time over PINE. The queue is written jobs-first and COUNT LAST so the
-        /// cave can never see a half-written list, and it falls back whenever the cave does not answer — slow is a far better
-        /// failure than wrong.</summary>
-        private readonly struct CopyJob
-        {
-            public readonly uint Src, Dst; public readonly int Size;
-            public readonly uint R1Src, R1Dst; public readonly int R1Size;
-            public readonly uint R2Src, R2Dst; public readonly int R2Size;
-            public readonly int Op;                                                  // 0 = copy + re-point, 1 = find/replace 64-bit
-            public CopyJob(uint src, uint dst, int size, uint r1s, int r1n, uint r1d, uint r2s, int r2n, uint r2d)
-            { Src = src; Dst = dst; Size = size; R1Src = r1s; R1Size = r1n; R1Dst = r1d; R2Src = r2s; R2Size = r2n; R2Dst = r2d; Op = 0; }
-            /// <summary>Sweep one block for every old→new pair in <see cref="_pairs"/> — the cat's TEX0 registers, after its
-            /// textures move. The pair count and table address are filled in when the queue is written.</summary>
-            public CopyJob(uint block, int size)
-            { Src = 0; Dst = block; Size = size; R1Src = 0; R1Size = 0; R1Dst = 0; R2Src = 0; R2Size = 0; R2Dst = 0; Op = 1; }
-        }
-        private static readonly List<CopyJob> _jobs = new();
-        private static readonly List<(ulong oldV, ulong newV)> _pairs = new();          // shared by every find/replace job
-        private static readonly List<(long cVU, int vuSz, long cMDT, int mdtSz, long vis, uint vu, uint mdt, uint cVUG, uint cMDTG)> _pending = new();
-
-        private const int SkinNodeSize = 0x18;   // one skin-list node: {mesh, bone, type 20, count, keys, next}
-        /// <summary>Hide the meshes this look does not wear — the wings on a wingless weapon, the mask on anything but Super
-        /// Steve. They are all SKINNED frames, so nulling their geometry alone is unsafe (MotionProc2 writes every mesh's .wgt
-        /// run through its visual each frame). The copy's channel gets a PRIVATE clone of the skin list with those meshes' runs
-        /// left out — the keys still point at her data, only the chain is ours — and THEN their geometry pointers are cleared
-        /// so nothing draws them. Her own list is untouched; one pass builds the clone once.</summary>
-        private static void HideMeshes(List<int> hide, string what)
-        {
-            if (hide.Count == 0) return;
-            long chan = CodeCaves.MotionCave;                                              // the copy's channel struct
-            uint head = Memory.ReadGuestPtr(chan + MotionType.MotionSkinList);
-            var nodes = new List<byte[]>();
-            for (uint p = head; Memory.IsValidGuest(p) && nodes.Count < 256;)
-            {
-                byte[] n = Memory.ReadBytesBatch(Memory.ToMmu(p), SkinNodeSize);
-                if (n == null) break;
-                nodes.Add(n);
-                p = (uint)BitConverter.ToInt32(n, 0x14) & Memory.PhysAddrMask;
-            }
-            if (nodes.Count == 0) { Log($"{what}-off: the copy's skin list is unreadable — they stay visible"); return; }
-            var keep = new List<byte[]>();
-            foreach (byte[] n in nodes) if (!hide.Contains(BitConverter.ToInt32(n, 0))) keep.Add(n);
-            if (keep.Count == nodes.Count) { Log($"{what}-off: no such runs in the skin list — they stay visible"); return; }
-            long cave = TakeCave(keep.Count * SkinNodeSize, out uint caveG);
-            if (cave == 0) { Log($"{what}-off: no cave room for the skin list clone — they stay visible"); return; }
-            for (int i = 0; i < keep.Count; i++)
-            {
-                BitConverter.GetBytes(i + 1 < keep.Count ? caveG + (uint)((i + 1) * SkinNodeSize) : 0u).CopyTo(keep[i], 0x14);
-                Memory.WriteBytesBatch(cave + i * SkinNodeSize, keep[i]);
-            }
-            Memory.WriteUInt(chan + MotionType.MotionSkinList, caveG);
-            foreach (int i in hide) Memory.WriteUInt(CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride + CFrameVu1.GeomPtr, 0);
-            Log($"{what} hidden: skin list {nodes.Count} → {keep.Count} runs (private clone at 0x{caveG:X}), {hide.Count} geometry pointers cleared");
-        }
-
-        /// <summary>The old path, kept whole as the fallback: read each source block, rebase it here, write the copy. Only runs
-        /// when the cave is absent or silent.</summary>
-        private static bool CopyJobsBySocket()
-        {
-            foreach (CopyJob j in _jobs)
-            {
-                if (j.Op == 1)
-                {
-                    byte[] blk = Memory.ReadBytesBatch(Memory.ToMmu(j.Dst), j.Size);
-                    if (blk == null) continue;
-                    bool hit = false;
-                    for (int o = 0; o + 8 <= blk.Length; o += 4)
-                    {
-                        ulong w = BitConverter.ToUInt64(blk, o);
-                        foreach (var (oldV, newV) in _pairs)
-                            if (w == oldV) { BitConverter.GetBytes(newV).CopyTo(blk, o); hit = true; o += 4; break; }
-                    }
-                    if (hit) Memory.WriteBytesBatch(Memory.ToMmu(j.Dst), blk);
-                    continue;
-                }
-                byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(j.Src), j.Size);
-                if (b == null) { Log($"copy fallback: could not read 0x{j.Src:X}"); return false; }
-                if (j.R1Size > 0) Memory.RebaseRange(b, j.R1Src, j.R1Size, j.R1Dst);
-                if (j.R2Size > 0) Memory.RebaseRange(b, j.R2Src, j.R2Size, j.R2Dst);
-                Memory.WriteBytesBatch(Memory.ToMmu(j.Dst), b);
-                _copied[Memory.ToMmu(j.Dst)] = b;                                   // the texture pass scans these instead of re-reading
-            }
-            _jobs.Clear(); return true;
-        }
-
-        /// <summary>Hand the queued copy jobs to the cave, draining in queue-sized batches when there are more jobs than the
-        /// queue holds. Refuses outright if this ISO lacks the hook, and on a failed batch restores the full list — the jobs
-        /// already done plus the untouched tail — so the caller can fall back to the C# path with nothing half-applied.</summary>
-        private static bool RunCopyJobs()
-        {
-            if (_jobs.Count == 0) return true;
-            if ((uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) != DunPatches.CatFollowHookNew) return false;
-            while (_jobs.Count > CodeCaves.CatCopyQueueJobs)                            // drain in queue-sized batches
-            {
-                var head = _jobs.GetRange(0, CodeCaves.CatCopyQueueJobs);
-                var tailJobs = _jobs.GetRange(CodeCaves.CatCopyQueueJobs, _jobs.Count - CodeCaves.CatCopyQueueJobs);
-                _jobs.Clear(); _jobs.AddRange(head);
-                if (!RunCopyJobs()) { _jobs.Clear(); _jobs.AddRange(head); _jobs.AddRange(tailJobs); return false; }
-                _jobs.Clear(); _jobs.AddRange(tailJobs);
-            }
-            var buf = new byte[0x10 + _jobs.Count * CodeCaves.CatCopyJobStride];
-            for (int i = 0; i < _jobs.Count; i++)
-            {
-                int o = 0x10 + i * CodeCaves.CatCopyJobStride; CopyJob j = _jobs[i];
-                BitConverter.GetBytes(j.Src).CopyTo(buf, o); BitConverter.GetBytes(j.Dst).CopyTo(buf, o + 4);
-                BitConverter.GetBytes(j.Size).CopyTo(buf, o + 8);
-                BitConverter.GetBytes(j.R1Src).CopyTo(buf, o + 0x0C); BitConverter.GetBytes(j.R1Size).CopyTo(buf, o + 0x10);
-                BitConverter.GetBytes(j.R1Dst).CopyTo(buf, o + 0x14);
-                BitConverter.GetBytes(j.R2Src).CopyTo(buf, o + 0x18); BitConverter.GetBytes(j.R2Size).CopyTo(buf, o + 0x1C);
-                BitConverter.GetBytes(j.R2Dst).CopyTo(buf, o + 0x20);
-                BitConverter.GetBytes(j.Op).CopyTo(buf, o + 0x24);
-                if (j.Op == 1)
-                {
-                    BitConverter.GetBytes(_pairs.Count).CopyTo(buf, o + 0x0C);
-                    BitConverter.GetBytes(CodeCaves.CatCopyQueueGuest + (uint)CodeCaves.CatCopyPairsOff).CopyTo(buf, o + 0x10);
-                }
-            }
-            if (_pairs.Count > 0)
-            {
-                var pb = new byte[_pairs.Count * 16];
-                for (int i = 0; i < _pairs.Count; i++)
-                { BitConverter.GetBytes(_pairs[i].oldV).CopyTo(pb, i * 16); BitConverter.GetBytes(_pairs[i].newV).CopyTo(pb, i * 16 + 8); }
-                Memory.WriteBytesBatch(CodeCaves.CatCopyQueue + CodeCaves.CatCopyPairsOff, pb);
-            }
-            Memory.WriteBytesBatch(CodeCaves.CatCopyQueue, buf);                        // jobs first…
-            Memory.WriteInt(CodeCaves.CatCopyQueue, _jobs.Count);                       // …then the count: the cave's go signal
-            // The cave services the whole queue in the frame it next runs, so the only cost here is noticing. Poll tightly:
-            // sleeping 4 ms between checks put a floor of several hundred ms on a build that is otherwise one frame of work.
-            var waited = System.Diagnostics.Stopwatch.StartNew();
-            for (int spin = 0; spin < 4000; spin++)
-            {
-                if (Memory.ReadInt(CodeCaves.CatCopyQueue) == 0)
-                {
-                    Log($"copy queue: {_jobs.Count} job(s) run in the machine ({_jobs.Sum(j => j.Size):N0} B) — "
-                                          + $"{waited.ElapsedMilliseconds} ms, {spin + 1} poll(s)");
-                    _jobs.Clear(); return true;
-                }
-                if (spin >= 40) Thread.Sleep(1);                                        // first 40 are back to back
-                if (waited.ElapsedMilliseconds > 2000) break;
-            }
-            Memory.WriteInt(CodeCaves.CatCopyQueue, 0);
-            Log("copy queue: the cave did not answer — falling back to copying over PINE");
-            return false;
-        }
-
-        /// <summary>The skinner's SOURCE vertices. AnimeDataInit (0x1493A0) runs once per character — from
-        /// CommandMOTION only while CCharacter+0x2CC is still null, i.e. for MOTION 0 — and builds, for every mesh
-        /// in THAT channel's skin list, a bind-transformed copy of its vertices into FRAME_INF[mesh] (+4 count,
-        /// +8 → copy). Her cat skin is a MOTION 1 mesh, so its entry never got one: MotionProc2 would read its
-        /// source vertices from address 0. Build it here in
-        /// the MeshCave exactly as the initializer does: def[i] = bindMatrix(node) · vertex[i], with the bind
-        /// matrix taken from the table row the caller built from the copied node.</summary>
-        private static bool BuildSkinSources(byte[] fib)
-        {
-            foreach (var (node, mdt, _, _, _, _) in _skinNodes)
-            {
-                int count = Memory.ReadInt(mdt + CVisualMDT.MdtVertCount);
-                int vOff  = Memory.ReadInt(mdt + CVisualMDT.MdtVertOffset);
-                if (count <= 0 || count > 3000 || vOff <= 0) { Log($"skin n{node}: odd MDT header (count {count}, verts @+0x{vOff:X})"); return false; }
-                int bytes = count * 16;
-                long cave = TakeCave(bytes, out uint caveG);
-                if (cave == 0) { Log("skin source vertices do not fit the mesh caves"); return false; }
-                byte[] src = Memory.ReadBytesBatch(mdt + vOff, bytes);
-                if (src == null) return false;
-                int e = node * MotionType.FrameInfEntry;
-                float[] m = new float[16];
-                for (int k = 0; k < 16; k++) m[k] = BitConverter.ToSingle(fib, e + 0x10 + k * 4);   // the entry's bind matrix
-                byte[] dst = new byte[bytes];
-                for (int v = 0; v < count; v++)
-                {
-                    float x = BitConverter.ToSingle(src, v * 16), y = BitConverter.ToSingle(src, v * 16 + 4), z = BitConverter.ToSingle(src, v * 16 + 8), w = BitConverter.ToSingle(src, v * 16 + 12);
-                    for (int c = 0; c < 4; c++)
-                        BitConverter.GetBytes(x * m[c] + y * m[4 + c] + z * m[8 + c] + w * m[12 + c]).CopyTo(dst, v * 16 + c * 4);
-                }
-                Memory.WriteBytesBatch(cave, dst);
-                BitConverter.GetBytes(count).CopyTo(fib, e + 4);
-                BitConverter.GetBytes(caveG).CopyTo(fib, e + 8);
-                Log($"skin n{node}: {count} source vertices built at 0x{caveG:X} from bind [{m[0]:F2} {m[5]:F2} {m[10]:F2} | {m[12]:F2},{m[13]:F2},{m[14]:F2}]");
-                BuildStep($"skin n{node} built ({count} vertices)");
-            }
-            return true;
-        }
-
-        // ── Her MOTION 1 channel: watchdog + repair ────────────────────────────────────────────────────────
-        private const int  ChanInlineBase = 0x420, ChanInlineStride = 0x80;   // CommandMOTION's inline channel: character + 0x420 + 0x80·n
-        private static bool _herChanValid = true;
-        private static DateTime _lastDespawn = DateTime.MinValue;
-
-        /// <summary>Watch her channel-1 pointer (+0xC24): when it reads invalid every later shot fails. No engine writer of
-        /// that word runs mid-floor — DeleteExtendMotion is town-only, Initialize/CommandMOTION run on loads, operator= only
-        /// for town NPCs — and the mod never writes her table, so this logs the tick it changes along with the raw words.
-        /// <see cref="RepairHerCatChannel"/> puts it back while the inline channel struct is still intact.</summary>
-        private static void WatchHerCatChannel()
-        {
-            uint raw = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.MotionSlotBase + CatChannel * 4);
-            bool valid = Memory.IsValidGuest(raw & Memory.PhysAddrMask);
-            if (valid == _herChanValid) return;
-            _herChanValid = valid;
-            if (valid) { Log($"her MOTION 1 pointer is back (0x{raw:X8})"); return; }
-            var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < CCharacter.MotionSlots; i++)
-                sb.Append($" ch{i}=0x{(uint)Memory.ReadInt(CCharacter.Base + CCharacter.MotionSlotBase + i * 4):X8}/{Memory.ReadInt(CCharacter.Base + ChanKeyStart + i * 4)}..{Memory.ReadInt(CCharacter.Base + ChanKeyEnd + i * 4)}");
-            Log(
-                $"her MOTION 1 pointer LOST (raw 0x{raw:X8}) — phase {(Active ? _phase.ToString() : "idle")}, {(GameClock.Now - _lastDespawn).TotalSeconds:F2} s after the last despawn, event mode {Memory.ReadInt(DungeonScriptEvent.BtEventMode)}; table:{sb}");
-        }
-
-        /// <summary>Put her channel-1 pointer and key range back when the inline MOTION struct still holds its data
-        /// (its KEY table and bind rows are valid pointers). Returns true and refreshes <paramref name="buf"/> on success.</summary>
-        private static bool RepairHerCatChannel(ref byte[] buf)
-        {
-            long inline = CCharacter.Base + ChanInlineBase + CatChannel * ChanInlineStride;
-            uint keyTable = Memory.ReadGuestPtr(inline + MotionType.MotionInfoPtr);
-            uint boneRows = Memory.ReadGuestPtr(inline + MotionType.BoneMtxPtr);
-            if (!Memory.IsValidGuest(keyTable) || !Memory.IsValidGuest(boneRows))
-            {
-                Log($"her MOTION 1 struct @0x{inline & Memory.PhysAddrMask:X} is empty too (KEY 0x{keyTable:X}, rows 0x{boneRows:X}) — cannot repair");
-                return false;
-            }
-            Memory.WriteUInt(CCharacter.Base + CCharacter.MotionSlotBase + CatChannel * 4, (uint)(inline & Memory.PhysAddrMask));
-            Memory.WriteInt (CCharacter.Base + ChanKeyStart + CatChannel * 4, KeyBase);
-            Memory.WriteInt (CCharacter.Base + ChanKeyEnd   + CatChannel * 4, KeyBase + KeyCount);
-            Log($"her MOTION 1 pointer repaired → 0x{inline & Memory.PhysAddrMask:X} (keys {KeyBase}..{KeyBase + KeyCount})");
-            buf = Memory.ReadBytesBatch(CCharacter.Base, CharCopySize) ?? buf;
-            return true;
-        }
-
-        /// <summary>Host slot from XIAO's own CCharacter (draw/texture config, as the Mirage clone does), aimed at
-        /// the copy, with her cat channel (MOTION 1) cloned as the copy's ONLY channel — own FrameInf/BoneMtx (any
-        /// bone pointers into the live cat block re-based to the copy), the KEY table and track list shared
-        /// read-only — and the copy's key range set to the cat keys so <see cref="SetKey"/> with 64..69 selects it.
-        /// The cat channel's tracks are indexed relative to the cat root, which IS the copy's node 0.</summary>
-        private static bool RegisterSlot(uint min, int blockSize)
-        {
-            byte[] buf = Memory.ReadBytesBatch(CCharacter.Base, CharCopySize);
-            if (buf == null) return false;
-            uint chan = (uint)BitConverter.ToInt32(buf, CCharacter.MotionSlotBase + CatChannel * 4) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(chan) && RepairHerCatChannel(ref buf))
-                chan = (uint)BitConverter.ToInt32(buf, CCharacter.MotionSlotBase + CatChannel * 4) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(chan)) { Log($"she has no MOTION 1 channel (raw 0x{BitConverter.ToUInt32(buf, CCharacter.MotionSlotBase + CatChannel * 4):X8}) — the loaded c04b.chr has no cat"); return false; }
-            byte[] mstr = Memory.ReadBytesBatch(Memory.ToMmu(chan), MotionStructSize);
-            if (mstr == null) return false;
-            int fiSize = (_nodeCount + 1) * MotionType.FrameInfEntry;
-            int bmSize = (_nodeCount + 1) * MotionType.BoneMtxEntry;
-            if (fiSize > CodeCaves.CatFrameInfCaveSize || bmSize > CodeCaves.CatBoneMtxCaveSize) { Log("bone buffers exceed the caves"); return false; }
-            uint poolG = (uint)CodeCaves.NodePoolGuest;
-            // FRAME_INF is indexed by NODE (AnimeDataInit 0x1493A0: entry i = {parent index, skin vertex count, →
-            // bind-vertex copy, bind matrix @+0x10, two scratch matrices @+0x50/+0x90}). The initializer fills the
-            // rows only for nodes reachable from her model root — and the cat is UNPARENTED on purpose — so her
-            // rows for the cat are uninitialized heap (they printed as floats). Build the copy's table from the
-            // copied nodes themselves: parent index made cat-relative (root → itself) and the bind matrix = the
-            // node's local matrix (never posed on her; the root's is the un-hidden one written above).
-            {
-                byte[] fib = new byte[fiSize];
-                for (int i = 0; i < _nodeCount; i++)
-                {
-                    long node = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
-                    uint par = Memory.ReadGuestPtr(node + CFrameVu1.Parent);
-                    int rel = (par >= poolG && par < poolG + (uint)blockSize) ? (int)((par - poolG) / CFrameVu1.NodeStride) : 0;
-                    int e = i * MotionType.FrameInfEntry;
-                    BitConverter.GetBytes(rel).CopyTo(fib, e);
-                    byte[] local = Memory.ReadBytesBatch(node + CFrameVu1.LocalMatrix, 0x40);
-                    if (local == null) return false;
-                    local.CopyTo(fib, e + 0x10);
-                }
-                if (!BuildSkinSources(fib)) return false;
-                Memory.WriteBytesBatch(CodeCaves.FrameInfCave, fib);
-                BitConverter.GetBytes((uint)CodeCaves.FrameInfCaveGuest).CopyTo(mstr, MotionType.FrameInfPtr);
-            }
-            // Per-bone BIND matrices (channel +0): CreateAnimeDataEX (0x149090) makes this buffer a straight copy of
-            // the channel's .bbp file, and the skinner chains it into the inverse-bind side (posed world × inv(bind
-            // world) × vertex). Her channel 1's buffer IS cat.bbp — 37 rows in cat order — so take rows 0..36 as they
-            // are. (The .mds local matrices are NOT the same thing: initializing from them stretched every blended
-            // joint — neck, shoulders, tail tip.)
-            uint bm = (uint)BitConverter.ToInt32(mstr, MotionType.BoneMtxPtr) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(bm)) { Log("her cat channel has no bind rows"); return false; }
-            {
-                byte[] bmb = Memory.ReadBytesBatch(Memory.ToMmu(bm), bmSize);
-                if (bmb == null) return false;
-                Memory.WriteBytesBatch(CodeCaves.BoneMtxCave, bmb);
-                BitConverter.GetBytes((uint)(CodeCaves.BoneMtxCave & Memory.PhysAddrMask)).CopyTo(mstr, MotionType.BoneMtxPtr);
-            }
-            uint keyTable = (uint)BitConverter.ToInt32(mstr, MotionType.MotionInfoPtr) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(keyTable)) { Log("cat KEY table unreadable"); return false; }
-            // The float-up's play rate goes into its KEY entry, not the speed override: Step's play-once stop test
-            // (0x138530) looks ahead by the KEY rate while the advance uses the override, so an override faster than
-            // the KEY rate overshoots the last frame and the clip wraps, so the float loops instead of holding.
-            // The table is her hidden cat channel's, played by nobody but this copy.
-            Memory.WriteFloat(Memory.ToMmu(keyTable) + (KeyFloat - KeyBase) * CCharacter.MotionEntryStride + 8, FloatRate);
-            Memory.RebaseRange(mstr, min, blockSize, poolG);
-            Memory.WriteBytesBatch(CodeCaves.MotionCave, mstr);
-
-            BitConverter.GetBytes((uint)CodeCaves.MotionCaveGuest).CopyTo(buf, CCharacter.MotionSlotBase);
-            for (int s = 1; s < CCharacter.MotionSlots; s++) BitConverter.GetBytes(0).CopyTo(buf, CCharacter.MotionSlotBase + s * 4);
-            BitConverter.GetBytes(KeyBase).CopyTo(buf, ChanKeyStart);
-            BitConverter.GetBytes(KeyBase + KeyCount).CopyTo(buf, ChanKeyEnd);
-            for (int s = 1; s < CCharacter.MotionSlots; s++)
-            {
-                BitConverter.GetBytes(0).CopyTo(buf, ChanKeyStart + s * 4);
-                BitConverter.GetBytes(0).CopyTo(buf, ChanKeyEnd + s * 4);
-            }
-            BitConverter.GetBytes(keyTable).CopyTo(buf, CCharacter.MotionList);
-            // No shadow: her CCharacter carries her shadow rig (+0xC0) and shadow channels (+0xC40+i*4), which
-            // ShadowStep would step with OUR motion id against HER shadow KEY table (37 entries, ids 64..69 fall
-            // off its end) and pose HER shadow tree. The slingshot copy has none either.
-            BitConverter.GetBytes(0).CopyTo(buf, ShadowModel);
-            for (int i = 0; i < CCharacter.MotionSlots; i++) BitConverter.GetBytes(0).CopyTo(buf, ShadowSlotBase + i * 4);
-            BitConverter.GetBytes((uint)CodeCaves.ClothStubGuest).CopyTo(buf, CCharacter.ClothList);
-            BitConverter.GetBytes(_copyRoot).CopyTo(buf, CCharacter.CharModel);
-            BitConverter.GetBytes(0f).CopyTo(buf, CCharacter.CharaTint);
-            BitConverter.GetBytes(0f).CopyTo(buf, CCharacter.CharaTint + 4);
-            BitConverter.GetBytes(0f).CopyTo(buf, CCharacter.CharaTint + 8);
-            BitConverter.GetBytes(1.0f).CopyTo(buf, CCharacter.DimFactor);
-            BitConverter.GetBytes(128f).CopyTo(buf, CCharacter.NpcOpacity);
-            for (int o = CCharacter.LightFrom; o < CCharacter.LightTo; o += 4) BitConverter.GetBytes(0).CopyTo(buf, o);
-            BitConverter.GetBytes(_x).CopyTo(buf, CCharacter.CharPos);
-            BitConverter.GetBytes(_h).CopyTo(buf, CCharacter.CharPos + 4);
-            BitConverter.GetBytes(_y).CopyTo(buf, CCharacter.CharPos + 8);
-            BitConverter.GetBytes(0f).CopyTo(buf, CCharacter.CharRot);
-            BitConverter.GetBytes(_yaw).CopyTo(buf, CCharacter.CharRotY);
-            BitConverter.GetBytes(0f).CopyTo(buf, CCharacter.CharRot + 8);
-            BitConverter.GetBytes(CatScale * _scale).CopyTo(buf, CCharacter.CharScale);
-            BitConverter.GetBytes(CatScale * _scale).CopyTo(buf, CCharacter.CharScale + 4);
-            BitConverter.GetBytes(CatScale * _scale).CopyTo(buf, CCharacter.CharScale + 8);
-            BitConverter.GetBytes(KeyLeap).CopyTo(buf, CCharacter.MotionId);
-            BitConverter.GetBytes(CharacterMotion.MotionSpeedUseKey).CopyTo(buf, CharacterMotion.MotionSpeedOffset);
-            BitConverter.GetBytes((uint)BitConverter.ToInt32(buf, CCharacter.MotionFlags) | (uint)CCharacter.MotionRestart)
-                .CopyTo(buf, CCharacter.MotionFlags);
-
-            Memory.WriteBytesBatch(CodeCaves.ClothStub, new byte[16]);
-            long slot = SlotAddr();
-            // The CNPCharacter tail past the copied 0xD60 block (foot-sound + event tables, the NPC sequence
-            // state PlaySeq runs every step, the fade/ramp words) is whatever this slot last held. Initialize it
-            // the way Initialize__12CNPCharacter / ClearSeq do: tables free (-1.0f frames), sequences cleared.
-            var tail = new byte[DungeonCharaDraw.CharaStride - CharCopySize];
-            for (int i = 0; i < FootSlots; i++)  BitConverter.GetBytes(-1f).CopyTo(tail, FootTable  + i * FootStride  - CharCopySize);
-            for (int i = 0; i < EventSlots; i++) BitConverter.GetBytes(-1f).CopyTo(tail, EventTable + i * EventStride - CharCopySize);
-            BitConverter.GetBytes(1).CopyTo(tail, SeqEnable - CharCopySize);
-            BitConverter.GetBytes(-1).CopyTo(tail, DungeonCharaDraw.CharaRampB - CharCopySize);
-            BitConverter.GetBytes(-1).CopyTo(tail, SeqWord1490 - CharCopySize);
-            Memory.WriteBytesBatch(slot, buf);
-            Memory.WriteBytesBatch(slot + CharCopySize, tail);
-            Memory.WriteInt(slot + DungeonCharaDraw.CharaActive, 1);
-            Memory.WriteInt(slot + DungeonCharaDraw.CharaMotionA, 1);
-            Memory.WriteInt(slot + DungeonCharaDraw.CharaMotionB, 0);
-            Memory.WriteInt(slot + DungeonCharaDraw.CharaRampA, 0);
-            Memory.WriteInt(slot + DungeonCharaDraw.CharaRampB, 0);
-            Memory.WriteInt(DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 1);
-            Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, _held ? 1 : 0);
-            Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 1);
-            RetagCatTextures(HerTextureBlock, SlotTextureGroup);
-            uint boneHead = (uint)BitConverter.ToInt32(mstr, MotListHead) & Memory.PhysAddrMask, skinHead = (uint)BitConverter.ToInt32(mstr, MotionType.MotionSkinList) & Memory.PhysAddrMask;
-            string heads = $"bone list 0x{boneHead:X}" + (Memory.IsValidGuest(boneHead) ? $" (w0 {Memory.ReadInt(Memory.ToMmu(boneHead))}, type {Memory.ReadInt(Memory.ToMmu(boneHead) + 8)}, keys {Memory.ReadInt(Memory.ToMmu(boneHead) + 0xC)})" : "")
-                         + $", skin list 0x{skinHead:X}" + (Memory.IsValidGuest(skinHead) ? $" (mesh {Memory.ReadInt(Memory.ToMmu(skinHead))}, bone {Memory.ReadInt(Memory.ToMmu(skinHead) + 4)}, type {Memory.ReadInt(Memory.ToMmu(skinHead) + 8)}, keys {Memory.ReadInt(Memory.ToMmu(skinHead) + 0xC)})" : "");
-            Log($"slot {Slot}: cat channel cloned (keys {KeyBase}..{KeyBase + KeyCount - 1}, KEY table 0x{keyTable:X}), FrameInf 0x{fiSize:X}; {heads}");
-            return true;
-        }
-
         /// <summary>Play a clip on the copy: motion id, play-once cleared and restart set so a fresh key loops from its start
         /// (the hit sets play-once instead), and the rate returned to the KEY's own.</summary>
-        private static void SetKey(int key)
+        internal static void SetKey(int key)
         {
             if (!Active) return;
             _key = key;
@@ -2367,7 +675,7 @@ namespace Dark_Cloud_Improved_Version
         /// Draw__10CCharacter adds CharaTint (+0xCE0) to the scene ambient on a 0..255 scale where the dungeon's key lights
         /// are ~100-120, scaled here by the fade so the cat dims as it goes. Despawns if her model changed underneath us.
         /// Runs every tick in all three active states, so anything that must hold regardless of state belongs here.</summary>
-        private static void Maintain()
+        internal static void Maintain()
         {
             if ((Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel)) != _liveRoot)
             {
@@ -2446,276 +754,6 @@ namespace Dark_Cloud_Improved_Version
             Log("cat copy down");
         }
 
-        // ─────────────────────────────────────────── textures ──────────────────────────────────────────────
-        private const short HerTextureBlock = 0x11;
-        private const short SlotTextureGroup = (short)(DungeonCharaDraw.CharaTexBase + Slot);
-        // ⚠ EVERY texture the cat pack carries must be listed here. These are the entries re-tagged into the slot's group
-        // and moved into the cat's VRAM window while the copy is up; one left out keeps her block's pages after that block
-        // has been cut back, so it samples stale VRAM and draws as garbage, or not at all.
-        private static readonly string[] CatTextureNames = { "c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05", "catwing", "catcape", "catglowp" };   // catwing = the wings' flat white; catglowp = the ONE 8-bit glow disc every look now shares (its palette row carries the colour)
-        // The re-tagged entries keep the VRAM addresses they were given in HER window, so slot 1's block takes over that
-        // tail of her window (and hers shrinks to just before it) while the copy is up; the cat reserves its window by
-        // moving TextureManager.Cursor.
-        private static uint _texCursorSaved, _texCursorTaken;
-        private static uint _herTopSaved;
-        private static int _texCheckTick;
-        /// <summary>A dungeon script event or a menu can rebuild the texture manager under the resident copy: the cat's
-        /// entries come back at their vanilla addresses (or vanish) while the copy's packets still name the relocated
-        /// ones — garbled fur until a rebuild. Notice it and tear the copy down; it re-spawns clean after the 1 s gate.</summary>
-        private static void CheckTexturesStillOurs()
-        {
-            long e = FindTexEntry(CatTextureNames[0]);
-            uint tbp = e == 0 ? 0u : (Memory.ReadUInt(e + TextureManager.EntryTex0) & TextureManager.Tex0AddrMask);
-            if (e != 0 && tbp >= StuckFloor && Memory.ReadShort(e) == SlotTextureGroup) return;   // still relocated and ours
-            Log((e == 0 ? "texture manager rebuilt (cat entries gone)" : $"texture manager rebuilt (cat entry back at 0x{tbp:X}, block 0x{Memory.ReadShort(e):X})") + " — rebuilding the copy");
-            _texMoved.Clear();                                                   // nothing of ours is in there to restore
-            Despawn();
-        }
-
-        /// <summary>Re-tag the cat's entries (<see cref="CatTextureNames"/>) into the slot's texture group while the copy is
-        /// up, and hand them back on despawn. The dungeon draw loop re-uploads group 0x20+slot to VRAM right before it draws
-        /// chara slot i (ReloadTexture 0x133070 uploads every entry tagged with that block); the cat's textures sit in HER
-        /// block, whose VRAM pages are gone by then because the upload window is paged and shared, so the copy would sample
-        /// whatever replaced them. With <see cref="MoveCatVram"/> on, the entries are also relocated into a reserved window
-        /// above every other block's top.</summary>
-        private static void RetagCatTextures(short from, short to)
-        {
-            int count = Math.Min(TextureManager.MaxEntries, Memory.ReadInt(TextureManager.Base));
-            int done = 0; uint minTbp = uint.MaxValue;
-            for (int i = 0; i < count; i++)
-            {
-                long e = TextureManager.Base + TextureManager.Entries + (long)i * TextureManager.EntryStride;
-                if (Memory.ReadShort(e) != from) continue;
-                byte[] nb = Memory.ReadBytesBatch(e + TextureManager.EntryName, 32);
-                if (nb == null) continue;
-                int len = 0; while (len < nb.Length && nb[len] != 0) len++;
-                string nm = System.Text.Encoding.ASCII.GetString(nb, 0, len);
-                if (Array.IndexOf(CatTextureNames, nm) < 0) continue;
-                if (to == SlotTextureGroup && (Memory.ReadUInt(e + TextureManager.EntryTex0) & TextureManager.Tex0AddrMask) < StuckFloor)
-                {
-                    byte[] snap = Memory.ReadBytesBatch(e, TextureManager.EntryStride);           // the whole entry at rest: block, name, image pointers, TEX0
-                    if (snap != null) _texSnapshot[nm] = snap;                   // a script event's slot clean-up wipes it; RecreateCatEntries puts it back
-                }
-                Memory.WriteUShort(e, (ushort)to);
-                if (to == SlotTextureGroup)
-                {
-                    // An entry still sitting in the relocation window is one an earlier despawn failed to put back.
-                    // Put its remembered original back first.
-                    ulong t = (ulong)Memory.ReadUInt(e + TextureManager.EntryTex0) | ((ulong)Memory.ReadUInt(e + TextureManager.EntryTex0 + 4) << 32);
-                    uint tbp = (uint)(t & TextureManager.Tex0AddrMask);
-                    if (tbp >= StuckFloor)
-                    {
-                        if (_texOriginal.TryGetValue(nm, out ulong orig))
-                        {
-                            Memory.WriteUInt(e + TextureManager.EntryTex0, (uint)orig); Memory.WriteUInt(e + TextureManager.EntryTex0 + 4, (uint)(orig >> 32));
-                            Log($"texture {nm} was left at 0x{tbp:X} by an earlier despawn — restored to 0x{orig & TextureManager.Tex0AddrMask:X}");
-                            t = orig; tbp = (uint)(t & TextureManager.Tex0AddrMask);
-                        }
-                        else Log($"WARNING: texture {nm} sits at 0x{tbp:X} with no remembered original — its relocation will be wrong this spawn");
-                    }
-                    else _texOriginal[nm] = t;
-                    minTbp = Math.Min(minTbp, tbp);
-                }
-                done++;
-            }
-            long her = TextureManager.Base + TextureManager.Blocks + (long)HerTextureBlock * TextureManager.BlockStride;
-            long grp = TextureManager.Base + TextureManager.Blocks + (long)SlotTextureGroup * TextureManager.BlockStride;
-            if (to == SlotTextureGroup && done > 0 && minTbp != uint.MaxValue && MoveCatVram)
-            {
-                // The slot loop's group reload is written into the main frame packet, but the slot's draw goes
-                // into the chara packet the GS consumes EARLIER in the frame, so the cat's binds precede its own upload and
-                // another block can overwrite the pages in between. So the cat's textures live where nothing else uploads: the
-                // top of the manager's VRAM range, above every block's top. Entries, the copy's packet buffers and MDT get the
-                // new addresses; hers are untouched.
-                _herTopSaved = Memory.ReadUInt(her + TextureManager.BlkTop);
-                uint size = _herTopSaved - minTbp;
-                uint limit = Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor);
-                uint newBase = (limit - size) & ~0x1Fu;
-                uint highest = 0;
-                for (int b = 0; b < 0x48; b++) highest = Math.Max(highest, Memory.ReadUInt(TextureManager.Base + TextureManager.Blocks + (long)b * TextureManager.BlockStride + TextureManager.BlkTop));
-                if (highest > newBase) Log($"WARNING: a texture block tops at 0x{highest:X}, inside the cat's window 0x{newBase:X}..0x{newBase + size:X}");
-                // RESERVE the window instead of squatting under the cursor. manager+0x14 is a DOWNWARD bump allocator —
-                // EnterFixTexture does `lw v0,0x14(s6); subu v0,v0,size; sw v0,0x14(s6)` (0x132354) — so the space just below
-                // it is precisely what the game hands out NEXT. Taking the window without moving the cursor meant any texture
-                // entered afterwards would land on top of the cat's — fonts are entered that way. Moving the cursor down by
-                // the same amount makes this a real allocation.
-                _texCursorSaved = limit; _texCursorTaken = newBase;
-                Memory.WriteUInt(TextureManager.Base + TextureManager.Cursor, newBase);
-                int patched = RelocateCatTextures(minTbp, newBase);
-                Memory.WriteUInt(grp + TextureManager.BlkBase, newBase);
-                Memory.WriteUInt(grp + TextureManager.BlkTop, newBase + size);
-                Memory.WriteUInt(grp + TextureManager.BlkLoaded, 0);
-                Memory.WriteUInt(grp + TextureManager.BlkDirty, 0);
-                Memory.WriteUInt(her + TextureManager.BlkTop, minTbp);
-                Log($"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X} and moved 0x{minTbp:X}..0x{_herTopSaved:X} → 0x{newBase:X}..0x{newBase + size:X} ({patched} block(s) swept); her block now tops at 0x{minTbp:X}");
-            }
-            else if (to == HerTextureBlock)
-            {
-                if (_texMoved.Count > 0) RelocateCatTextures(0, 0);          // back to their original addresses
-                if (_texCursorTaken != 0)                                    // give the reservation back, if nobody built below it
-                {
-                    uint cur = Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor);
-                    if (cur == _texCursorTaken) Memory.WriteUInt(TextureManager.Base + TextureManager.Cursor, _texCursorSaved);
-                    else Log($"texture cursor moved to 0x{cur:X} under our reservation (0x{_texCursorTaken:X}) — leaving it, the window stays reserved");
-                    _texCursorTaken = 0; _texCursorSaved = 0;
-                }
-                if (_herTopSaved != 0) Memory.WriteUInt(her + TextureManager.BlkTop, _herTopSaved);
-                Memory.WriteUInt(grp + TextureManager.BlkBase, 0);
-                Memory.WriteUInt(grp + TextureManager.BlkTop, 0);
-                Memory.WriteUInt(grp + TextureManager.BlkLoaded, 1);
-                Memory.WriteUInt(her + TextureManager.BlkLoaded, 0);                          // she re-uploads her whole window next frame
-                Log($"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X}; her block restored to top 0x{_herTopSaved:X}");
-            }
-            else Log($"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X}");
-            BuildStep("textures re-tagged");
-        }
-
-        // (texture NAME, original tex0) for every cat texture moved this spawn — restored on despawn by looking the
-        // entry up by name again (entry addresses shift when the manager registers or drops textures meanwhile).
-        private static readonly List<(string name, ulong tex0)> _texMoved = new();
-        // name → TEX0 at rest, refreshed at every sane spawn; repairs an entry a failed restore left relocated.
-        private static readonly Dictionary<string, ulong> _texOriginal = new();
-        private static readonly Dictionary<string, byte[]> _texSnapshot = new();   // name → the manager entry (0x50 B) as it sits in her block
-        private static bool _texDeferLogged;
-
-        /// <summary>A script event's clean-up (EdEventAllClear 0x197810 → DeleteTextureBlock, which zeroes every entry of
-        /// a block id) wipes the cat entries while they are tagged to the copy's slot group. Put the remembered entries back
-        /// into free manager rows (first empty name from row 1, as SearchTexture 0x131320 allocates) — the image data they
-        /// point at is her pack's own IMG bank, still loaded — so the normal re-tag/relocate can run. Returns how many of
-        /// the cat's entries the manager now holds.</summary>
-        private static int RecreateCatEntries()
-        {
-            int present = 0, made = 0;
-            foreach (string nm in CatTextureNames)
-            {
-                if (FindTexEntry(nm) != 0) { present++; continue; }
-                if (!_texSnapshot.TryGetValue(nm, out byte[] snap)) continue;
-                int idx = -1;
-                for (int i = 1; i < TextureManager.MaxEntries; i++)
-                    if (Memory.ReadByte(TextureManager.Base + TextureManager.Entries + (long)i * TextureManager.EntryStride + TextureManager.EntryName) == 0) { idx = i; break; }
-                if (idx < 0) { Log("texture manager full — cannot recreate " + nm); break; }
-                Memory.WriteBytesBatch(TextureManager.Base + TextureManager.Entries + (long)idx * TextureManager.EntryStride, snap);
-                if (idx + 1 > Memory.ReadInt(TextureManager.Base)) Memory.WriteInt(TextureManager.Base, idx + 1);
-                present++; made++;
-            }
-            if (made > 0) Log($"cat textures recreated in the manager ({made} put back, {present} of {CatTextureNames.Length} present) after a script event wiped them");
-            return present;
-        }
-
-        /// <summary>Whether the cat's textures are RELOCATED to their own VRAM window, as opposed to just being re-tagged into
-        /// the slot's group where they sit. The move exists so nothing else uploads over the cat's pages mid-frame. It is also
-        /// the only thing the mod does that writes VRAM addresses at all. Left ON — without the move the cat's textures are
-        /// unreliable.</summary>
-        private const bool MoveCatVram = true;
-
-        private const uint StuckFloor = 0x3000;          // no vanilla block reaches this high (max seen 0x3920 is the manager's own top area)
-
-        /// <summary>The manager entry for a cat texture, found by name (0 if absent).</summary>
-        private static long FindTexEntry(string name)
-        {
-            int count = Math.Min(TextureManager.MaxEntries, Memory.ReadInt(TextureManager.Base));
-            for (int i = 0; i < count; i++)
-            {
-                long e = TextureManager.Base + TextureManager.Entries + (long)i * TextureManager.EntryStride;
-                byte[] nb = Memory.ReadBytesBatch(e + TextureManager.EntryName, 32);
-                if (nb == null) continue;
-                int len = 0; while (len < nb.Length && nb[len] != 0) len++;
-                if (System.Text.Encoding.ASCII.GetString(nb, 0, len) == name) return e;
-            }
-            return 0;
-        }
-
-        /// <summary>Move the cat entries' TEX0 (TBP0 bits 0..13, CBP bits 37..50) by newBase − oldBase, and patch
-        /// the identical register words wherever they sit in the copy's own packet buffers and MDT copy (the
-        /// packet is rebuilt from the MDT every frame). With oldBase == 0 the saved originals are put back.</summary>
-        private static int RelocateCatTextures(uint oldBase, uint newBase)
-        {
-            var moves = new List<(ulong oldT, ulong newT)>();
-            if (oldBase == 0 && newBase == 0)
-            {
-                foreach (var (name, tex0) in _texMoved)
-                {
-                    long entry = FindTexEntry(name);
-                    if (entry == 0) { Log($"WARNING: texture {name} is gone from the manager — nothing to restore"); continue; }
-                    ulong cur = (ulong)Memory.ReadUInt(entry + 0x28) | ((ulong)Memory.ReadUInt(entry + 0x2C) << 32);
-                    moves.Add((cur, tex0));
-                    Memory.WriteUInt(entry + 0x28, (uint)tex0); Memory.WriteUInt(entry + 0x2C, (uint)(tex0 >> 32));
-                }
-                _texMoved.Clear();
-            }
-            else
-            {
-                foreach (string name in CatTextureNames)                     // the cat's textures only, by name
-                {
-                    long e = FindTexEntry(name);
-                    if (e == 0) continue;
-                    ulong t = (ulong)Memory.ReadUInt(e + TextureManager.EntryTex0) | ((ulong)Memory.ReadUInt(e + TextureManager.EntryTex0 + 4) << 32);
-                    uint tbp = (uint)(t & TextureManager.Tex0AddrMask), cbp = (uint)((t >> TextureManager.Tex0CbpShift) & TextureManager.Tex0AddrMask);
-                    // Shift a field ONLY if it is inside the window being moved. A TEX0 carries the texture's page AND its
-                    // CLUT's, and a CLUT can sit below the textures: `newBase + (cbp - oldBase)` then underflows, and the
-                    // GS keeps 14 bits of it, so the CLUT is uploaded to an essentially arbitrary page. A cat CLUT at 0x0E60
-                    // lands exactly on the message font at 0x2BC0, and one at 0x1060 on the font's own CLUT at 0x2DC0 —
-                    // a 1 KB band of cape colour dropped across the glyph atlas.
-                    uint nt = (tbp >= oldBase && tbp < _herTopSaved) ? newBase + (tbp - oldBase) : tbp;
-                    uint nc = (cbp >= oldBase && cbp < _herTopSaved) ? newBase + (cbp - oldBase) : cbp;
-                    if (nc == cbp && nt != tbp) Log($"texture {name}: CLUT 0x{cbp:X} is outside the moved window 0x{oldBase:X}..0x{_herTopSaved:X} — left where it is");
-                    ulong n = (t & ~(ulong)TextureManager.Tex0AddrMask & ~((ulong)TextureManager.Tex0AddrMask << TextureManager.Tex0CbpShift)) | nt | ((ulong)nc << TextureManager.Tex0CbpShift);
-                    _texMoved.Add((name, t));
-                    moves.Add((t, n));
-                    Memory.WriteUInt(e + TextureManager.EntryTex0, (uint)n); Memory.WriteUInt(e + TextureManager.EntryTex0 + 4, (uint)(n >> 32));
-                }
-            }
-            int patched = 0;
-            var blocks = new List<(long addr, int size)>();
-            foreach (var (node, mdt, mdtSz, vu, vu2, vuSz) in _skinNodes)
-                blocks.AddRange(new[] { (mdt, mdtSz), (vu, vuSz), (vu2, vuSz) });
-            // Rigid cat meshes (the bell) were not copied — their packet is shared with her hidden cat, which is
-            // never drawn, so patching it in place is harmless (and undone with the entries on despawn).
-            for (int i = 0; i < _nodeCount; i++)
-            {
-                if (_skinNodes.Exists(sn => sn.node == i)) continue;
-                long node = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
-                uint vis = Memory.ReadGuestPtr(node + CFrameVu1.GeomPtr);
-                if (!Memory.IsValidGuest(vis)) continue;
-                uint vu = Memory.ReadGuestPtr(Memory.ToMmu(vis) + CVisualMDT.VisVU);
-                int vuSz = Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU + 4) * 16;
-                if (Memory.IsValidGuest(vu) && vuSz > 0 && vuSz < 0x40000) blocks.Add((Memory.ToMmu(vu), vuSz));
-                uint vuB = Memory.ReadGuestPtr(Memory.ToMmu(vis) + 0x2C);
-                if (vuB != vu && Memory.IsValidGuest(vuB) && vuSz > 0) blocks.Add((Memory.ToMmu(vuB), vuSz));
-            }
-            // The machine does the hunting. Every one of these blocks is a draw packet the copy just placed, and scanning them
-            // from here would mean reading all 300 KB back over PINE. One find/replace job per block per moved texture;
-            // the cave sweeps them all in a frame.
-            _jobs.Clear(); _pairs.Clear();
-            if (moves.Count > CodeCaves.CatCopyMaxPairs)   // never truncate: a dropped pair leaves a texture pointing at nothing
-            {
-                Log($"texture relocation: {moves.Count} moves exceed the sweep table ({CodeCaves.CatCopyMaxPairs}) — using the slow path");
-                foreach (var (addr, size) in blocks)
-                {
-                    if (addr == 0 || size <= 0) continue;
-                    byte[] blk = Memory.ReadBytesBatch(addr, size);
-                    if (blk == null) continue;
-                    bool dirty = false;
-                    for (int o = 0; o + 8 <= blk.Length; o += 4)
-                    {
-                        ulong w = BitConverter.ToUInt64(blk, o);
-                        foreach (var (oldT, newT) in moves)
-                            if (w == oldT) { BitConverter.GetBytes(newT).CopyTo(blk, o); dirty = true; patched++; o += 4; break; }
-                    }
-                    if (dirty) Memory.WriteBytesBatch(addr, blk);
-                }
-                return patched;
-            }
-            _pairs.AddRange(moves);
-            foreach (var (addr, size) in blocks)
-                if (addr != 0 && size > 0) _jobs.Add(new CopyJob(Memory.ToGuest(addr), size));
-            patched = _jobs.Count;
-            if (_jobs.Count > 0 && !RunCopyJobs() && !CopyJobsBySocket())
-                Log("texture relocation: neither path completed — the copy may draw with her texture block");
-            _jobs.Clear();
-            return patched;
-        }
-
         // ─────────────────────────────────────────── the hit ───────────────────────────────────────────────
 
         /// <summary>One pellet-style CollisionData entry at the pounce (GuardianReflector.PlantReflectedHit's
@@ -2724,7 +762,7 @@ namespace Dark_Cloud_Improved_Version
         /// <param name="ox">…the kick's origin (the cat): CheckDmg pushes the enemy along enemy − origin with strength/decay
         /// from the entry when its type word (+0x98) is 2 — the same words Toan's sword hits carry, so the enemy's own
         /// hit reaction (flinch + shove) runs exactly as for a melee hit. A pellet's entry has type 0: no reaction.</param>
-        private static void PlantHit(float x, float h, float y, float radius, int baseDmg, float ox, float oh, float oy)
+        internal static void PlantHit(float x, float h, float y, float radius, int baseDmg, float ox, float oh, float oy)
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
@@ -2801,15 +839,14 @@ namespace Dark_Cloud_Improved_Version
 
         // ───────────────────────────────────────────── utils ───────────────────────────────────────────────
 
-        private static long SlotAddr() => DungeonCharaDraw.CharaArray + (long)Slot * DungeonCharaDraw.CharaStride;
-        private static void Log(string message) => Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + message);
+        internal static long SlotAddr() => DungeonCharaDraw.CharaArray + (long)Slot * DungeonCharaDraw.CharaStride;
+        internal static void Log(string message) => Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + message);
 
         /// <summary>Read-modify-write the copy's MotionFlags: <paramref name="clear"/> bits off, then <paramref name="set"/> bits on.</summary>
-        private static void SetMotionFlags(int set = 0, int clear = 0)
+        internal static void SetMotionFlags(int set = 0, int clear = 0)
         {
             long f = SlotAddr() + CCharacter.MotionFlags;
             Memory.WriteInt(f, (Memory.ReadInt(f) & ~clear) | set);
         }
-
     }
 }

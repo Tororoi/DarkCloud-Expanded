@@ -9,7 +9,7 @@ namespace Dark_Cloud_Improved_Version
     /// each tick (one call per ability, gated by which sphere grants it). Callers qualify them
     /// (<c>SuperSteveAbilities.X</c>), so the names omit the "SuperSteve" prefix.
     ///
-    /// Enemy-side abilities reuse the <c>CustomToanEffects</c> drivers directly (they only touch enemy data);
+    /// Enemy-side abilities reuse the Toan weapon classes' drivers directly (they only touch enemy data);
     /// what lives here is the Xiao body adaptations. Each driver is named after its SOURCE weapon (the one
     /// whose sphere grants it): <c>DriveSmallSword</c> = Quick Draw, <c>DriveTsukikage</c> = Moonlit Focus,
     /// <c>DriveHeavensCloud</c> = the two-stage charge → wind-gem crowd-control blast, <c>DriveAgasSword</c> =
@@ -84,7 +84,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── Defensive Legacy (Aga's Sword) ──
-        private const int AgasDefenseBoost = 15;   // mirrors CustomToanEffects.AgasSwordEffect
+        private const int AgasDefenseBoost = 15;   // mirrors AgasSword.AgasSwordEffect
         private static bool _ssAgasApplied;        // whether the +15 defense is currently on Xiao
 
         /// <summary>Defensive Legacy (Aga's Sword): balanced ±<see cref="AgasDefenseBoost"/> on Xiao's defense.</summary>

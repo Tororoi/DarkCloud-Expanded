@@ -844,35 +844,35 @@ namespace Dark_Cloud_Improved_Version
             bool questActive = false;
             if (Memory.ReadByte(0x21CE4402) == 1)
             {
-                Dungeon.monsterQuestMachoActive = true;
+                DungeonSidequests.monsterQuestMachoActive = true;
                 questActive = true;
             }
             else
-                Dungeon.monsterQuestMachoActive = false;
+                DungeonSidequests.monsterQuestMachoActive = false;
 
             if (Memory.ReadByte(0x21CE4407) == 1)
             {
-                Dungeon.monsterQuestGobActive = true;
+                DungeonSidequests.monsterQuestGobActive = true;
                 questActive = true;
             }
             else
-                Dungeon.monsterQuestGobActive = false;
+                DungeonSidequests.monsterQuestGobActive = false;
 
             if (Memory.ReadByte(0x21CE440C) == 1)
             {
-                Dungeon.monsterQuestJakeActive = true;
+                DungeonSidequests.monsterQuestJakeActive = true;
                 questActive = true;
             }
             else
-                Dungeon.monsterQuestJakeActive = false;
+                DungeonSidequests.monsterQuestJakeActive = false;
 
             if (Memory.ReadByte(0x21CE4411) == 1)
             {
-                Dungeon.monsterQuestChiefActive = true;
+                DungeonSidequests.monsterQuestChiefActive = true;
                 questActive = true;
             }
             else
-                Dungeon.monsterQuestChiefActive = false;
+                DungeonSidequests.monsterQuestChiefActive = false;
 
 
             if (questActive)
