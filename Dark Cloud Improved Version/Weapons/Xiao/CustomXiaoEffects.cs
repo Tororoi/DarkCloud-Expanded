@@ -46,6 +46,19 @@ namespace Dark_Cloud_Improved_Version
             DragonsY.Stop();
         }
 
+        // ── Bandit Slingshot ───────────────────────────────────────────────────────────────
+        /// <summary>Xiao's Bandit Slingshot thread: hands every tick to <see cref="BanditSlingshot.Drive"/> while the weapon is
+        /// equipped, and stands it down once when it goes.</summary>
+        public static void BanditSlingshotEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.banditslingshot)
+            {
+                BanditSlingshot.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                Thread.Sleep(16);
+            }
+            BanditSlingshot.Stop();
+        }
+
         // ── Double Impact ──────────────────────────────────────────────────────────────────
         /// <summary>Xiao's Double Impact thread: hands every tick to <see cref="DoubleImpact.Drive"/> while the weapon is
         /// equipped, and stands it down once when it goes.</summary>

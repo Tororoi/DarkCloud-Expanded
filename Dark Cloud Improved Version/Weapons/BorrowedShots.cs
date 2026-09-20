@@ -10,7 +10,8 @@ namespace Dark_Cloud_Improved_Version
     {
         internal readonly byte[] Cfg;      // the BT_SHOT_EFFECT (0x70 B), as the provider built it
         internal readonly string Path;     // the container in the archive, e.g. dun/effect/f_boll_3.chr
-        internal BorrowedEffect(byte[] cfg, string path) { Cfg = cfg; Path = path; }
+        internal readonly bool   KeepFlags; // the config's whole flags word stays (its ailments too); else the element bits alone
+        internal BorrowedEffect(byte[] cfg, string path, bool keepFlags = false) { Cfg = cfg; Path = path; KeepFlags = keepFlags; }
         internal string Name => BorrowedShots.Name(Cfg);
         internal bool Same(BorrowedEffect o) => o != null && Path == o.Path && Cfg.SequenceEqual(o.Cfg);
     }
@@ -167,7 +168,7 @@ namespace Dark_Cloud_Improved_Version
             BitConverter.GetBytes(2).CopyTo(c, ShotEffectPack.CfgVictimMask);                            // hurts enemies, not the player
             BitConverter.GetBytes(0f).CopyTo(c, ShotEffectPack.CfgRadiusFlying);                         // no planting in flight: the impact's first frame is the first plant
             int flags = BitConverter.ToInt32(c, ShotEffectPack.CfgFlags);
-            BitConverter.GetBytes(flags & ShotEffectPack.CfgElementBits).CopyTo(c, ShotEffectPack.CfgFlags);   // the element only — no ailment (the Black Dragon's shot carries Freeze)
+            if (!fx.KeepFlags) BitConverter.GetBytes(flags & ShotEffectPack.CfgElementBits).CopyTo(c, ShotEffectPack.CfgFlags);   // the element only — no ailment (the Black Dragon's shot carries Freeze)
             byte[] path = new byte[CodeCaves.BorrowedShotPathLen];
             Encoding.ASCII.GetBytes(fx.Path, 0, Math.Min(fx.Path.Length, path.Length - 1), path, 0);
             Memory.WriteInt(CodeCaves.BorrowedShotBlock, 0);                                               // quiet while the block changes
@@ -184,14 +185,14 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>One of the game's 34 configs (<see cref="ShotEffectPack.CfgTable"/>) and its container under dun/effect, as
         /// the species loader uses it.</summary>
-        internal static BorrowedEffect TableConfig(int index)
+        internal static BorrowedEffect TableConfig(int index, bool keepFlags = false)
         {
-            string key = "#" + index;
+            string key = "#" + index + (keepFlags ? "+" : "");
             if (_effects.TryGetValue(key, out var fx)) return fx;
             uint cfgAddr = Memory.ReadUInt(ShotEffectPack.CfgTable + index * 4);
             byte[] c = cfgAddr == 0 ? null : Memory.ReadBytesBatch(0x20000000L + cfgAddr, ShotEffectPack.CfgSize);
             if (c == null) return null;
-            fx = new BorrowedEffect(c, EffectDir + Name(c) + ".chr");
+            fx = new BorrowedEffect(c, EffectDir + Name(c) + ".chr", keepFlags);
             _effects[key] = fx;
             return fx;
         }

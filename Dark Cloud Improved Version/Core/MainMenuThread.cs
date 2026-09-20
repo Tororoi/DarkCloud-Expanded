@@ -36,7 +36,7 @@ namespace Dark_Cloud_Improved_Version
             GameClock.Start();           // the play clock every dungeon feature times against
             Mirage.Start();   // Ungaga's Mirage: watches for charge-release, drives the decoy via data writes
             GuardianGrace.Start();
-            BorrowedShots.Start(DragonsY.WantedShot);   // shot effects borrowed for Xiao's abilities, entered on every floor; each ability names the one it wants
+            BorrowedShots.Start(DragonsY.WantedShot, BanditSlingshot.WantedShot);   // shot effects borrowed for Xiao's abilities, entered on every floor; each ability names the one it wants
             SharedShots.Start();         // the monster shot pack's five slots shared among every config a floor needs (the cave does it; the mod arms and reports)
             GuardianReflector.Start();   // Xiao's Angel Gear projectile reflect, Stage A (roadmap PR 7)
             DivineBeastCat.Start();      // Xiao's Divine Beast Title charged cat shot (roadmap PR 8)

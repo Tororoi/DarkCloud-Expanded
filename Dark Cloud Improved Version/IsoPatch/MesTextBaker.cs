@@ -105,6 +105,45 @@ namespace Dark_Cloud_Improved_Version
             return outb;
         }
 
+        /// <summary>Move existing messages to the END of a meswin .mes, each into a block of <c>reserveWords</c> words (its
+        /// own text, then zeros), and point their index entries there — the count never changes and no other message's
+        /// read position shifts. The block is room the app can rewrite at runtime with a longer text (the Bandit
+        /// Slingshot's notice line; the file's RAM buffer must hold the growth — the notices bank has 13 KB spare).</summary>
+        internal static byte[] RelocateMes(byte[] orig, params (int id, int reserveWords)[] moves)
+        {
+            int cnt = U16(orig, 0), f2 = U16(orig, 2);
+            int idxEnd = 4 + cnt * 4;
+            int blobEnd = orig.Length;
+            while (blobEnd > idxEnd && orig[blobEnd - 1] == 0) blobEnd--;
+            const int Gap = 16;
+            int raw = (blobEnd - idxEnd) + Gap; raw += raw & 1;
+            int blobLen = Math.Min(orig.Length - idxEnd, raw);
+
+            var ents = new List<(int id, int off)>(cnt);
+            for (int i = 0; i < cnt; i++) ents.Add((U16(orig, 4 + i * 4), U16(orig, 4 + i * 4 + 2)));
+            var newText = new List<byte>();
+            int cum = blobLen;
+            foreach (var (id, reserve) in moves)
+            {
+                ushort[] words = MesExtract(orig, id);
+                if (words.Length > reserve) throw new IOException($"meswin message {id} ({words.Length} words) is longer than its {reserve}-word block");
+                int at = ents.FindIndex(e => e.id == id);
+                int textByte = 4 + cnt * 4 + cum;
+                ents[at] = (id, textByte / 2 - cnt - 1);
+                foreach (ushort g in words) { newText.Add((byte)g); newText.Add((byte)(g >> 8)); }
+                for (int i = words.Length; i < reserve; i++) { newText.Add(0); newText.Add(0); }
+                cum += reserve * 2;
+            }
+            var outb = new byte[4 + cnt * 4 + blobLen + newText.Count];
+            U16(outb, 0, (ushort)cnt);
+            U16(outb, 2, (ushort)f2);
+            int p = 4;
+            foreach (var (id, off) in ents) { U16(outb, p, (ushort)id); U16(outb, p + 2, (ushort)off); p += 4; }
+            Array.Copy(orig, idxEnd, outb, p, blobLen); p += blobLen;
+            newText.CopyTo(outb, p);
+            return outb;
+        }
+
         /// <summary>Inject one message by REPURPOSING the mes's highest-id empty (sentinel) entry instead of
         /// adding a new one — so the message COUNT never grows and no existing message's read position shifts.
         ///

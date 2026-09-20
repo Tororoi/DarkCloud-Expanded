@@ -86,6 +86,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread dragonsYThread = new Thread(new ThreadStart(CustomXiaoEffects.DragonsYEffect));
         public static Thread lockOnSpeedThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnSpeedEffect));
         public static Thread doubleImpactThread = new Thread(new ThreadStart(CustomXiaoEffects.DoubleImpactEffect));
+        public static Thread banditSlingshotThread = new Thread(new ThreadStart(CustomXiaoEffects.BanditSlingshotEffect));
         public static Thread lockOnReachThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnReachEffect));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
@@ -439,6 +440,14 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             doubleImpactThread = new Thread(new ThreadStart(CustomXiaoEffects.DoubleImpactEffect));
                                             doubleImpactThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.banditslingshot:
+                                        if (!banditSlingshotThread.IsAlive)
+                                        {
+                                            banditSlingshotThread = new Thread(new ThreadStart(CustomXiaoEffects.BanditSlingshotEffect));
+                                            banditSlingshotThread.Start();
                                         }
                                         break;
 

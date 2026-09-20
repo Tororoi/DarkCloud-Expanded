@@ -559,6 +559,15 @@ namespace Dark_Cloud_Improved_Version
                                    (20, menu20), (21, menu21), (22, menu22), (LadderMsgId, ladderMsg)));
             }
 
+            // 5.2) the dungeon's "acquired" notices (meswin/system_ae.bin, ids 10/20/30) moved into 80-word blocks at the bank's
+            //      end, so the Bandit Slingshot can append its line to the one an item's arrival will show (BanditSlingshot).
+            progress("Baking room into the item notices …");
+            {
+                var moves = new (int, int)[BanditSlingshot.NoticeIds.Length];
+                for (int i = 0; i < moves.Length; i++) moves[i] = (BanditSlingshot.NoticeIds[i], BanditSlingshot.NoticeReserveWords);
+                Redirect(BanditSlingshot.NoticeFile, RelocateMes(ReadArchive(BanditSlingshot.NoticeFile), moves));
+            }
+
             // 5.5) Ungaga run animation: speed up the ally-swap model's run to match his battle run. The swap
             //      loads e323_2c10a.chr — the only Ungaga model with BOTH cloth and a real run (c10p had cloth
             //      but its run KEY reused the walk frames; the NPC c10a had a real run but no cloth). That event
