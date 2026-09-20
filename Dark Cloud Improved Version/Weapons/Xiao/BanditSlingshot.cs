@@ -11,6 +11,12 @@ namespace Dark_Cloud_Improved_Version
     /// Steal ability (a 10 % roll per hit in CheckDmg); the game spawns the stolen item as a CStealItem that flies to
     /// Xiao, and the item's "acquired" notice gets a second line: "[enemy]'s projectile is now yours".
     ///
+    /// Bandit's Ring gives Ruby the same: the config is entered into the SECOND main-character instance
+    /// (<see cref="ShotEffectPack.CharaMainEffectCrash"/>, the broken-weapon shot's, otherwise idle) beside her own, and each
+    /// QUICK shot — a sub-shot of the live instance whose random-rate word is not the charged release's 2.0 — is put out
+    /// the tick it appears and the stolen shot fired from the second instance in its place, with her owner id; the charged
+    /// shot stays her own. Super Steve carrying either weapon's SynthSphere has Xiao's version.
+    ///
     /// The proc is seen in the CStealItem pool (<see cref="StealItemPool"/>, eight slots: a slot's state leaving −1),
     /// the victim is the living enemy nearest the slot's spawn point, and its projectile is the primary shot config of
     /// its species (the static table's +0x68; none = no projectile, the item alone). The config is entered into the
@@ -44,8 +50,11 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly int[] NoticeIds = { 10, 20, 30 };
         internal const int NoticeReserveWords = 80;
 
+        private const float ChargedRate = 2f;               // SetRandomRate's mark on Ruby's charged release (a quick shot carries Set's −1)
+        private const int   RubyShotLife = 120;             // frames of flight for her stolen shot (a pellet's)
         private static readonly int[]  _stealState = new int[StealSlots];
         private static readonly bool[] _seen = new bool[PlayerShotPool.SlotCount];
+        private static readonly bool[] _rubySeen = new bool[ShotEffectPack.SubShots];
         private static int    _floor = -1;
         private static int    _stolenCfg = -1;
         private static string _stolenName;
@@ -65,8 +74,23 @@ namespace Dark_Cloud_Improved_Version
             if (floor != _floor) { Forget(); _floor = floor; for (int i = 0; i < StealSlots; i++) _stealState[i] = -1; }
             WatchSteals();
             if (_noticeRestoreAt <= GameClock.Now) RestoreNotice();
-            if (_effect != null) FirePellets();
+            if (_effect == null) return;
+            if (Player.CurrentCharacterNum() == Player.RubyId) ReplaceQuickShots(); else FirePellets();
         }
+
+        /// <summary>Whether a weapon record carries the ability: the Bandit Slingshot, Bandit's Ring, or Super Steve with
+        /// either one's SynthSphere.</summary>
+        internal static bool Wields(long rec)
+        {
+            int id = Memory.ReadUShort(rec);
+            if (id == Items.banditslingshot || id == Items.banditsring) return true;
+            if (id != Items.supersteve) return false;
+            int sphere = SuperSteveAbilities.AttachedSphere(rec);
+            return sphere == Items.banditslingshot || sphere == Items.banditsring;
+        }
+
+        /// <summary>The two weapons with their own thread (Super Steve's loop drives its sphere's).</summary>
+        internal static bool Carries(int weaponId) => weaponId == Items.banditslingshot || weaponId == Items.banditsring;
 
         private static void WatchSteals()
         {
@@ -105,10 +129,11 @@ namespace Dark_Cloud_Improved_Version
             if (cfg < 0) cfg = Projectile(Memory.ReadUShort(row + EnemySpeciesTable.SecondaryBstIndex));   // a self-burst primary: its other shot, if it flies
             if (cfg < 0)
             { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"stole item {item} from {species.Name}: it has no projectile"); return; }
-            var fx = BorrowedShots.TableConfig(cfg, keepFlags: true);
+            bool ruby = Player.CurrentCharacterNum() == Player.RubyId;
+            var fx = BorrowedShots.TableConfig(cfg, keepFlags: true, instance: ruby ? ShotEffectPack.CharaMainEffectCrash : ShotEffectPack.CharaMainEffect);
             if (fx == null) return;
             _stolenCfg = cfg; _stolenName = species.Name; _effect = fx;
-            Array.Clear(_seen, 0, _seen.Length);
+            Array.Clear(_seen, 0, _seen.Length); Array.Clear(_rubySeen, 0, _rubySeen.Length);
             WriteNotice(item, species.Name);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{species.Name}'s projectile is hers: {fx.Name} (config {cfg}, flags 0x{BitConverter.ToInt32(fx.Cfg, ShotEffectPack.CfgFlags):X}) until another steal or the floor ends");
         }
@@ -141,6 +166,33 @@ namespace Dark_Cloud_Improved_Version
                         Memory.WriteInt(PlayerShotPool.FlagAddr(pool, i), 0);
                 }
                 else if (!live) _seen[i] = false;
+            }
+        }
+
+        /// <summary>Ruby: each quick shot the tick it appears in her live instance — the stolen shot from the second instance
+        /// at its position and direction, <see cref="DamageMult"/>× its attack, her owner id — and the quick shot put out. A
+        /// charged release (random rate 2.0) is left as it is.</summary>
+        private static void ReplaceQuickShots()
+        {
+            long inst = ShotEffectPack.CharaMainEffect;
+            if (Memory.ReadUInt(ShotEffectPack.MainEffectLivePtr) != inst - 0x20000000L) return;   // a broken weapon fires from the second instance: ours already
+            int count = Memory.ReadInt(inst + ShotEffectPack.OffCount);
+            if (count < 1 || count > ShotEffectPack.SubShots) return;
+            for (int i = 0; i < count; i++)
+            {
+                bool live = Memory.ReadUShort(inst + ShotEffectPack.OffActive + i * 2) != 0;
+                if (live && !_rubySeen[i])
+                {
+                    _rubySeen[i] = true;
+                    if (Memory.ReadFloat(inst + ShotEffectPack.OffA0D0 + i * 4) == ChargedRate) continue;   // her charged shot, her own
+                    long obj = inst + ShotEffectPack.OffObj + i * ShotEffectPack.ObjStride, dir = inst + ShotEffectPack.OffDir + i * 0x10;
+                    float x = Memory.ReadFloat(obj + ShotEffectPack.ObjPos), h = Memory.ReadFloat(obj + ShotEffectPack.ObjPos + 4), y = Memory.ReadFloat(obj + ShotEffectPack.ObjPos + 8);
+                    float vx = Memory.ReadFloat(dir), vh = Memory.ReadFloat(dir + 4), vy = Memory.ReadFloat(dir + 8);
+                    int damage = (int)(Memory.ReadInt(inst + ShotEffectPack.OffDamage + i * 4) * DamageMult);
+                    if (BorrowedShots.Fire(_effect, x, h, y, vx, vh, vy, damage, RubyShotLife, Player.RubyId))
+                        Memory.WriteUShort(inst + ShotEffectPack.OffActive + i * 2, 0);   // her quick shot gives way
+                }
+                else if (!live) _rubySeen[i] = false;
             }
         }
 
@@ -187,13 +239,15 @@ namespace Dark_Cloud_Improved_Version
             return 0;
         }
 
-        /// <summary>The stolen projectile, for BorrowedShots — while the Bandit Slingshot is out and something is stolen.</summary>
+        /// <summary>The stolen projectile, for BorrowedShots — while a carrying weapon is out and something is stolen.</summary>
         internal static BorrowedEffect WantedShot()
         {
-            if (_effect == null || Player.CurrentCharacterNum() != Player.XiaoId) return null;
-            int slot = Memory.ReadByte(DngStatusData.Base + DngStatusData.EquipSlotArrayOffset + Player.XiaoId);
+            if (_effect == null) return null;
+            int ch = Player.CurrentCharacterNum();
+            if (ch != Player.XiaoId && ch != Player.RubyId) return null;
+            int slot = Memory.ReadByte(DngStatusData.Base + DngStatusData.EquipSlotArrayOffset + ch);
             if ((uint)slot > 9) return null;
-            return Memory.ReadUShort(DngStatusData.WeaponRecord(Player.XiaoId, slot)) == Items.banditslingshot ? _effect : null;
+            return Wields(DngStatusData.WeaponRecord(ch, slot)) ? _effect : null;
         }
 
         private static void Forget()

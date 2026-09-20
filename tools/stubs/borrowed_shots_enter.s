@@ -26,6 +26,9 @@
 #   enter; cave writes 1 = entered, −1 = no room / failed, and drops the magic)   +0x258 the file path (≤ 63 chars)
 #   +0x298 our CDataAlloc2 {base, 0, used, cap} (cave)   +0x2A8 LoadFile's size out   +0x2AC the reserve, units of 16 B (mod)
 #   +0x2B0 the pool's used counter right after our carve (cave) — the mark, also stored in the region's signature
+#   +0x2B4 the instance to enter (mod): CharaMainEffect for Xiao's abilities; the SECOND instance (0x01E97BC0, the
+#   broken-weapon shot's, otherwise idle) for Ruby's stolen shot, which fires beside her own   +0x2B8 1 when it is the
+#   main instance (mod): only then is texture block 0x10 cleared before the entry and the live pointer set after it
 # Globals: 0x01E8DA60 CharaMainEffect   *0x002A2384 read_buffer   0x01F066D0 the monster pool's CDataAlloc2 (+0 base, +8 used,
 #   +0xC cap)   0x01C75870 the texture manager   gp−0x6304 the live main-character effect pointer
 
@@ -42,8 +45,7 @@
     ori   $t2, $t2, 0x4853         # "SHOT"
     bne   $t1, $t2, ret            # nothing seeded
     nop
-    lui   $s1, 0x01E8
-    ori   $s1, $s1, 0xDA60         # CharaMainEffect
+    lw    $s1, 0x02B4($s0)         # the instance the mod named (CharaMainEffect, or the second one for Ruby's stolen shot)
     lw    $t6, 0x0000($s1)         # its config pointer
     addiu $t7, $s0, 0x10           # ours
     lw    $t4, 0x0250($s0)         # the state word
@@ -113,7 +115,9 @@ reenter:
     sw    $zero, 0x02A0($s0)       #                used = 0: the region is reused whole
     jal   0x001AE440               # Initialize__12CSHOT_EFFECT(instance): emptied, config pointer 0
     move  $a0, $s1
-    lui   $a0, 0x01C7
+    lw    $t1, 0x02B8($s0)         # the main instance's (1): its texture block cleared and the live pointer set; else neither
+    beq   $t1, $zero, load
+    lui   $a0, 0x01C7              # (delay slot; harmless either way)
     ori   $a0, $a0, 0x5870         # the texture manager
     jal   0x00133700               # DeleteTextureBlock(mgr, 0x10): the previous effect's textures
     addiu $a1, $zero, 0x10
@@ -123,6 +127,7 @@ reenter:
     lui   $a0, 0x01C7
     jal   0x00133A60               # CleanUpTextureList(mgr)
     ori   $a0, $a0, 0x5870
+load:
     addiu $a0, $s0, 0x258          # the path
     lui   $a1, 0x002A
     lw    $a1, 0x2384($a1)         # read_buffer
@@ -139,9 +144,11 @@ reenter:
     jal   0x001AD260               # Entry2__12CSHOT_EFFECT → 0 = failed
     addiu $t1, $zero, 6            # (delay slot) six sub-shots
     beq   $v0, $zero, noroom
-    nop
-    addiu $t1, $zero, 1
+    addiu $t1, $zero, 1            # (delay slot; noroom writes its own)
     sw    $t1, 0x0250($s0)         # entered
+    lw    $t1, 0x02B8($s0)
+    beq   $t1, $zero, ret          # the second instance is stepped and drawn as it is; the live pointer stays the character's
+    nop
     sw    $s1, -0x6304($gp)        # the live main-character effect pointer names the instance (the loop steps and draws it)
     b     ret
     nop

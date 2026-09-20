@@ -799,7 +799,8 @@ namespace Dark_Cloud_Improved_Version
         internal const uint BorrowedShotBlockGuest = 0x01FAEF40;
         internal const uint BorrowedShotMagic      = 0x544F4853;   // "SHOT"
         internal const int  BorrowedShotCfg = 0x10, BorrowedShotState = 0x250, BorrowedShotPath = 0x258, BorrowedShotPathLen = 0x40,
-                            BorrowedShotAlloc = 0x298, BorrowedShotReserve = 0x2AC, BorrowedShotCarveMark = 0x2B0, BorrowedShotBlockSize = 0x2C0;
+                            BorrowedShotAlloc = 0x298, BorrowedShotReserve = 0x2AC, BorrowedShotCarveMark = 0x2B0,
+                            BorrowedShotInstance = 0x2B4, BorrowedShotMainFlag = 0x2B8, BorrowedShotBlockSize = 0x2C0;   // +0x2B4 the instance (guest), +0x2B8 1 = the main one (texture block cleared, live pointer set)
 
         /// <summary>The shot-slot sharing block (DebugInfoCave.SharedShots shares the monster pack's five slots among every config
         /// a floor needs; SharedShots seeds and reads it): +0x00 "SHRE" (mod; without it a refused config is only skipped when it

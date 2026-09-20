@@ -11,9 +11,11 @@ namespace Dark_Cloud_Improved_Version
         internal readonly byte[] Cfg;      // the BT_SHOT_EFFECT (0x70 B), as the provider built it
         internal readonly string Path;     // the container in the archive, e.g. dun/effect/f_boll_3.chr
         internal readonly bool   KeepFlags; // the config's whole flags word stays (its ailments too); else the element bits alone
-        internal BorrowedEffect(byte[] cfg, string path, bool keepFlags = false) { Cfg = cfg; Path = path; KeepFlags = keepFlags; }
+        internal readonly long   Instance;  // the CSHOT_EFFECT it is entered in: CharaMainEffect, or the second instance (Ruby's stolen shot)
+        internal BorrowedEffect(byte[] cfg, string path, bool keepFlags = false, long instance = ShotEffectPack.CharaMainEffect)
+        { Cfg = cfg; Path = path; KeepFlags = keepFlags; Instance = instance; }
         internal string Name => BorrowedShots.Name(Cfg);
-        internal bool Same(BorrowedEffect o) => o != null && Path == o.Path && Cfg.SequenceEqual(o.Cfg);
+        internal bool Same(BorrowedEffect o) => o != null && Path == o.Path && Instance == o.Instance && Cfg.SequenceEqual(o.Cfg);
     }
 
     /// <summary>
@@ -120,7 +122,7 @@ namespace Dark_Cloud_Improved_Version
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag
                                 + $"  monster pool used {Memory.ReadInt(pool + DataPools.Used):N0} of cap {Memory.ReadInt(pool + DataPools.Cap):N0} units, reserve {Memory.ReadInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotReserve):N0}; "
                                 + $"region base 0x{Memory.ReadUInt(alloc):X} used {Memory.ReadInt(alloc + 8):N0} cap {Memory.ReadInt(alloc + 12):N0}; "
-                                + $"instance cfg 0x{Memory.ReadUInt(ShotEffectPack.CharaMainEffect):X} (ours 0x{CodeCaves.BorrowedShotBlockGuest + CodeCaves.BorrowedShotCfg:X}), live effect ptr 0x{Memory.ReadUInt(ShotEffectPack.MainEffectLivePtr):X}");
+                                + $"instance cfg 0x{Memory.ReadUInt(_seeded.Instance):X} (ours 0x{CodeCaves.BorrowedShotBlockGuest + CodeCaves.BorrowedShotCfg:X}), live effect ptr 0x{Memory.ReadUInt(ShotEffectPack.MainEffectLivePtr):X}");
                         }
                     }
                 }
@@ -175,6 +177,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteBytesBatch(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotCfg, c);
             Memory.WriteBytesBatch(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotPath, path);
             Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotReserve, ReserveFor(fx));
+            Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotInstance, (int)(fx.Instance - 0x20000000L));
+            Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotMainFlag, fx.Instance == ShotEffectPack.CharaMainEffect ? 1 : 0);
             // The carve mark and the region are left as they are: the cave proves a region by its signature and the pool's counter,
             // so a floor's region outlives a Clear (a weapon switch) and the next effect re-enters it instead of carving another.
             Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotState, 0);
@@ -185,14 +189,14 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>One of the game's 34 configs (<see cref="ShotEffectPack.CfgTable"/>) and its container under dun/effect, as
         /// the species loader uses it.</summary>
-        internal static BorrowedEffect TableConfig(int index, bool keepFlags = false)
+        internal static BorrowedEffect TableConfig(int index, bool keepFlags = false, long instance = ShotEffectPack.CharaMainEffect)
         {
-            string key = "#" + index + (keepFlags ? "+" : "");
+            string key = "#" + index + (keepFlags ? "+" : "") + "@" + instance;
             if (_effects.TryGetValue(key, out var fx)) return fx;
             uint cfgAddr = Memory.ReadUInt(ShotEffectPack.CfgTable + index * 4);
             byte[] c = cfgAddr == 0 ? null : Memory.ReadBytesBatch(0x20000000L + cfgAddr, ShotEffectPack.CfgSize);
             if (c == null) return null;
-            fx = new BorrowedEffect(c, EffectDir + Name(c) + ".chr", keepFlags);
+            fx = new BorrowedEffect(c, EffectDir + Name(c) + ".chr", keepFlags, instance);
             _effects[key] = fx;
             return fx;
         }
@@ -261,7 +265,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt   (inst + ShotEffectPack.OffWait + j * 4, -1);              // no flight to time out
             Memory.WriteInt   (inst + ShotEffectPack.OffDamage + j * 4, damage);
             Memory.WriteInt   (inst + ShotEffectPack.OffUserCol + j * 4, 0);
-            Memory.WriteUShort(inst + ShotEffectPack.OffOwner + j * 2, 1);
+            Memory.WriteUShort(inst + ShotEffectPack.OffOwner + j * 2, (ushort)Player.XiaoId);
             Memory.WriteUShort(inst + ShotEffectPack.OffAttr2 + j * 2, 0);
             Memory.WriteUShort(inst + ShotEffectPack.OffA060 + j * 2, 0xFFFF);
             Memory.WriteInt   (inst + ShotEffectPack.OffA0B0 + j * 4, -1);
@@ -318,11 +322,11 @@ namespace Dark_Cloud_Improved_Version
         /// <paramref name="vx"/>/<paramref name="vh"/>/<paramref name="vy"/> (units per frame), <paramref name="damage"/> base
         /// damage and <paramref name="life"/> frames of flight, as Xiao's. False when the effect is not entered on this floor
         /// or its sub-shots are all busy.</summary>
-        internal static bool Fire(BorrowedEffect fx, float x, float h, float y, float vx, float vh, float vy, int damage, int life)
+        internal static bool Fire(BorrowedEffect fx, float x, float h, float y, float vx, float vh, float vy, int damage, int life, int owner = Player.XiaoId)
         {
             if (!Entered(fx)) return false;
             byte[] cfg = fx.Cfg;
-            long inst = ShotEffectPack.CharaMainEffect;
+            long inst = fx.Instance;
             int count = Memory.ReadInt(inst + ShotEffectPack.OffCount);
             if (count < 1 || count > ShotEffectPack.SubShots) return false;
             int j = -1;
@@ -335,7 +339,7 @@ namespace Dark_Cloud_Improved_Version
             long ftab = Memory.ReadInt(obj + ShotEffectPack.ObjFrameTb);
             float startFrame = ftab > 0 ? Memory.ReadInt(ftab + 0x20000000 + flyMot * 0x10) : 1;
             long rec = WeaponHave.BattleWeaponRecord;
-            // Set's own field order; active LAST. Owner 1 = Xiao, collider 0 as her pellets, her live flags and anti bytes.
+            // Set's own field order; active LAST. The owner (1 Xiao, 3 Ruby), collider 0 as a pellet's, the live weapon's flags and anti bytes.
             Memory.WriteUShort(inst + ShotEffectPack.OffPhase + j * 2, 1);              // flying, no muzzle
             Memory.WriteVec3  (obj + ShotEffectPack.ObjPos, x, h, y);
             Memory.WriteFloat (obj + ShotEffectPack.ObjPos + 12, 1f);
@@ -347,7 +351,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt   (inst + ShotEffectPack.OffWait + j * 4, life);
             Memory.WriteInt   (inst + ShotEffectPack.OffDamage + j * 4, damage);
             Memory.WriteInt   (inst + ShotEffectPack.OffUserCol + j * 4, 0);
-            Memory.WriteUShort(inst + ShotEffectPack.OffOwner + j * 2, 1);
+            Memory.WriteUShort(inst + ShotEffectPack.OffOwner + j * 2, (ushort)owner);
             Memory.WriteUShort(inst + ShotEffectPack.OffAttr2 + j * 2, 0);
             Memory.WriteUShort(inst + ShotEffectPack.OffA060 + j * 2, 0xFFFF);
             Memory.WriteInt   (inst + ShotEffectPack.OffA0B0 + j * 4, -1);
@@ -362,7 +366,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt   (inst + ShotEffectPack.OffLastIdx, j);
             ShotEffects.FaceAlong(obj, vx, vh, vy);
             Memory.WriteUShort(inst + ShotEffectPack.OffActive + j * 2, 1);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{fx.Name} from the main-character effect #{j}: damage {damage}, {life} frames, v=({vx:F2},{vh:F2},{vy:F2})");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{fx.Name} from {(inst == ShotEffectPack.CharaMainEffect ? "the main-character effect" : "the second instance")} #{j}: damage {damage}, {life} frames, v=({vx:F2},{vh:F2},{vy:F2})");
             return true;
         }
     }

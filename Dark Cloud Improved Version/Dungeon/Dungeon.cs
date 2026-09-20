@@ -505,6 +505,15 @@ namespace Dark_Cloud_Improved_Version
                                             mobiusRingThread.Start();
                                         }
                                         break;
+                                    case Items.banditsring:
+                                        if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
+
+                                        if (!banditSlingshotThread.IsAlive)
+                                        {
+                                            banditSlingshotThread = new Thread(new ThreadStart(CustomXiaoEffects.BanditSlingshotEffect));
+                                            banditSlingshotThread.Start();
+                                        }
+                                        break;
                                     case Items.secretarmlet:
                                         if (!magicCircleChanged) {
                                             bool executed = CustomRubyEffects.SecretArmletEnable();

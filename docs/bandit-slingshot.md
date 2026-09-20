@@ -9,6 +9,18 @@ all (a stolen Black Dragon ball keeps its Freeze), the victim mask alone turned 
 shot's own element (the config's flags word reaches the entry's +0x50). No enemy shot carries both an element and an
 ailment, so nothing is lost to `CheckDmg`'s exact element compare.
 
+## Bandit's Ring and Super Steve
+
+Ruby's Bandit's Ring has the same ability for her QUICK fire only. Both her quick and charged shots fire from the live
+main-character instance (`BattleActionShotRuby`: `Set` on the pointer at gp−0x6304, then `SetWepStatus` / `SetVsMonster` /
+`SetDmg`; the charged release adds `SetRandomRate(2.0)` and `SetNoSound`), so her own config stays in that instance and
+the stolen one goes into the SECOND instance (`CharaMainEffectCrash`, 0x1E97BC0 — `MainChara_Effect` enters `c05_f03`
+there for her, and `SwordDmgCheck1` points the live pointer at it only when the weapon breaks): the keeper cave now takes
+the instance from the block (+0x2B4) and, for a non-main instance (+0x2B8 = 0), neither clears texture block 0x10 nor
+sets the live pointer. Each quick sub-shot (random rate ≠ 2.0) is put out the tick it appears and the stolen shot fired
+from the second instance at its position and direction, 2 × its attack, owner 3. A broken ring fires from the second
+instance natively, which then holds the stolen shot. Super Steve carrying either weapon's sphere has Xiao's version.
+
 ## The steal
 
 The weapon's native Steal ability rolls 10 % per hit in `CheckDmg` and spawns the stolen item as a `CStealItem` (the pool

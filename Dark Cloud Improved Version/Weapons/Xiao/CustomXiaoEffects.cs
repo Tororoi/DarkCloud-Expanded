@@ -46,12 +46,13 @@ namespace Dark_Cloud_Improved_Version
             DragonsY.Stop();
         }
 
-        // ── Bandit Slingshot ───────────────────────────────────────────────────────────────
-        /// <summary>Xiao's Bandit Slingshot thread: hands every tick to <see cref="BanditSlingshot.Drive"/> while the weapon is
-        /// equipped, and stands it down once when it goes.</summary>
+        // ── Bandit Slingshot / Bandit's Ring ──────────────────────────────────────────────
+        /// <summary>The stolen-projectile thread: hands every tick to <see cref="BanditSlingshot.Drive"/> while Xiao's Bandit
+        /// Slingshot or Ruby's Bandit's Ring is equipped (<see cref="BanditSlingshot.Carries"/>), and stands it down once when
+        /// it goes. Super Steve drives the same from <see cref="SuperSteveEffect"/> when its sphere is either one's.</summary>
         public static void BanditSlingshotEffect()
         {
-            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.banditslingshot)
+            while (Player.InDungeonFloor() && BanditSlingshot.Carries(Player.Weapon.GetCurrentWeaponId()))
             {
                 BanditSlingshot.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
                 Thread.Sleep(16);
@@ -238,6 +239,9 @@ namespace Dark_Cloud_Improved_Version
                 // Dragon's Y: the charged shot — the Gemron ball of Super Steve's own selected element.
                 DragonsY.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.dragonsy);
 
+                // Bandit Slingshot / Bandit's Ring: a steal takes the enemy's projectile; every pellet is that shot at 2× the attack.
+                BanditSlingshot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && (sphere == Items.banditslingshot || sphere == Items.banditsring));
+
                 // Double Impact: every shot is two pellets, each at 0.75× the attack.
                 DoubleImpact.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.doubleimpact);
 
@@ -299,6 +303,7 @@ namespace Dark_Cloud_Improved_Version
             DragonsY.Stop();
             ChargingBull.Stop();   // the resident slingshot copy too
             DoubleImpact.Stop();
+            BanditSlingshot.Stop();
         }
 
         /// <summary>Pack three contiguous floats for a single batched write. Position and velocity are
