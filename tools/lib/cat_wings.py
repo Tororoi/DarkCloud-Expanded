@@ -132,28 +132,28 @@ def subtree_nodes(mds, first, count):
 WING_BONES = ['r_wing1', 'r_wing2', 'r_wing3', 'r_wing4', 'l_wing1', 'l_wing2', 'l_wing3', 'l_wing4']
 WING_ATTACH_NODE = 'cat_sebone2'   # the wing roots sit at this cat bone's bind position (the mid-spine the glow uses)
 WING_SCALE = None                  # None = auto: wing length (wing1→wing4 on Dran, ≈59 units) = the cat's body length × WING_SCALE_MUL
-WING_SCALE_MUL = 0.5               # user 2026-09-12: 0.6× the first try, then 0.5×
-WING_SIZE_MUL = 0.7                # user 2026-09-13: the wings' MESH and bone chain at 0.6× of that, about the wing roots — the roots
+WING_SCALE_MUL = 0.5               # 0.6× the first try, then 0.5×
+WING_SIZE_MUL = 0.7                # the wings' MESH and bone chain at 0.6× of that, about the wing roots — the roots
                                    # (and so the intersection on the back) stay where they were; only the wing itself shrinks
 # The attach point (the midpoint between the two wing roots), cat world in the BIND pose = cat_sebone2's bind position (0, 3.1, 1.0)
-# lifted 0.3 and moved 0.7 forward — the position the user approved (2026-09-12); it rides the spine bone from there. (A leap-pose
+# lifted 0.3 and moved 0.7 forward — the position the user approved; it rides the spine bone from there. (A leap-pose
 # re-definition at the shoulder-blade polys put the wings too far back — reverted.)
 WING_ATTACH_BIND = (0.0, 3.4, 1.7)
 WING_RAISE = 0.2                   # the whole wing (its roots, so every pose) sits this much higher than WING_ATTACH_BIND; the tab
-                                   # corners on the back stay where they are (user 2026-09-13: "raise the entirety of the wings 0.1
+                                   # corners on the back stay where they are ("raise the entirety of the wings 0.1
                                    # while keeping the attachment points on the back the same")
 WING_YAW = 0.0                     # radians about the cat's up axis, if Dran's wing orientation needs turning
-# Closing the gap between the wing base and the back (user 2026-09-12: solid-colour wings, so the mesh may be extended; moving
+# Closing the gap between the wing base and the back (solid-colour wings, so the mesh may be extended; moving
 # wing vertices spoiled the other poses, and a strip to a seam line stood up as a patch on the spine). The fix is a SLEEVE:
 # the wing's base ring — the boundary of the carved membrane where it met Dran's body — is extruded inward into the torso
 # as copies FIXED TO THE SPINE BONE (a copy riding the wing bone pivots with the flap and pokes out of the chest when the
 # wing is raised), so the wing root continues into the body as a short tube whose cross-section with the back is the
 # visible edge, in every pose. Cat units, judged in the leap pose:
-WING_SLEEVE = False                # OFF (user 2026-09-12: remove the custom join geometry; extend the wing to the red marks instead)
+WING_SLEEVE = False                # OFF (remove the custom join geometry; extend the wing to the red marks instead)
 WING_SLEEVE_LEN = 0.9              # how far the ring is extruded toward the torso
 WING_SLEEVE_DROP = 1.2             # the extrusion aims at the midline this far below the attach point: with the root on the skin line, down-inward enters the body fastest from both halves of the ring
-WING_PITCH_DEG = 8.0               # angle of attack: the wings tilt back so the leading edge rides high (user 2026-09-12: 3, then +5)
-# The COVER (user's red outline, top-down, 2026-09-12): behind the root the membrane runs UNDER the skin and only emerges at the
+WING_PITCH_DEG = 8.0               # angle of attack: the wings tilt back so the leading edge rides high (3, then +5)
+# The COVER (the red outline, top-down): behind the root the membrane runs UNDER the skin and only emerges at the
 # body's outline, leaving the shoulder blades bare between the wing and the spine. The cover is a DECAL GRID: a grid of points
 # over the outlined region, each lying a hair above the posed back and carrying the bone weights of the NEAREST SKIN VERTEX, so
 # … no: skin-weighted points tore into a band in the stand pose, and the skin's own triangles are too coarse. The grid is
@@ -164,24 +164,24 @@ WING_COVER_X = (0.46, 1.15)
 WING_COVER_Z_BACK, WING_COVER_Z_FRONT_IN, WING_COVER_Z_FRONT_OUT = 0.12, 1.2, 1.0
 WING_COVER_LIFT = 0.05
 WING_COVER_N = 5                   # grid samples per axis
-# EXTEND THE WING TO THE RED MARKS (user 2026-09-12, top-down): the wing's base ring is stitched to a line on the back — the
+# EXTEND THE WING TO THE RED MARKS (top-down): the wing's base ring is stitched to a line on the back — the
 # inner edge at |x| = EXTEND_X_IN from z EXTEND_Z_BACK to EXTEND_Z_FRONT, then out along the front edge to (EXTEND_X_OUT,
 # EXTEND_Z_FRONT_OUT). Partner points lie EXTEND_LIFT above the posed back (leap pose) and are rigid with the wing-root bone,
 # so the extension is simply more wing. Cat units, leap pose.
-WING_EXTEND = True                 # the wing surface over the region the ridges proved (user confirmed 2026-09-12)
+WING_EXTEND = True                 # the wing surface over the region the ridges proved 
 # RIDGES: small raised markers along the lines the wings are meant to reach, on the cat's back, weighted like the skin.
 WING_RIDGES = False                # the markers served their purpose
 WING_RIDGE_H, WING_RIDGE_W, WING_RIDGE_STEP = 0.12, 0.06, 0.08   # crest height above the skin, half-width, sample spacing
-WING_EXTEND_X_IN, WING_EXTEND_X_OUT = 0.20, 0.95          # measured from the user's marks (0.33); inner line moved to 0.20 (user
-                                                          # 2026-09-13: "extend these tris closer to the spine")
-WING_TAB_TILT_DEG = 15.0           # the tabs' dihedral about the CAT'S BODY AXIS (user 2026-09-13: "tilt down towards the cat's
+WING_EXTEND_X_IN, WING_EXTEND_X_OUT = 0.20, 0.95          # measured from the red marks (0.33); the inner line at 0.20 brings
+                                                          # these tris closer to the spine
+WING_TAB_TILT_DEG = 15.0           # the tabs' dihedral about the CAT'S BODY AXIS ("tilt down towards the cat's
                                    # center … not the axis the wings tilt on"): each cat-anchored corner sits at the rim's height
                                    # (Ri behind, Rf ahead, by z) MINUS its spanwise distance from Ri × tan(tilt) — an absolute slope
                                    # down toward the spine, so the tabs run into the ridge instead of climbing it. None = skin-following
-WING_EXTEND_Z_BACK, WING_EXTEND_Z_FRONT, WING_EXTEND_Z_FRONT_OUT = 1.1, 2.03, 1.85   # user's top-down 2026-09-12: the front corner is at the
+WING_EXTEND_Z_BACK, WING_EXTEND_Z_FRONT, WING_EXTEND_Z_FRONT_OUT = 1.1, 2.03, 1.85   # the top-down: the front corner is at the
                                                                                       # neck base (z ≈ 2.0), 0.9 ahead of my first guess
 WING_EXTEND_LIFT = 0.1             # the corner points sit this far above the skin
-WING_TAB_POLYS = [('Rb', 'Ri', 'ir'),          # the rear tab hangs off the base triangle's INNER edge Rb–Ri (user 2026-09-13: the tabs
+WING_TAB_POLYS = [('Rb', 'Ri', 'ir'),          # the rear tab hangs off the base triangle's INNER edge Rb–Ri (the tabs
                   ('Ri', 'if', 'ir'),          # must connect to the edge of the base polys, not share their other edges)
                   ('RIM', 'if'),               # the front: a fan from 'if' over EVERY upper-rim segment Ri→…→Rf (a single chord
                   ('Rg', 'Rf', 'if', 'under')] # Ri–Rf left a gap against the rim's middle vertices)
@@ -190,27 +190,27 @@ WING_TAB_FLOOR = True              # and FLOOR the base: a fan from the rear cor
                                    # on to 'if', so the roof (tabs + fan), the cap, the 'under' wall and this floor make a closed boot.
                                    # Without it the roof's two ends (Rb–ir at the back, if–Rg at the front) were open edges lying on
                                    # the cat's back — hidden while the ring sat on the back, a see-through gap once the float-up's
-                                   # stroke lifted the ring 0.7 off it (user 2026-09-13, polys 7/174 and 120/121). Existing verts only.
+                                   # stroke lifted the ring 0.7 off it (polys 7/174 and 120/121). Existing verts only.
 WING_APEX_PULL = (0.30, 0.6)       # (pull at the midline, |x| where it fades to 0): the inboard fan's tip is moved OUTWARD toward
                                    # the wing root in the mesh itself — it lies under the back's skin in flight, so the open wing
-                                   # is unchanged, and the shorter fan rises less when the humerus folds (user 2026-09-13: "reduce
+                                   # is unchanged, and the shorter fan rises less when the humerus folds ("reduce
                                    # the height the polys spike to so their slope when folded is a little gentler")
 WING_ROOT_FORWARD = (0.15, 0.8, 0.85, 0.45)   # (forward shift, z below which, |x| where it fades to 0, |x| up to which it is full —
                                    # leap pose): the fan's back edge moves forward so it no longer cuts into the folded wing behind
-                                   # it; the outer rear vertices get less so the fold behind them closes up (user 2026-09-13)
+                                   # it; the outer rear vertices get less so the fold behind them closes up 
 WING_FOLD_LIFT = {28: 0.25, 24: 0.15, 29: 0.10, 19: 0.05}   # wing-mesh vertex → lift in the folded pose (two-pose fit; the
                                    # leap is exact): the top edge of the membrane behind the root, whose blend sagged into a V
 WING_ROOT_LOWER = None             # (drop at the midline, |x| where it fades to 0): the inboard fan's apex is LOWERED by this much
                                    # in the folded pose only — a two-pose fit (leap exact, fold = rigid spot moved straight down),
-                                   # so the fan's slope is gentler when folded without pulling it anywhere (user 2026-09-13)
+                                   # so the fan's slope is gentler when folded without pulling it anywhere 
 WING_ROOT_SOFTEN = None            # (share at the midline, |x| where it fades to 0): the inboard fan's apex leans on the body
 WING_ROOT_ANCHOR = False           # ring verts inside WING_ROOT_ANCHOR_X of the midline (the footprint's inward part, which stood up
 WING_ROOT_ANCHOR_X = None          # above the back when the humerus folded down) are skinned like the back beneath them; the rim
                                    # (Ri, Rf, Rt, the outer verts) keeps riding the wing so the front base folds cleanly
 WING_TAB_SUBDIV = 2                # each top tab → n² triangles laid on the skin (see the block); 1 = the plain triangles
-                                   # (user 2026-09-13: back to the plain tabs while the wing size is re-judged)
+                                   # (back to the plain tabs while the wing size is re-judged)
 WING_TAB_SUBDIV_POOL = True        # new sub-points are the plain average of their edge's ends — position AND skinning pooled — so the
-                                   # base bends smoothly between the wing and the body (user 2026-09-13: "subdivide these polys once
+                                   # base bends smoothly between the wing and the body ("subdivide these polys once
                                    # … fold the base of the wing a bit more smoothly"); False = the older skin-projected points
 WING_TAB_BULGE = 0.2               # the pooled wing↔body midpoints are pushed this far out along the shoulder in the FOLDED pose
                                    # (two-pose fit; the open wing is unchanged) so the folded base rounds over the blade
@@ -222,11 +222,11 @@ WING_TAB_HINGE, WING_TAB_HINGE_MAX = 0.35, 0.0   # sub-points closer than this (
 WING_TAB_CLEAR = None              # corners are raised until every tab clears the skin by this (the flat tabs vs the convex shoulder);
                                    # None = off (the tilt sets the heights absolutely; intersecting the back is intended)
 # which Dran clip drives which cat clip: cat KEY index → (Dran start, Dran end, Dran speed, loop?)
-WING_CLIPS = {4: (200, 205, 0.2, True),   # cat 'leap' (the fall, 205-214 @0.5) ← Dran motion 3 "charge loop" (user 2026-09-12)
+WING_CLIPS = {4: (200, 205, 0.2, True),   # cat 'leap' (the fall, 205-214 @0.5) ← Dran motion 3 "charge loop" 
               7: (295, 300, 0.15, False)}  # cat 'float-up' (285-294 @0.6) ← Dran motion 2 "charge: take-off" frames 295-300 = the
                                           # DOWNSTROKE, wings raised at the first frame; the game's 10-frame cross-fade from the
-                                          # ready pose (wings folded) then IS the unfold/upstroke (user 2026-09-13)
-# The LANDING is authored (user 2026-09-13: Dran's charge-end swung the root around; the cat's wings sit lower so the attachment
+                                          # ready pose (wings folded) then IS the unfold/upstroke 
+# The LANDING is authored (Dran's charge-end swung the root around; the cat's wings sit lower so the attachment
 # must stay put, and the wings must end FOLDED like a bird's — feathers back, tight to the flanks — as the ground idle):
 #   cat 215..LAND_FLARE_END ← Dran 70..75 (the forward braking swing = the momentum), root position PINNED;
 #   then each bone slerps into WING_FOLD over its own lag window (the tips trail) and stays there: WING_FOLD is the wings' BIND.
@@ -234,11 +234,11 @@ WING_LAND = {'cat': (215, 227), 'dran': (70, 75), 'flare_end': 220,
              'lag': [(220.0, 225.0), (220.5, 226.0), (221.0, 226.5), (221.5, 227.0)]}   # per bone (wing1..4): fold start/end frames
 WING_FOLD_FRAME = 15               # the cat frame (stand) whose spine orientation the folded pose is authored in
 # folded pose, right wing, in the stand pose's world: per bone (span direction root→tip, top-surface normal); the left is mirrored
-# in x. A BIRD fold with the dorsal side out (user 2026-09-13). Dran's membrane trails 1.8–2.4 behind every bone line in the
+# in x. A BIRD fold with the dorsal side out . Dran's membrane trails 1.8–2.4 behind every bone line in the
 # direction span × top, so: the humerus hangs down the front of the flank (membrane trails back over the flank), the forearm runs
 # back along the belly line (membrane rises up the flank), the hand runs back at mid-flank rolled 25° up (vanes graze the back's
 # edge); tips just past the rump. The wing's ROOT (base ring + first rows) is pushed out of the shoulder by WING_FOLD_ROOT_SHIFT
-# (user 2026-09-13: "push these polys out away from the body a bit"); the humerus is re-aimed so the elbow stays where it was.
+# ("push these polys out away from the body a bit"); the humerus is re-aimed so the elbow stays where it was.
 WING_FOLD = [((-0.08, -0.96, -0.27), (-0.83, 0.38, 0.10)),   # humerus: down the flank from the shifted root, elbow ≈ at the flank
              ((-0.05,  0.35, -0.94), (-1.00, 0.00, 0.00)),   # forearm: back along the belly line
              (( 0.03,  0.20, -0.98), (-0.90, 0.42, 0.00)),   # hand: back at mid-flank, rolled 25° up
@@ -249,26 +249,26 @@ WING_FOLD_ROOT_SHIFT = (-0.43, 0.08, 0.0)   # the folded wing's root sits this f
 WING_HAND_DROOP = {'bones': {1: -10.0, 2: 8.0, 3: -2.0}, 'frames': (224, 227)}   # extra pitch (degrees, about the cat's lateral axis, in the spine
                                    # frame) per wing bone index (0 = wing1 … 3 = wing4), eased in over these landing frames and held
                                    # in the idle. Pitching the FOREARM (1) lowers the whole hand: the back feathers come DOWN to the
-                                   # back's line without leaning inward or tipping forward (user 2026-09-13)
+                                   # back's line without leaning inward or tipping forward 
 WING_HAND_ROLL = {'bones': {2: 6.0, 3: 10.0}, 'frames': (224, 227)}   # extra roll (degrees, about each bone's own span) per
                                    # wing bone index, eased over these landing frames and held in the idle: + = the feathers above
                                    # the hand line lean IN toward the cat (checked in v59; the sign is mirrored per side in code)
 WING_STROKE = {7: {'phi': [(285.0, 78.0), (287.5, 100.0), (288.5, 100.0), (292.0, -20.0), (294.0, 0.0)], 'extend': [(285.0, 0.0), (287.5, 1.0)],
                    # (110° with the inboard hinge put the vanes ON the midline — top 100° with roots at lateral 0.4 = tips ~1.5 apart)
                    # top 110° held 287.5-288.5 so the lagging hand catches up: the glide droops 19° below lateral, so the stretched
-                   # wings end ~5-10° from vertical, tips ~1 apart (user 2026-09-13: "at the peak of the stretch the wings should be
+                   # wings end ~5-10° from vertical, tips ~1 apart ("at the peak of the stretch the wings should be
                    # almost parallel"; 80° gave a 58° V, 100° with no hold still ~35°)
                    'lag': 0.2, 'sweep': 60.0, 'axis': 'spine', 'hinge_in': 0.25}}
                                    # 'hinge_in': the flap rotates about an axis this far INBOARD of the wing1 origin (toward the spine),
                                    # so the root rides up on a small arc and the base ring's inboard edge stays on the back — the two
-                                   # wings keep protruding close together as they rise (user 2026-09-13: "the visible back between the
+                                   # wings keep protruding close together as they rise ("the visible back between the
                                    # wings increases as the wings extend"; about the origin itself the ring stood up 0.7 above the back
                                    # and only the stretched tabs bridged to the spine). 0 = the pinned origin. Root at 294 = the origin.
                                    # 'phi': (frame, deg) keys of the flap angle (+ = up from the glide), smoothstepped; 'extend': (frame,
                                    # 0..1) keys of the wing's EXTENSION: 0 = the forearm and hand keep the folded idle's chain-local
                                    # rotations (the wing rises FLEXED, as a bird's does: the engine's ready → float-up fade then moves
                                    # only the humerus and the body), 1 = the stroke's stretched shape — "when the first half of the wing
-                                   # is fully risen the primaries extend upward" (user 2026-09-13). Both are read at each bone's LAGGED
+                                   # is fully risen the primaries extend upward" . Both are read at each bone's LAGGED
                                    # frame, so the elbow opens before the wrist and the hand trails the arm through the stroke.
                                    # 'axis': 'spine' = flap about the cat's own fore-aft axis; 'world' = about the world-horizontal
                                    # fore-aft axis (per frame, from the spine's pitch) — REJECTED: with the body reared ~60° the
@@ -276,7 +276,7 @@ WING_STROKE = {7: {'phi': [(285.0, 78.0), (287.5, 100.0), (288.5, 100.0), (292.0
                                    # bottom went under the belly (30+ verts inside). The glide already droops 19° below lateral in
                                    # the spine frame, so 'bottom' −20° puts the tips ~40° below lateral: a spread V, not flat along
                                    # the flanks (−40/−45° did that, and clipped the hind flanks).
-                                   # per WING_CLIPS key: an AUTHORED flap instead of Dran's frames (user 2026-09-13: "from 289 the wings
+                                   # per WING_CLIPS key: an AUTHORED flap instead of Dran's frames ("from 289 the wings
                                    # make an arc shape instead of trailing the momentum like a real bird's downflap … Dran's motions
                                    # aren't the best flapping motion"). Base pose = the clip's Dran END frame (300 = the charge-loop
                                    # glide = the leap). Every bone is rotated about the cat's fore-aft axis (through the pinned
@@ -289,7 +289,7 @@ WING_STROKE = {7: {'phi': [(285.0, 78.0), (287.5, 100.0), (288.5, 100.0), (292.0
                                    # WING_CLIP_PITCH still applies on top (the reared body: aim the stroke at the ground).
 WING_HOLD = {8: 285.0}             # per CAT_KEYS index: the clip HOLDS the wings' pose of this cat frame (spine-local, root included)
                                    # over its whole range — the sit (30-40, "in place when there is no enemy") wears the float-up's
-                                   # first frame: humerus raised, forearm and hand still flexed (user 2026-09-13). Keyed like the
+                                   # first frame: humerus raised, forearm and hand still flexed . Keyed like the
                                    # clip windows, with folded brackets one frame outside, so the engine's fades in/out work as usual.
 WING_CLIP_PITCH = {7: [(285.0, 30.0), (292.0, 15.0), (294.0, 10.0)]}
                                    # (with the authored WING_STROKE the flap is about the fore-aft axis and already aims down; the +45°
@@ -297,8 +297,8 @@ WING_CLIP_PITCH = {7: [(285.0, 30.0), (292.0, 15.0), (294.0, 10.0)]}
                                    # per WING_CLIPS key: (frame, deg) keys of an extra pitch of the WHOLE wing (all four bones rigidly
                                    # about the pivot) about the cat's lateral axis, positive = tips UP, smoothstepped between keys, held
                                    # outside them. Float-up: the fade from the folded ready ends on frame 285, so the first key is the
-                                   # "top of the upstroke": Dran 295's stretched wing sat 58° above the spine line (user saw ~45° from
-                                   # profile), user 2026-09-13: "closer to 75°, not the full 90° right away" → +30°. The stroke bottom
+                                   # "top of the upstroke": Dran 295's stretched wing sat 58° above the spine line (seen at ~45° from
+                                   # profile), "closer to 75°, not the full 90° right away" → +30°. The stroke bottom
                                    # (Dran 298 ↔ cat 290.4, 76° below the spine axis on the BACK side) pointed at the FRONT PAWS: the
                                    # float-up rears the body ~59° nose-up, so "down relative to the spine" sweeps under the belly (world:
                                    # 44° below horizontal, forward); user: "pointed a little more at the ground" → keep the stroke plane
@@ -310,18 +310,18 @@ WING_CHAIN = True                  # rig wing2/3/4 as CHILDREN of the previous b
                                    # instead of Dran's siblings-under-the-root: the engine's key-change cross-fade slerps every bone's
                                    # LOCAL rotation and lerps its translation independently, so sibling bones whose positions are 144°
                                    # apart (folded ready → wings-up float-up) pass through a chord — the upper arm collapsed to 0.59 of
-                                   # its 1.93 mid-fade. A chain keeps every segment its length through any fade (2026-09-13).
+                                   # its 1.93 mid-fade. A chain keeps every segment its length through any fade.
 WING_PIN_ROOT = True               # ignore Dran's root-bone translation in every clip: the wing root stays on the shoulder and the
                                    # outer bones follow by FK (Dran's per-bone positions ARE an FK chain: +x along the wing, fixed lengths)
 WING_LEVEL_AT = 4                  # the cat clip (CAT_KEYS index) in whose middle pose Dran's wing orientation is taken as-is: the wings are
-                                   # RIGID to the spine bone; in this pose they come out level, elsewhere they follow the back (user 2026-09-12)
+                                   # RIGID to the spine bone; in this pose they come out level, elsewhere they follow the back 
 
 
 # ───────────────────────────── the Super Steve cape (viewer rest shape; the game runs it as a CCloth) ─────────────────────────────
 # Super Steve with an Angel Shooter / Angel Gear sphere summons the BLUE cat wearing a solid-yellow cape hung from the back of
-# its collar (user 2026-09-13). The viewer shows the cloth's REST lattice so the attachment, width and length can be tuned;
+# its collar . The viewer shows the cloth's REST lattice so the attachment, width and length can be tuned;
 # the engine's cloth simulation drapes it in play.
-CAPE_COLLAR = (483, 503, 485, 477, 478)   # cat_skin vertices of the collar ring's REAR edge, left → right (user 2026-09-13: "attached to
+CAPE_COLLAR = (483, 503, 485, 477, 478)   # cat_skin vertices of the collar ring's REAR edge, left → right ("attached to
                                    # the collar"; bind pose (±0.86, 2.82, 2.75), (±0.62, 3.37, 2.46), (0, 3.55, 2.46), all 50 % sebone2 + kao)
 CAPE_WIDTH = 3.5                   # the hem's width MEASURED ACROSS THE CLOTH (it wraps the body, so its shadow on the ground is
                                    # narrower); the sheet widens linearly from the collar arc to this
@@ -356,16 +356,16 @@ CAPE_ROW_TAUT = 0.55               # how much of each row's own arch survives: t
                                    # follow the body exactly (unstable), 0 = a flat plank.
 CAPE_COLLAR_BIAS = (0.18, 0.18)    # (up, forward) carried into the pinned top row, GRADED across it (full at the spine, nothing at
                                    # the ends): biasing the whole row carried the cape's front corners forward PAST the collar and
-                                   # down the chest, which the user called a worse trade than the gap (2026-09-14). The engine pins a cloth to ONE frame, so our
+                                   # down the chest, which the user called a worse trade than the gap. The engine pins a cloth to ONE frame, so our
                                    # edge rides cat_sebone2 while the collar's own vertices are half cat_kao: sit the cat and the
                                    # head carries the real collar 0.22 up and 0.20 forward of the pinned row (measured over every
-                                   # clip by scratch collar_gap_probe.py), opening the bare strip under the collar the user saw on
-                                   # 2026-09-14. Biasing the authored edge by that much closes it when sitting and merely tucks the
+                                   # clip by scratch collar_gap_probe.py), opening a bare strip under the collar.
+                                   # Biasing the authored edge by that much closes it when sitting and merely tucks the
                                    # cape's top a touch further under the collar ring when standing.
 CAPE_SIDE_SLOPE = 0.9              # past the flank a column can no longer rest on fur, so it falls away from the last one that
                                    # could, at this many units down per unit out (0.9 ≈ 42°). Before this the column simply dropped
                                    # CAPE_HANG per ROW, which put a 3-unit CLIFF between the outer column and its neighbour — the
-                                   # crease the user saw on 2026-09-14, and a 127% violation of the engine's width tie (below).
+                                   # crease, and a 127% violation of the engine's width tie (below).
 CAPE_BILLOW = 0.5                  # the hem rides this far above where it would lie, easing in along the hang: the cape keeps a
                                    # gentle lifted curve as if a breeze were always blowing into the cat's face. It is AUTHORED
                                    # rather than simulated because the engine damps a particle's velocity only across the cloth's
@@ -377,7 +377,7 @@ CAPE_ANCHOR = 'cat_sebone2'        # the bone the engine's cloth is pinned to (i
                                    # authored in its bind-local space) — the upper spine: steadier than the head, the shoulders' bone
 
 
-# The cape's body collision: .clo BOUND ellipsoids on the cat's spine bones (CBound, RE'd 2026-09-13: centre = the midpoint of A and
+# The cape's body collision: .clo BOUND ellipsoids on the cat's spine bones (CBound: centre = the midpoint of A and
 # B in the bone's space, the ellipsoid's z axis along A−B, y along `up`, x across; radii (rx across, ry up, rz along); particles
 # inside are pushed to the surface, their velocity scaled by `damp`; a particle inside several is moved to the AVERAGE of their
 # push-outs, so neighbours overlap with generous rz to keep that average near the back). Authored in BIND-POSE WORLD space (the cat
@@ -389,7 +389,7 @@ CAPE_ANCHOR = 'cat_sebone2'        # the bone the engine's cloth is pinned to (i
 # the constraints. The only velocity damping is `min(1, 0.6 + (1 − |v̂·n̂|))`: it bites just for motion ALONG the cloth's normal
 # and leaves motion ACROSS the sheet completely undamped. A cape lying on a horizontal back is damped (gravity ⟂ the sheet), but
 # the moment the cat SITS its back is vertical, gravity runs along the sheet, velocity accumulates without limit and the cape
-# peels off the back and hangs from the collar (screenshot 2026-09-14). No value of K fixes that — the drift is linear in time —
+# peels off the back and hangs from the collar. No value of K fixes that — the drift is linear in time —
 # so this cape carries **no gravity**: it holds the authored rest shape and takes its motion from the cat (FOLLOW + the spring's
 # lag) and the wind. Author any droop into the rest shape (CAPE_LENGTH / CAPE_HANG) rather than asking gravity for it.
 CAPE_PHYSICS = {
@@ -410,7 +410,7 @@ CAPE_PHYSICS = {
                                     # grid's own neighbour differences, so which way they face depends on the ORDER our
                                     # lattice is baked in — get it backwards and every normal points into the cat, the lit
                                     # side is the one against the body and the side you can see takes only ambient: a flat,
-                                    # solid colour with no hint of the ripples in it (user 2026-09-14). Vanilla flips this
+                                    # solid colour with no hint of the ripples in it . Vanilla flips this
                                     # for one half of Ungaga's poncho for the same reason.
 }
 
@@ -419,7 +419,7 @@ CAPE_BOUNDS = [                                                                 
     # is "inside the body" and has to be shoved out — which flattens the drape into a plank or tears the lattice out of line. The
     # sheet's clearance comes from CAPE_LIFT instead, and these stay at the fur, where their job is to stop the cloth passing
     # THROUGH the cat while it moves. The head carries its own: nothing else covers it, and a cape that swings forward off the
-    # collar goes straight through it (user 2026-09-14).
+    # collar goes straight through it .
     {'bone': 'cat_sebone2', 'centre': (0.0, 3.05, 2.00), 'axis': (0.0, 0.0, 1.0), 'radii': (1.25, 0.70, 2.50), 'damp': 0.7},   # chest/shoulders
     {'bone': 'cat_sebone1', 'centre': (0.0, 3.16, -0.30), 'axis': (0.0, 0.0, 1.0), 'radii': (1.25, 0.70, 2.30), 'damp': 0.7},  # mid back
     {'bone': 'cat_kosibone', 'centre': (0.0, 2.75, -1.00), 'axis': (0.0, 0.0, 1.0), 'radii': (1.35, 1.10, 2.20), 'damp': 0.7}, # hips/rump
@@ -541,7 +541,7 @@ def build_bound_meshes(cat_nodes, seg=16, ring=10):
 #     cuts can never run into each other).
 #   · every 2D point is then cast OUTWARD from a point inside the head (MASK_CORE) rather than straight back along −z, so the
 #     outer edge wraps around the cheekbone instead of shooting off the silhouette into thin air. The first build cast along −z
-#     and the four widest points found no face at all (2026-09-14).
+#     and the four widest points found no face at all.
 MASK_ANCHOR = 'cat_kao'            # the bone it rides — the whole mask is weighted 100% to it
 MASK_CORE = (0.0, 3.36, 3.35)      # the head's centre at eye height, in the cat's bind pose: every mask point is cast out from
 MASK_R = 0.88                      # here, along a ray through this sphere, so design coordinates are arc lengths over the face
@@ -563,11 +563,11 @@ MASK_LOBE_TILT = 5.0              # degrees, outer corner lifted — a mask swee
 MASK_BRIDGE = 0.00                 # the soft-union radius: 0 leaves sharp notches where the lobes cross, larger fills them in
 MASK_NOSE_TOP = 3.20               # the notch bitten up out of the bottom edge so the mask clears the nose: how high it
 MASK_NOSE_W = 0.55                 # reaches on the midline, and the half-width at which it has fallen 0.25 below that.
-MASK_NOSE_BLEND = 0.13             # how rounded its corners are. It used to be an ELLIPSE subtracted from the mask, and that
-                                   # ellipse sat almost exactly tangent to the bottom of the lobes: a hair too low and it did
-                                   # nothing at all, a hair too high and it took a huge bite out of the middle, so there was no
-                                   # tuning it by eye. A parabola crosses the bottom edge squarely, so its height is a real
-                                   # knob and raising it simply thins the middle of the mask (2026-09-14).
+MASK_NOSE_BLEND = 0.13             # how rounded its corners are. Not an ELLIPSE subtracted from the mask: an ellipse
+                                   # sits almost exactly tangent to the bottom of the lobes, so a hair too low and it does
+                                   # nothing at all, a hair too high and it takes a huge bite out of the middle, so it cannot be
+                                   # tuned by eye. A parabola crosses the bottom edge squarely, so its height is a real
+                                   # knob and raising it simply thins the middle of the mask.
 MASK_LIFT = 0.050                  # how far the mask stands off the fur
 MASK_DRAPE = 0.00                  # 0 = the mask hugs every bump and crease of the head; 1 = a stiff sheet that only touches
 MASK_DRAPE_PASSES = 60             # the high points and slopes gently across the hollows between them. Each vertex rides a
@@ -641,7 +641,7 @@ def _decimate(line, tol, keys=None):
     which is a narrow wedge seen from the middle of the mask, so the notch came out faceted however it was tuned. And the run
     that matters is the one ON THE FACE, not the one in the flat design — a stretch of outline that is nearly straight in
     design space still bends hard as it crosses the shoulder of the muzzle, and a single edge there folded the mask over
-    itself. So the bake decimates against the projected points (2026-09-14)."""
+    itself. So the bake decimates against the projected points."""
     keys = line if keys is None else keys
     idx = _decimate_idx(keys, tol, 0, len(keys) - 1)
     return [line[i] for i in idx]
@@ -779,14 +779,14 @@ def mask_mesh_2d(project=None):
     from a fixed left edge, so its columns did not line up with their own mirror images, and the Delaunay pass then broke ties
     differently on the two sides. Mirroring a half makes the two sides identical by construction. The lattice is what keeps the
     mask ON the face: the bare outline alone spans single triangles from the eye out to the cheek, and those long flat chords
-    cut back inside the curve of the head, so the fur pokes through at the temples (2026-09-14)."""
+    cut back inside the curve of the head, so the fur pokes through at the temples."""
     h = MASK_LATTICE
     pts = list(_mask_outline_half(project=project)) + list(_mask_hole(1))
     nb = len(pts)
     lip = _mask_hole(1, 64, 0.0)
     # Points are spaced by how far they are from an edge, not on a flat lattice. The rims of this mask are narrow — under each
     # eye the band between the hole and the bottom edge is barely one step wide — and a flat lattice simply found no room
-    # there, leaving the whole rim as one strip of long thin triangles that shaded as a row of scallops (2026-09-14).
+    # there, leaving the whole rim as one strip of long thin triangles that shaded as a row of scallops.
     bnd = list(pts)
     step = h / 3.0
     y = MASK_EYE[1] - 1.2
@@ -820,7 +820,7 @@ def mask_mesh_2d(project=None):
 
 def mask_clearance():
     """The smallest gap between an eye hole and the mask's own outline. Negative means the hole breaks the edge — which the ear
-    clipper will happily triangulate into a fan of crossed slivers rather than refuse (2026-09-14)."""
+    clipper will happily triangulate into a fan of crossed slivers rather than refuse."""
     worst = None
     for side in (-1, 1):
         for p in _mask_hole(side, 72):
@@ -860,7 +860,7 @@ def _mask_ray(fur, tris, u, v):
         # Every face hit at the SAME distance shares its normal with the rest. A ray down the middle of the face lands exactly
         # on the seam where the two mirrored halves of the cat meet, and taking whichever of those two faces happened to be
         # tested first pushed the mask's midline vertices sideways by the whole stand-off — the mask came out visibly crooked
-        # down the middle, and the browser and the bake picked different faces (2026-09-14).
+        # down the middle, and the browser and the bake picked different faces.
         if best is None or t > best + 1e-9: best, acc = t, [n]
         elif t > best - 1e-9: acc.append(n)
     if best is None: return None
@@ -874,9 +874,9 @@ def mask_outline_2d():
 
 
 def _drape(floor, tris, n):
-    """Relax how far each vertex sits out along its ray toward its neighbours', but never below the face. The mask used to take
-    the fur's own shape point for point, so it inherited every crease of the muzzle and the edge around the nose notch came out
-    lumpy however the notch itself was tuned. A sheet of costume spans a hollow instead of dipping into it (2026-09-14)."""
+    """Relax how far each vertex sits out along its ray toward its neighbours', but never below the face. A mask that takes
+    the fur's own shape point for point inherits every crease of the muzzle, and the edge around the nose notch comes out
+    lumpy however the notch itself was tuned. A sheet of costume spans a hollow instead of dipping into it."""
     if MASK_DRAPE <= 0: return list(floor)
     adj = [set() for _ in range(n)]
     for a, b, c in tris:
@@ -985,7 +985,7 @@ def build_cape_mesh(cat_nodes, skin):
     cosmetic: Step__6CCloth ties every column to the one TWO over at exactly twice the single step, which only holds when three
     consecutive points are evenly spaced and roughly straight. Columns spaced evenly in x are not evenly spaced along a row that
     wraps a body — the outer segment plunges down the flank and is far longer — and the tie then deforms the sheet every frame
-    while the rest spring pulls back, which is the crumpled cape the user saw on 2026-09-14.
+    while the rest spring pulls back, which is the crumpled cape.
 
     For the same reason every later adjustment — bridging a hollow, the billow, clearing the collision capsules — is applied to a
     row AS A WHOLE, never per vertex: a per-vertex lift would pull the row's spacing apart again.
@@ -1504,7 +1504,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                 Rls = fold_local[sd][0]; root = fold_root[sd]
             if WING_HAND_DROOP and (lcs <= f <= lce or df is None):
                 # DROOP the hand (wing3, wing4): pitch the back feathers downward about the cat's lateral axis over
-                # WING_HAND_DROOP['frames'] and hold it in the idle (user 2026-09-13: "morph the entire back two feathers angled
+                # WING_HAND_DROOP['frames'] and hold it in the idle ("morph the entire back two feathers angled
                 # further … downward, not inward towards the spine … the top feather edge in line with the top of the back").
                 # A rotation in the PARENT (spine) frame is post-multiplied; the spine's local z is the cat's lateral axis.
                 a, b = WING_HAND_DROOP['frames']
@@ -1517,7 +1517,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                         Rls[k] = _mul3(Rls[k], Qz)                                              # not inward and not tilted forward
             if WING_HAND_ROLL and (lcs <= f <= lce or df is None):
                 # ROLL the hand (wing3, wing4) about its own span so the feathers above the hand line lean in toward the cat, eased
-                # over WING_HAND_ROLL['frames'] and held in the idle (user 2026-09-13: "roll the top 3 feathers toward the cat in
+                # over WING_HAND_ROLL['frames'] and held in the idle ("roll the top 3 feathers toward the cat in
                 # the folded pose … now that the wings sit higher"). A roll about the bone's own x is PRE-multiplied; the wings'
                 # local frames are mirrored, so the sign flips per side. Vanes near the hand line barely move, the top ones most.
                 a, b = WING_HAND_ROLL['frames']
@@ -1600,7 +1600,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
         if WING_SLEEVE:
             log(f"  {sd} wing sleeve: base ring {len(ring)} verts ({'closed' if any(c[0] == c[-1] for c in chains) else 'open'}), extruded {WING_SLEEVE_LEN:g} toward ({aim[0]:.1f}, {aim[1]:.2f}, {aim[2]:.2f}) → {added} tris")
         if WING_EXTEND:
-            # A FEW polys (user 2026-09-12: "max 3 to 5 polys attached to the base of each wing to cover and intersect with the
+            # A FEW polys ("max 3 to 5 polys attached to the base of each wing to cover and intersect with the
             # cat's back"): tabs from the wing's base ring to the corners of the marked region, so the wing root spreads over
             # the shoulder blade. The ring itself sits under the skin here; the corner points sit on the skin (+ lift) and are
             # weighted like the skin under them (spine inside → arm outside) so the tabs hold through the flap and the other
@@ -1700,11 +1700,11 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             pts = {'Rb': remap[chain[0]], 'Ri': remap[top[0]], 'Rf': remap[top[-1]],
                    'Rg': remap[chain[fi + 1] if fi + 1 < len(chain) else chain[-1]]}   # Rg = the lower rim's first vertex past Rf (under Ri)
             # Rt = the wing's own rear-top base vertex: the third corner of the (only) wing triangle on the ring edge Rb–Ri
-            # (user 2026-09-13: the base polys — this one included — are what gets extended toward the spine)
+            # (the base polys — this one included — are what gets extended toward the spine)
             eb, ei = chain[0], top[0]
             rt = [v for t in wt if eb in t and ei in t for v in t if v not in (eb, ei)]
             pts['Rt'] = remap[rt[0]] if rt else pts['Ri']
-            # ── the ROOT is anchored to the body (user 2026-09-13: the base tri (Ri, Rb, Rt) crossed the tabs mid-fold; "make the
+            # ── the ROOT is anchored to the body (the base tri (Ri, Rb, Rt) crossed the tabs mid-fold; "make the
             # mesh more stable"): the base ring, Rt and (through pooling) Rm take the skinning of the skin beneath them in the
             # reference pose, so the intersection with the back is literally fixed and the wing flexes at its first membrane row
             # instead of swinging its root through the tabs ──
@@ -1713,7 +1713,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                 pa = em.xform_pt(M(me['b0'][i]), me['p0'][i]); pb = em.xform_pt(M(me['b1'][i]), me['p1'][i]); wa = me['w0'][i]
                 return [pa[c] * wa + pb[c] * (1 - wa) for c in range(3)]
             if WING_ROOT_ANCHOR:
-                # the whole intersection — the ring where the wing's top enters the back — is held to the body (user 2026-09-13:
+                # the whole intersection — the ring where the wing's top enters the back — is held to the body (the brief:
                 # "stabilize the entire intersection where the tops of the wings enter the back with the wings open"): each ring
                 # vertex (+Rt) copies the nearest skin vertex's exact skinning with its offset carried, so it sits where it sits in
                 # every pose; the base triangles and tabs then never span a moving and a fixed corner (the notch in the fold)
@@ -1740,14 +1740,14 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             if WING_ROOT_FORWARD:
                 # the fan's BACK EDGE (the rear-most root vertices) is moved forward in the mesh — the offset is taken as "the cat's
                 # forward" in the FOLDED pose and carried in each bone's frame — so it stops cutting into the folded wing behind it
-                # (user 2026-09-13: "move the back edge of these polys forward a little bit")
+                # ("move the back edge of these polys forward a little bit")
                 fwd, zmax, xmax, xfull = WING_ROOT_FORWARD; moved = []
                 W_fold = wing_pose(WING_FOLD_FRAME)[0]; Wc_fold = cat_world(WING_FOLD_FRAME)
                 for vi in used:
                     li = remap[vi]; q = wpos(li); x = abs(q[0])
                     if q[2] >= zmax or x >= xmax: continue
                     f_ = fwd * min(1.0, (xmax - x) / (xmax - xfull))                      # full shift inboard of xfull, fading to 0 at xmax
-                    for slot in ('0', '1'):                                               # (user 2026-09-13: the outer rear verts came
+                    for slot in ('0', '1'):                                               # (the outer rear verts came
                         b = me['b' + slot][li]; M = W_fold[b] if b in W_fold else Wc_fold[b]   # too far forward → a gap behind them)
                         R = M[:3]                                                         # rows = the bone's axes in world (fold pose)
                         dl = [f_ * R[i][2] for i in range(3)]                             # world +z → bone-local (v · R^T)
@@ -1755,7 +1755,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                     moved.append(f"v{li} {f_:.2f}")
                 log(f"  {sd} wing fan back edge moved forward: {', '.join(moved)}")
             if WING_FOLD_LIFT:
-                # LIFT specific wing vertices in the FOLDED pose only (user 2026-09-13: "allow the top edge of these polys to stay
+                # LIFT specific wing vertices in the FOLDED pose only ("allow the top edge of these polys to stay
                 # higher so they don't create such a deep V when folded"): the deep V is the linear-blend collapse at the elbow —
                 # a 50/50 wing1/wing2 vertex lands on the chord between its two rigid images. A two-pose fit per vertex keeps the
                 # leap position exact and raises the folded one; keys = (side-independent) vertex index in the wing mesh
@@ -1792,7 +1792,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                         lowered.append(f"v{li} −{d:.2f}")
                 log(f"  {sd} wing root apex lowered in the fold: {', '.join(lowered)}")
             if WING_ROOT_SOFTEN:
-                # SOFTEN the inboard fan's apex (user 2026-09-13: the polys around the midline vertex "spike upward during the
+                # SOFTEN the inboard fan's apex (the polys around the midline vertex "spike upward during the
                 # fold"): the membrane that lay flat on Dran's back is rigid with the wing, so when the humerus folds down its
                 # inboard tip points up. The midline vertex gets a modest share of the body (its dominant skin bone beneath, via
                 # snap_to_skin), fading to nothing by |x| = WING_ROOT_SOFTEN[1] — the apex drops toward the back without the
@@ -1806,7 +1806,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                     me['b1'][li], me['p1'][li] = ba, pa; me['w0'][li] = 1.0 - w_b
                     soft.append(f"v{li} {w_b:.0%}")
                 log(f"  {sd} wing root softened: {', '.join(soft)}")
-            # Rm = the midpoint of the base's rear edge Rb–Rt (user 2026-09-13: "connect to the midpoint of the back edge"),
+            # Rm = the midpoint of the base's rear edge Rb–Rt ("connect to the midpoint of the back edge"),
             # a new wing vertex skinned EXACTLY as the average of its two ends (their bone influences pooled per bone)
             acc = {}
             for vi in (pts['Rb'], pts['Rt']):
@@ -1845,7 +1845,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                     pts[nm], cpos[pts[nm]] = back_pt(*corners[nm])
             polys = []
             if WING_TAB_CAP:
-                # close the base as a CLOSED FORM by ZIPPING the ring's upper rim to its lower rim (user 2026-09-13: a lid fanned
+                # close the base as a CLOSED FORM by ZIPPING the ring's upper rim to its lower rim (a lid fanned
                 # from a centre vertex made flat facets that stuck out when folded; the closure must taper toward the base like
                 # the membrane does). Both rims run Rb → … → Rf; walk them together, always closing the shorter diagonal, so the
                 # closure is the thin wedge between the membrane's top and bottom surfaces and the top surface stays smooth.
@@ -1913,7 +1913,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                     y_rim = y0 + (y1 - y0) * t - WING_RAISE                               # the rim's height beside this corner, before
                     pos[1] = y_rim - abs(pos[0] - hx) * math.tan(th)                      # lower toward the spine by the dihedral
                     me['p0'][i] = list(em.xform_pt(em.rigid_inv(Wcat[me['b0'][i]]), pos)); me['p1'][i] = list(em.xform_pt(em.rigid_inv(Wcat[me['b1'][i]]), pos))
-            # ── subdivide the top tabs (user 2026-09-13: "subdivide these so you can fold the wings while keeping the intersection
+            # ── subdivide the top tabs ("subdivide these so you can fold the wings while keeping the intersection
             # into the back stable and not clipping"): each tab → n² triangles; new points on a wing–wing edge stay wing-skinned
             # (their ends' influences pooled), every other new point is laid on the skin (+lift, never below the tab's own plane)
             # and weighted like the skin under it — so the patch hugs the back in every pose and only the one ring-side row
@@ -1992,7 +1992,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             if WING_TAB_SUBDIV_NEIGHBOURS and n == 2:
                 # CONFORMING split of everything that shares an edge with a split tab — the base triangles, the lid, the 'under'
                 # poly, any wing poly — on exactly those edges (1 → 2 tris, 2 → 3, 3 → 4), so no edge is left with a midpoint
-                # on one side only (user 2026-09-13: thin gaps along the fore edge of the base opened and inverted as the bulged
+                # on one side only (thin gaps along the fore edge of the base opened and inverted as the bulged
                 # midpoints moved off the neighbour's straight edge). Nothing new is created, so it never cascades.
                 def mid_of(a_, b_):
                     return cache.get(('e', min(a_, b_), max(a_, b_), 1))
@@ -2017,7 +2017,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                 log(f"  {sd} wing base floored: {len(floor)} tris from ir over the lower rim ({len(lower) - 1} verts) to if")
             polys += fine; tabs = fine
             if WING_TAB_BULGE and mixed:
-                # ROUND THE FOLD (user 2026-09-13: "take advantage of the subdivision to make the folded pose smoother"): a pooled
+                # ROUND THE FOLD ("take advantage of the subdivision to make the folded pose smoother"): a pooled
                 # midpoint sits on the straight chord between its wing end and its body end, so the folded tab was two flat planes
                 # meeting at a crease. Each mixed point now gets bone-local positions solved from TWO targets: its reference-pose
                 # spot (the open wing is untouched) and, in the folded idle pose, that chord point pushed WING_TAB_BULGE out along

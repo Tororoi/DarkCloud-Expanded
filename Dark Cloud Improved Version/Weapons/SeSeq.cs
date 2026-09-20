@@ -2,7 +2,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// SHARED data-only sound-effect trigger for the weapon-ability family — the long-sought
-    /// "data-writable SE path" (RE'd 2026-09-07 for Guardian Grace's heal chime).
+    /// "data-writable SE path" (RE'd for Guardian Grace's heal chime).
     ///
     /// The engine keeps a 32-slot SE sequencer pool `se_seq` @0x1CFB530 (8 B/slot) that
     /// SndSeSeqStep (0x15AFA0, called from the global per-frame SndStep) iterates: a slot whose

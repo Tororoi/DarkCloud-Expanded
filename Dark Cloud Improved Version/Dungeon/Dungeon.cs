@@ -1305,8 +1305,8 @@ namespace Dark_Cloud_Improved_Version
                 {
                     int timer = 0;
                     // Both markers live in a dungeon pool, so they move with the character heap (DungeonPools). The 12850
-                    // check now also gates the WRITE — it used to fire even when the wait timed out, which after the pools
-                    // moved meant stamping 52 into whatever had taken that address.
+                    // check gates the WRITE as well as the wait: a write after a timed-out wait would stamp 52 into whatever
+                    // holds that address once the pools have moved.
                     long swapA = DungeonPools.Resolve(0x2193A013), swapB = DungeonPools.Resolve(0x217E5453);
                     while (timer < 10)
                     {

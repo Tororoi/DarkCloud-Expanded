@@ -78,7 +78,7 @@ namespace Dark_Cloud_Improved_Version
     /// in the same order as the bait affinity fields in <see cref="FishSlotOffsets"/>.
     /// The game copies entry.Radius into each fish slot's <see cref="FishSlotOffsets.NoticeRadius"/>
     /// every frame, keyed by the equipped bait's item ID.
-    /// Confirmed via ScanFor25f cluster dump (2026-06-03). Bait validity is enforced elsewhere —
+    /// Confirmed via ScanFor25f cluster dump. Bait validity is enforced elsewhere —
     /// writing a non-bait item ID into an entry's Id address has no effect on the bait screen.
     /// </summary>
     internal static class BaitDetectionRadiusTable

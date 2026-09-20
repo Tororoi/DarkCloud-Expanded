@@ -503,7 +503,7 @@ sw    $t8, 0x0018($t7)         # the channel's blend increment back to the defau
 lui   $t7, 0xBF80
 sw    $t7, 0x0C60($t6)         # the land clip plays at its KEY rate (the leap may have run at CatLeapRate)
 lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 6              # restart = HARD CUT + play once: fall → land never fades (user 2026-09-11: the lead-in is tuned for an
+ori   $t5, $t5, 6              # restart = HARD CUT + play once: fall → land never fades (the lead-in is tuned for an
 sw    $t5, 0x0C64($t6)         # instant start and the poses already meet); the clip runs to its end and HOLDS
 addiu $t5, $zero, 69
 sw    $t5, 0x0C68($t6)         # key = land
@@ -804,7 +804,7 @@ lwc1  $f2, 0x0000($t5)
 lwc1  $f4, 0x0008($t5)
 swc1  $f2, 0x4178($t0)         # … target x
 swc1  $f4, 0x417C($t0)         # … target y
-readystart:                    # ── every pounce: the ready crouch first, standing (user 2026-09-11: the vertical leap for all) ──
+readystart:                    # ── every pounce: the ready crouch first, standing (the vertical leap for all) ──
 lw    $t5, 0x0C64($t6)
 ori   $t5, $t5, 2              # play once, no restart: the walk fades into the crouch, which runs to its end and HOLDS
 sw    $t5, 0x0C64($t6)
@@ -895,8 +895,8 @@ runstore:
 swc1  $f6, 0x0010($t6)
 swc1  $f8, 0x0014($t6)
 swc1  $f12, 0x0018($t6)
-b     done                     # (2026-09-11: this branch was missing — every walking frame fell through into the
-nop                            #  ready block below: ready pose while walking, pounces launched with no trigger)
+b     done                     # (without this branch every walking frame falls through into the ready block
+nop                            #  below: ready pose while walking, pounces launched with no trigger)
 sitdown:                       # ── no enemy in range: sit in place (the sit clip loops) until the mod names one ──
 lw    $t7, 0x0C68($t6)
 lw    $t5, 0x41A0($t0)         # sit key
@@ -993,7 +993,7 @@ sw    $t5, 0x0C64($t6)
 lw    $t5, 0x4154($t0)
 sw    $t5, 0x0C68($t6)         # key = float-up
 lw    $t7, 0x41B8($t0)
-sw    $t7, 0x0C60($t6)         # at CatFloatRate (user 2026-09-11: a touch faster than its KEY rate)
+sw    $t7, 0x0C60($t6)         # at CatFloatRate (a touch faster than its KEY rate)
 sw    $zero, 0x40E4($t0)
 addiu $t5, $zero, 11
 b     done

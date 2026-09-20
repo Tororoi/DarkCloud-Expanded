@@ -11,7 +11,7 @@ namespace Dark_Cloud_Improved_Version
     /// every dungeon, and a pnach per-frame write must be gated because the town overlay shares these addresses.
     /// A baked word changes only this file and needs no gating. Data a patched load points at lives in the
     /// MAILBOX page (0x01F10000): a PINE write into a page holding executed code SIGBUSes PCSX2, and the ELF
-    /// cave segment is such a page (2026-09-09 crash). The pnach seeds the defaults whenever the app is idle.
+    /// cave segment is such a page (a crash). The pnach seeds the defaults whenever the app is idle.
     /// File offset of a word = record start + (RAM address − LoadBase): the overlay is a flat image.
     /// </summary>
     internal static class DunPatches
@@ -23,8 +23,8 @@ namespace Dark_Cloud_Improved_Version
         private static readonly Word[] Words =
         {
             // Passive HEAL ability (weapon flag 0x800) cadence: heal tick compares its frame counter with
-            // `slti v0,v0,0xF0` (240 f = 4 s, dun 0x1DB8234); 0xB4 = 180 f = 3 s for every HEAL weapon
-            // (user 2026-09-09). Guardian Grace reads the threshold from this word and floors the counter while Xiao guards.
+            // `slti v0,v0,0xF0` (240 f = 4 s, dun 0x1DB8234); 0xB4 = 180 f = 3 s for every HEAL weapon.
+            // Guardian Grace reads the threshold from this word and floors the counter while Xiao guards.
             new(HealCadenceAddr, HealCadenceOrig, HealCadenceNew, "heal-ability cadence 4 s → 3 s"),
             // Xiao's attack-gauge refill multiplier (motionDrive: `lui v0,0x3fc0; mtc1 v0,f0`, v0 dead after)
             // → `lui v0,HI; lwc1 f0,LO(v0)` of Mailbox.ShieldGaugeRate (pnach-seeded 1.5 = vanilla while idle).
@@ -53,9 +53,9 @@ namespace Dark_Cloud_Improved_Version
             // so the 30,000 units come out of the dungeon READ buffer (SetPacketReadBuffer(0x9344, 280000) at the
             // end of GameInit): 4.48 → 4.00 MB. Its real demand is bounded: the largest single dungeon file is a
             // 3.86 MB map pack, and the longest staged menu chain (Xiao's party switch: dunmenu5 + portraits + her
-            // ~2.5 MB pack + weapons + effect) reaches ~3.9 MB. Measured 2026-09-10 (flat textures): Xiao+cat chara
+            // ~2.5 MB pack + weapons + effect) reaches ~3.9 MB. Measured (flat textures): Xiao+cat chara
             // 3,216,400 + weapons 227,168 + effects 70,128 = 3,513,696; the real cat textures add ~127,000.
-            // 2026-09-13, the WINGS: the cat's wing bones/meshes/keys/textures cost another ~220 KB in this pool (chara
+            // The WINGS: the cat's wing bones/meshes/keys/textures cost another ~220 KB in this pool (chara
             // 3,400,336 → 3,620,496 measured), and the pool is shared with the weapons (~216 KB) and the floor's shot effects
             // (70-190 KB): 240000 units overflowed by 67-190 KB → a silent spin on the switch to Xiao. The allocator's own
             // counter (DivineBeastCat.HeapWatch, GlobalPoolUsed 0x21C74980) shows the global buffer at 26,616,000 of
@@ -64,7 +64,7 @@ namespace Dark_Cloud_Improved_Version
             // units (104 KB) of global slack. The literal 210000 is `lui r,3; ori r,r,0x3450` at four sites (carve, the two
             // remaining-room computations, a memory-map printf): 260000 = 0x3F7A0 = ori 0xF7A0 (lui 3 unchanged). 280000 is
             // `lui v0,4; ori a1,v0,0x45C0` → 250000 = `lui v0,3; ori a1,v0,0xD090`.
-            // 2026-09-14, the MASK: 260000 units was not enough for it. HeapWatch on the freeze read chara 3,905,424 of
+            // The MASK: 260000 units was not enough for it. HeapWatch on the freeze read chara 3,905,424 of
             // 4,160,000 with weapons 225,232 and effects 29,296 — total 4,159,952, i.e. 48 BYTES free, and the effects pool
             // squeezed to a 29,344 cap against a real demand of 70-190 KB. So the heap takes 5,000 more units (80,000 B) out
             // of the global buffer, which the same log measured at 103,984 B free; 23,984 B of it is left. 265000 = 0x40B28

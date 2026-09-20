@@ -40,7 +40,7 @@ FORMAT (reverse-engineered from SCUS_971.11; see game_data/docs/mot-format.md fo
   model B play model A's motion, copy A's keyframes in A's window into B's window, per matching bone.
 
   Companion files: `.bbp` = the memcpy'd header/bind block (param_3[1..2] of MOTION_FILE_INFO);
-  `.wgt` = a SECOND track list in the identical format holding the SKIN WEIGHTS (corrected 2026-09-12; it is
+  `.wgt` = a SECOND track list in the identical format holding the SKIN WEIGHTS (corrected ; it is
   not a morph): one track per bone — w0 = the skinned mesh's node index, w1 = the bone's node index,
   w2 = 20 — whose "keyframes" are (frame = vertex index, value[0] = weight in percent); every vertex
   covered, weights sum to 100 (consumed by MotionProc2 @0x148860). Not needed to SPLICE a skeletal

@@ -7,7 +7,7 @@ namespace Dark_Cloud_Improved_Version
     /// The GIANT SLINGSHOT "wings" prop for Guardian Reflector — v6: an independent, engine-stepped
     /// COPY of the weapon object. Her real slingshot never leaves her hand.
     ///
-    /// WHAT ANIMATES THE POUCH (settled 2026-09-08): each slingshot ships its own animation pack
+    /// WHAT ANIMATES THE POUCH : each slingshot ships its own animation pack
     /// (dun\mainchara\c04w.pac → c04w##.chr: .mot animating the pouch bone `null24`, .wgt = the
     /// VERTEX_ANIME elastic morph, and a cfg KEY table mirroring Xiao's body keys — 9 guard-loop,
     /// 11 構え引き draw 240–251, 12 hold, 13 撃ち shoot 251–255). The weapon object is a CCharacter
@@ -67,7 +67,7 @@ namespace Dark_Cloud_Improved_Version
         // exactly as the earlier welded-weapon bake did (5 = tuned live). The draw re-seeds the ROOT
         // from the slot each frame, so this is baked into the root's child bone (chn30) instead —
         // never re-seeded, never motion-tracked — and the slot rotation stays zero.
-        private const int OrientPreset = 7;     // pinned 2026-09-08
+        private const int OrientPreset = 7;     // the shield's pose (tuned by eye)
         private const int ProjectilePreset = 5; // the projectile: the shield's pose turned a half-turn in pitch (7 flew upside down)
         // The projectile's nudge, root space (+x = screen-left as it flies away, y up, z along the flight), on top of the pouch-on-root slide: the pouch
         // BONE sits a little up and to the right of the cup the pellet should appear in. Tuned in game.
@@ -82,7 +82,7 @@ namespace Dark_Cloud_Improved_Version
         // Orbit smoothing runs at frame rate on its own thread (a 20 Hz step read as a staircase):
         // each frame closes OrbitEase of the remaining angle, at most OrbitRate rad (≈ 180° in 0.3 s).
         private const int   OrbitTickMs = 16;
-        private const float OrbitEase   = 0.18f, OrbitRate = 0.20f;   // user: 0.2 (2026-09-09)
+        private const float OrbitEase   = 0.18f, OrbitRate = 0.20f;   // user: 0.2
         private static bool  _projectile;                // SpawnProjectile: world-rooted, tinted, placed by the cave
         private static float[] _tint = { 0f, 0f, 0f };   // projectile: the slot's ambient add
         private static float _dim = 1f;                  // projectile: the slot's dim factor
@@ -690,12 +690,12 @@ namespace Dark_Cloud_Improved_Version
                 if (f == IdleFrame) iIdle = i;
                 if (f == DrawnFrame) iDrawn = i;
             }
-            // NO LOOSE REST, EVER (user 2026-09-09): the authored draw (240→250) leaves from the slack
+            // NO LOOSE REST, EVER: the authored draw (240→250) leaves from the slack
             // rest pose and the snap settles back into it (255→261). On the copy, the draw is re-pathed
             // to run straight from the taut catch pose (IdleFrame) to full draw as an IMPACT: cubic
             // ease-out, so the caught shot shoves the pouch back at once (~half the travel in the first
             // three frames) and it slows as the elastic loads — a smoothstep read as a 1-2 frame delay
-            // after the catch (user 2026-09-09). Everything after the snap's forward peak holds the
+            // after the catch. Everything after the snap's forward peak holds the
             // catch pose. Both end poses are the authored (scaled) ones.
             if (iIdle >= 0 && iDrawn >= 0)
             {
@@ -811,7 +811,7 @@ namespace Dark_Cloud_Improved_Version
                 // that is where Step__10CCharacter reads it (NOT CCharacter +0x344, which only mirrors it).
                 // It is shared with the live weapon, so the copy gets a CLONE with dummy KEY 14 rewritten
                 // as a one-frame hold at IdleFrame — the end of the snap, pouch forward and taut, "in
-                // position to catch" — instead of the loose guard-loop pose (user 2026-09-09).
+                // position to catch" — instead of the loose guard-loop pose.
                 uint mi = (uint)BitConverter.ToInt32(mstr, MotionType.MotionInfoPtr) & Memory.PhysAddrMask;
                 if (Memory.IsValidGuest(mi))
                 {

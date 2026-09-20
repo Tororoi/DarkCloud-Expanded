@@ -294,7 +294,7 @@ namespace Dark_Cloud_Improved_Version
         /// qualify: kuseg 0x0, kseg0 0x8, kseg1 0xA, and the 0x2/0x3 uncached forms. Any other top nibble is data —
         /// most importantly a float: 3.3f is 0x4053651E, and masking it with <see cref="PhysAddrMask"/> first
         /// yields 0x0053651E, a perfectly plausible heap address. That exact accident bent five muzzle vertices of
-        /// the Divine Beast cat copy into the floor (2026-09-10): a byte-copied MDT re-based against the source
+        /// the Divine Beast cat copy into the floor: a byte-copied MDT re-based against the source
         /// MDT's own address range had those Y floats "re-pointed" into the cave (≈ denormal 0). Test the raw word
         /// with this BEFORE masking.</summary>
         internal static bool LooksLikePointer(uint word)
@@ -377,7 +377,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         /// <summary>How many times we have crossed to the emulator, and how many bytes went with it. Round trips are the thing
         /// that costs: a 300 KB batch lands in tens of milliseconds while a few hundred four-byte reads take over a second, and
-        /// the per-trip latency swings so much between runs that wall-clock timings of the same code varied by 16× (2026-09-15).
+        /// the per-trip latency swings so much between runs that wall-clock timings of the same code varied by 16×.
         /// The trip count does not move, so it is what to optimise against.</summary>
         internal static long Trips, TripBytes;
         internal static void ResetTrips() { Trips = 0; TripBytes = 0; }

@@ -7,7 +7,7 @@ function (strings, a 56-byte funcdata, its code) at the end of the file — ever
 relative, so appended data is addressable and nothing else moves. (docs/stb-script-format.md: op 3 = PUSHCONST (1 int,
 2 float, 3 string), 19 = CALL_FUNC (a2 = funcdata offset from codeBase), 21 = EXT (a1 counts the id), 15 = RET, 22 = NOP.)
 
-Patches (user 2026-09-12):
+Patches :
   Hurt spheres — Blizzard (e65a) → Titan's four (bcol0 5, bcol1 10.6, bcol2 6, bcol3 6); Sam (e86a), Billy (e69a) →
       Mr. Blare's two (bcol0 8.5, bcol1 6.5); Minotaur Joe (c16a) → EVERY hurt sphere armed for the Divine Beast cat:
       each block → its own function = the original _SET_BODY_COL (verbatim) + _SET_BODY_COL_PARA(0, 100) +

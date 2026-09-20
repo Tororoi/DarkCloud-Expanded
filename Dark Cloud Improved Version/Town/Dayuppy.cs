@@ -807,9 +807,9 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // WHERE the text goes is resolved from the live message bank, never hardcoded. The dungeon carves its pools out
-            // of one buffer in order, so any change to the character heap moves this bank: the cat's heap growth moved it
-            // 880,512 B and these writes landed on the `gaiji` glyph sheet instead — a band of message text struck through
-            // the letters in every dungeon window (user 2026-09-15). See DungeonMessageBank.
+            // of one buffer in order, so any change to the character heap moves this bank (the mod's bigger heap moves it
+            // 880,512 B); a write to a captured address lands on the `gaiji` glyph sheet instead — a band of message text
+            // struck through the letters in every dungeon window. See DungeonMessageBank.
             long messageAddress = DungeonMessageBank.TextAddress(isFloorClearMessage ? DungeonMessageBank.FloorClearId
                                                                                      : DungeonMessageBank.CustomId);
             if (messageAddress == 0) return new byte[0];   // bank unreadable: drop the message rather than write over whatever is there

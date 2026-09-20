@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate the binaries the mod EMBEDS, so they always match the sources they are generated from.
 
-Two generators, both of which used to be manual steps a person had to remember:
+Two generators, so neither is a manual step a person has to remember:
   tools/stubs/build_ee_stubs.py   — every EE cave stub (.s -> Resources/isoPatch/*.bin)
   build_cat_pack.glow_palettes()  — the six element glow ramps (GLOW_ELEMENTS -> catGlowPalettes.bin)
 

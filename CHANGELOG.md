@@ -208,6 +208,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Big Bang ("Detonate")** — Every enemy Toan hits triggers an explosion.
 - **Buster Sword ("True Buster")** — Anti-category attachments (Dinoslayer … Mage Slayer) are worth +4 instead of +3 when attached to a Buster Sword.
 - **Cross Hinder ("Sanctifier")** — Roughly double damage and double ABS reward against undead, and undead it kills can no longer revive.
+- **Bone Rapier ("Skeleton Key")** — Besides the bone-door bypass, the reviving undead stay down. Super Steve inherits the Cross Hinder and the bone key with their spheres.
 - **Dark Cloud ("Guard Crush")** — Toan's hits cut straight through enemy guards; every blow connects even while an enemy is blocking. Inherited by 7th Heaven.
 - **7th Heaven ("Divine Guard")** — Perfect guard: blocks every enemy attack and projectile, including heavy hits that normally break guard (those just knock Toan back instead). Also inherits Dark Cloud effect.
 - **Kitchen Knife ("Spring-Blessed Blade")** — Stepping into a healing spring blesses the knife for ~60 seconds: the blade visibly grows to triple length and its attack doubles. Standing in the spring refreshes the timer.
@@ -221,6 +222,15 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Divine Beast Title ("Cat Shot")** — Hold the shot for a one-second charge (the charge flash marks it) and the pellet that leaves the slingshot becomes Xiao's cat: it flies out along the pellet's line, lands, runs at the locked-on enemy (straight ahead when nothing is locked), pounces, and the pounce hits through the normal weapon formula with the weapon's selected element. The cat rig, textures and leap clips are baked into Xiao's dungeon model by the ISO patcher (hidden until summoned), so it is resident in every dungeon. The cat copy is built once and kept hidden while the weapon is equipped, and a native catcher in the ISO binds it to the charged pellet on the very frame the pellet is born, then hands it the pellet's freshly stepped position every frame, so it never trails; it grows from the pellet's size to full over the first tenth of a second while the pellet's own sprite fades out. At full size the pellet is spent and the cat leaves its line: it falls with the pellet's forward speed, lands (its momentum dies the frame its paws touch), and as the landing motion ends it sets off toward its target (the locked-on enemy, otherwise the enemy nearest Xiao), following the real floor under it at the town's own walk pacing, stopping at walls, and pouncing when it gets close: a ready crouch and the town cat's own spring-up, during both of which it keeps turning to face the enemy, then a jump aimed at where the enemy is as the spring-up ends, and a landing. A script event that wipes the cat's textures (the chasm jump) no longer leaves it unable to appear: they are put back on the next charge. Its motions cross-fade into one another the way the town model's do, using the engine's own ten-frame blend; only the jump itself (take-off into leap into landing) and the drop into the landing cut straight across, as the town's own landing does. Touching an enemy while airborne or landing, from the first flight off the slingshot onward, lands one hit through the normal weapon formula as if the weapon's attack were doubled, with magic and the weapon's element applied, any guard the enemy holds ignored, and the same stagger and shove a sword blow gives (the game's own rule that Xiao's hits never stagger now exempts a hit that carries a melee-type kick, which only the cat's does); the cat sails on through and fades out over the next half second as it lands. It gives up after twenty seconds. The cat carries a blue glow, drawn by the game's own wall-torch routine from a re-tinted copy of the Gallery of Time's purple torch disc, centred on its torso and fading with it.
 - **Dungeon character memory** — The dungeon's character-model pool (shared by the active character, their weapons and shot effects) is raised from 3.36 MB to 3.84 MB in the ISO's dungeon overlay, paid for by trimming the dungeon's 4.48 MB disc-read staging buffer to 4.00 MB (its largest single file is 3.86 MB). Xiao's model already sat within about 150 KB of the old ceiling, and the cat baked into it pushed a party switch to her into the allocator's silent hang.
 - **Super Steve ("Sphere Inheritance")** — Super Steve inherits the custom effect of whichever weapon's SynthSphere is attached to it (one sphere at a time = one inherited effect), and recolors itself in the source weapon's palette. Ownership/upgrade passives (Macho Sword, Wise Owl Sword, Chronicle 2, Buster Sword, 7 Branch Sword) deliberately don't transfer.
+- **Steel Slingshot** — While its WHP is low (the gauge's warning state), each shot costs half the WHP; Durable and Fragile stack on top. Level-ups grant +2 endurance instead of +1 and twice the max-WHP roll. Super Steve inherits the WHP half with its sphere.
+- **Bandit Slingshot** — A steal that lands on an enemy with a projectile takes the projectile: until another steal or the floor ends, every pellet is that enemy's shot, flags and all, at 2× attack and with its own element. The item's "acquired" notice adds "[enemy]'s projectile is now yours". Self-detonations are never taken (a species' other shot is). Super Steve inherits with either Bandit sphere.
+- **Bone Slingshot ("Skeleton Key")** — Bone doors open without their key, and the reviving undead stay down, as with the Bone Rapier. Super Steve inherits with either bone sphere.
+- **Hardshooter ("Ricochet")** — A pellet that lands on an enemy spawns a second pellet at the impact that flies at the next nearest enemy (or in a random direction with none near), once per shot; it cannot strike the enemy it came from. Super Steve inherits with its sphere.
+- **Double Impact** — Every shot is two real pellets side by side, each at 0.75× attack and each rolling the weapon's abilities on its own, drawn as the Steel Slingshot's stone; both ricochet as the Hardshooter's do, at different targets. Super Steve inherits with its sphere.
+- **Dragon's Y** — Locked on, Xiao moves at 1.3× speed (inherited by Divine Beast Title, Angel Shooter and Angel Gear). A shot held for a second fires the Gemron ball of the selected element (the Black Dragon's with none) at 1.5× attack with a knockback that shoves enemies out of the burst. Super Steve inherits the shot with its sphere and the speed with any of the four's.
+- **Flamingo** — Enemies can be locked on to from twice as far (inherited by Dragon's Y, Divine Beast Title, Angel Shooter and Angel Gear, and by Super Steve with any of the five's sphere). Owned, up to three Flamingos each add 10 units to every bait's notice radius when fishing.
+- **Matador ("Charging Bull")** — Super Steve inherits it with a Matador sphere, projecting its own model on the charged pellet. Super Steve's pellet is drawn as the sphere weapon's when the sphere came from a slingshot.
+- **Shot slots** — Floors are no longer limited to five monster shot types: the five slots are shared among every config the floor needs, each read from disc at most once per floor.
 
 **Goro**
 - **Frozen Tuna ("Cold Storage")** — Each point of WHP lost banks 2 HP into a healing pool. When Goro takes damage, the pool drains at 1 HP per 0.5 seconds. Healing pauses if HP reaches max; banked HP is preserved until the next hit. The pool resets on weapon repair or switch. On hit, 5% chance stops all non-ice enemies and freezes Goro for 3 seconds. Blizzard, Sam, and Ice Gemron are immune to the stop proc.
@@ -229,8 +239,12 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Cactus ("Absorb")** — Custom thirst effect which drains moisture from enemies. Dry enemies are unaffected.
 - **Mirage ("Decoy")** — Holding guard charges a mirage; on release a shimmering clone of Ungaga with a heat-haze effect is planted at that spot, and enemies chase the decoy instead of him for ~12 seconds (a new charge refreshes it). The illusion breaks per enemy — hit one and it re-targets you. Hercules' Wrath inherits the effect.
 
+**Ruby**
+- **Bandit's Ring** — The Bandit Slingshot's stolen projectile for Ruby's quick fire only; her charged shot stays her own.
+
 **Osmond**
 - **Snail** — 5% chance on hit to apply Gooey to the struck enemy.
+- **Skunk** — The flamethrower reaches twice as far.
 
 #### Dark Cloud Enhanced
 
@@ -263,7 +277,8 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 **Xiao**
 - **Bone Slingshot** — 50% Fragile
-- **Hardshooter** — 50% Fragile
+- **Hardshooter** — 50% Fragile; builds up to Double Impact only
+- **Double Impact** — builds up to Matador only
 
 **Goro**
 - **Frozen Tuna** — 100% Stop

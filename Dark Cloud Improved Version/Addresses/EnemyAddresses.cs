@@ -260,7 +260,7 @@ namespace Dark_Cloud_Improved_Version
 
     /// <summary>
     /// The enemy DAMAGE HITBOX — the per-bone collision spheres your weapon must reach to hurt the enemy
-    /// (RE'd 2026-06-20 + confirmed in-game). NOT EntityScale and NOT the BODY_SIZE triple; this is its own system.
+    /// (RE'd + confirmed in-game). NOT EntityScale and NOT the BODY_SIZE triple; this is its own system.
     ///
     /// PIPELINE:
     ///   • At spawn the enemy's STB script issues <c>_SET_BODY_COL(boneName, radius, …)</c> (cmd 0x82, handler ELF
@@ -354,7 +354,7 @@ namespace Dark_Cloud_Improved_Version
     /// 0x1E450). The normalized direction sits alongside it at 0x1E430/0x1E434/0x1E438 (x/y/z). Same per-slot 0x3510
     /// stride as the CCharacter/model arrays.
     ///
-    /// ★ WHY A PER-SLOT SPEED-UP IS NOT FEASIBLE (RE'd 2026-06-22; a miniboss "move faster" attempt was dropped here).
+    /// ★ WHY A PER-SLOT SPEED-UP IS NOT FEASIBLE (RE'd; a miniboss "move faster" attempt was dropped here).
     /// <c>CMonstorUnit::Step</c> (ELF 0x1DE540) integrates motion as a plain <c>pos += dir * speed</c> per axis
     /// (0x1DE60C–0x1DE674: lwc1 dir@-0x1BD0/-0x1BCC/-0x1BC8 × speed@-0x1BB0, add to pos) — there is NO third per-slot
     /// scale factor to set once. Both dir and speed are REWRITTEN every frame by _SET_MOVE / _CHK_MOVE while an enemy
@@ -383,7 +383,7 @@ namespace Dark_Cloud_Improved_Version
     ///   SHOT  struct base  = MMU.Base + slot*0x30 + 0x5FF50,  damage int @ +0x5FF78
     ///   SHOT2 struct base  = MMU.Base + slot*0x30 + 0x60250,  damage int @ +0x60278   (SHOT2 array sits exactly
     ///   after the 16-slot SHOT array: 16*0x30 = 0x300, and 0x60250 − 0x5FF50 = 0x300.)
-    /// Struct fields (RE'd 2026-06-19): +0x00/+0x04/+0x08 = three floats (shot params), +0x0C = 1.0f, +0x20 =
+    /// Struct fields : +0x00/+0x04/+0x08 = three floats (shot params), +0x0C = 1.0f, +0x20 =
     /// validated effect handle, +0x24 = active flag, +0x28 = DAMAGE (int).
     ///
     /// ★ DAMAGE SEMANTICS — UNLIKE MELEE, THIS IS NOT INIT-LATCHED. The handler inits the damage to −1 and only
@@ -398,7 +398,7 @@ namespace Dark_Cloud_Improved_Version
     /// active flag toggles), so probing it confirms a species' live shot damage. (The per-species explicit values
     /// are mirrored in EnemyDefaults.ProjectileDamage; default/−1 shots source their damage at fire time elsewhere.)
     ///
-    /// STB VM reference (RE'd 2026-06-19, exe__10CRunScript @0x23E080): vmcode_t = 12-byte {op@+0, operandA@+4,
+    /// STB VM reference (RE'dexe__10CRunScript @0x23E080): vmcode_t = 12-byte {op@+0, operandA@+4,
     /// operandB@+8}; opcode dispatch table @0x29FB80 (31 ops). op3 = push-LITERAL (operandA = type 1=int/2=float/
     /// 3=string, operandB = the inline value), op1 = push-VARIABLE (operandB = scope-size, operandA = index into
     /// runtime storage; no inline value), op20 = _PRINT, op21 = external-command call (ext @0x23DD00 → dispatch
@@ -499,7 +499,7 @@ namespace Dark_Cloud_Improved_Version
         // ENEMY → PLAYER DAMAGE block above EnemySpeciesTable.DamageReduction for the full enemy→player formula.
         internal const int DefenseStats      = 0x090; // packed: low ushort = DamageReduction, high ushort = WeaponDefense
 
-        internal const int HitStunTimer      = 0x098; // int   — INVINCIBILITY frame countdown (record +0x1E468): scripts set it with `_STATUS_SET_MUTEKI` (cmd 101: 9 after a hit, 100 when a mimic wakes, 1000 while dying); CheckDmg__12CMonstorUnit skips the whole hit test while > 0 (2026-09-12)
+        internal const int HitStunTimer      = 0x098; // int   — INVINCIBILITY frame countdown (record +0x1E468): scripts set it with `_STATUS_SET_MUTEKI` (cmd 101: 9 after a hit, 100 when a mimic wakes, 1000 while dying); CheckDmg__12CMonstorUnit skips the whole hit test while > 0
 
         internal const int ForceItemDrop     = 0x0A0; // int   — forces a specific item drop when nonzero
         internal const int RenderDistance    = 0x0A4; // float — CONFIRMED controls render distance and map-dot appearance threshold
@@ -535,11 +535,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int AiSpeedParam      = 0x0F0; // float — REQUESTED motion speed; _SET_MOTION writes −1.0 (= use the motion's own KEY speed) here, matching the −1.0 seen at spawn.
         internal const int MotionCommitFlag  = 0x0F4; // halfword — commit gate (-0x1b3c). CMonstorUnit::Step (ELF 0x1dd890) commits the requested motion (0xEC) into the render object's player ONLY when this is nonzero; the engine sets it when the current clip finishes. Writing 1 forces an immediate motion switch (interrupt).
 
-        // ── Lock-on target (regular enemies) — RESOLVED 2026-09-09 (was "SpeciesParamPtr", role unconfirmed) ──
+        // ── Lock-on target (regular enemies) — RESOLVED ──
         // +0x0FC: PS2-native pointer to the enemy's LOCK-ON FRAME — the CFrame node named by the STB's
         // `_STATUS_SET_LOCKON_TRG("lockon", w, h)` (handler 0x1E3710: SearchFrame on the species model →
         // unit+slot*400+0x1E4CC; w/h → ReticleWidth/Height below). Same-species slots share the model, hence
-        // the shared pointer that puzzled the 2026-06-09 savestate analysis. +0x100: that frame's WORLD position
+        // the shared pointer a savestate analysis puzzled over. +0x100: that frame's WORLD position
         // (vec4 x, h, y, w), refreshed by DrawMonstor (GetWorldPosition) every draw. setTargetCursor (dun
         // 0x1DC07A0) copies it to the lock-on aim point global 0x1DC4500 — the point Xiao's pellets fly at
         // (BattleActionPlay_Jinn); with no lock-on frame the aim point is the enemy origin raised by 8.
@@ -750,7 +750,7 @@ namespace Dark_Cloud_Improved_Version
         //   Step (death): type 2 skips the rare-drop roll.
         //   setTargetCursor / DrawTargetLife: type 2 hides the HP gauge and aims the lock-on cursor differently.
         // The randomizer's one-of-each floors write 1; the injector's spawn-once writes 1 too (2 would make the enemy a boss).
-        internal const int MonsterType = 0x078; // halfword (int-sized slot) — see above; formerly named MonsterType
+        internal const int MonsterType = 0x078; // halfword (int-sized slot) — see above
 
         // +0x07C: the enemy's ID (EnemyDefaults.Id; boss companions carry 0), copied to the unit at +0x1E412: the lock-on
         // cursor shows the HP gauge and name only for id > 0, and Steve's monster chatter (weapons 303/312) picks message
@@ -767,7 +767,7 @@ namespace Dark_Cloud_Improved_Version
 
         // +0x084 ItemDamageRes: the enemy's DAMAGE-TAKEN multiplier for thrown items (gems/bombs/etc.) — scale 100 =
         // neutral, <100 = resistant (same scale as the elemental resistances). Read in CheckDmg (@0x1dc170, on the
-        // non-elemental / s3==-1 damage path). CONFIRMED in-game (2026-06-25) on Minotaur Joe: ItemDamageRes 50->90
+        // non-elemental / s3==-1 damage path). CONFIRMED in-game on Minotaur Joe: ItemDamageRes 50->90
         // raised a thrown fire-gem's damage 14->26 (≈ the 90/50 ratio), and 0 made it deal 0 (fully immune). Bosses
         // ~30-50 (item-resistant), regulars ~90-100. (Whether it also scales non-item damage on the same path is untested.)
         internal const int ItemDamageRes   = 0x084; // ushort — thrown-item damage-taken multiplier (×/100, 100=neutral); see comment
@@ -775,7 +775,7 @@ namespace Dark_Cloud_Improved_Version
         // damage resistance. In CheckDmg, for each player weapon/item status-attribute bit (0x20/0x40/0x100/0x200/
         // 0x800/0x1000; 0x80 = steal) the engine rolls rand vs ItemStatusRes and, if it passes, sets the matching status
         // timer on the slot (+0x08 Freeze / +0x0C Poison / +0x10 Stamina / +0x14 Gooey). 0 = the roll never passes =
-        // immune. All bosses ship 0 (status-immune); regulars are 50-90. CONFIRMED in-game (2026-06-25): raising
+        // immune. All bosses ship 0 (status-immune); regulars are 50-90. CONFIRMED in-game: raising
         // Minotaur Joe's ItemStatusRes 0->90 made him poison-able, and the landed poison then ticked for real damage
         // (~12/tick at his normal HP).
         internal const int ItemStatusRes   = 0x086; // ushort — status-effect susceptibility (0 = immune); see comment
@@ -819,7 +819,7 @@ namespace Dark_Cloud_Improved_Version
         // CheckDmg computes knockback = weaponHitForce (0x90 of the hit data) * KnockbackMult and writes it to
         // slot+0x180; Step__CMonstorUnit then drives the enemy's velocity from slot+0x180 each frame and decays it
         // (slot+0x180 -= slot+0x184) to 0. So lower = knockback-resistant, 0 = immovable on hit, higher = flies
-        // further. (Copied to slot+0x188 at spawn.) CONFIRMED in-game (2026-06-25): Skeleton Soldier at 5.0 was
+        // further. (Copied to slot+0x188 at spawn.) CONFIRMED in-game: Skeleton Soldier at 5.0 was
         // knocked back noticeably further per hit (scales the impulse, which then decays, so distance grows
         // sub-linearly). It is a DELIBERATE per-species knockback-resistance stat (read from the ELF table, all 167
         // records): 0.0 = immovable (every boss + their effect entities, and rooted plants like Cannibal Plant/

@@ -8,10 +8,10 @@ namespace Dark_Cloud_Improved_Version
     /// GameInit carves every dungeon pool sequentially out of one 27 MB buffer (common, motion, chara, shotfx, texture,
     /// p870/SystemScript, p6a0/BtMes, …), so changing ANY pool's size moves every pool carved after it. The cat needed a
     /// bigger character heap — 210000 → 265000 units (DunPatches) — which moved everything after `chara` up by 880,000 B,
-    /// and every mod address captured from a vanilla run kept pointing at where its data used to be. That is how the
-    /// dungeon's message text ended up painted across the `gaiji` glyph sheet (see <see cref="DungeonMessageBank"/>, which
-    /// resolves its own address from the engine's live pointer), and why the bone-door bypass and the Ungaga door fixes
-    /// quietly stopped working: their value checks failed and they logged "couldn't fix" forever (user 2026-09-15).
+    /// so a mod address captured from a vanilla run points at where its data is no longer: the dungeon's message text then
+    /// paints across the `gaiji` glyph sheet (see <see cref="DungeonMessageBank"/>, which resolves its own address from the
+    /// engine's live pointer), and the bone-door bypass and the Ungaga door fixes fail their value checks and log "couldn't
+    /// fix" forever.
     ///
     /// The shift is (live chara cap − 210000) × 16: the heap is the only pool the mod resizes and the carve is sequential.
     /// Callers must still VALIDATE what they find — check the engine's own value (the door type, the 150.0 door distance)

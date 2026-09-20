@@ -20,7 +20,7 @@ motion with forward kinematics (see game_data/docs/mot-format.md sec.10 for the 
       that node -- hands, feet, face, hat, hair, cloth, bag, belt... plus one big body mesh "skin"
       (whole T-pose body, ~400 verts) attached at/near the root. The small parts animate perfectly by
       drawing them at their owner node's animated world transform. The big body mesh spans many joints,
-      so it is SKINNED. The REAL per-vertex weights live in the pack's `.wgt` (decoded 2026-09-12 — the
+      so it is SKINNED. The REAL per-vertex weights live in the pack's `.wgt` (decoded  — the
       mot_codec note calling it a "vertex-morph" list was wrong): one track per bone (w0 = the mesh's
       node index, w1 = the BONE's node index, w2 = 20), whose "keyframes" are (frame = vertex index,
       value[0] = weight in percent); every vertex is covered, weights sum to 100, up to 3-5 influences.
@@ -463,7 +463,7 @@ def mdt_triangles_tex(m):
     — and `Mdt.uv` holds the normals while `Mdt.norm` holds the texture coordinates. Measured, not guessed: every entry of the
     first block is a UNIT vector with a constant 1.0 fourth component, and every entry of the second is (u, v, 1.0, 0.0) with u
     and v inside 0…1. Texturing through the wrong one gives a mapping that looks almost plausible — a head's normals vary like a
-    spherical projection — but squeezes a whole face onto the muzzle (2026-09-14). The names are left alone because the bake
+    spherical projection — but squeezes a whole face onto the muzzle. The names are left alone because the bake
     writes both blocks through them and its output is byte-identical; use `mdt_uvs` rather than reading either directly."""
     tris, uvs, mats = [], [], []
     for prim, midx, recs in m.submeshes:

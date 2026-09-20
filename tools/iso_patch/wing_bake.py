@@ -44,12 +44,12 @@ MASK_TEX = 'catcape'                                    # to cat_kao, so it ride
                                                         # up again at draw time (DrawVu1 makes no texture call at all). A
                                                         # private 'catmask' entry never came through: the mask drew untextured
                                                         # and so took the ambient straight, which is what made it pink instead
-                                                        # of red. catcape is the one name proven to resolve (2026-09-15).
+                                                        # of red. catcape is the one name proven to resolve.
 WING_TEX = 'catwing'                                    # the flat white texture (build_cat_pack bakes it)
 CAPE_NODE = 'cat_cape'                                  # the cloth's FRAME node: its MDT is the rest lattice (engine order, see below)
 CAPE_TEX = 'catcape'                                    # the flat yellow texture
 CAPE_CLO = 'catcape.clo'                                # the cloth definition record (CommandCLOTH → InitCloth)
-# The .clo grammar (RE'd 2026-09-13, Step__6CCloth 0x13b8a0 / Initialize 0x13d050 / CreateVUData 0x13c5f0). The physics numbers
+# The .clo grammar (RE'dStep__6CCloth 0x13b8a0 / Initialize 0x13d050 / CreateVUData 0x13c5f0). The physics numbers
 # come from cat_wings.CAPE_PHYSICS (which documents why this cape carries no gravity): SIZE outer, inner
 # (1..16 each; outer → CCloth+0x2C = the WIDTH, inner → +0x30 = the HANG). Particle (a, b) = MDT vertex a*inner + b, slot a*16 + b;
 # the engine pins every (a, 0) to LW(anchor) × rest, so inner index 0 is the collar edge and the rest hangs along b; the draw is

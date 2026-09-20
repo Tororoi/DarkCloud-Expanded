@@ -102,8 +102,8 @@ namespace Dark_Cloud_Improved_Version
         public const int dunMessageWidth = 0x21EB6438;          // Value is equal to the number of chars in a string (Ex: 5 -> width of a 5 char string)
         public const int dunMessageHeight = 0x21EB643C;         // Value is equal to the number of lines of a string paragraph (Ex: 2 -> paragraph with 2 lines)
         // ⚠ The dungeon message TEXT addresses are not constants: they live in a pool the dungeon carves at GameInit, so they
-        // move whenever a pool before them changes size (the cat's character heap moved them 880,512 B, and the writes then
-        // landed on a glyph sheet — struck letters everywhere, 2026-09-15). Resolve them with DungeonMessageBank.TextAddress
+        // move whenever a pool before them changes size (the mod's bigger character heap moves them 880,512 B; a write to a
+        // captured address lands on the glyph sheet and strikes letters). Resolve them with DungeonMessageBank.TextAddress
         // (message ids 10 and 3319). These three are what a VANILLA dungeon happened to use, kept for reference only.
         //   dunMessage10 = 0x20998BB8 (157 B)   dunMessage11 = 0x20998C8E (172 B)   dunMessageLastEnemyName = 0x20999EE8
         public const int dunMessageDuration = 0x21EA7694;       //How long to show the message

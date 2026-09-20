@@ -545,7 +545,7 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>Guest bounds of the hijacked-phdr3 segment; RegionEnd − RegionStart is its p_filesz/p_memsz.
             /// RegionStart must stay 16KB-aligned (page isolation — see the class doc) and 0x80-aligned (p_align).</summary>
             internal const uint RegionStart = 0x01FB0000;
-            internal const uint RegionEnd   = 0x01FB4000;   // ⚠ the band can NEVER grow past this: 0x1FB4000.. is runtime data (TownAddresses.BobberPtr, then Mailbox.CatBase) — code there crashed PCSX2 (PINE writes into a compiled page, 2026-09-19)
+            internal const uint RegionEnd   = 0x01FB4000;   // ⚠ the band can NEVER grow past this: 0x1FB4000.. is runtime data (TownAddresses.BobberPtr, then Mailbox.CatBase) — code there crashes PCSX2 (a PINE write into a compiled page)
             /// <summary>ELF-file offset the segment loads from (span RegionEnd−RegionStart, zero-filled at patch
             /// time; formerly .reldun debug bytes — outside every phdr's file extent, never read at runtime).</summary>
             internal const uint SegmentFileOff = 0x002AD000;   // 0x4000 B of dead .reldun (0x29FE60..0x2B11C8) — was 0x2AF000 for 0x2000
@@ -794,9 +794,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Where a find/replace job's old→new pairs live, just past the jobs: 16 B each.</summary>
         internal const int  CatCopyPairsOff   = 0x10 + CatCopyQueueJobs * CatCopyJobStride;   // 0x910
         /// <summary>How many old→new pairs a sweep can carry. MUST cover every name in DivineBeastCat.CatTextureNames —
-        /// there are TEN, and a first cut of 8 silently dropped the last two. One of them was catcape, which the MASK draws
-        /// with, so its register never moved, it kept pointing into her old block and the mask came out black.
-        /// The count is checked against this now rather than truncated.</summary>
+        /// there are TEN. A name that does not fit is silently dropped, and a dropped name's register keeps pointing into her
+        /// old block (catcape is one the MASK draws with: dropped, the mask draws black). The count is checked against this
+        /// rather than truncated.</summary>
         internal const int  CatCopyMaxPairs   = 16;                                           // → the block ends at 0xA10
 
         /// <summary>The borrowed shot config in use (ElfCave.BorrowedShotsEnter keeps it entered in the main-character effect

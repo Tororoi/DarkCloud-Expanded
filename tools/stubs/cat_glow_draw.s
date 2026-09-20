@@ -125,7 +125,7 @@ lui   $t9, 0x002A
 lwc1  $f8, 0x19DC($t9)         # DrawFire adds this torch lift (4.6) to the height: cancel it so the glow centres on the torso
 lwc1  $f6, 0x0024($t6)
 sub.s $f6, $f6, $f8
-lwc1  $f8, 0x4240($t0)         # CatGlowLift: the mod's height nudge (negative = lower; user 2026-09-12: it sat just above the cat)
+lwc1  $f8, 0x4240($t0)         # CatGlowLift: the mod's height nudge (negative = lower; it sat just above the cat)
 add.s $f6, $f6, $f8
 swc1  $f6, 0x0024($t6)
 lwc1  $f12, 0x41E8($t0)        # CatGlowScale → f12, the draw's scale (the torches use 1.0; the flame sprite is 45 × 22.5 units at 1.0)

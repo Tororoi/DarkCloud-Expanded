@@ -250,8 +250,7 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(HookAddr), Jal(CaveAddr));
         }
 
-        // (A "cast-trajectory scale" cave hooked into the FishLineSetUki/SetHook tails was tried here and
-        // REMOVED 2026-08: the throw state (chara_fishing==3) passes the -1 sentinel weight, so the bobber is
+        // (No "cast-trajectory scale" cave hooks the FishLineSetUki/SetHook tails: the throw state (chara_fishing==3) passes the -1 sentinel weight, so the bobber is
         // NOT bone-pinned during the cast — the vanilla throw is ROPE TRANSMISSION (the short taut line slings
         // the bobber; cast reach ≈ line length), and a pin-target scale never executes. The cast boost is the
         // C#-side LINE PAY-OUT in CustomFishingSpot instead: sling at vanilla length, then ramp distpAbove out

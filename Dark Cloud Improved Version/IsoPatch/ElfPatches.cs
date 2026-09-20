@@ -152,7 +152,7 @@ namespace Dark_Cloud_Improved_Version
         {
             const uint SegVa   = CodeCaves.ElfCave.RegionStart;
             const uint SegOff  = CodeCaves.ElfCave.SegmentFileOff;
-            const uint SegSize = CodeCaves.ElfCave.RegionEnd - CodeCaves.ElfCave.RegionStart;   // 0x4000 (2026-09-12: grown for the cat glow cave; it can never grow past 0x1FB4000 — runtime data there)
+            const uint SegSize = CodeCaves.ElfCave.RegionEnd - CodeCaves.ElfCave.RegionStart;   // 0x4000 (it can never grow past 0x1FB4000 — runtime data there)
 
             if (phnum != 4)
                 throw new IOException($"Expected 4 ELF program headers, got {phnum} — wrong ISO/version.");

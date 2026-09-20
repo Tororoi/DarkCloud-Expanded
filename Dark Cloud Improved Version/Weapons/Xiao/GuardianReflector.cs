@@ -5,7 +5,7 @@ using System.Threading;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// Angel Gear "Guardian Reflector" (roadmap PR 7; pool RE in game_data/docs/angelgear-reflector-re.md).
+    /// Angel Gear "Guardian Reflector" (roadmap PR 7).
     /// While Xiao guards with the Angel Gear — or with Super Steve carrying an Angel Gear SynthSphere
     /// (<see cref="SuperSteveAbilities.AttachedSphere"/>), the copy then being Super Steve itself: every slingshot
     /// shares the rig, KEY table and pouch track the prop reads by name — a GIANT COPY of her slingshot stands IN
@@ -14,7 +14,7 @@ namespace Dark_Cloud_Improved_Version
     /// when an enemy is nearer), else the nearest enemy, else straight ahead — and, while it fires,
     /// the enemy it is about to shoot.
     ///
-    /// INTERCEPT &amp; RE-FIRE (user design 2026-09-08): every closing shot is claimed (latch held —
+    /// INTERCEPT &amp; RE-FIRE : every closing shot is claimed (latch held —
     /// it cannot hurt anyone). The one the slingshot faces is homed gently into the POUCH and
     /// caught there (quiet vanish); any other reaches her body and is absorbed there instead (dull
     /// white flash). Each caught shot is then RE-CREATED from the pouch — the weapon copy plays its
@@ -46,7 +46,7 @@ namespace Dark_Cloud_Improved_Version
         private const float HomingRange  = 40f;    // faced shot is homed into the pouch from this range
         private const float HomingGain   = 0.35f;  // per-tick blend of its direction toward the pouch
         private const int   FireWaitMax  = 20;     // ticks a caught shot waits for the sky to clear before firing anyway
-        // SHIELD RING (user design 2026-09-09): enemies keep Xiao's CENTER as their target, but each one
+        // SHIELD RING : enemies keep Xiao's CENTER as their target, but each one
         // "sees" her at the point on a ring of the slingshot's radius along its own approach line — so it
         // walks straight at her and stops/attacks on reaching the slingshot. Pure data: the Mirage redirect
         // caves make _GET_POSITION/_GET_DISTANCE read a per-slot POINTER (CodeCaves.PtrTable); the ring
@@ -54,7 +54,7 @@ namespace Dark_Cloud_Improved_Version
         // real position (they are past the shield). Released → every pointer back to the live player.
         private const float RingRadius   = PropAhead + PropHitRadius;   // the slingshot's far face: bodies stop at the volume a swing is tested against
         private const int   RingSlots    = 20;               // per-slot entries managed (Mirage manages the same 20)
-        // MELEE HIT ON THE SLINGSHOT (user 2026-09-09): enemy swings are CCollisionData spheres in the
+        // MELEE HIT ON THE SLINGSHOT: enemy swings are CCollisionData spheres in the
         // NowColData pool, planted by CMonstorUnit::CheckDmg (0x1D9F10) only during an attack's damage
         // window (mask +0x48 bit 1 = hurts the player, owner +0x58 = slot*5+200). The player is hit
         // when CheckHitUser (0x1B5920) finds an open entry (+0x70 == +0x74) whose horizontal distance
@@ -67,13 +67,13 @@ namespace Dark_Cloud_Improved_Version
         // powders) and 1.0f for PROJECTILE/effect planters (CSHOT_EFFECT impacts, MACHINGUN, FIREBAR, thrown
         // items) — the discriminator that keeps a shot detonating near the slingshot from reading as a swing.
         private const int    ColColIdx = 0x60;
-        // ── REFLECTED DAMAGE (Stage C, RE doc §C; formula agreed 2026-09-09) ──
+        // ── REFLECTED DAMAGE (Stage C) ──
         // A reflected shot stays a latched visual (its own mask is the enemy-shot one, so the engine never
         // collides it with monsters). We track OUR in-flight shots only; on contact with a live enemy the
         // shot's wait is zeroed (the engine ends the flight next frame with the shot's own impact motion,
         // planting nothing because latched) and ONE pellet-style CollisionData entry is planted:
         //   +0x34 base = weapon ATTACK × (dungeon+1)/14  (0 = Divine Beast Cave … 6 = Demon Shaft = half attack;
-        //                user 2026-09-09: /7 read too strong for a defensive ability)
+        //                /7 read too strong for a defensive ability)
         //   +0x50 = the SHOT's element bit (pure) or its enemy-valid status bits (0x100/0x200/0x800)
         //   +0x58 = 1 (Xiao: ranged falloff + kill credit), +0x64 = her stats block, +0x6C = her ability flags
         // and CMonstorUnit::CheckDmg does defense, anti-category, resistance, No Effect, statuses, numbers.
@@ -83,7 +83,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  HitMargin = 4f;                                              // contact slack + planted-entry reach
         private const int    PlantedLifeTicks = 2;                                       // retire an unconsumed entry
         private const int    ReflectMaxTicks = 260;                                      // give up tracking (FreshTimers + slack)
-        // RULE (user 2026-09-09): melee is melee — any melee-class player-hurting sphere on the slingshot
+        // RULE: melee is melee — any melee-class player-hurting sphere on the slingshot
         // dispels it. Shots are shots — a pool shot whose BODY reaches the slingshot is caught there and
         // re-fired (see CatchAtProp), and a shot's impact sphere landing on it is swallowed, never a hit.
         private const long   HitMarkPool = 0x21EC4940;
@@ -92,7 +92,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  PropHitRadius = 6f, PropHitHeight = 14f, PropHitBelow = 2f;   // the copy's volume about its root
         private const int    HitFadeTicks = 3;             // dispel: solid → gone in 0.15 s
         private const double CooldownSeconds = 4.0;       // the bar refills from 0 to full over this after a break
-        // SHIELD HP ON THE ATTACK GAUGE (user 2026-09-09): the bottom-left speed bar (float 0x1DC44C8, 0..100;
+        // SHIELD HP ON THE ATTACK GAUGE: the bottom-left speed bar (float 0x1DC44C8, 0..100;
         // Xiao's shot needs 100 and zeroes it; a hit on her resets it to 100; MainDraw fills 128 px from it and
         // flashes at 100) shows the slingshot's HP: 5 hits, −20 each. The ISO's dun.bin patch (DunPatches)
         // makes Xiao's refill multiplier the MAILBOX word ShieldGaugeRate (pnach-seeded 1.5 while nobody owns
@@ -105,7 +105,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  GaugePerHit = 100f / ShieldHits;
         private const float  VanillaXiaoRefillMul = 1.5f;
         private const int    HitWatchMs = 16;
-        // PHYSICAL BLOCK (user 2026-09-09: a collision circle, not a per-frame clamp). CMonstorUnit::MoveCheck2
+        // PHYSICAL BLOCK (a collision circle, not a per-frame clamp). CMonstorUnit::MoveCheck2
         // (0x1DCDD0, called from Step for every enemy) zeroes an enemy's scripted movement (dir +0x1E430 /
         // speed +0x1E450) when its next position is within (its move radius +0x1E414 + 6.0) of the player
         // and it is heading toward her — the ONLY enemy-vs-player body block in the engine (MoveChecMonster
@@ -119,7 +119,7 @@ namespace Dark_Cloud_Improved_Version
         private static readonly uint[] BlockPatched  = { 0x3C030000u | (uint)((CodeCaves.Mailbox.ShieldBlockAddend - 0x20000000) >> 16),
                                                           0xC4610000u | (uint)((CodeCaves.Mailbox.ShieldBlockAddend - 0x20000000) & 0xFFFF) };
         private const float  VanillaBlockAddend = 6f;
-        // ENGINE-SIDE CATCH (user 2026-09-09: no per-tick collision checks). checkCollision (0x1AB740) is every
+        // ENGINE-SIDE CATCH (no per-tick collision checks). checkCollision (0x1AB740) is every
         // shot's hit-the-player test; its player-position load (`lui $v0,0x1ea; addiu $a1,$v0,0x1d30` @0x1AB828,
         // $v0 dead after) becomes a POINTER read of Mailbox.ShotHitTarget. Solid shield → pointer = the copy's
         // shot-target node (pouch lowered by her 14-unit body lift, engine-refreshed every draw) → shots hit the POUCH natively at frame

@@ -363,11 +363,11 @@ namespace Dark_Cloud_Improved_Version
                         // → RESTORE the vanilla gates (they don't auto-revert). 0 (town) is set below so the shared
                         // town overlay at those addresses is never touched.
                         // 1 = decoy up (NOP scene+step gates; a hold freezes the clone's own slot instead, so the
-                        // PNACH's 3 = "up but paused" state is no longer written); 2 = dungeon, no decoy (restore vanilla).
+                        // PNACH's 3 = "up but paused" state is never written); 2 = dungeon, no decoy (restore vanilla).
                         // Guardian Reflector's slingshot prop and Divine Beast Title's cat share this gate flag
                         // (and the chara slots / caves): while either copy is up, IT drives the flag — stand down.
                         // (Mirage and Xiao's weapons can never be wielded simultaneously.) A competing 2 here made
-                        // the slot loop run only on the frames the other writer won — the cat flickered (2026-09-10).
+                        // the slot loop run only on the frames the other writer won — the cat flickered.
                         if (!SlingshotProp.Active && !DivineBeastCat.Active)
                             Memory.WriteInt(CodeCaves.MirageSceneGateFlag, (_decoyActive && CharacterClone.IsActive) ? 1 : 2);
                         sleep = FastTickMs;

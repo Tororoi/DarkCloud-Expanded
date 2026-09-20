@@ -7,18 +7,14 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// The dungeon overlay loads <c>dun/message/ww_mes/dunmsd00_&lt;lang&gt;.mes</c> into a pool at GameInit and hands the
     /// address to ClsMes — <c>SetBuff__6ClsMes</c> (0x14DA00) stores it at +0x17A0. The mod overwrites two of those messages
-    /// with its own text (<see cref="Dayuppy"/>), and used to do that at addresses captured from a vanilla run:
-    /// 0x20998BB8 (message 10) and 0x20999EE8 (message 3319), i.e. the bank at 0x00998840 plus each message's own offset.
+    /// with its own text (<see cref="Dayuppy"/>). In a vanilla dungeon they sit at 0x20998BB8 (message 10) and 0x20999EE8
+    /// (message 3319), the bank at 0x00998840 plus each message's own offset — but those are not constants: GameInit carves
+    /// every dungeon pool out of one 27 MB buffer in order, so the mod's 55,000-unit bigger character heap pushes everything
+    /// carved after it, this bank included, up by 880,512 B. A write to a captured vanilla address lands in the TEXTURE pool
+    /// instead, on the `gaiji` glyph sheet the dungeon draws all its text from: a ~200-byte band of message text straight
+    /// through one row of letters, struck through in every dungeon window.
     ///
-    /// Those constants died the moment the cat's character heap grew. GameInit carves every dungeon pool out of one 27 MB
-    /// buffer in order, so raising the heap by 55,000 units pushed everything carved after it — this bank included — up by
-    /// 880,512 B. The writes kept going to the old addresses, which now land in the TEXTURE pool, on top of the `gaiji`
-    /// glyph sheet the dungeon draws all its text from: a ~200-byte band of message text straight through one row of
-    /// letters. Every dungeon window drew b, c and d with a line struck through them, in dungeons only, with the app
-    /// closed, on the patched disc alone — and the bytes recovered from the glyph sheet decoded as "Horn Head … no sign of
-    /// monsters on this floor" (user 2026-09-15).
-    ///
-    /// So the address is resolved from the live bank instead, and a bank that cannot be read means the message is skipped
+    /// So the address is resolved from the live bank, and a bank that cannot be read means the message is skipped
     /// rather than written somewhere arbitrary. The .mes layout (see MesTextBaker): u16 count, u16 endOff,
     /// count × {u16 id, u16 wordOff}, then the text; message <c>id</c>'s text starts at byte 2 × (count + wordOff + 1).
     /// </summary>

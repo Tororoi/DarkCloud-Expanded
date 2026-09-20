@@ -66,7 +66,7 @@ GLOW_CROSS = 0.125                              # radius fraction where the mix 
 # is already squeezing. Rows 0-5 are the elements below; the mod picks the row through
 # Mailbox.CatGlowPalRow (ONE-based, 0 = let the cave derive it from the equipped element).
 GLOW_LOOKS = [(GLOW_CORE, GLOW_OUTER),                 # 6 Divine Beast Title — the authored blue
-              ((215, 215, 215), (180, 190, 215)),      # 7 Angel Shooter — white, a cool edge (user 2026-09-16: good as is)
+              ((215, 215, 215), (180, 190, 215)),      # 7 Angel Shooter — white, a cool edge
               ((255, 238, 180), (255, 176, 40))]       # 8 Angel Gear — gold
 # ⚠ NO MORE 64x64 DISCS FIT. Four per-element discs (orange/yellow/green/purple) were added here and FROZE the game:
 # each is 16 KB in Xiao's character pack, and the weapons/effects pools are whatever the heap has left after her
@@ -112,7 +112,7 @@ CAT_PARENT    = -1                 # UNPARENTED: LoadMDSFile 0x1262B0 calls SetP
                                    # the cat never joins her tree — no draw, no skinning, no DMA while hidden. (The
                                    # parented+hidden variant froze the weapon/party menus, whose draw buffers are
                                    # smaller than the dungeon's.) It still sits in her frame ARRAY for the runtime scan.
-FLAT_TEXTURES = False              # real cat fur (user 2026-09-10: blue/glow will be flash effects, not a retexture)
+FLAT_TEXTURES = False              # real cat fur (blue/glow will be flash effects, not a retexture)
 FLAT_RGBA     = (150, 190, 255, 0x80)   # pale blue — the "blue cat" — GS alpha 0x80 = opaque
 VERSION_MARK  = "//catpack v18 wings+cape"
 KEY_START     = 64                 # cat channel key ids 64.. (her own ids end at 45)

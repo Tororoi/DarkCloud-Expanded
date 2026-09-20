@@ -108,7 +108,7 @@ namespace Dark_Cloud_Improved_Version
 
         // Model scale table (base 0x21E18530, stride 0x3510 per slot) — separate from enemy slot.
         // "BODY SIZE" triple, set from the MODEL file's info.cfg `BODY_SIZE height,width,depth` line via
-        // CommandBODY_SIZE (RE'd 2026-06-20; see ModelScaleOffsets.BodyWidth/BodyHeight/BodyDepth). Read live (not cached at spawn).
+        // CommandBODY_SIZE (RE'd; see ModelScaleOffsets.BodyWidth/BodyHeight/BodyDepth). Read live (not cached at spawn).
         // +0x020: body WIDTH / girth radius (7 small → 14 Gunny → 32 Prajna) — CCharacter::PickUpPoly floor-poly
         //         pickup radius (min 2.0, terrain collision) + _GET_NPC_BODY_SIZE script getter. No observable effect.
         internal float? BodyWidth;
@@ -1095,7 +1095,7 @@ namespace Dark_Cloud_Improved_Version
             Id=65, TableIndex=57, Name="Blizzard", ModelCode="e65a", ModelFootprint=51196,
             Abs=8, MinGoldDrop=5, DropChance=30, StealItemId=162, RareDropItemId=82,
             MaxHp=750, DamageReduction=5, WeaponDefense=0, KnockbackMult=0.5f,
-            Category=EnemyCategory.Metal, FireRes=100, IceRes=0 /* vanilla 100; ISO patch ElfPatches.PatchBlizzardIceImmunity (user 2026-09-12) */, ThunderRes=140, WindRes=140, HolyRes=100,
+            Category=EnemyCategory.Metal, FireRes=100, IceRes=0 /* vanilla 100; ISO patch ElfPatches.PatchBlizzardIceImmunity  */, ThunderRes=140, WindRes=140, HolyRes=100,
             ItemDamageRes=100, ItemStatusRes=50,
             BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f, EntityScale=14.0f, EntityScaleCopy=14.0f,
             MeleeDamage=new int[]{119,119,119,119,105,90,75}, ProjectileDamage=new int[]{105,105} };
@@ -2499,7 +2499,7 @@ namespace Dark_Cloud_Improved_Version
         };
         /// <summary>Enemies the Divine Beast cat reaches with its VERTICAL leap (ready crouch → the town ladder jump's
         /// float-up → fall) instead of the flat pounce: flyers, hoverers, and the tall or large bodies whose hit spheres
-        /// sit above a cat-height jump (user list, 2026-09-11). Keyed by species id, so the "(Enhanced)" variants —
+        /// sit above a cat-height jump . Keyed by species id, so the "(Enhanced)" variants —
         /// which share their base species' id — are covered without being listed. A miniboss spawn (MiniBoss, 1.5×
         /// model) counts as well, by slot, regardless of species.</summary>
         internal static readonly Dictionary<ushort, string> VerticalLeapTargets = new()

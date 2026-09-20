@@ -396,7 +396,7 @@ namespace Dark_Cloud_Improved_Version
         internal const uint KiruNameWord  = 0x7572696B; // "kiru" little-endian (the fuusya root frame)
         internal const int  FuusyaFrameStride = 0x270;  // CFrame object size; fkiri = kiru + this
 
-        // ── Direct POINTER to the fuusya roots (no RAM scan) — RE'd 2026-06-30, offsets CONFIRMED in-game ──
+        // ── Direct POINTER to the fuusya roots (no RAM scan) — RE'd: offsets CONFIRMED in-game ──
         // Toan's charge whirl lives in the main-character effect object (a CSHOT_EFFECT) at the FIXED global
         // 0x1e8da60 (MMU 0x21E8DA60). Set by MainChara_Effect (dun 0x1dba230: Entry2(0x1e8da60,…); gp slot
         // uGpffff9cfc also points at it). It is a POOL of up to 8 CONCURRENT effect instances (CSHOT_EFFECT::
@@ -516,7 +516,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  BreakStateAnimation   = 5;
         internal const int  BreakStateWindDown    = 6;
 
-        // ⚠ LESSON (2026-07-05): PINE writes to EE CODE pages crash PCSX2 outright — the first
+        // ⚠ LESSON: PINE writes to EE CODE pages crash PCSX2 outright — the first
         // value-changing poke to a hot instruction killed the emulator the same second (log:
         // 19:24:09). Identical-value writes were benign. ALL patching must stay data-only; the
         // 7 Branch Sword status-break effect is therefore implemented post-hoc on the sphere
@@ -579,7 +579,7 @@ namespace Dark_Cloud_Improved_Version
     /// as CollisionData: +0x58 = <see cref="OffOwner"/>, +0x60 = <see cref="OffUserCol"/>, +0x64 = <see cref="OffAntiPtr"/>,
     /// +0x6C = <see cref="OffWepFlags"/>, +0x5C = <see cref="OffA060"/>, +0x68 = <see cref="OffA110"/>; the config gives the
     /// victim mask (+0x48: 1 = the player, 2 = enemies), the hit reaction (+0x44), the element (+0x40), the wait (+0x38) and
-    /// the default damage (+0x3C). RE: GuardianReflector (game_data/docs/angelgear-reflector-re.md), BorrowedShots.
+    /// the default damage (+0x3C). RE: GuardianReflector, BorrowedShots.
     /// </summary>
     internal static class ShotEffectPack
     {

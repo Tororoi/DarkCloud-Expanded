@@ -6,7 +6,7 @@ windows the game plays) is exported through the model viewer's codec (extract_mo
 
 A second entry shows the untouched s86 source cat (gedit\\s86\\chara\\c04cat.chr) with every clip its own cfg names, for
 comparison, and a third shows Dran (dun\\monstor\\c12a.chr) with every clip — the wing donor for the Angel Shooter / Angel
-Gear cat, so the wing poses to port can be judged (user 2026-09-12). Output: cat_viewer.html next to this script (or --out).
+Gear cat, so the wing poses to port can be judged . Output: cat_viewer.html next to this script (or --out).
 
     python3 tools/model_viewer/cat_viewer.py [--iso PATH] [--out PATH]
 """
@@ -230,8 +230,8 @@ def main():
                 r'CAPE_RGBA\s*=\s*\((\d+),\s*(\d+),\s*(\d+)', [128, 28, 0])
     tint = _grab(os.path.join(here, '..', '..', 'Dark Cloud Improved Version', 'Weapons', 'Xiao', 'DivineBeastCat.cs'),
                  r'CapeTint\s*=\s*\{\s*([\d.]+)f?,\s*([\d.]+)f?,\s*([\d.]+)f?', [80, 20, 10])
-    # a build stamp in the header: the one reliable way to tell a stale page (a phone had cached one for a whole debugging
-    # round, 2026-09-14) from a current one without opening dev tools
+    # a build stamp in the header: the one reliable way to tell a stale page (a phone can cache one for a whole debugging
+    # round) from a current one without opening dev tools
     html = html.replace('/*__BUILT__*/', 'built ' + __import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M'))
     html = html.replace('/*__CAPE_DEFAULTS__*/', json.dumps({'tex': tex, 'tint': tint}) + ' || ')
     # The mask cannot borrow the cape's red: that red is an ambient the runtime adds around the CLOTH draw alone, and the mask
