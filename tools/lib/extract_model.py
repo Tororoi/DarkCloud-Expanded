@@ -2,7 +2,7 @@
 r"""extract_model.py -- Dark Cloud character `.chr` -> compact JSON for the WebGL model viewer.
 
 Cracks and exports, per character model, everything the viewer needs to render the mesh and play a
-motion with forward kinematics (see game_data/docs/mot-format.md sec.10 for the format write-up):
+motion with forward kinematics (see the .mot format notes sec.10 for the format write-up):
 
   SKELETON  -- the `.mds` CFrame node table (77-ish 0x70-byte records after the 0x18 header):
       +0x00  char[0x20]  node name
@@ -40,15 +40,12 @@ motion with forward kinematics (see game_data/docs/mot-format.md sec.10 for the 
       (ordinal) is what the town engine hard-wires (idle=0, run=1, walk=2, fall=8, land=9); we surface
       the decoded Japanese name + an English gloss + the [start,end] window + baked speed.
 
-Usage:
-    source .env
-    python3 tools/lib/extract_model.py            # build every model, bake tools/model_viewer/model_viewer.html
-    python3 tools/lib/extract_model.py --dump c01d # print one model's skeleton/motion summary
+This is the codec: the bakes (cat_wings.py, wing_bake.py) import it for the skeleton, mesh, weight and track readers.
+The WebGL viewers that display what it reads are dev tools outside the repo (a page baker builds every model from
+enumerate_models + build_model into a template's `/*__MODEL_DATA__*/` placeholder).
 
 Heavy arrays (mesh positions, triangle indices, keyframe values) are quantized to int16/uint16 and
-base64-packed so the whole multi-model viewer stays small. The viewer template
-(tools/model_viewer/viewer_template.html) has a `/*__MODEL_DATA__*/` placeholder that this script
-replaces with `const MODELS = {...}` to produce the self-contained tools/model_viewer/model_viewer.html.
+base64-packed so a multi-model page stays small.
 """
 import base64
 import zlib
@@ -818,123 +815,3 @@ def build_model(spec, kf_stride=1, tri_keep=1.0, skeleton_only=False):
 
 # ---------------------------------------------------------------- html bake
 # fidelity levels, coarsest last: (keyframe stride, triangle keep-fraction, skeleton-only)
-LEVELS = [(1, 1.0, False), (2, 1.0, False), (2, 0.5, False), (3, 0.35, False), (3, 0.0, True)]
-
-
-def _model_bytes(m):
-    return len(json.dumps(m, separators=(',', ':'), ensure_ascii=False).encode('utf-8'))
-
-
-def bake_html(budget_mb=15.5):
-    specs = enumerate_models()
-    print(f"Enumerated {len(specs)} unique character models (deduped by content hash). Building...")
-
-    models, used_specs, levels, nbytes = [], [], [], []
-    for sp in specs:
-        try:
-            m = build_model(sp, *LEVELS[0])
-        except Exception as e:
-            sys.stderr.write(f"  SKIP {sp['stem']}·{sp['folder']}: {e}\n")
-            continue
-        models.append(m); used_specs.append(sp); levels.append(0); nbytes.append(_model_bytes(m))
-
-    viewer_dir = os.path.join(HERE, '..', 'model_viewer')            # the template and the baked page live with the viewers
-    tpl_path = os.path.join(viewer_dir, 'viewer_template.html')
-    out_path = os.path.join(viewer_dir, 'model_viewer.html')
-    with open(tpl_path, 'r', encoding='utf-8') as f:
-        tpl = f.read()
-    budget = int(budget_mb * 1024 * 1024) - len(tpl.encode('utf-8')) - 4096   # data budget
-
-    # ---- escalating decimation to fit the budget, in the coordinator's priority order ----
-    # tier 0 = e02 Matataki (decimate first — confirmed NOT the target, reference only),
-    # tier 1 = Toan cutscene variants, tier 2 = other event/cutscene models (incl. the new Goro
-    # cutscenes), tier 3 = PROTECTED: every ally PRIMARY body (rank 0 town/field + rank 1 dungeon,
-    # incl. the stair packs) — never decimated, never dropped. Dropping (last resort) hits tier 0
-    # then 1 then 2; tier 3 is untouchable.
-    def tier(sp):
-        if sp['char'] == E02_GROUP:
-            return 0
-        if sp['rank'] != 2:
-            return 3                                   # ally primary bodies + stair packs
-        return 1 if sp['char'] == 'Toan' else 2        # cutscene/event variants
-
-    def cap(sp):
-        return 0 if tier(sp) == 3 else (len(LEVELS) - 1)
-
-    reduced, dropped = [], []
-    full_total = sum(nbytes)
-    while sum(nbytes) > budget:
-        chosen = -1
-        for T in (0, 1, 2):                            # exhaust a whole tier before touching the next
-            best = -1
-            for i, sp in enumerate(used_specs):
-                if tier(sp) == T and levels[i] < cap(sp) and nbytes[i] > best:
-                    best, chosen = nbytes[i], i
-            if chosen >= 0:
-                break
-        if chosen < 0:                                 # nothing left to decimate -> drop (never tier 3)
-            di, best = -1, -1
-            for pref in (0, 1, 2):
-                for i, sp in enumerate(used_specs):
-                    if tier(sp) == pref and nbytes[i] > best:
-                        best, di = nbytes[i], i
-                if di >= 0:
-                    break
-            if di < 0:
-                break
-            dropped.append(models[di]['label'])
-            for lst in (models, used_specs, levels, nbytes):
-                del lst[di]
-            continue
-        levels[chosen] += 1
-        models[chosen] = build_model(used_specs[chosen], *LEVELS[levels[chosen]])
-        nbytes[chosen] = _model_bytes(models[chosen])
-    for i, lv in enumerate(levels):
-        if lv > 0:
-            reduced.append((models[i]['label'], lv))
-
-    data_js = 'const MODELS = ' + json.dumps(models, separators=(',', ':'), ensure_ascii=False) + ';'
-    html = tpl.replace('/*__MODEL_DATA__*/', data_js)
-    with open(out_path, 'w', encoding='utf-8') as f:
-        f.write(html)
-
-    # ---- report ----
-    print("\nEmbedded models (grouped, in dropdown order):")
-    cur = None
-    for m in models:
-        if m['group'] != cur:
-            cur = m['group']; print(f"  == {cur} ==")
-        s = m['_stats']
-        tag = 'cast' if m['group'] == E02_GROUP else ['town/field', 'dungeon', 'event'][s['rank']]
-        print(f"    {m['label']:52} {tag:10} meshes={s['meshes']:2} verts={s['verts']:5} "
-              f"tris={s['tris']:5} tracks={s['tracks']:3} motions={s['motions']:2}"
-              f"{'  SKEL-ONLY' if m['skelOnly'] else ''}")
-    kb = os.path.getsize(out_path) / 1024
-    print(f"\nFull (undecimated) data would be {full_total/1024/1024:.2f} MB; budget {budget_mb} MB.")
-    if reduced:
-        lv_names = ['full', 'kf/2', 'kf/2+tri/2', 'kf/3+tri/3', 'skeleton-only']
-        print(f"Decimated {len(reduced)} models to fit: " +
-              ', '.join(f"{lbl.split(' · ')[0]}={lv_names[lv]}" for lbl, lv in reduced))
-    if dropped:
-        print(f"DROPPED {len(dropped)} (Toan cutscene, last resort): " +
-              ', '.join(d.split(' · ')[0] for d in dropped))
-    print(f"\nWrote {out_path}  ({kb:.0f} KB, {kb/1024:.2f} MB)  with {len(models)} models")
-    return out_path, models
-
-
-def dump_model(short):
-    for sp in enumerate_models():
-        if short.lower() in sp['sub'].lower():
-            m = build_model(sp)
-            print(json.dumps({'label': m['label'], 'group': m['group'], 'stats': m['_stats'],
-                              'motions': m['motions']}, indent=2, ensure_ascii=False))
-            return
-    print("no match for", short)
-
-
-if __name__ == '__main__':
-    if len(sys.argv) > 2 and sys.argv[1] == '--dump':
-        dump_model(sys.argv[2])
-    else:
-        budget = float(sys.argv[1]) if len(sys.argv) > 1 else 15.5
-        bake_html(budget)

@@ -192,7 +192,7 @@ namespace Dark_Cloud_Improved_Version
         //                                     index = id-81; only the head is zero (effectless items).
         //                                     +0x0A s16 base, +0x0C s16 rand-range: ItemUseFunc rolls
         //                                     base + rand()%range (defense items 136-141: 5+rand%3).
-        //                                     Full RE: game_data/docs/defense-items-re.md)
+        //                                     Full RE: the defense-items RE notes)
 
         /// <summary>
         /// Static per-item attribute table in the ELF — NOT FOUND. The research session confirmed

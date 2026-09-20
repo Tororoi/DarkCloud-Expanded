@@ -3,7 +3,7 @@
 sub-file, decode it into tracks/keyframes, edit or splice a named motion's frame range, and
 rebuild a byte-valid `.mot` (and `.chr`) the game will load.
 
-FORMAT (reverse-engineered from SCUS_971.11; see game_data/docs/mot-format.md for the full write-up):
+FORMAT (reverse-engineered from SCUS_971.11; see the .mot format notes for the full write-up):
 
   A `.chr` is a PACK: a flat, chained sequence of records, NO front index. Each record is
       0x00  name        up to 0x40 bytes, NUL-terminated, '\' or '/' path seps (basename matched)

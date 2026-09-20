@@ -53,8 +53,8 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Brownboo's in-water ladder (s04r*) XZ positions, from gedit/s04/mapinfo.cfg. Used to
-        /// reclaim the FLOOR platforms on top of each ladder. Radius/height must match the viewer's van_cut
-        /// (tools/brownboo/brownboo_viewer.py: LAD_POS / LAD_R / LAD_Y).</summary>
+        /// reclaim the FLOOR platforms on top of each ladder. Radius/height must match the Brownboo scene viewer's van_cut
+        /// (LAD_POS / LAD_R / LAD_Y; the viewer is a dev tool outside the repo).</summary>
         private static readonly (float x, float z)[] BrownbooLadders =
         {
             (0f, 74f), (-57f, 48f), (32f, -67f), (82f, 109f), (62f, -127f), (-55f, -116f), (-91f, 76f),
@@ -84,9 +84,9 @@ namespace Dark_Cloud_Improved_Version
             return false;
         }
 
-        /// <summary>Append the town's fabricated fishing collision from the DCFC .bin to cpoly — the decoded
-        /// rock triangles plus any hand-picked triangles (both baked into the .bin by
-        /// tools/build_fishing_collision.py). Runs after the floors-only compaction, so it lands in the slots
+        /// <summary>Append the town's fabricated fishing collision from the DCFC .bin to cpoly — the walls the native
+        /// geometry lacks plus any hand-picked triangles (the ISO patch flow builds the .bin from the scene in the ISO,
+        /// tools/iso_patch/bake_town_scene_parts.py). Runs after the floors-only compaction, so it lands in the slots
         /// freed by the dropped walls.</summary>
         internal static void AppendCustomCollision(int mapNo)
         {
@@ -146,24 +146,18 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Where the FULL native gather (floors + walls, pre-removal) is written at the CURRENT cast
-        /// rect, for the viewer (tools/brownboo/brownboo_viewer.py) to split into floor/slope/wall. Overwrites the
+        /// rect, for the Brownboo scene viewer (a dev tool outside the repo) to split into floor/slope/wall. Overwrites the
         /// stale reference each capture, which is correct — the rect it reflects is whatever is live now.</summary>
         // Dev-only diagnostic; runs only when DC_DUMP_DIR is set (see .env.sample), else skipped — no fallback.
-        // Per-town path (game_data/<town>/vanilla_cpoly.csv, sibling of DC_DUMP_DIR) so each town's dump feeds
-        // its own viewer and towns don't clobber each other. DC_DUMP_DIR itself points at game_data/brownboo,
-        // so map 14 resolves to exactly the historical path.
+        // Per-town path (<DC_DUMP_DIR's parent>/<town>/vanilla_cpoly.csv) so each town's dump feeds its own viewer
+        // and towns don't clobber each other.
         private static string FullGatherCsvFor(int mapNo)
         {
             string town = mapNo switch { 2 => "queens", 14 => "brownboo", 23 => "yellowdrops", _ => null };
             if (town == null) return null;
-            // Prefer DC_DUMP_DIR's parent (game_data) when the env var is set; otherwise derive game_data from
-            // the running assembly's location (bin/Debug/net8.0 -> repo root) so the dump works even when the
-            // mod is launched from an IDE that never sourced .env.
             string dumpDir = Environment.GetEnvironmentVariable("DC_DUMP_DIR");
-            string gameData = !string.IsNullOrEmpty(dumpDir)
-                ? Path.GetDirectoryName(dumpDir.TrimEnd('/', '\\'))
-                : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "game_data"));
-            return Path.Combine(gameData, town, "vanilla_cpoly.csv");
+            if (string.IsNullOrEmpty(dumpDir)) return null;
+            return Path.Combine(Path.GetDirectoryName(dumpDir.TrimEnd('/', '\\')), town, "vanilla_cpoly.csv");
         }
 
         /// <summary>Dump every cpoly triangle (3 verts + normal) to a CSV. One line per triangle:

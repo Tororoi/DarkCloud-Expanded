@@ -1,4 +1,5 @@
-"""Bake the wing graft (tools/lib/cat_wings.py, build_winged_cat) into the cat pack as real disc data.
+"""Bake the wing graft (tools/lib/cat_wings.py, build_winged_cat) into the cat pack as real disc data — the authoring model of
+IsoPatch/WingBake.cs, which the app runs at patch time (byte-exact port); build_cat_pack.assemble() runs this for dev builds.
 
 The viewer authors the wings in its own skinning model (per-bone positions p0/p1 per vertex, some of them fitted to TWO
 poses at once). The engine's skinner (MotionProc2, docs/custom-fish-pipeline.md §3) is plain linear blend skinning: one

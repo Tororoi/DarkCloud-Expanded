@@ -11,7 +11,7 @@ cave faithfully paints whatever the tables hold and every diagnostic reports suc
 build so the embedded resources cannot drift from the code that defines them.
 
 Absent prerequisites are reported and SKIPPED, never fatal — a checkout without the extracted disc still builds, and
-build_cat_pack.refuse_if_palette_blob_stale refuses the ISO bake as the backstop. Only a generator that actually FAILS
+CatPackBakes.RefuseIfPaletteBlobStale (the C# bake) refuses the ISO bake as the backstop. Only a generator that actually FAILS
 is fatal, because that means a source no longer assembles.
 """
 import os, subprocess, sys

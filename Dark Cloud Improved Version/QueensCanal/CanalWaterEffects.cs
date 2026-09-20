@@ -64,7 +64,7 @@ namespace Dark_Cloud_Improved_Version
         private const int  RippleSlots  = 4;
 
         // ── WADING RIPPLE (v7 — static part drawn IN THE WATER PASS via its LAYER; full RE:
-        // game_data/docs/water-rendering-re.md §TEXANIME). The look = the plant/stilt ring look: a
+        // the water-rendering RE notes §TEXANIME). The look = the plant/stilt ring look: a
         // persistent mesh (Norune's hamon splat, ±39, part "wripple") whose e01b22 texture the town
         // TEX_ANIME animates (ring art baked in by the ISO post-step). DrawWater's static-part loop draws
         // every part whose LAYER field (+0xE4) == the pass arg (0x15) with the water texture group

@@ -9,14 +9,14 @@ using static Dark_Cloud_Improved_Version.IsoPatcher;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// Visual-MDT parse / carve / rebuild toolkit (C# port of tools/queens/carve_queens_ladder.py) and the canal-ladder
+    /// Visual-MDT parse / carve / rebuild toolkit (a port of the Python carve prototype, a dev tool outside the repo) and the canal-ladder
     /// carve that uses it: de-yaw, clip, snap, compact, world-place, re-emit. LadderWorldX is the ladder's world X
     /// (IsoPatcher.LadderClimbBottom/LadderClimbTop derive their climb points from it).
     /// </summary>
     internal static class MdtCarve
     {
         // ── canal ladder: carve the Factory metal ladder (e05a01/hasigo1) from the user's ISO and reshape it
-        //    for the Queens canal wall. Faithful C# port of tools/queens/carve_queens_ladder.py (the reference the viewer
+        //    for the Queens canal wall. Faithful port of the Python carve prototype (a dev tool outside the repo; the reference the viewer
         //    renders): de-yaw ~9.5° so the rails run parallel to X, clip the bottom off at the mid-rung gap
         //    (y=22) with edge interpolation so the rails stay watertight, snap the cut ring to the floor and
         //    shift so the donor's ground mount lands on the walkway (y=70), compact, then translate to the

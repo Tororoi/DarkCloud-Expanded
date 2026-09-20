@@ -27,10 +27,14 @@ What goes in (from gedit\s86\chara\c04cat.chr — the cat rig with the leap clip
 Runtime (Weapons/Xiao/DivineBeastCat.cs) finds `catroot` in her live tree, deep-copies the cat subtree into the
 clone caves, un-hides it and drives it with keys 64..69.
 
+The bake the app runs at patch time is IsoPatch/CatPackBakes.cs (with WingBake.cs and CatWings.cs), a byte-exact port of
+this module and its two companions; this stays as the AUTHORING model — the cat viewer (a dev tool outside the repo) runs
+assemble() in memory to show what the bake builds — and as the generator of the glow palette blob the build embeds.
+
 Usage:
-  python3 tools/iso_patch/build_cat_pack.py --iso "<patched iso>"      # install (called by IsoPatcher)
   python3 tools/iso_patch/build_cat_pack.py --dc-dir "$DC1_DATA_DIR" --out /tmp/c04b_cat.chr   # dev build
   python3 tools/iso_patch/build_cat_pack.py --dc-dir "$DC1_DATA_DIR" --test
+  python3 tools/iso_patch/build_cat_pack.py --dc-dir "$DC1_DATA_DIR" --palettes <catGlowPalettes.bin>
 """
 import math
 import os, sys, struct
@@ -39,12 +43,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 sys.path.insert(0, os.path.join(HERE, "..", "analysis"))
-import ps2iso                      # noqa: E402
 import mot_codec as mc             # noqa: E402
 import img_surgery as im           # noqa: E402
-
-SEC = ps2iso.SECTOR
-def align(x, a=SEC): return (x + a - 1) & ~(a - 1)
 
 HOST_CHR  = r"dun\mainchara\c04b.chr"
 HOST_CFG, HOST_MDS, HOST_BBP, HOST_IMG = "base.cfg", "c04b.mds", "c04b.bbp", "c04b01.img"
@@ -128,15 +128,6 @@ CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat
     (30,  40,  0.1,  "cat sit (s86 KEY 1)"),                    # 72: in place when there is no enemy to go for
 ]
 MOT_WINDOWS = [(k[0], k[1]) for k in CAT_KEYS]
-
-# ⚠ The cat must NOT go into the WEAPON packs — that overflows the weapon menu's model arena. Their vanilla
-# DATA.HD2 records (USA disc), so an ISO patched by that version is put back before the character bake.
-HOST_VANILLA = (0x195D5800, 0x218220, 0x32BAB, 0x431)   # vanilla DATA.HD2 record of c04b.chr (USA disc)
-WEAPON_REVERT = {
-    r"commenu\weapon\c04w09.chr": (0x17275000, 0x90E0, 0x2E4EA, 0x13),
-    r"commenu\c04wtes.chr":       (0x168A800, 0x8A950, 0x2D15, 0x116),
-    r"dun\mainchara\c04w.pac":    (0x1985B800, 0x641A0, 0x330B7, 0xC9),
-}
 
 
 # ───────────────────────────────────────────── pack helpers ─────────────────────────────────────────────
@@ -687,105 +678,6 @@ def is_current_bake(chr_bytes):
         return False
 
 
-# ───────────────────────────────────────────── ISO install ──────────────────────────────────────────────
-def _hd2_slot(hd2_r, i): return hd2_r["ext"] * SEC + 16 + i * 32
-
-
-def _free_tail(f, dat_size, hd2_r, hed):
-    mx = 0
-    for i in range(len(hed) // 80):
-        f.seek(_hd2_slot(hd2_r, i)); off, size = struct.unpack("<II", f.read(8))
-        if 0 < off + size <= dat_size: mx = max(mx, off + size)
-    return align(mx)
-
-
-def run(iso, log=print):
-    if not os.path.exists(iso):
-        raise SystemExit(f"ISO not found: {iso}")
-    with open(iso, "r+b") as f:
-        recs = ps2iso.parse_root(f)
-        hd2_r, dat_r = recs["DATA.HD2"], recs["DATA.DAT"]
-        dat_iso = dat_r["ext"] * SEC; dat_size = dat_r["size"]
-        hed = ps2iso.read_file(f, recs["DATA.HED"])
-        tail = _free_tail(f, dat_size, hd2_r, hed)
-
-        def slot_of(name):
-            i = ps2iso.archive_find(hed, name)
-            if i is None: raise SystemExit(f"{name} not in archive")
-            return _hd2_slot(hd2_r, i)
-
-        def read_src(name):
-            f.seek(slot_of(name)); off, size = struct.unpack("<II", f.read(8)); f.seek(dat_iso + off); return f.read(size)
-
-        def redirect(name, data):
-            nonlocal tail
-            slot = slot_of(name)
-            if tail + len(data) > dat_size: raise SystemExit("out of DATA.DAT tail")
-            f.seek(dat_iso + tail); f.write(data)
-            sec, cnt = tail >> 11, (len(data) + SEC - 1) // SEC
-            f.seek(slot); f.write(struct.pack("<IIII", tail, len(data), sec, cnt))
-            f.seek(dat_iso + sec * SEC); assert f.read(len(data)) == data, f"{name} readback"
-            log(f"redirected {name}: -> {len(data):,} B @sector {sec:#x}")
-            tail = align(tail + len(data))
-
-        # Undo the weapon-pack bake of the earlier tool version, if this ISO carries it.
-        for name, vanilla in WEAPON_REVERT.items():
-            slot = slot_of(name)
-            f.seek(slot); cur = struct.unpack("<IIII", f.read(16))
-            if cur == vanilla: continue
-            rec_name = "c04w09.chr" if name.endswith(".chr") and "wtes" not in name else None
-            f.seek(dat_iso + vanilla[0]); van = f.read(vanilla[1])
-            try:
-                pk = mc.Pack.parse(van)
-                probe = pk.find("c04w09.mds") if rec_name else mc.Pack.parse(pk.find("c04w09.chr").payload).find("c04w09.mds")
-                ok = probe is not None and not has_cat(van if rec_name else pk.find("c04w09.chr").payload, "c04w09.mds")
-            except Exception:
-                ok = False
-            if not ok:
-                raise SystemExit(f"{name}: record differs from vanilla and the vanilla bytes are not where expected — refusing to revert")
-            f.seek(slot); f.write(struct.pack("<IIII", *vanilla))
-            log(f"reverted {name} to its vanilla record (earlier weapon-pack bake removed)")
-
-        refuse_if_palette_blob_stale(read_src(GLOW_SRC), log)
-        base = read_src(HOST_CHR)
-        if is_current_bake(base):
-            log("cat already in dun\\mainchara\\c04b.chr — skipped"); return
-        if has_cat(base):                                    # an older bake of this tool: back to vanilla first
-            f.seek(dat_iso + HOST_VANILLA[0]); van = f.read(HOST_VANILLA[1])
-            if has_cat(van) or mc.Pack.parse(van).find(HOST_MDS) is None:
-                raise SystemExit("c04b.chr carries an older cat bake and the vanilla bytes are not where expected — refusing")
-            f.seek(slot_of(HOST_CHR)); f.write(struct.pack("<IIII", *HOST_VANILLA))
-            log("reverted dun\\mainchara\\c04b.chr to its vanilla record (older cat bake removed)")
-            base = van
-        new_chr, rep = assemble(base, read_src(CAT_CHR), read_src(FLOAT_CHR), read_src(GLOW_SRC), read_src(DRAN_CHR), log=log)
-        log(f"Divine Beast cat (wings) assembled into c04b.chr — {rep['nodes'][1]} cat nodes, {len(rep['textures'])} textures, "
-            f"cat.mot {rep['mot_bytes']:,} B ({rep['mot_keys']} keys), {rep['size'][0]:,}->{rep['size'][1]:,} B")
-        redirect(HOST_CHR, new_chr)
-        log("DONE (Divine Beast Title cat pack)")
-
-
-def refuse_if_palette_blob_stale(glow_bytes, log=print):
-    """The six element ramps reach the game as a COMMITTED resource — Resources/isoPatch/catGlowPalettes.bin, embedded
-    into the mod at build time and written into the ELF by ElfPatches.PatchCatGlowPalettes. The PACK is re-baked on every
-    patch, but that .bin is NOT: editing GLOW_ELEMENTS and re-patching therefore changes nothing, and the glow keeps its
-    previous colours while every diagnostic reports success. That cost a full patch-and-test cycle, so
-    a bake against a stale blob is refused rather than performed."""
-    blob = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
-                        "Dark Cloud Improved Version", "Resources", "isoPatch", "catGlowPalettes.bin")
-    if not os.path.exists(blob):
-        return                                            # not building against the repo: nothing to keep in step
-    img = mc.Pack.parse(glow_bytes).find("fire.img")
-    if img is None:
-        return
-    if open(blob, "rb").read() != glow_palettes(Bank(img.payload).block("lightling")):
-        raise SystemExit(
-            "GLOW_ELEMENTS has changed but Resources/isoPatch/catGlowPalettes.bin has not.\n"
-            "The patch writes that .bin, not this table, so the glow would keep its OLD colours. Re-run:\n"
-            "    python3 tools/iso_patch/build_cat_pack.py --dc-dir <extracted disc> \\\n"
-            "        --palettes \"Dark Cloud Improved Version/Resources/isoPatch/catGlowPalettes.bin\"\n"
-            "then rebuild the mod so the new .bin is embedded, and patch again.")
-
-
 def _from_dc_dir(dc_dir):
     _, base = mc.load_pack(HOST_CHR, dc_dir)
     _, cat = mc.load_pack(CAT_CHR, dc_dir)
@@ -797,11 +689,9 @@ def _from_dc_dir(dc_dir):
 
 def main():
     a = sys.argv[1:]
-    if "--iso" in a:
-        run(a[a.index("--iso") + 1]); return
     dc = a[a.index("--dc-dir") + 1] if "--dc-dir" in a else os.environ.get("DC1_DATA_DIR")
     if not dc:
-        raise SystemExit("--iso <iso> | --dc-dir <extracted disc dir> [--out <file>] [--test]")
+        raise SystemExit("--dc-dir <extracted disc dir> [--out <file>] [--test] [--palettes <file>]")
     if "--palettes" in a:
         # The ramps come from GLOW_ELEMENTS and the source disc ALONE, so this needs no pack bake — it is the fast path
         # the mod build calls on every compile (tools/build_resources.py).

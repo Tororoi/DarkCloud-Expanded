@@ -1,7 +1,7 @@
 # Town-swap animation map
 
 Per-character plan for what animation each swapped-in ally plays in town. The town character plays a
-**fixed motion index** into the loaded model's KEY table (see [mot-format §8](../game_data/docs/mot-format.md)),
+**fixed motion index** into the loaded model's KEY table (see the .mot format notes §8, kept outside the repo),
 so for each ally we fill the town-`c01d` slots below with a clip chosen (in the model viewer) from that
 character's own models. Clips come from several source models per character; the plan is to load one
 verified-**cutscene-safe** base model per ally and transplant the chosen clips into the right slots

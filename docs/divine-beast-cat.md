@@ -1,6 +1,8 @@
 # Divine Beast Title — the cat shot
 
-Reference for `Weapons/Xiao/DivineBeastCat.cs` and its ELF caves (`tools/stubs/cat_*.s`, `tools/iso_patch/build_cat_pack.py`).
+Reference for `Weapons/Xiao/DivineBeastCat.cs`, its ELF caves (`tools/stubs/cat_*.s`) and the pack bake (`IsoPatch/CatPackBakes.cs`
++ `WingBake.cs` + `CatWings.cs`, the byte-exact port of the authoring model `tools/iso_patch/build_cat_pack.py` / `wing_bake.py` /
+`tools/lib/cat_wings.py`, which the cat viewer still runs).
 The mod side is five classes that share their members through `using static`: `DivineBeastCat` (the constants, the looks, the
 thread, charge and launch, the hit, the heap watch), `CatCopy` (the copy and her MOTION 1 channel), `CatFlight` (the cave
 handshake, aim, the hit's element, the flight step), `CatCape` (the cape cloth) and `CatTextures` (the texture block).
@@ -120,7 +122,7 @@ the copy's `cat_sebone2` because the rest lattice was authored in that bone's sp
 The dungeon chara loop steps every slot's cloth while `MirageSceneGateFlag == 1` (the Mirage pnach's ClothStep swap),
 which the cat already sets; `Draw__10CCharacter` draws the list.
 
-**The element recolour is a palette write, not a texture swap.** `build_cat_pack.flat_tim2` bakes the cape texture as
+**The element recolour is a palette write, not a texture swap.** `CatPackBakes.FlatTim2` (`build_cat_pack.flat_tim2` in the authoring model) bakes the cape texture as
 32×32 pixels that are ALL palette index 0 followed by 256 identical CLUT entries, so the whole cape is a single palette
 entry. Repainting that entry in the texture manager's own copy recolours the cape live, because the dungeon draw loop
 re-uploads the cat's texture group before drawing the slot — the same mechanism WeaponTextureSwap uses on Super Steve.

@@ -17,8 +17,10 @@ namespace Dark_Cloud_Improved_Version
     ///   1. Install: REDIRECT name_419[8] -> "chara/f01a.chr" (a real file) so the BG load succeeds and a
     ///      real BG slot is populated.
     ///   2. Tick: while a species-8 fish is being reeled, find EVERY finished BG slot that loaded the f01a
-    ///      stand-in and OVERWRITE its buffer with our converted DC2 Priscleen pack (Resources/Fish/f19a.chr).
-    ///      The build (GetPackFile is name-based) then parses OUR pack and shows Priscleen.
+    ///      stand-in and OVERWRITE its buffer with the custom fish pack a provider handed to <see cref="Model"/>
+    ///      (a converted DC2 Priscleen pack proved the path; docs/custom-fish-pipeline.md). Nothing ships a pack today,
+    ///      so the mechanism stays dormant (<see cref="Enabled"/>) until a runtime provider builds one.
+    ///      The build (GetPackFile is name-based) then parses OUR pack and shows the custom fish.
     ///
     /// The earlier version matched the slot by a HARD-CODED size (168656) and only the first match — if that
     /// size was wrong, nothing swapped and the f01a stand-in ("Bobo") was built. This version keys on the
@@ -55,30 +57,25 @@ namespace Dark_Cloud_Improved_Version
         private const int  FishStride    = 0x2410;
         private const int  CFishSpecies  = 0x00;            // CFish+0 = species id
 
-        private static byte[] _model;
+        /// <summary>The custom fish `.chr` pack (the six sub-files, info.cfg naming f19a) to inject; set by a provider before
+        /// <see cref="Install"/>. No file is read: whatever builds the pack at runtime hands the bytes over here.</summary>
+        internal static byte[] Model;
         private static uint _origPath;
         private static bool _redirected;
         private static readonly HashSet<int> _injected = new HashSet<int>();  // BG slots done THIS catch
         private static bool _reelDiag;   // one-shot diagnostics per reel
 
-        private static string ModelPath =>
-            Path.Combine(AppContext.BaseDirectory, "Resources", "Fish", "f19a.chr");
-
-        /// <summary>Brownboo spot install: load the Priscleen pack and redirect species 8's model path to a
+        /// <summary>Brownboo spot install: with a pack in <see cref="Model"/>, redirect species 8's model path to a
         /// real stand-in so its BG load succeeds (only matters once a species-8 fish is caught).</summary>
         internal static void Install()
         {
             if (!Enabled) return;
-            if (_model == null)
-            {
-                try { _model = File.ReadAllBytes(ModelPath); }
-                catch (Exception e) { Log($"could not read {ModelPath}: {e.Message}"); return; }
-            }
+            if (Model == null) { Log("no custom fish pack supplied — species 8 stays cut"); return; }
             _origPath = Memory.ReadUInt(Name419Entry8);
             Memory.WriteUInt(Name419Entry8, StandInPathPtr);
             _redirected = true;
             _injected.Clear();
-            Log($"name_419[8] redirected to stand-in f01a (was 0x{_origPath:X8}); Priscleen model {_model.Length}B ready");
+            Log($"name_419[8] redirected to stand-in f01a (was 0x{_origPath:X8}); Priscleen model {Model.Length}B ready");
         }
 
         /// <summary>Undo the path redirect on town change.</summary>
@@ -105,7 +102,7 @@ namespace Dark_Cloud_Improved_Version
         /// every finished f01a-stand-in BG slot with the Priscleen model, so the build shows Priscleen.</summary>
         internal static void Tick()
         {
-            if (!Enabled || !_redirected || _model == null) return;
+            if (!Enabled || !_redirected || Model == null) return;
 
             // Gate on the fish being REELED (BattleFish) actually being species 8. BattleFish holds the CFish
             // address and is cleared to 0 by the build, so this window is exactly the catch. When it closes,
@@ -143,10 +140,10 @@ namespace Dark_Cloud_Improved_Version
                 byte[] head = Memory.ReadBytesBatch(buf, 16);
                 if (!HeadMatches(head))                    // (re)write only if our bytes aren't already there
                 {
-                    Memory.WriteBytesBatch(buf, _model);
-                    Memory.WriteInt(slot + BgSize, _model.Length);
+                    Memory.WriteBytesBatch(buf, Model);
+                    Memory.WriteInt(slot + BgSize, Model.Length);
                     if (_injected.Add(s))
-                        Log($"injected Priscleen ({_model.Length}B) into BG slot {s} buf 0x{bp:X8} (file '{fn}'), forced done");
+                        Log($"injected Priscleen ({Model.Length}B) into BG slot {s} buf 0x{bp:X8} (file '{fn}'), forced done");
                 }
             }
             _reelDiag = true;   // the per-reel DIAG lines above print only on the first species-8 frame
@@ -155,7 +152,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool HeadMatches(byte[] head)
         {
             if (head == null || head.Length < 16) return false;
-            for (int i = 0; i < 16; i++) if (head[i] != _model[i]) return false;
+            for (int i = 0; i < 16; i++) if (head[i] != Model[i]) return false;
             return true;
         }
 

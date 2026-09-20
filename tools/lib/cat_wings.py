@@ -5,7 +5,8 @@ vertex and texture taken from the user's own disc at patch time (nothing of the 
 Entry points: build_winged_cat(...) → the raw rig/mesh/track data (viewer indices = cat-relative node ids); wing_graft(read,
 packed, rep) → the same on top of a wingless assemble() output, for tools/iso_patch/wing_bake.py. The WING_* knobs below are
 the authored design (tuned in the WebGL viewer, tools/model_viewer/cat_viewer.py, which only displays what this builds).
-Pure Python: the bake runs under the stock python3 the app launches.
+Pure Python (no numpy). The app's patch-time bake is the byte-exact C# port (IsoPatch/CatWings.cs); this is the authoring model
+the viewer displays and the reference the port is checked against.
 """
 import math
 import os

@@ -21,7 +21,7 @@ namespace Dark_Cloud_Improved_Version
     /// The frame is found by name-scanning the map allocator (LoadMDSFile allocates scene frames from the
     /// CDataAlloc2 at guest 0x1F06650); the address is cached and only re-scanned when the town changes.
     ///
-    /// Levels (design, judged in tools/queens/queens_viewer.py): LOW = morning 8 (canal floor exposed and fishable —
+    /// Levels (design, judged in the Queens scene viewer, a dev tool outside the repo): LOW = morning 8 (canal floor exposed and fishable —
     /// climb the ladder down), MEDIUM = afternoon + night 31 (vanilla ~30), HIGH = dusk 52. See
     /// <see cref="TargetY"/> for the live values. Period from the same clock the fishing code reads
     /// (<see cref="Fishing.GetCurrentTimeOfDay()"/>).

@@ -52,7 +52,7 @@ namespace Dark_Cloud_Improved_Version
         // only Brownboo crashed. Vanilla's villager clear must pair with suspending this count; we do the
         // same: zero the count for the whole fishing window and restore it on the way out. One write covers
         // every event-mode villager iterator, not just the one we traced.
-        // (iterators + object layout: game_data/docs/fishing-engine-re.md §villager-suspend)
+        // (iterators + object layout: the fishing engine RE notes §villager-suspend)
         private static int _savedVillagerCount = -1;
 
         // The engine's villager DRAW walks a HARDCODED 10 slots (so the count knob above does NOT cover it),
@@ -60,7 +60,7 @@ namespace Dark_Cloud_Improved_Version
         // overwrite — only the VISUAL sub-object they point to is freed, and dispatching its vtable through
         // the garbage pointer is the recLUT crash. Zero the fixed draw flags and the gate returns 0 first, so
         // the freed visual is never touched. Restore on exit.
-        // (draw routine + object/flag offsets: game_data/docs/fishing-engine-re.md §villager-suspend)
+        // (draw routine + object/flag offsets: the fishing engine RE notes §villager-suspend)
         private static readonly int[] _savedDrawFlags = new int[Villagers.DrawSlots];
         private static bool _drawFlagsSaved;
         private static bool _villagersHidden;   // one-shot latch for UpdateVillagerHide
@@ -80,7 +80,7 @@ namespace Dark_Cloud_Improved_Version
         /// black alpha reaches full, staying there until the fade-in. So "fully black on a fade-out" ==
         /// <c>fade_in_out == -1 &amp;&amp; fade_end != 0</c>. We also hide on a live session (cpoly / fishing mode)
         /// as a safety net for attaching mid-session, where the buffer is already freed and leaving villagers
-        /// stepping would crash. (fade global: game_data/docs/fishing-engine-re.md §fade-state)
+        /// stepping would crash. (fade global: the fishing engine RE notes §fade-state)
         /// </summary>
         internal static void HideForSession(bool inFishingWindow)
         {

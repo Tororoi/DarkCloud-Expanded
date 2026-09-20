@@ -7,8 +7,8 @@
       surgery below (PLAYER_COLLISION_REMOVE_TRIS / PLAYER_COLLISION_ADD_TRIS), rebuilt as a fresh MDS APPENDED at the sub's
       end with the header's _a words (+0x78/+0x7c) repointed (old blocks become dead space).
 
-rebuild_h06() -> (new_sub_bytes, orig_size, chunks). Run this file directly to export
-game_data/queens/queens_parts.bin for IsoPatcher.ApplyQueensPartSwaps.
+rebuild_h06(scn, DIR) -> (new_sub_bytes, orig_size, chunks): the ISO patch flow (tools/iso_patch/bake_town_scene_parts.py)
+reads e03's scene out of the ISO being patched, appends the rebuilt sub to scene.scn and repoints the directory entry.
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'lib'))
@@ -188,21 +188,3 @@ def rebuild_h06(scn, DIR):
     return bytes(sub), size, chunks
 
 
-if __name__ == '__main__':
-    # Export the rebuilt part to the bin IsoPatcher.ApplyQueensPartSwaps consumes.
-    # Format: u32 count; per part: name[8] + u32 origSubSize (guard) + u32 newSubSize + bytes (16-aligned).
-    scn = load_scene('gedit/e03/scene.scn')
-    DIR = scene_placed.scn_directory_map(scn)
-    OUT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                        '..', '..', 'game_data', 'queens', 'queens_parts.bin'))
-    blob = bytearray()
-    entries = [('e03h06',) + rebuild_h06(scn, DIR)[:2]]
-    blob += struct.pack('<I', len(entries))
-    for name, new, orig in entries:
-        blob += name.encode('latin1').ljust(8, b'\x00')
-        blob += struct.pack('<II', orig, len(new))
-        blob += new
-        blob += b'\x00' * ((-len(new)) % 16)
-        print(f'{name}: sub {orig} -> {len(new)}')
-    open(OUT, 'wb').write(blob)
-    print(f'wrote {len(blob)} bytes -> {OUT}')

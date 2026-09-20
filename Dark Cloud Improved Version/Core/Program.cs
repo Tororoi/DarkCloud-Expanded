@@ -10,6 +10,7 @@ namespace Dark_Cloud_Improved_Version
         public static void Main(string[] args)
         {
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            if (args.Length > 0 && args[0] == "postbake") { Environment.Exit(IsoPostBakes.RunCli(args)); return; }   // dev: one ISO post-step, no UI
             Console.WriteLine("Dark Cloud Enhanced - Created by Wordofwind, Dayuppy, MikeZorD, and Plgue");
             Console.WriteLine("Version 1.xxx - Release");
             ModWindow.Mode = ParseLaunchMode(args);

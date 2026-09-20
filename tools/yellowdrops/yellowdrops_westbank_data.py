@@ -5,9 +5,9 @@ Bulge the west bank edge (x~-424..-388, z -142..275, user-marked) westward for c
 a player standing at the water's edge: edge columns move -x by WEST_BULGE*sin(pi*s) along the
 section; paired crown columns follow; section ends stay welded. WB_SUBDIV inserts stations for a
 smoother waterline (2x density). Consumers:
-  tools/yellowdrops/bake_yellowdrops_westbank.py         (bakes game_data/yellowdrops/yellowdrops_westbank_ground.bin)
-  tools/build_fishing_collision.py      (DCFC fish walls -> yellowdrops_23.bin)
-  tools/yellowdrops/yellowdrops_viewer.py           (proposal/verification layers)
+  tools/yellowdrops/bake_yellowdrops_westbank.py         (rebuilds the s1301 sub; the ISO patch flow applies it)
+  tools/lib/fishing_collision_bins.py   (DCFC fish walls -> yellowdrops_23.bin, built by the ISO patch flow)
+  the Yellow Drops scene viewer, a dev tool outside the repo   (proposal/verification layers)
 
 (The crescent-pond redesign that used to live in this file — steps 1-10 — was REVERTED by user
 decision and deleted 2026-09; recoverable via git as tools/yellowdrops_pond.py.)

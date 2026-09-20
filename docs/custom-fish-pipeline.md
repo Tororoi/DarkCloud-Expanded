@@ -124,7 +124,9 @@ non-looper.
 
 `custom_fish/repack_priscleen_dc1motions.py` is the reference assembler: reads the bake JSON + the source chr,
 applies every conversion (§2), builds the reduced `.mot`, patches the `.wgt` (and validates §3),
-regenerates `.bbp` and `info.cfg`, and writes the final chr to the mod's `Resources/Fish/`.
+regenerates `.bbp` and `info.cfg`, and writes the final chr. Nothing ships it: the mod's `PriscleenFish` injects whatever
+pack a runtime provider hands to `PriscleenFish.Model` (the tracked repo carries no game-derived pack), so a shipped
+custom fish needs that provider to build the pack from the player's own discs at patch or load time.
 Env toggles: `STATIC=1` (fully rigid — first-line crash bisect), `SKIN1ONLY=1` (primary skin only).
 
 Bisect ladder when something's wrong in-game: garbled texture → IM2 wrapper; stiff mesh (+ later

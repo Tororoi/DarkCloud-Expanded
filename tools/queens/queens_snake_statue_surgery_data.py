@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Queens h06 (snake statue) player-collision SURGERY DATA — the user-selected triangles from
-tools/queens/queens_snake_statue_viewer.py. Consumed by tools/queens/queens_snake_statue_collision.py (apply_surgery). Pure data: every entry is a
+the snake-statue scene viewer (a dev tool outside the repo). Consumed by tools/queens/queens_snake_statue_collision.py (apply_surgery). Pure data: every entry is a
 verbatim viewer selection (irreproducible by code), so edit by appending, never by regenerating.
 
   PLAYER_COLLISION_REMOVE_TRIS — tris of the full visual mesh that are REMOVED from the baked `_a`
   PLAYER_COLLISION_ADD_TRIS  — replacement/guard geometry ADDED (walls, tapers, ramps)
 """
-# collision surgery (from tools/queens/queens_snake_statue_viewer.py selections): tris listed here VERBATIM are removed
+# collision surgery (from the snake-statue scene viewer's selections): tris listed here VERBATIM are removed
 # from the baked _a; add replacement geometry to PLAYER_COLLISION_ADD_TRIS. Matched per-tri with 0.05 tolerance,
 # any vertex rotation.
 PLAYER_COLLISION_REMOVE_TRIS = [   # h06 collision surgery, deduped (307 unique tris across 4 user batches)

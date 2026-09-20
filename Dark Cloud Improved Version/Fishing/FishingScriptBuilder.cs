@@ -11,7 +11,7 @@ namespace Dark_Cloud_Improved_Version
     /// 
     /// The STB VM is 12-byte instructions {op, a1, a2}. Push type 1 = int, 2 = float (IEEE bits). EXT (op 21)
     /// takes the STACK ENTRY COUNT in a1, including the command id, which is the first entry. Modelled on
-    /// Norune's real scripts (exact offsets: game_data/docs/fishing-engine-re.md §norune-script).
+    /// Norune's real scripts (exact offsets: the fishing engine RE notes §norune-script).
     /// </summary>
     internal static class FishingScriptBuilder
     {

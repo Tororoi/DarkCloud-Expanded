@@ -8,7 +8,7 @@ namespace Dark_Cloud_Improved_Version
     /// The mod implements town ally switching as a full town reload: the PNACH patches the character-menu
     /// commit at 0x1F7DB4 into <c>jal EditInit</c>, which rebuilds the town and respawns the player at the
     /// town ENTRANCE — the position reset is a side effect of that reload, not anything platform-specific
-    /// (see game_data/docs/town-ally-switch-reload-re.md). This class is the researched Q2 fix:
+    /// (see the town ally-switch reload RE notes). This class is the researched Q2 fix:
     /// save position + facing when the allies menu opens, detect the EditInit reload, and write them back
     /// onto the freshly-loaded character while the load fade still covers the screen.
     ///
