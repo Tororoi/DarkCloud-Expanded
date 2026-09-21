@@ -12,7 +12,7 @@ namespace Dark_Cloud_Improved_Version
     /// pellet-sprite hook), so the pair reads as two stones. Each pellet carries <see cref="DamageFactor"/> of the shot's
     /// attack: the game's own damage word is scaled down and the twin gets the same figure. Both pellets ricochet as the
     /// Hardshooter's do (<see cref="Hardshooter.Drive"/>, driven from here), each at a different target. Super Steve carrying
-    /// a Double Impact SynthSphere has it too (<see cref="SuperSteve.SuperSteveEffect"/> drives it).
+    /// a Double Impact SynthSphere has it too (<see cref="SuperSteve.SphereInheritanceEffect"/> drives it).
     /// </summary>
     internal static class DoubleImpact
     {

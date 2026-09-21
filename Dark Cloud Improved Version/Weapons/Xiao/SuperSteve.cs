@@ -6,7 +6,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// Supporting implementations for Super Steve's SynthSphere inheritance. The master dispatch loop lives in
-    /// <see cref="SuperSteve.SuperSteveEffect"/>; these are the per-ability drivers/helpers it pulses
+    /// <see cref="SuperSteve.SphereInheritanceEffect"/>; these are the per-ability drivers/helpers it pulses
     /// each tick (one call per ability, gated by which sphere grants it). Callers qualify them
     /// (<c>SuperSteve.X</c>), so the names omit the "SuperSteve" prefix.
     ///
@@ -40,7 +40,7 @@ namespace Dark_Cloud_Improved_Version
         private const ushort BattleSpeed = 350;       // effective Speed in Super Steve's BATTLE copy (past 99) → keeps the rate-of-fire gauge from being the bottleneck
 
         /// <summary>
-        /// Quick Draw inheritance for Xiao, driven each tick from <see cref="SuperSteve.SuperSteveEffect"/>.
+        /// Quick Draw inheritance for Xiao, driven each tick from <see cref="SuperSteve.SphereInheritanceEffect"/>.
         /// Xiao (controlled) shares Toan's shot plumbing — motion-frame cursor = AnimFrameCursor (0x21EA2010),
         /// shot action-state = ChargeActionState (0x21DC4494). Her shot is three c04b motions: draw (0xB, frames
         /// 240→251), a zero-speed "nocked" HOLD parked on 250 (0xC) that lasts until the fire input releases,
@@ -85,7 +85,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── Defensive Legacy (Aga's Sword) ──
-        private const int AgasDefenseBoost = 15;   // mirrors AgasSword.AgasSwordEffect
+        private const int AgasDefenseBoost = 15;   // mirrors AgasSword.DefensiveLegacyEffect
         private static bool _ssAgasApplied;        // whether the +15 defense is currently on Xiao
 
         /// <summary>Defensive Legacy (Aga's Sword): balanced ±<see cref="AgasDefenseBoost"/> on Xiao's defense.</summary>
@@ -544,12 +544,12 @@ namespace Dark_Cloud_Improved_Version
         ///   • Macho Sword, Wise Owl Sword, Chronicle 2 — rely on weapon ownership
         ///   • Buster Sword, 7 Branch Sword - modify upgrading / status-breaks
         /// </summary>
-        public static void SuperSteveEffect()
+        public static void SphereInheritanceEffect()
         {
             var ssSun = new SunSword.SunHarvestState(EnemyAddresses.FloorSlots.Count);
-            var xiaoCurse = new ToanCurses.CurseAddrs(Player.Xiao.status, Player.Xiao.statusTimer, Player.Xiao.hp);
-            var ssEvilcise = new ToanCurses.CurseState();
-            var ssManeater = new ToanCurses.CurseState();
+            var xiaoCurse = new CurseAddrs(Player.Xiao.status, Player.Xiao.statusTimer, Player.Xiao.hp);
+            var ssEvilcise = new CurseState();
+            var ssManeater = new CurseState();
             var xiaoTuna = new CustomGoroEffects.FrozenTunaWielder(Player.XiaoId, Player.Xiao.hp, Player.Xiao.maxHP,
                                                                    Player.Xiao.status, Player.Xiao.statusTimer);
             var ssTuna = new CustomGoroEffects.FrozenTunaState();
@@ -589,14 +589,14 @@ namespace Dark_Cloud_Improved_Version
                 SuperSteve.DriveBraveArk(active && sphere == Items.braveark);
 
                 // Bone Rapier: bone-door bypass (the Xiao dispatcher no longer force-clears it, so this owns it).
-                BoneRapier.BoneRapierEffect(active && (sphere == Items.bonerapier || sphere == Items.boneslingshot));
+                BoneRapier.SkeletonKeyEffect(active && (sphere == Items.bonerapier || sphere == Items.boneslingshot));
 
                 // Solar Harvest (Sun Sword / Big Bang): ~1% of the floor's enemies drop a Sun attachment.
                 SunSword.SunHarvestDrive(sphere == Items.sunsword || sphere == Items.bigbang, ssSun);
 
                 // Curses (full inherit): curse Xiao. Not pause-gated — mirrors the Toan loops.
-                ToanCurses.EvilciseDrive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);
-                ToanCurses.ManeaterDrive(sphere == Items.maneater, xiaoCurse, rec, ssManeater);
+                Evilcise.Drive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);
+                Maneater.Drive(sphere == Items.maneater, xiaoCurse, rec, ssManeater);
 
                 // Quick Draw (Small Sword / Tsukikage / Heaven's Cloud): instant fire-on-release + rate-of-fire.
                 SuperSteve.DriveSmallSword(active && (sphere == Items.smallsword || sphere == Items.tsukikage || sphere == Items.heavenscloud));
@@ -682,10 +682,10 @@ namespace Dark_Cloud_Improved_Version
             // Restore everything on unequip / character-switch / dungeon exit (no-ops if not driven).
             SeventhHeaven.SeventhHeavenSoftenAttacks(false);
             DarkCloud.DarkCloudDriveGuards(false);
-            BoneRapier.BoneRapierEffect(false);
+            BoneRapier.SkeletonKeyEffect(false);
             SunSword.SunHarvestDrive(false, ssSun);
-            ToanCurses.EvilciseDrive(false, xiaoCurse, ssEvilcise);
-            ToanCurses.ManeaterDrive(false, xiaoCurse, 0, ssManeater);
+            Evilcise.Drive(false, xiaoCurse, ssEvilcise);
+            Maneater.Drive(false, xiaoCurse, 0, ssManeater);
             SuperSteve.DriveSmallSword(false);
             SuperSteve.DriveTsukikage(false);
             SuperSteve.DriveHeavensCloud(false);   // resets the flash latches

@@ -261,13 +261,12 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The weapon or the floor went: the stolen projectile is dropped and the notice put back.</summary>
         internal static void Stop() { Forget(); _floor = -1; }
 
-        // ── Bandit Slingshot / Bandit's Ring ──────────────────────────────────────────────
-        /// <summary>The stolen-projectile thread: hands every tick to <see cref="BanditSlingshot.Drive"/> while Xiao's Bandit
-        /// Slingshot or Ruby's Bandit's Ring is equipped (<see cref="BanditSlingshot.Carries"/>), and stands it down once when
-        /// it goes. Super Steve drives the same from <see cref="SuperSteveEffect"/> when its sphere is either one's.</summary>
-        public static void BanditSlingshotEffect()
+        /// <summary>The Steal Shot thread: hands every tick to <see cref="Drive"/> while the Bandit Slingshot is equipped, and stands
+        /// it down once when it goes. Ruby's Bandit's Ring runs the same driver from its own thread (<see cref="BanditsRing"/>), and
+        /// Super Steve from <see cref="SuperSteve.SphereInheritanceEffect"/> when its sphere is either one's.</summary>
+        public static void StealShotEffect()
         {
-            while (Player.InDungeonFloor() && BanditSlingshot.Carries(Player.Weapon.GetCurrentWeaponId()))
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.banditslingshot)
             {
                 BanditSlingshot.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
                 Thread.Sleep(16);

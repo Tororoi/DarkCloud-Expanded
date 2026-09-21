@@ -64,7 +64,7 @@ namespace Dark_Cloud_Improved_Version
         ///
         /// Both wielders work unchanged because Ungaga and Xiao share the guard motions this triggers on
         /// (9 / 33), and Xiao fits the clone's mesh cave. Mirage is NOT driven from SuperSteve's
-        /// SuperSteveEffect hub — it owns a thread and a state machine (guard charge → decoy → clone → haze),
+        /// SphereInheritanceEffect hub — it owns a thread and a state machine (guard charge → decoy → clone → haze),
         /// so it gates itself here rather than being pulsed per-tick like the stateless abilities.</summary>
         private static bool MirageArmed()
         {

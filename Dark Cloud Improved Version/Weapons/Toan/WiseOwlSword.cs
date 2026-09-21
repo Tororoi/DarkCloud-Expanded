@@ -14,7 +14,7 @@ namespace Dark_Cloud_Improved_Version
         /// Wise Owl Sword passive: displays a message when an enemy holding a WOF key is nearby,
         /// provided the player owns a Wise Owl Sword anywhere (bag, storage, or equipped).
         /// </summary>
-        public static void WiseOwlSwordEffect()
+        public static void WiseOwlAlwaysKnowsEffect()
         {
             const float maxKeyDetectionRange = 500f;
 

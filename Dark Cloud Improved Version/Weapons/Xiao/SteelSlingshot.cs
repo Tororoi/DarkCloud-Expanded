@@ -42,7 +42,7 @@ namespace Dark_Cloud_Improved_Version
         // ── Steel Slingshot ────────────────────────────────────────────────────────────────
         /// <summary>Xiao's Steel Slingshot thread: hands every tick to <see cref="SteelSlingshot.Drive"/> while the weapon is
         /// equipped, and stands it down once when it goes.</summary>
-        public static void SteelSlingshotEffect()
+        public static void EnduranceUpEffect()
         {
             while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.steelslingshot)
             {

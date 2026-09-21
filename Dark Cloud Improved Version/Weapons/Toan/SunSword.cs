@@ -26,7 +26,7 @@ namespace Dark_Cloud_Improved_Version
         /// path runs items through a small de-dupe set, so a second Sun proc on the same floor
         /// may be swallowed.
         /// </summary>
-        public static void SunSwordEffect()
+        public static void SolarHarvestEffect()
         {
             var st = new SunHarvestState(EnemyAddresses.FloorSlots.Count);
             while (Player.InDungeonFloor())

@@ -1,6 +1,6 @@
 # Double Impact — two pellets a shot
 
-`Weapons/Xiao/DoubleImpact.cs` (thread `DoubleImpact.DoubleImpactEffect`; Super Steve drives it from `SuperSteveEffect`
+`Weapons/Xiao/DoubleImpact.cs` (thread `DoubleImpact.DoubleImpactEffect`; Super Steve drives it from `SphereInheritanceEffect`
 when a Double Impact SynthSphere is attached).
 
 Every shot is two pellets. The one the game fires is joined by a twin the tick it appears in the player's shot pool

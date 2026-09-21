@@ -107,7 +107,7 @@ namespace Dark_Cloud_Improved_Version
     {
 
         // ── Charge attack state (ToanKey_Play, RE'd from SCUS_971.11) ──
-        // Drives HeavensCloud.HeavensCloudEffect's charge ramp + MaintainEnemyHitbox's whirl gate. See
+        // Drives HeavensCloud.TyphoonEffect's charge ramp + MaintainEnemyHitbox's whirl gate. See
         // Weapons.IsChargingWhirlwind / IsWhirlwindActive and the toan-charge-states memory.
         internal const long ChargeActionState = 0x21DC4494; // DAT_01dc4494 action id (values below)
         internal const int  ActionWindup      = 0xE;        // charge wind-up (meter accumulates; lunge OR whirlwind)
@@ -146,7 +146,7 @@ namespace Dark_Cloud_Improved_Version
         //   ~830         motion end → chain to 0x25 / windup / exit
         // Snapping the cursor forward once it has passed the step-in window preserves the
         // step-in, trail, sound and hit — only the wind-up frames disappear. See
-        // SmallSword.SmallSwordEffect (Quick Draw).
+        // SmallSword.QuickDrawEffect (Quick Draw).
         internal const long  AnimFrameCursor        = 0x21EA2010; // float: active-char motion frame cursor
         internal const float Combo1WindupSettled    = 820.5f;     // past the engine's one-shot step-in write
         internal const float Combo1TrailSpawn  = 824.0f;     // just before trail spawn + hit window
@@ -516,7 +516,7 @@ namespace Dark_Cloud_Improved_Version
         // value-changing poke to a hot instruction killed the emulator the same second (log:
         // 19:24:09). Identical-value writes were benign. ALL patching must stay data-only; the
         // 7 Branch Sword status-break effect is therefore implemented post-hoc on the sphere
-        // (see AttachBoard below + SevenBranchSword.SevenBranchSwordEffect), not by patching
+        // (see AttachBoard below + SevenBranchSword.SevenfoldRiteEffect), not by patching
         // WeaponStatusBreakEnable/SetStatusBreak.
 
         /// <summary>The status-break stat-transfer factor: a DATA float (0.6f) at native 0x2A1890,
@@ -691,7 +691,7 @@ namespace Dark_Cloud_Improved_Version
     /// while the player is monster-transformed (<see cref="DngStatusData.TransformStateOffset"/> == 10) kills
     /// DRAIN abs instead of granting.
     ///
-    /// Backs MachoSword.MachoSwordEffect ("Overtraining"), which owns the rollover POLICY — this class
+    /// Backs MachoSword.OvertrainingEffect ("Overtraining"), which owns the rollover POLICY — this class
     /// holds only what the game itself does.
     /// </summary>
     internal static class AbsRewards

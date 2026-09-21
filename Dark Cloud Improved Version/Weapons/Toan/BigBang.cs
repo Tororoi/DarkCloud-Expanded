@@ -28,7 +28,7 @@ namespace Dark_Cloud_Improved_Version
         /// tick's baseline), so only real weapon hits detonate — the explosion's own splash never
         /// chain-reacts the room.
         /// </summary>
-        public static void BigBangEffect()
+        public static void DetonateEffect()
         {
             int n = EnemyAddresses.FloorSlots.Count;
             int[] prev = null;

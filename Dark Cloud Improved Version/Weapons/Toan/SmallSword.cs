@@ -21,7 +21,7 @@ namespace Dark_Cloud_Improved_Version
         /// charge attacks are untouched. Tsukikage and Heaven's Cloud inherit the effect for
         /// lineage reasons (the Small Sword builds up into them), on top of their own effects.
         /// </summary>
-        public static void SmallSwordEffect()
+        public static void QuickDrawEffect()
         {
             while (Player.InDungeonFloor())
             {

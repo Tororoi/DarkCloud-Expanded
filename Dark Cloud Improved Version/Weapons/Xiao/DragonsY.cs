@@ -12,7 +12,7 @@ namespace Dark_Cloud_Improved_Version
     /// on every entry whose base damage is <see cref="Mailbox.PelletKickDamage"/>, with the ORIGIN at that entry's own sphere
     /// centre — the burst — so each enemy it catches is shoved straight out of the burst; the guard window stands (no crush
     /// here). A charged shot costs ChargedShotWhp's weapon HP. Super Steve carrying a Dragon's Y SynthSphere has the same
-    /// shot, of its own selected element (<see cref="SuperSteve.SuperSteveEffect"/> drives it). The lock-on movement
+    /// shot, of its own selected element (<see cref="SuperSteve.SphereInheritanceEffect"/> drives it). The lock-on movement
     /// buff is <see cref="LockOnSpeedDrive"/>, inherited further.
     /// </summary>
     internal static class DragonsY
@@ -130,7 +130,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Xiao's Dragon's Y thread: hands every tick to <see cref="DragonsY.Drive"/> (the charged shot) while the
         /// weapon is equipped, and stands it down once when it goes. Its movement buff has its own thread,
         /// <see cref="LockOnSpeedEffect"/>, shared with the weapons that inherit it.</summary>
-        public static void DragonsYEffect()
+        public static void DragonsBreathEffect()
         {
             while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.dragonsy)
             {
@@ -145,7 +145,7 @@ namespace Dark_Cloud_Improved_Version
         /// Dragon's Y's movement: while Xiao is locked on to an enemy she moves at <see cref="LockOnRate"/>× speed. The buff is
         /// Dragon's Y's, inherited by its line — Divine Beast Title, Angel Shooter and Angel Gear — and by Super Steve carrying
         /// any of the four's SynthSphere (<see cref="LockOnSpeedGrants"/>). Driven each tick by <see cref="LockOnSpeedEffect"/>
-        /// for the four weapons and by <see cref="SuperSteve.SuperSteveEffect"/> for the sphere.
+        /// for the four weapons and by <see cref="SuperSteve.SphereInheritanceEffect"/> for the sphere.
         ///
         /// The dungeon walk is ROOT MOTION: motionDrive (dun 0x1DB7xxx) copies her position from her root frame's accumulated
         /// translation every frame, and the stick only steers (the camera-relative stick vector at 0x1DC4540), so there is no
@@ -194,7 +194,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The lock-on movement buff's thread: hands every tick to <see cref="DragonsY.LockOnSpeedDrive"/> while one of the
         /// weapons that carry it is equipped (<see cref="DragonsY.LockOnSpeedGrants"/>), and releases it once when it goes. Super Steve
-        /// drives the same buff from <see cref="SuperSteveEffect"/> when its sphere is one of theirs.</summary>
+        /// drives the same buff from <see cref="SphereInheritanceEffect"/> when its sphere is one of theirs.</summary>
         public static void LockOnSpeedEffect()
         {
             while (Player.InDungeonFloor() && DragonsY.LockOnSpeedGrants(Player.Weapon.GetCurrentWeaponId()))

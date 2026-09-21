@@ -31,9 +31,9 @@ namespace Dark_Cloud_Improved_Version
         /// — so nothing is unguardable. Side effect (accepted): unguarded, those attacks now knockback instead of
         /// knocking you down (softer). The reaction types are set once at spawn, so this holds with no race; the
         /// originals are restored (3) on unequip / dungeon exit. 7th Heaven also inherits Dark Cloud's Guard Crush
-        /// (its guard-break vs enemies) for lineage reasons — see DarkCloud.DarkCloudEffect + the Dungeon dispatch.
+        /// (its guard-break vs enemies) for lineage reasons — see DarkCloud.GuardCrushEffect + the Dungeon dispatch.
         /// </summary>
-        public static void SeventhHeavenEffect()
+        public static void DivineGuardEffect()
         {
             while (Player.InDungeonFloor())
             {

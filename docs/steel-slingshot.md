@@ -1,6 +1,6 @@
 # Steel Slingshot — half the WHP cost when low
 
-`Weapons/Xiao/SteelSlingshot.cs` (thread `SteelSlingshot.SteelSlingshotEffect`).
+`Weapons/Xiao/SteelSlingshot.cs` (thread `SteelSlingshot.EnduranceUpEffect`).
 
 While the weapon's HP is low — the game's own warning state, WHP ≤ 10 % of the maximum (`LowWhpWarningFraction`, the
 HUD gauge blinking) — each shot costs half the WHP. Xiao drains per shot: `BattleActionPlay_Jinn` passes the mailbox
@@ -9,7 +9,7 @@ word `XiaoShotWhpFactor` (the ISO's dun.bin patch) to `SwordDmgCheck1`, and `Bat
 by themselves. `ChargedShotWhp` gained a `Base` factor: what an ordinary shot costs and what the word returns to after
 a charged one (a charged factor multiplies it). The driver sets it to 0.5 while low and 1.0 otherwise, and back to 1.0
 when the weapon goes. Super Steve carrying a Steel Slingshot SynthSphere has the half too (driven from
-`SuperSteveEffect`, its own WHP being the low one); the level-up bonus below is the Steel's alone.
+`SphereInheritanceEffect`, its own WHP being the low one); the level-up bonus below is the Steel's alone.
 
 ## Level-ups (baked)
 

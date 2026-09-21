@@ -4002,12 +4002,12 @@ namespace Dark_Cloud_Improved_Version
             new Thread(ReachLoop) { IsBackground = true }.Start();
         }
 
-        // ── HC reach control (data-side; driven by HeavensCloud.HeavensCloudEffect's charge ramp) ──
+        // ── HC reach control (data-side; driven by HeavensCloud.TyphoonEffect's charge ramp) ──
         // Everything is keyed to a blade `factor` (1.0 = original). Three writes:
         //   • blade mesh "w14" scaled by factor → the visible blade AND its dcol hit point grow together;
         //   • whirlwind effect (c01_fuusya) scaled to match: WhirlVisualScale = stockZ*factor / visualRadius;
         //   • enemy body radii inflated (distance-gated) to reach = stockZ*factor.
-        // HeavensCloudEffect grows factor during the charge windup and applies whirl+hitbox on the whirlwind
+        // TyphoonEffect grows factor during the charge windup and applies whirl+hitbox on the whirlwind
         // release, then ResetHeavensCloudReach snaps everything back. (docs/weapon-reach.md top section.)
         const float HcStockDcol1Z = 9.2053f;       // HC commenu dcol1 Z
         static float _hcHitboxDelta;               // persistent delta added to enemy body radii (0 = none)
@@ -4358,11 +4358,11 @@ namespace Dark_Cloud_Improved_Version
         {
             // Whirlwind VISUAL scale applies to ALL of Toan's weapons (the fuusya effect is character-, not
             // weapon-bound), sized to each weapon's own dcol1 reach — EXCEPT Heaven's Cloud, whose blade/whirl/
-            // hitbox are driven per-charge by HeavensCloud.HeavensCloudEffect (which owns the shared whirl state
+            // hitbox are driven per-charge by HeavensCloud.TyphoonEffect (which owns the shared whirl state
             // while HC is equipped, so this loop must not also write it). Recompute on weapon swap.
             if (Player.CurrentCharacterNum() != Player.ToanId) return;
             int wid = GetEquippedWeaponId();
-            if (wid == HeavensCloudReachId) return;   // HC → HeavensCloudEffect
+            if (wid == HeavensCloudReachId) return;   // HC → TyphoonEffect
 
             if (wid != _whirlWeaponId)
             {

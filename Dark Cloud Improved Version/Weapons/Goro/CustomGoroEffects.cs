@@ -18,7 +18,7 @@ namespace Dark_Cloud_Improved_Version
         };
 
         /// <summary>Who is holding the Frozen Tuna (or its sphere): character id + the raw HP/status
-        /// addresses the driver heals/freezes. Mirrors the CurseAddrs pattern in ToanCurses.</summary>
+        /// addresses the driver heals/freezes. Mirrors the CurseAddrs pattern in Weapons/Toan/Shared/Curse.cs.</summary>
         internal sealed class FrozenTunaWielder
         {
             public readonly int CharId; public readonly int Hp, MaxHp, Status, StatusTimer;
@@ -145,7 +145,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Goro's own Frozen Tuna weapon: loops the shared driver while it's equipped.</summary>
-        public static void FrozenTunaEffect()
+        public static void ColdStorageEffect()
         {
             var wielder = new FrozenTunaWielder(Player.GoroId, Player.Goro.hp, Player.Goro.maxHP,
                                                 Player.Goro.status, Player.Goro.statusTimer);

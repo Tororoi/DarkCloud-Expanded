@@ -1,13 +1,13 @@
 # Dragon's Y — lock-on speed and the Gemron shot
 
-`Weapons/Xiao/DragonsY.cs` (threads `DragonsY.DragonsYEffect` and `DragonsY.LockOnSpeedEffect`),
+`Weapons/Xiao/DragonsY.cs` (threads `DragonsY.DragonsBreathEffect` and `DragonsY.LockOnSpeedEffect`),
 `Weapons/BorrowedShots.cs`.
 
 ## Lock-on speed
 
 `DragonsY.cs`. The buff is Dragon's Y's and is inherited by its line — Divine Beast Title, Angel Shooter and Angel
 Gear (`DragonsY.LockOnSpeedGrants`) — and by Super Steve carrying any of the four's SynthSphere (driven from
-`SuperSteveEffect`). Super Steve with a Dragon's Y sphere also has the charged shot below, of its own selected element
+`SphereInheritanceEffect`). Super Steve with a Dragon's Y sphere also has the charged shot below, of its own selected element
 (`DragonsY.Wields`).
 
 While a lock is on (`PlayerAction.LockOnActive` / `LockOnTargetSlot`) Xiao moves at 1.3× speed. The dungeon walk is

@@ -265,7 +265,7 @@ namespace Dark_Cloud_Improved_Version
         /// writes and a machine-side copy, and a second thread stepping in mid-way (Super Steve's loop, when the weapon changed under a
         /// look thread) corrupted the copy and once took the game down — so Super Steve does not pulse this one. The tick holds the cat
         /// itself through the PAUSE screen and the menus, so nothing is gated here.</summary>
-        public static void DivineBeastTitleEffect()
+        public static void SpiritBeastEffect()
         {
             while (Player.InDungeonFloor() && Wields())
             {

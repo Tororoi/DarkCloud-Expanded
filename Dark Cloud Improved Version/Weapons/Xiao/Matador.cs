@@ -25,7 +25,7 @@ namespace Dark_Cloud_Improved_Version
     ///    disc in the Fire element's ramp (the palette cave paints <see cref="FireRow"/>). The cat never coexists with the
     ///    Matador, and the row is handed back to None when the shot ends so the cat repaints on its next spawn.
     /// Nothing is drawn or crushed when the ISO lacks the caves. Super Steve carrying a Matador SynthSphere has the ability
-    /// too (<see cref="SuperSteve.SuperSteveEffect"/> drives it): the copy is of the LIVE weapon, so it flies as Super
+    /// too (<see cref="SuperSteve.SphereInheritanceEffect"/> drives it): the copy is of the LIVE weapon, so it flies as Super
     /// Steve's own model.
     /// </summary>
     internal static class Matador
@@ -205,7 +205,7 @@ namespace Dark_Cloud_Improved_Version
         // ── Matador ────────────────────────────────────────────────────────────────────────
         /// <summary>Xiao's Matador thread: hands every tick to <see cref="Matador.Drive"/> while the weapon is equipped,
         /// and stands it down once when it goes.</summary>
-        public static void MatadorEffect()
+        public static void ChargingBullEffect()
         {
             while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.matador)
             {

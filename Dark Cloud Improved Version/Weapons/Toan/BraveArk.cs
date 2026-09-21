@@ -14,7 +14,7 @@ namespace Dark_Cloud_Improved_Version
         /// Brave Ark: resists Freeze, Poison, Curse, and Goo status effects while equipped.
         /// Clears any of those statuses within the polling interval.
         /// </summary>
-        public static void BraveArkEffect()
+        public static void HerosCourageEffect()
         {
             const ushort resistMask = ToanState.StatusFreeze | ToanState.StatusPoison |
                                       ToanState.StatusCurse  | ToanState.StatusGoo;

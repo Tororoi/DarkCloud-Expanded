@@ -1,6 +1,7 @@
 # Bandit Slingshot — a stolen projectile
 
-`Weapons/Xiao/BanditSlingshot.cs` (thread `BanditSlingshot.BanditSlingshotEffect`; the shot through `BorrowedShots`).
+`Weapons/Xiao/BanditSlingshot.cs` (thread `BanditSlingshot.StealShotEffect`; the shot through `BorrowedShots`), and for
+Ruby's Bandit's Ring `Weapons/Ruby/BanditsRing.cs`, whose `StealShotEffect` runs the slingshot's driver while the ring is equipped.
 
 A steal that lands on an enemy with a projectile takes the projectile: until Xiao steals another or the floor ends,
 every pellet she fires is that enemy's shot — the species' primary shot config as the static table holds it, flags and

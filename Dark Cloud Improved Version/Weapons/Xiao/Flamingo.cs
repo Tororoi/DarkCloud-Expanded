@@ -12,8 +12,8 @@ namespace Dark_Cloud_Improved_Version
     /// While a granting weapon is equipped the driver owns the table and holds Xiao's factor at <see cref="XiaoFactor"/>; the
     /// vanilla 1.4 goes back when the weapon goes. The reach is the Flamingo's, inherited by Dragon's Y, Divine Beast
     /// Title, Angel Shooter and Angel Gear (<see cref="GrantsReach"/>), and by Super Steve carrying any of their
-    /// SynthSpheres (<see cref="SuperSteve.SuperSteveEffect"/> drives it; the others share
-    /// <see cref="Flamingo.FlamingoEffect"/>).
+    /// SynthSpheres (<see cref="SuperSteve.SphereInheritanceEffect"/> drives it; the others share
+    /// <see cref="Flamingo.LockOnDistanceEffect"/>).
     ///
     /// Owning them (Xiao's bag or the storage) is a passive for fishing: every bait's notice radius — the distance at which a
     /// fish turns toward the hook, copied from <see cref="BaitDetectionRadiusTable"/> into each fish every frame — is
@@ -86,8 +86,8 @@ namespace Dark_Cloud_Improved_Version
         // ── Lock-on reach (Flamingo, Dragon's Y, Divine Beast Title, Angel Shooter, Angel Gear) ──
         /// <summary>The lock-on reach's thread: hands every tick to <see cref="Flamingo.Drive"/> while one of the weapons that
         /// carry it is equipped (<see cref="Flamingo.GrantsReach"/>), and releases it once when it goes. Super Steve drives the
-        /// same reach from <see cref="SuperSteveEffect"/> when its sphere is one of theirs.</summary>
-        public static void FlamingoEffect()
+        /// same reach from <see cref="SphereInheritanceEffect"/> when its sphere is one of theirs.</summary>
+        public static void LockOnDistanceEffect()
         {
             while (Player.InDungeonFloor() && Flamingo.GrantsReach(Player.Weapon.GetCurrentWeaponId()))
             {

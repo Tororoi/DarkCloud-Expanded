@@ -4,7 +4,7 @@ Hold the shot for a second (the game's charge-complete flash marks it) and the p
 damage, passes an enemy's guard window with a hammer-swing kick behind it, and flies as a projection of the slingshot — a copy of
 the model, tinted orange, riding the pellet at its own size, wrapped in the cat's glow; the pellet itself is untouched
 and hidden inside. `Weapons/Xiao/Matador.cs` drives it from the Matador
-thread (`Matador.MatadorEffect`), and from Super Steve's loop (`SuperSteveEffect`) when a Matador SynthSphere
+thread (`Matador.ChargingBullEffect`), and from Super Steve's loop (`SphereInheritanceEffect`) when a Matador SynthSphere
 is attached — the copy is of the live weapon, so Super Steve projects its own model.
 
 ## What rides on the pellet

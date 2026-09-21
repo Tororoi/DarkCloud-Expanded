@@ -1060,7 +1060,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Xiao's Angel Gear thread: runs while the weapon is equipped and hands every tick to
         /// <see cref="DriveAngelGear"/>, which owns the cadence — so a pause, a menu, a chest or a conversation only
         /// holds the interval, never restarts it.</summary>
-        public static void AngelGearEffect()
+        public static void GuardianReflectorEffect()
         {
             while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.angelgear)
             {

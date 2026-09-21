@@ -104,7 +104,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Ungaga's own Cactus weapon: loops the shared driver while it's equipped.</summary>
-        public static void CactusEffect()
+        public static void AbsorbEffect()
         {
             var st = new CactusState();
             while (Player.Weapon.GetCurrentWeaponId() == Items.cactus && Player.InDungeonFloor())

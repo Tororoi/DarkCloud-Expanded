@@ -16,7 +16,7 @@ namespace Dark_Cloud_Improved_Version
         /// they're ready the instant the whirlwind fires. When the charge attack finishes the blade snaps back
         /// to its original size. Scaling reuses the helpers in <see cref="Weapons"/>.
         /// </summary>
-        public static void HeavensCloudEffect()
+        public static void TyphoonEffect()
         {
             const float maxScale = 3.0f;       // blade grows up to 3x
             const double growSeconds = 4.0;    // play time to grow from 1x to maxScale

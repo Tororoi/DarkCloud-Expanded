@@ -110,7 +110,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Xiao's Angel Shooter thread: hands every tick to <see cref="Drive"/> while she wields a weapon that carries the
         /// ability (<see cref="Carries"/>), and closes the channel once when it goes. One driver only, like the cat's.</summary>
-        public static void AngelShooterEffect()
+        public static void GuardianGraceEffect()
         {
             while (Player.InDungeonFloor() && Carries())
             {

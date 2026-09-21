@@ -54,7 +54,7 @@ namespace Dark_Cloud_Improved_Version
         ///    the sphere 77%. The break animation still plays on a refused break (cosmetic).
         /// The Status Break hover hint explains the rule whenever a 7BS is selected (mes-data).
         /// </summary>
-        public static void SevenBranchSwordEffect()
+        public static void SevenfoldRiteEffect()
         {
             // The selection / factor / cursor-pin logic below runs EVERY call (main loop ~50ms)
             // so the confirm-cursor pin reacts fast enough to beat a Right+X input. Only the

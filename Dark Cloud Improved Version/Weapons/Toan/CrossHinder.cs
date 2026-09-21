@@ -44,7 +44,7 @@ namespace Dark_Cloud_Improved_Version
         ///     floor: the revive roll's threshold literal is set to 0 so the revive branch never wins
         ///     (one u32 per script, restored on unequip). No engine call, no per-death watching.
         /// </summary>
-        public static void CrossHinderEffect()
+        public static void SanctifierEffect()
         {
             int n = EnemyAddresses.FloorSlots.Count;
             var absOriginal = new int[n];

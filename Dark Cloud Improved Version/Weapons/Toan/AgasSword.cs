@@ -13,7 +13,7 @@ namespace Dark_Cloud_Improved_Version
         /// Ability Name: Defensive Legacy (Aga's Sword)
         /// Aga's Sword: +15 defense to Toan while equipped.
         /// </summary>
-        public static void AgasSwordEffect()
+        public static void DefensiveLegacyEffect()
         {
             const int boost = 15;
             int baseDefense = Player.Toan.GetDefense();

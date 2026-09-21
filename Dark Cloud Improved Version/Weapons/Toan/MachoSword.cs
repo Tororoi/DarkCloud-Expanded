@@ -97,7 +97,7 @@ namespace Dark_Cloud_Improved_Version
         /// clamps its abs number to max, and the vanilla "ABS MAX" popup doesn't fire on the
         /// crossing kill (this watcher preempts the engine's clamp path).
         /// </summary>
-        public static void MachoSwordEffect()
+        public static void OvertrainingEffect()
         {
             DateTime now = DateTime.UtcNow;
             if (now < _machoNextTick) return;

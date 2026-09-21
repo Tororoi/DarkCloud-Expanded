@@ -20,7 +20,7 @@ namespace Dark_Cloud_Improved_Version
         /// lineage reasons (Tsukikage builds up into it), on top of its own charge-scaling
         /// effect — firing the whirlwind sooner simply means less time for the blade to grow.
         /// </summary>
-        public static void TsukikageEffect()
+        public static void MoonlitFocusEffect()
         {
             DateTime lastTick = DateTime.UtcNow;
 

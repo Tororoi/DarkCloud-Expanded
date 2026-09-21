@@ -23,7 +23,7 @@ namespace Dark_Cloud_Improved_Version
     /// it came from (2 + radius + one frame of travel, so the game's next test passes), then turns collision on and the
     /// game flies it from there — it cannot strike the enemy it came from. Should it reach another enemy's sphere while
     /// still on the driver's steps, collision is turned on at once and the game resolves that hit. Double Impact drives this
-    /// for its pair, and Super Steve carrying a Hardshooter SynthSphere has it too (<see cref="SuperSteve.SuperSteveEffect"/>).
+    /// for its pair, and Super Steve carrying a Hardshooter SynthSphere has it too (<see cref="SuperSteve.SphereInheritanceEffect"/>).
     /// </summary>
     internal static class Hardshooter
     {
@@ -191,7 +191,7 @@ namespace Dark_Cloud_Improved_Version
         // ── Hardshooter ────────────────────────────────────────────────────────────────────
         /// <summary>Xiao's Hardshooter thread: hands every tick to <see cref="Hardshooter.Drive"/> while the weapon is equipped,
         /// and stands it down once when it goes.</summary>
-        public static void HardshooterEffect()
+        public static void RicochetEffect()
         {
             while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.hardshooter)
             {

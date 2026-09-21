@@ -30,7 +30,7 @@ namespace Dark_Cloud_Improved_Version
         /// GetNowWeaponAttachNum == 0). Runs from the mod main loop in ALL modes (self-gated to
         /// ~2.5 Hz) because attaching can happen from any menu, sword equipped or not.
         /// </summary>
-        public static void BusterSwordEffect()
+        public static void BusterBoostEffect()
         {
             if (DateTime.UtcNow < _busterNextTick) return;
             _busterNextTick = DateTime.UtcNow.AddMilliseconds(400);

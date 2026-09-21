@@ -23,7 +23,7 @@ namespace Dark_Cloud_Improved_Version
         /// messages mark the blessing and its fading (no numbers shown). Scale and attack are re-asserted
         /// each tick, so floor reloads / battle-record refreshes can't strand a half-applied boost.
         /// </summary>
-        public static void KitchenKnifeEffect()
+        public static void SpringsBlessingEffect()
         {
             bool boosted = false;
             bool warnedNoBlade = false;

@@ -1,6 +1,6 @@
 # Skunk — twice the flamethrower's reach
 
-`Weapons/Osmond/Skunk.cs` (thread `CustomOsmondEffects.SkunkEffect`).
+`Weapons/Osmond/Skunk.cs` (thread `CustomOsmondEffects.LongerFlameEffect`).
 
 Osmond's flame gun mode (gun type 2, set per weapon by `Get_Main_EffectPtr` — the Blessing Gun 368 and the Skunk 369;
 `BattleActionPlay_Ozumond_F`, dun 0x1DBE3A0) fires a `CSHOT_FIREBAR` (0x1EFB2F0): 24 flame particles laid along the

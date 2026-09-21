@@ -1,13 +1,13 @@
 # Flamingo — lock-on reach and the fishing passive
 
-`Weapons/Xiao/Flamingo.cs` (thread `Flamingo.FlamingoEffect`, shared with the weapons that inherit the reach;
+`Weapons/Xiao/Flamingo.cs` (thread `Flamingo.LockOnDistanceEffect`, shared with the weapons that inherit the reach;
 the passive from `Fishing.OnSessionStart`).
 
 ## Lock-on reach (equipped)
 
 Enemies can be locked on to from twice as far. The reach is the Flamingo's and is inherited by Dragon's Y, Divine Beast
 Title, Angel Shooter and Angel Gear (`Flamingo.GrantsReach`), and by Super Steve carrying any of the five's
-SynthSphere (driven from `SuperSteveEffect`). The reach is the enemy's lock-on distance (`EnemySlotOffsets.
+SynthSphere (driven from `SphereInheritanceEffect`). The reach is the enemy's lock-on distance (`EnemySlotOffsets.
 LockOnDistance`, +0x118; `CleanViewMonstor` writes 120 when the slot is set up, and a species script may set its own
 with `_SET_LOCKON_DIST` / `_STATUS_SET_LOCKON_DIST`) times a per-character factor: `SetNearLockOnTarget` (the acquire)
 and `setTargetCursor` (the hold) each copy a six-float table to the stack and index it by character id — Toan 1.2, Xiao

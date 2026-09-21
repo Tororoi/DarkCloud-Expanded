@@ -40,7 +40,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Osmond's own Snail weapon: loops the shared driver while it's equipped.</summary>
-        public static void SnailEffect()
+        public static void SlimeTrailEffect()
         {
             var st = new SnailState();
             while (Player.Weapon.GetCurrentWeaponId() == Items.snail && Player.InDungeonFloor())
@@ -76,7 +76,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Osmond's own Star Breaker weapon: loops the shared driver while it's equipped.</summary>
-        public static void StarBreakerEffect()
+        public static void ShootingStarsEffect()
         {
             var st = new StarBreakerState();
             while (Player.Weapon.GetCurrentWeaponId() == Items.starbreaker && Player.InDungeonFloor())
@@ -92,7 +92,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         /// <summary>Osmond's Skunk thread: hands every tick to <see cref="Skunk.Drive"/> while the weapon is equipped, and
         /// stands it down once when it goes.</summary>
-        public static void SkunkEffect()
+        public static void LongerFlameEffect()
         {
             while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.skunk)
             {

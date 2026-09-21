@@ -34,7 +34,7 @@ namespace Dark_Cloud_Improved_Version
         /// original when it isn't (sidekick out, paused, unequipped, or dungeon exit) so enemies block normally
         /// with other weapons. No code patch; the frame values are left untouched.
         /// </summary>
-        public static void DarkCloudEffect()
+        public static void GuardCrushEffect()
         {
             while (Player.InDungeonFloor())
             {

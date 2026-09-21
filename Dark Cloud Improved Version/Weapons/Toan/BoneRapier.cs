@@ -13,7 +13,7 @@ namespace Dark_Cloud_Improved_Version
         /// Toggles the effect of the bone rapier
         /// </summary>
         /// <param name="isActive">True if to active the effect</param>
-        public static void BoneRapierEffect(bool isActive)
+        public static void SkeletonKeyEffect(bool isActive)
         {
             if (isActive)
             {
@@ -79,7 +79,7 @@ namespace Dark_Cloud_Improved_Version
         /// (or Super Steve with either sphere), the loaded death scripts of the reviving undead are patched once per floor so
         /// the revive roll never wins (<see cref="PatchUndeadRevivers"/>), and put back when the key goes. Runs while one of
         /// the three weapons is equipped; a sphere change on Super Steve patches or restores mid-floor.</summary>
-        public static void BoneKeyNoRevivalEffect()
+        public static void GravediggerEffect()
         {
             var patched = new List<(long CellValueAddr, int OrigThr)>();
             byte floor = 0xFF; bool applied = false;
