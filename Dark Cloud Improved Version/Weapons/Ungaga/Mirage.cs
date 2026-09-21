@@ -63,7 +63,7 @@ namespace Dark_Cloud_Improved_Version
         ///     standard Super Steve inheritance (the sphere's SOURCE weapon id selects the effect).
         ///
         /// Both wielders work unchanged because Ungaga and Xiao share the guard motions this triggers on
-        /// (9 / 33), and Xiao fits the clone's mesh cave. Mirage is NOT driven from CustomXiaoEffects'
+        /// (9 / 33), and Xiao fits the clone's mesh cave. Mirage is NOT driven from SuperSteve's
         /// SuperSteveEffect hub — it owns a thread and a state machine (guard charge → decoy → clone → haze),
         /// so it gates itself here rather than being pulsed per-tick like the stateless abilities.</summary>
         private static bool MirageArmed()
@@ -83,7 +83,7 @@ namespace Dark_Cloud_Improved_Version
                 if ((uint)equipSlot > 9) return false;
                 long rec = DngStatusData.WeaponRecord(ch, equipSlot);
                 if (Memory.ReadUShort(rec) != Items.supersteve) return false;
-                int sphere = SuperSteveAbilities.AttachedSphere(rec);
+                int sphere = SuperSteve.AttachedSphere(rec);
                 return sphere == Items.mirage || sphere == Items.herculeswrath;
             }
 
@@ -357,7 +357,7 @@ namespace Dark_Cloud_Improved_Version
 
                         // Angel Gear's shield ring OWNS the per-slot table while it is up (Mirage and Angel
                         // Gear can never be wielded simultaneously) — stand down, resume when it releases.
-                        if (!GuardianReflector.RingActive)
+                        if (!AngelGear.RingActive)
                             WriteTable();   // fills the per-slot table both _GET_POSITION and _GET_DISTANCE now read
                         // PNACH gate flag: 1 = clone drawn → NOP the chara-loop gates; 2 = in a dungeon w/o a decoy
                         // → RESTORE the vanilla gates (they don't auto-revert). 0 (town) is set below so the shared
@@ -368,7 +368,7 @@ namespace Dark_Cloud_Improved_Version
                         // (and the chara slots / caves): while either copy is up, IT drives the flag — stand down.
                         // (Mirage and Xiao's weapons can never be wielded simultaneously.) A competing 2 here made
                         // the slot loop run only on the frames the other writer won — the cat flickered.
-                        if (!SlingshotProp.Active && !DivineBeastCat.Active)
+                        if (!SlingshotProp.Active && !DivineBeastTitle.Active)
                             Memory.WriteInt(CodeCaves.MirageSceneGateFlag, (_decoyActive && CharacterClone.IsActive) ? 1 : 2);
                         sleep = FastTickMs;
                     }
@@ -376,7 +376,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         guardLatched = false;
                         if (_decoyActive || CharacterClone.IsActive) EndDecoy();   // left the floor
-                        if (!SlingshotProp.Active && !DivineBeastCat.Active)
+                        if (!SlingshotProp.Active && !DivineBeastTitle.Active)
                             Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 0);   // town: leave the gates to the overlay reload
                     }
                 }

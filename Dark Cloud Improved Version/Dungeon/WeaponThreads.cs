@@ -21,16 +21,16 @@ namespace Dark_Cloud_Improved_Version
         private static Thread smallSwordThread = new Thread(new ThreadStart(SmallSword.SmallSwordEffect));
         private static Thread darkCloudThread = new Thread(new ThreadStart(DarkCloud.DarkCloudEffect));
         private static Thread kitchenKnifeThread = new Thread(new ThreadStart(KitchenKnife.KitchenKnifeEffect));
-        private static Thread angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
-        private static Thread superSteveThread = new Thread(new ThreadStart(CustomXiaoEffects.SuperSteveEffect));
-        private static Thread matadorThread = new Thread(new ThreadStart(CustomXiaoEffects.MatadorEffect));
-        private static Thread dragonsYThread = new Thread(new ThreadStart(CustomXiaoEffects.DragonsYEffect));
-        private static Thread lockOnSpeedThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnSpeedEffect));
-        private static Thread doubleImpactThread = new Thread(new ThreadStart(CustomXiaoEffects.DoubleImpactEffect));
-        private static Thread banditSlingshotThread = new Thread(new ThreadStart(CustomXiaoEffects.BanditSlingshotEffect));
-        private static Thread steelSlingshotThread = new Thread(new ThreadStart(CustomXiaoEffects.SteelSlingshotEffect));
-        private static Thread hardshooterThread = new Thread(new ThreadStart(CustomXiaoEffects.HardshooterEffect));
-        private static Thread lockOnReachThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnReachEffect));
+        private static Thread angelGearThread = new Thread(new ThreadStart(AngelGear.AngelGearEffect));
+        private static Thread superSteveThread = new Thread(new ThreadStart(SuperSteve.SuperSteveEffect));
+        private static Thread matadorThread = new Thread(new ThreadStart(Matador.MatadorEffect));
+        private static Thread dragonsYThread = new Thread(new ThreadStart(DragonsY.DragonsYEffect));
+        private static Thread lockOnSpeedThread = new Thread(new ThreadStart(DragonsY.LockOnSpeedEffect));
+        private static Thread doubleImpactThread = new Thread(new ThreadStart(DoubleImpact.DoubleImpactEffect));
+        private static Thread banditSlingshotThread = new Thread(new ThreadStart(BanditSlingshot.BanditSlingshotEffect));
+        private static Thread steelSlingshotThread = new Thread(new ThreadStart(SteelSlingshot.SteelSlingshotEffect));
+        private static Thread hardshooterThread = new Thread(new ThreadStart(Hardshooter.HardshooterEffect));
+        private static Thread lockOnReachThread = new Thread(new ThreadStart(Flamingo.FlamingoEffect));
         private static Thread heavensCloudThread = new Thread(new ThreadStart(HeavensCloud.HeavensCloudEffect));
         private static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
         private static Thread agasSwordThread = new Thread(new ThreadStart(AgasSword.AgasSwordEffect));
@@ -294,15 +294,15 @@ namespace Dark_Cloud_Improved_Version
             if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
             // The lock-on movement buff: Dragon's Y's, and the three weapons that inherit it (Super Steve's own loop drives its sphere's).
-            if (LockOnSpeed.Grants(Player.Weapon.GetCurrentWeaponId()) && !lockOnSpeedThread.IsAlive)
+            if (DragonsY.LockOnSpeedGrants(Player.Weapon.GetCurrentWeaponId()) && !lockOnSpeedThread.IsAlive)
             {
-                lockOnSpeedThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnSpeedEffect));
+                lockOnSpeedThread = new Thread(new ThreadStart(DragonsY.LockOnSpeedEffect));
                 lockOnSpeedThread.Start();
             }
             // The lock-on reach: the Flamingo's, and the four weapons that inherit it (Super Steve's own loop drives its sphere's).
             if (Flamingo.GrantsReach(Player.Weapon.GetCurrentWeaponId()) && !lockOnReachThread.IsAlive)
             {
-                lockOnReachThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnReachEffect));
+                lockOnReachThread = new Thread(new ThreadStart(Flamingo.FlamingoEffect));
                 lockOnReachThread.Start();
             }
             switch (Player.Weapon.GetCurrentWeaponId())
@@ -311,7 +311,7 @@ namespace Dark_Cloud_Improved_Version
                 case Items.angelgear:
                     if (!angelGearThread.IsAlive)
                     {
-                        angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
+                        angelGearThread = new Thread(new ThreadStart(AngelGear.AngelGearEffect));
                         angelGearThread.Start();
                     }
                     break;
@@ -319,7 +319,7 @@ namespace Dark_Cloud_Improved_Version
                 case Items.supersteve:
                     if (!superSteveThread.IsAlive)
                     {
-                        superSteveThread = new Thread(new ThreadStart(CustomXiaoEffects.SuperSteveEffect));
+                        superSteveThread = new Thread(new ThreadStart(SuperSteve.SuperSteveEffect));
                         superSteveThread.Start();
                     }
                     if (!boneNoRevivalThread.IsAlive)   // the bone key's no-revival, for a Bone Rapier / Bone Slingshot sphere (the thread checks)
@@ -337,7 +337,7 @@ namespace Dark_Cloud_Improved_Version
                 case Items.matador:
                     if (!matadorThread.IsAlive)
                     {
-                        matadorThread = new Thread(new ThreadStart(CustomXiaoEffects.MatadorEffect));
+                        matadorThread = new Thread(new ThreadStart(Matador.MatadorEffect));
                         matadorThread.Start();
                     }
                     break;
@@ -345,7 +345,7 @@ namespace Dark_Cloud_Improved_Version
                 case Items.dragonsy:
                     if (!dragonsYThread.IsAlive)
                     {
-                        dragonsYThread = new Thread(new ThreadStart(CustomXiaoEffects.DragonsYEffect));
+                        dragonsYThread = new Thread(new ThreadStart(DragonsY.DragonsYEffect));
                         dragonsYThread.Start();
                     }
                     break;
@@ -353,7 +353,7 @@ namespace Dark_Cloud_Improved_Version
                 case Items.doubleimpact:
                     if (!doubleImpactThread.IsAlive)
                     {
-                        doubleImpactThread = new Thread(new ThreadStart(CustomXiaoEffects.DoubleImpactEffect));
+                        doubleImpactThread = new Thread(new ThreadStart(DoubleImpact.DoubleImpactEffect));
                         doubleImpactThread.Start();
                     }
                     break;
@@ -361,7 +361,7 @@ namespace Dark_Cloud_Improved_Version
                 case Items.banditslingshot:
                     if (!banditSlingshotThread.IsAlive)
                     {
-                        banditSlingshotThread = new Thread(new ThreadStart(CustomXiaoEffects.BanditSlingshotEffect));
+                        banditSlingshotThread = new Thread(new ThreadStart(BanditSlingshot.BanditSlingshotEffect));
                         banditSlingshotThread.Start();
                     }
                     break;
@@ -385,7 +385,7 @@ namespace Dark_Cloud_Improved_Version
                 case Items.steelslingshot:
                     if (!steelSlingshotThread.IsAlive)
                     {
-                        steelSlingshotThread = new Thread(new ThreadStart(CustomXiaoEffects.SteelSlingshotEffect));
+                        steelSlingshotThread = new Thread(new ThreadStart(SteelSlingshot.SteelSlingshotEffect));
                         steelSlingshotThread.Start();
                     }
                     break;
@@ -393,7 +393,7 @@ namespace Dark_Cloud_Improved_Version
                 case Items.hardshooter:
                     if (!hardshooterThread.IsAlive)
                     {
-                        hardshooterThread = new Thread(new ThreadStart(CustomXiaoEffects.HardshooterEffect));
+                        hardshooterThread = new Thread(new ThreadStart(Hardshooter.HardshooterEffect));
                         hardshooterThread.Start();
                     }
                     break;
@@ -457,7 +457,7 @@ namespace Dark_Cloud_Improved_Version
 
                     if (!banditSlingshotThread.IsAlive)
                     {
-                        banditSlingshotThread = new Thread(new ThreadStart(CustomXiaoEffects.BanditSlingshotEffect));
+                        banditSlingshotThread = new Thread(new ThreadStart(BanditSlingshot.BanditSlingshotEffect));
                         banditSlingshotThread.Start();
                     }
                     break;

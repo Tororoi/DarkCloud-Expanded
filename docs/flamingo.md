@@ -1,6 +1,6 @@
 # Flamingo — lock-on reach and the fishing passive
 
-`Weapons/Xiao/Flamingo.cs` (thread `CustomXiaoEffects.LockOnReachEffect`, shared with the weapons that inherit the reach;
+`Weapons/Xiao/Flamingo.cs` (thread `Flamingo.FlamingoEffect`, shared with the weapons that inherit the reach;
 the passive from `Fishing.OnSessionStart`).
 
 ## Lock-on reach (equipped)

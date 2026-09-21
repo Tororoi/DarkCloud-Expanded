@@ -575,7 +575,7 @@ namespace Dark_Cloud_Improved_Version
     /// as CollisionData: +0x58 = <see cref="OffOwner"/>, +0x60 = <see cref="OffUserCol"/>, +0x64 = <see cref="OffAntiPtr"/>,
     /// +0x6C = <see cref="OffWepFlags"/>, +0x5C = <see cref="OffA060"/>, +0x68 = <see cref="OffA110"/>; the config gives the
     /// victim mask (+0x48: 1 = the player, 2 = enemies), the hit reaction (+0x44), the element (+0x40), the wait (+0x38) and
-    /// the default damage (+0x3C). RE: GuardianReflector, BorrowedShots.
+    /// the default damage (+0x3C). RE: AngelGear, BorrowedShots.
     /// </summary>
     internal static class ShotEffectPack
     {

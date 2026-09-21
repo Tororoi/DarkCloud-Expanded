@@ -100,7 +100,7 @@ namespace Dark_Cloud_Improved_Version
     /// (colour × pulse) + 64 until the <see cref="Count"/> repeats run out. It is character-agnostic — the
     /// game uses it for drink/face-change and Ruby's Mobius charge flash — so the same data writes flash any
     /// active character. Trigger: write colour + speed + count, reset <see cref="Phase"/>, then set Enable.
-    /// gp = 0x2A97F0. See <c>CustomXiaoEffects.TriggerCharacterFlash</c> / the Ruby Mobius flash.
+    /// gp = 0x2A97F0. See <c>Player.FlashChargeComplete</c> / the Ruby Mobius flash.
     /// </summary>
     internal static class CharacterFlash
     {

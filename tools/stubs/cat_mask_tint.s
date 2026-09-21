@@ -11,7 +11,7 @@
 # node test in front of every mesh the game draws.
 #
 # WHAT THIS DOES INSTEAD. The runtime already gives every cat mesh a PRIVATE CVisualMDT in the mod's own cave (CopyMeshes), so
-# the mask's visual is an object nobody else can reach. DivineBeastCat.MaskTint copies the vtable, points slots 6 and 7 here,
+# the mask's visual is an object nobody else can reach. DivineBeastTitle.MaskTint copies the vtable, points slots 6 and 7 here,
 # and writes that copy into the mask visual alone. Not one byte of shared engine code is patched, and nothing else in the game
 # can arrive at this cave — the only pointer to it lives in an object the mod allocated itself.
 #

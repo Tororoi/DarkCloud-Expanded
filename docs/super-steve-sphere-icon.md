@@ -1,9 +1,9 @@
 # Super Steve — the attached sphere's icon
 
-Super Steve inherits the ability of whichever weapon's SynthSphere is attached (`SuperSteveAbilities.AttachedSphere`).
+Super Steve inherits the ability of whichever weapon's SynthSphere is attached (`SuperSteve.AttachedSphere`).
 The sphere is shown as that weapon's icon drawn over Steve on the dungeon HUD, natively, by `ElfCave.SuperSteveIconDraw`
 (`tools/stubs/supersteve_icon_draw.s`, hooked at the overlay's `jal topStatusInfo`, dun 0x1DB0364);
-`SuperSteveAbilities.DriveSphereIcon` switches it on with its screen position in the mailbox once per sphere change.
+`SuperSteve.DriveSphereIcon` switches it on with its screen position in the mailbox once per sphere change.
 This replaced the earlier palette swap, which recoloured the slingshot model with the source weapon's CLUT.
 
 ## The pellet
@@ -11,7 +11,7 @@ This replaced the earlier palette swap, which recoloured the slingshot model wit
 A slingshot's sphere also brings its pellet. Every player pellet is drawn by `draw__5CSHOT` (main 0x1ABC40) as one
 32 × 32 cell of `dun\effect\basefx01.img`, cell = the equipped weapon's item id − 300, read off `*NowWeaponHave` at
 every draw. `DebugInfoCave.PelletSprite` (`tools/stubs/pellet_sprite.s`, hooked at that read, 0x1ABC74) hands back
-`Mailbox.PelletSpriteId` instead when it is non-zero; `SuperSteveAbilities.DriveSphereSprite` writes the sphere
+`Mailbox.PelletSpriteId` instead when it is non-zero; `SuperSteve.DriveSphereSprite` writes the sphere
 weapon's id there when the sphere is a slingshot's (Wooden Slingshot … Angel Gear, not Super Steve's own) and 0
 otherwise. The Matador's sphere therefore also carries its orange ball, which Charging Bull's glow scale expects.
 
@@ -55,7 +55,7 @@ copy call is harmless in between (its `GetTexture` returns 0). So the sphere ico
   refuse, so the icon only appeared after a menu. Counters in the mailbox (`SsIconDiag*`) record each stage and are
   reported in the `sphere icon:` log line; they are how the dead overlay site was found.
 - **draw** (`ElfCave.SuperSteveIconDraw`, on `jal topStatusInfo`): `set2DSprite(Vif1Packet, GetTexture("itempack"),
-  dst, src (64, 32, 32, 32), alpha)` at `SuperSteveAbilities.SsIconX/Y/Size`, tuned in game. The alpha is the HUD's own:
+  dst, src (64, 32, 32, 32), alpha)` at `SuperSteve.SsIconX/Y/Size`, tuned in game. The alpha is the HUD's own:
   topStatusInfo draws Steve's icon at a fixed (29, 388) with `(x + 0x60) & 0xFF`, x its first argument, which the
   caller animates when a menu opens (32 at rest → 0x80); the cave keeps that x and uses the same formula, skipping the
   draw at 0, so the icon fades out with the HUD.

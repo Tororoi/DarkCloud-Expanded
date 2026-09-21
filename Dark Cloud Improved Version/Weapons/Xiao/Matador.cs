@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -24,12 +25,12 @@ namespace Dark_Cloud_Improved_Version
     ///    disc in the Fire element's ramp (the palette cave paints <see cref="FireRow"/>). The cat never coexists with the
     ///    Matador, and the row is handed back to None when the shot ends so the cat repaints on its next spawn.
     /// Nothing is drawn or crushed when the ISO lacks the caves. Super Steve carrying a Matador SynthSphere has the ability
-    /// too (<see cref="CustomXiaoEffects.SuperSteveEffect"/> drives it): the copy is of the LIVE weapon, so it flies as Super
+    /// too (<see cref="SuperSteve.SuperSteveEffect"/> drives it): the copy is of the LIVE weapon, so it flies as Super
     /// Steve's own model.
     /// </summary>
-    internal static class ChargingBull
+    internal static class Matador
     {
-        private const string Tag = "[ChargingBull] ";
+        private const string Tag = "[Matador] ";
 
         private const double ChargeSeconds  = 1.0;    // hold this long → the shot is charged (the game's charge-complete flash marks it)
         private const double ArmSeconds     = 0.5;    // a charged release must produce its pellet within this
@@ -200,5 +201,19 @@ namespace Dark_Cloud_Improved_Version
             if (SlingshotProp.Active) SlingshotProp.Maintain(0f);                // hidden, resident for the next shot
             _slot = -1; _fade = -1;
         }
+
+        // ── Matador ────────────────────────────────────────────────────────────────────────
+        /// <summary>Xiao's Matador thread: hands every tick to <see cref="Matador.Drive"/> while the weapon is equipped,
+        /// and stands it down once when it goes.</summary>
+        public static void MatadorEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.matador)
+            {
+                Matador.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                Thread.Sleep(16);
+            }
+            Matador.Stop();
+        }
+
     }
 }

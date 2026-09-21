@@ -3,14 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
-using static Dark_Cloud_Improved_Version.DivineBeastCat;
+using static Dark_Cloud_Improved_Version.DivineBeastTitle;
 using static Dark_Cloud_Improved_Version.CatCape;
 using static Dark_Cloud_Improved_Version.CatFlight;
 using static Dark_Cloud_Improved_Version.CatCopy;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>The cat's textures: retagged from her block to the slot's group at a spawn and returned at a despawn, recreated or relocated when the block moves. One of the <see cref="DivineBeastCat"/> classes, which share their members through using static.</summary>
+    /// <summary>The cat's textures: retagged from her block to the slot's group at a spawn and returned at a despawn, recreated or relocated when the block moves. One of the <see cref="DivineBeastTitle"/> classes, which share their members through using static.</summary>
     internal static class CatTextures
     {
         // ─────────────────────────────────────────── textures ──────────────────────────────────────────────

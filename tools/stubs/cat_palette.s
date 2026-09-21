@@ -31,7 +31,7 @@
 # Leaf routine: it calls nothing, touches only $t registers, and returns through $ra — so it needs no frame.
 
 # +0x00 — the colours, RGBA with the PS2's 0x80 = opaque, indexed by the element byte. Tuned by the user against
-# the element bars in the weapon menu; keep in step with DivineBeastCat.ElementLooks.
+# the element bars in the weapon menu; keep in step with DivineBeastTitle.ElementLooks.
 .word 0x80000F80               # 0 Fire    128, 15,   0
 .word 0x80682D09               # 1 Ice       9, 45, 104
 .word 0x800094B4               # 2 Thunder 180,148,   0

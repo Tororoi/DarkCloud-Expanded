@@ -7,7 +7,7 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>
     /// Angel Gear "Guardian Reflector" (roadmap PR 7).
     /// While Xiao guards with the Angel Gear — or with Super Steve carrying an Angel Gear SynthSphere
-    /// (<see cref="SuperSteveAbilities.AttachedSphere"/>), the copy then being Super Steve itself: every slingshot
+    /// (<see cref="SuperSteve.AttachedSphere"/>), the copy then being Super Steve itself: every slingshot
     /// shares the rig, KEY table and pouch track the prop reads by name — a GIANT COPY of her slingshot stands IN
     /// FRONT of her for the whole guard hold (transparent → solid over 0.25 s, folding away over 0.5 s on
     /// release). It ORBITS her to face, in priority: the nearest enemy shot closing on her (even
@@ -28,11 +28,11 @@ namespace Dark_Cloud_Improved_Version
     /// muzzle exactly as Set does for muzzle-less configs; the fresh shot reuses the free sub-shot's
     /// OWN frame objects, so nothing is deep-copied). The wings are <see cref="SlingshotProp"/>.
     /// </summary>
-    internal static class GuardianReflector
+    internal static class AngelGear
     {
         internal static bool Enabled = true;
 
-        private const string Tag = "[GuardianReflector] ";
+        private const string Tag = "[AngelGear] ";
 
         private const int  XiaoId = 1;
 
@@ -197,7 +197,7 @@ namespace Dark_Cloud_Improved_Version
             if (_thread != null && _thread.IsAlive) return;
             try { Memory.WriteFloat(GaugeRateWord, VanillaXiaoRefillMul); Memory.WriteInt(CodeCaves.Mailbox.ShieldGaugeOwner, 0); _rateWritten = VanillaXiaoRefillMul; _ownerWritten = 0; }   // vanilla until a shield stands
             catch (Exception e) { Console.WriteLine(Tag + "gauge seed failed: " + e.Message); }
-            _thread = new Thread(Loop) { IsBackground = true, Name = "GuardianReflector" };
+            _thread = new Thread(Loop) { IsBackground = true, Name = "AngelGear" };
             _thread.Start();
             if (_hitThread == null || !_hitThread.IsAlive)
             { _hitThread = new Thread(HitWatch) { IsBackground = true, Name = "SlingshotHitWatch" }; _hitThread.Start(); }
@@ -217,7 +217,7 @@ namespace Dark_Cloud_Improved_Version
                     bool inDun = Enabled && Player.InDungeonFloor() && Player.CurrentCharacterNum() == XiaoId;
                     int  weaponId = inDun ? Memory.ReadUShort(WeaponHave.BattleWeaponRecord) : 0;
                     bool gear  = weaponId == Items.angelgear
-                              || (weaponId == Items.supersteve && SuperSteveAbilities.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.angelgear);
+                              || (weaponId == Items.supersteve && SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.angelgear);
                     bool live  = inDun && gear;
                     if (live) sleep = FastTickMs;
                     long pack = live ? Memory.ReadInt(ShotEffectPack.NowShotEffectPtr) : 0;
@@ -233,12 +233,10 @@ namespace Dark_Cloud_Improved_Version
                     pack += 0x20000000;
                     if (held) { Thread.Sleep(sleep); continue; }   // the prop holds its own slot; nothing here may advance
 
-
                     float xx = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos);
                     float xh = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
                     float xy = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 8);
                     float yaw = Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
-
 
                     // The attack gauge is ours while the ISO's dun.bin refill patch is in this overlay.
                     _gaugeLive = (uint)Memory.ReadInt(DunPatches.GaugePatchAddrMmu) == DunPatches.GaugePatchedWord0;
@@ -1058,5 +1056,54 @@ namespace Dark_Cloud_Improved_Version
         /// SetTransMatrix (0x128560) is pure data — copy the matrix to frame+0x1D0, zero the world
         /// cache +0x240 — so we rebuild the same look-at basis (row Z = flight direction, Y kept
         /// upright) and write it ourselves. Translation row is left alone.</summary>
+
+        /// <summary>Xiao's Angel Gear thread: runs while the weapon is equipped and hands every tick to
+        /// <see cref="DriveAngelGear"/>, which owns the cadence — so a pause, a menu, a chest or a conversation only
+        /// holds the interval, never restarts it.</summary>
+        public static void AngelGearEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.angelgear)
+            {
+                DriveAngelGear(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                Thread.Sleep(16);
+            }
+        }
+
+        private const ushort AngelGearHealAmount = 1;
+        private static int _healTickPrev = -1;   // the counter last seen; -1 = not watching, re-seed on the next tick
+
+        /// <summary>Angel Gear's regen, driven every tick by Xiao's own thread and by Super Steve's when it inherits the
+        /// weapon. It rides the native HEAL ability's own cadence: each wrap of <see cref="HealAbility.TickCounter"/> —
+        /// the frame the game grants its +1 — heals each ally by <see cref="AngelGearHealAmount"/> (skipping the dead and
+        /// the already-full). Xiao is healed too UNLESS the equipped weapon carries the native Heal build-up attribute
+        /// (Special2 % 16 in 8..11), which already regenerates her. Opening mid-cycle never procs retroactively. While Xiao
+        /// guards, <see cref="AngelShooter"/> floors the counter so the native tick fires every second, and the party heal
+        /// follows — the counter only ever climbs, is set upward by that floor, or resets to 0 on a proc, so any decrease
+        /// is a proc.</summary>
+        internal static void DriveAngelGear(bool active)
+        {
+            if (!active || Player.CheckDunIsPausedOrMenu() || !Player.CheckDunIsWalkingMode()) { _healTickPrev = -1; return; }
+            int c = Memory.ReadInt(HealAbility.TickCounter);
+            bool wrapped = _healTickPrev >= 0 && c < _healTickPrev;   // the native +1 just fired
+            _healTickPrev = c;
+            if (!wrapped) return;
+
+            HealAlly(Player.Toan.GetHp(),   Player.Toan.GetMaxHp(),   Player.Toan.SetHp);
+            HealAlly(Player.Goro.GetHp(),   Player.Goro.GetMaxHp(),   Player.Goro.SetHp);
+            HealAlly(Player.Ruby.GetHp(),   Player.Ruby.GetMaxHp(),   Player.Ruby.SetHp);
+            HealAlly(Player.Ungaga.GetHp(), Player.Ungaga.GetMaxHp(), Player.Ungaga.SetHp);
+            HealAlly(Player.Osmond.GetHp(), Player.Osmond.GetMaxHp(), Player.Osmond.SetHp);
+
+            // Xiao only if the equipped weapon lacks the native Heal attribute (else the game already regens her).
+            int special2 = Player.Weapon.GetCurrentWeaponSpecial2() % 16;
+            if (special2 < 8 || special2 > 11)
+                HealAlly(Player.Xiao.GetHp(), Player.Xiao.GetMaxHp(), Player.Xiao.SetHp);
+        }
+
+        private static void HealAlly(ushort hp, int maxHp, Action<ushort> setHp)
+        {
+            if (hp > 0 && hp < maxHp) setHp((ushort)(hp + AngelGearHealAmount));
+        }
+
     }
 }

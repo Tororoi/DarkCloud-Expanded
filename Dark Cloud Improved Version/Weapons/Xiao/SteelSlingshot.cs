@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -37,5 +38,19 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The weapon or the floor went: the vanilla factor back.</summary>
         internal static void Stop() { _low = false; ChargedShotWhp.SetBase(1f); }
+
+        // ── Steel Slingshot ────────────────────────────────────────────────────────────────
+        /// <summary>Xiao's Steel Slingshot thread: hands every tick to <see cref="SteelSlingshot.Drive"/> while the weapon is
+        /// equipped, and stands it down once when it goes.</summary>
+        public static void SteelSlingshotEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.steelslingshot)
+            {
+                SteelSlingshot.Drive(!Player.CheckDunIsPaused());
+                Thread.Sleep(16);
+            }
+            SteelSlingshot.Stop();
+        }
+
     }
 }

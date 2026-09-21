@@ -1,6 +1,6 @@
 # Steel Slingshot — half the WHP cost when low
 
-`Weapons/Xiao/SteelSlingshot.cs` (thread `CustomXiaoEffects.SteelSlingshotEffect`).
+`Weapons/Xiao/SteelSlingshot.cs` (thread `SteelSlingshot.SteelSlingshotEffect`).
 
 While the weapon's HP is low — the game's own warning state, WHP ≤ 10 % of the maximum (`LowWhpWarningFraction`, the
 HUD gauge blinking) — each shot costs half the WHP. Xiao drains per shot: `BattleActionPlay_Jinn` passes the mailbox

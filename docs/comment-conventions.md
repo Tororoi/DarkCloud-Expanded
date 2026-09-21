@@ -1,6 +1,6 @@
 # Comment conventions
 
-House style for comments in this repo, derived from the DivineBeastCat.cs pass. Applies to `.cs`, `.py` and `.s` alike.
+House style for comments in this repo, derived from the DivineBeastTitle.cs pass. Applies to `.cs`, `.py` and `.s` alike.
 
 ## The rules
 

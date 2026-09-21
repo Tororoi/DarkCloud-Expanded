@@ -117,7 +117,7 @@ namespace Dark_Cloud_Improved_Version
         {
             int id = Player.Weapon.GetCurrentWeaponId();
             if (id == Items.crosshinder) return true;
-            return id == Items.supersteve && SuperSteveAbilities.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.crosshinder;
+            return id == Items.supersteve && SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.crosshinder;
         }
 
         internal static void RestoreUndeadRevivers(List<(long CellValueAddr, int OrigThr)> patched)

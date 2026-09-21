@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -11,8 +12,8 @@ namespace Dark_Cloud_Improved_Version
     /// While a granting weapon is equipped the driver owns the table and holds Xiao's factor at <see cref="XiaoFactor"/>; the
     /// vanilla 1.4 goes back when the weapon goes. The reach is the Flamingo's, inherited by Dragon's Y, Divine Beast
     /// Title, Angel Shooter and Angel Gear (<see cref="GrantsReach"/>), and by Super Steve carrying any of their
-    /// SynthSpheres (<see cref="CustomXiaoEffects.SuperSteveEffect"/> drives it; the others share
-    /// <see cref="CustomXiaoEffects.LockOnReachEffect"/>).
+    /// SynthSpheres (<see cref="SuperSteve.SuperSteveEffect"/> drives it; the others share
+    /// <see cref="Flamingo.FlamingoEffect"/>).
     ///
     /// Owning them (Xiao's bag or the storage) is a passive for fishing: every bait's notice radius — the distance at which a
     /// fish turns toward the hook, copied from <see cref="BaitDetectionRadiusTable"/> into each fish every frame — is
@@ -34,7 +35,7 @@ namespace Dark_Cloud_Improved_Version
         /// Title, Angel Shooter, Angel Gear — the lock-on speed's line). Also the test for a SynthSphere's source weapon on
         /// Super Steve.</summary>
         internal static bool GrantsReach(int weaponId)
-            => weaponId == Items.flamingo || LockOnSpeed.Grants(weaponId);
+            => weaponId == Items.flamingo || DragonsY.LockOnSpeedGrants(weaponId);
 
         /// <summary>Drive every tick while a granting weapon (or sphere) is equipped; <paramref name="active"/> false releases.</summary>
         internal static void Drive(bool active)
@@ -81,5 +82,20 @@ namespace Dark_Cloud_Improved_Version
             if (Memory.ReadFloat(XiaoEntry) == XiaoFactor) Memory.WriteFloat(XiaoEntry, CodeCaves.LockOnFactorVanilla[Player.XiaoId]);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "lock-on reach released");
         }
+
+        // ── Lock-on reach (Flamingo, Dragon's Y, Divine Beast Title, Angel Shooter, Angel Gear) ──
+        /// <summary>The lock-on reach's thread: hands every tick to <see cref="Flamingo.Drive"/> while one of the weapons that
+        /// carry it is equipped (<see cref="Flamingo.GrantsReach"/>), and releases it once when it goes. Super Steve drives the
+        /// same reach from <see cref="SuperSteveEffect"/> when its sphere is one of theirs.</summary>
+        public static void FlamingoEffect()
+        {
+            while (Player.InDungeonFloor() && Flamingo.GrantsReach(Player.Weapon.GetCurrentWeaponId()))
+            {
+                Flamingo.Drive(!Player.CheckDunIsPaused());
+                Thread.Sleep(16);
+            }
+            Flamingo.Stop();
+        }
+
     }
 }

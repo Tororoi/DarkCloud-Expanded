@@ -3,14 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
-using static Dark_Cloud_Improved_Version.DivineBeastCat;
+using static Dark_Cloud_Improved_Version.DivineBeastTitle;
 using static Dark_Cloud_Improved_Version.CatFlight;
 using static Dark_Cloud_Improved_Version.CatCopy;
 using static Dark_Cloud_Improved_Version.CatTextures;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>The Super Steve cape on the cat: her cape cloth (CCloth 0x8550) taken as the template, spawned and scaled onto the copy, watched, breezed, stiffened and reseeded. One of the <see cref="DivineBeastCat"/> classes, which share their members through using static.</summary>
+    /// <summary>The Super Steve cape on the cat: her cape cloth (CCloth 0x8550) taken as the template, spawned and scaled onto the copy, watched, breezed, stiffened and reseeded. One of the <see cref="DivineBeastTitle"/> classes, which share their members through using static.</summary>
     internal static class CatCape
     {
         // ── the Super Steve cape (CCloth 0x8550) ───────────────────────────────────────────────────────────

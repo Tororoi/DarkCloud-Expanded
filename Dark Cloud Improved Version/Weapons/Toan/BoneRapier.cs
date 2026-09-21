@@ -71,7 +71,7 @@ namespace Dark_Cloud_Improved_Version
             int id = Player.Weapon.GetCurrentWeaponId();
             if (id == Items.bonerapier || id == Items.boneslingshot) return true;
             if (id != Items.supersteve) return false;
-            int sphere = SuperSteveAbilities.AttachedSphere(WeaponHave.BattleWeaponRecord);
+            int sphere = SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord);
             return sphere == Items.bonerapier || sphere == Items.boneslingshot;
         }
 

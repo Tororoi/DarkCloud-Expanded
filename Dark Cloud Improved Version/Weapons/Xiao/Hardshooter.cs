@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Collections.Generic;
 
 namespace Dark_Cloud_Improved_Version
@@ -22,11 +23,11 @@ namespace Dark_Cloud_Improved_Version
     /// it came from (2 + radius + one frame of travel, so the game's next test passes), then turns collision on and the
     /// game flies it from there — it cannot strike the enemy it came from. Should it reach another enemy's sphere while
     /// still on the driver's steps, collision is turned on at once and the game resolves that hit. Double Impact drives this
-    /// for its pair, and Super Steve carrying a Hardshooter SynthSphere has it too (<see cref="CustomXiaoEffects.SuperSteveEffect"/>).
+    /// for its pair, and Super Steve carrying a Hardshooter SynthSphere has it too (<see cref="SuperSteve.SuperSteveEffect"/>).
     /// </summary>
-    internal static class Ricochet
+    internal static class Hardshooter
     {
-        private const string Tag = "[Ricochet] ";
+        private const string Tag = "[Hardshooter] ";
         private const float PelletRadius   = 2f;     // checkCollision's radius for a pellet
         private const float NextEnemyRange = 120f;   // the next target must be within this of the enemy hit
         private const float DefaultSpeed   = 4f;     // when the first pellet's ground speed cannot be read
@@ -186,5 +187,19 @@ namespace Dark_Cloud_Improved_Version
             _departing.Clear(); _claims.Clear();
             Array.Clear(_live, 0, _live.Length); Array.Clear(_bounced, 0, _bounced.Length);
         }
+
+        // ── Hardshooter ────────────────────────────────────────────────────────────────────
+        /// <summary>Xiao's Hardshooter thread: hands every tick to <see cref="Hardshooter.Drive"/> while the weapon is equipped,
+        /// and stands it down once when it goes.</summary>
+        public static void HardshooterEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.hardshooter)
+            {
+                Hardshooter.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                Thread.Sleep(16);
+            }
+            Hardshooter.Stop();
+        }
+
     }
 }

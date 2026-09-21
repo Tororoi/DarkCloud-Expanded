@@ -236,7 +236,7 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>ENEMY-VS-PLAYER BLOCK ADDEND (float). <c>CMonstorUnit::MoveCheck2</c> (0x1DCDD0) stops an
             /// enemy's scripted movement when its next position is within (its move radius +0x1E414 + 6.0) of
             /// the player; the 6.0 is a per-site immediate (`lui $v1,0x40c0; mtc1 $v1,$f1` @0x1DCFD0).
-            /// GuardianReflector.ArmBlockPatch rewrites those two words (cold) to load THIS word instead, so the
+            /// AngelGear.ArmBlockPatch rewrites those two words (cold) to load THIS word instead, so the
             /// block distance becomes data: 6.0 = vanilla, RingRadius while Angel Gear's shield is up (enemies
             /// and their scripted lunges stop at the slingshot). Cave reads GUEST 0x01F10084. ⚠ Read every
             /// enemy step in every dungeon once armed — must never be 0/garbage; seeded 6.0 at arm.</summary>
@@ -244,7 +244,7 @@ namespace Dark_Cloud_Improved_Version
 
             /// <summary>SHOT-VS-PLAYER TARGET POINTER. <c>checkCollision</c> (0x1AB740) is every shot's "did I hit
             /// the player" test; it loads her position global with `lui $v0,0x1ea; addiu $a1,$v0,0x1d30` @0x1AB828.
-            /// GuardianReflector.ArmShotPatch rewrites those two words (cold) to `lui $a1,HI; lw $a1,LO($a1)` — a
+            /// AngelGear.ArmShotPatch rewrites those two words (cold) to `lui $a1,HI; lw $a1,LO($a1)` — a
             /// POINTER read from this word: 0x01EA1D30 (vanilla) or, while Angel Gear's shield is solid, the copy's
             /// pouch-node world translation (engine-refreshed every draw) — so enemy shots collide with the POUCH
             /// natively, no per-frame writes. Cave reads GUEST 0x01F10088. ⚠ Read by every enemy shot every frame
@@ -268,7 +268,7 @@ namespace Dark_Cloud_Improved_Version
             /// hit slot and diagnostics were being shared with and wiped by it. Same offsets, new base.</summary>
             internal const long CatBase = 0x21FB4000;
 
-            /// <summary>Divine Beast cat ↔ the native pellet catcher/follower (ElfCave.CatPelletFollow; DivineBeastCat.cs).
+            /// <summary>Divine Beast cat ↔ the native pellet catcher/follower (ElfCave.CatPelletFollow; DivineBeastTitle.cs).
             /// The cat copy sits resident and hidden in chara slot 1. At the charge threshold the mod writes the growth
             /// reciprocal and the head rest offset (cat space × cat scale), zeroes frames/slot, and sets state 3 (waiting);
             /// the cave then binds the next NEW pellet on its birth frame (slot+1, state 1, opacity 128) and owns slot 1's
@@ -378,7 +378,7 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatGlowLift      = CatBase + 0x240; // float, added to the glow's height (mod; negative lowers it)
             internal const long CatAimPos        = CatBase + 0x244; // float3 x,h,z: the point the cat walks to / jumps at — the target's biggest body sphere (mod, per tick); CatTargetPtr points here
             internal const long CatHoldReady     = CatBase + 0x254; // int: 1 = the cave holds the ready crouch on its last frame instead of leaping (mod: the target cannot be hit yet)
-            internal const long CatScaleMul      = CatBase + 0x250; // float: the cat's full size — the cave multiplies it into its growth k while the cat rides the pellet (mod writes DivineBeastCat.CatScale at spawn; 0 = unset → the cave uses 1.0)
+            internal const long CatScaleMul      = CatBase + 0x250; // float: the cat's full size — the cave multiplies it into its growth k while the cat rides the pellet (mod writes DivineBeastTitle.CatScale at spawn; 0 = unset → the cave uses 1.0)
             internal const long CatGlowName      = CatBase + 0x258; // char[16], NUL-terminated: the glow disc's texture entry — always "catglowp" now, because every look shares one 8-bit disc and differs only in the palette row (see CatGlowPalRow); the glow cave binds it (mod writes it, then clears CatGlowReady)
             internal const long CatTrackHalf     = CatBase + 0x268; // float: 0 = the flying pounce re-aims until the apex; > 0 = keep re-aiming past the apex until halfway down to the floor (the winged cat, mod)
             internal const long CatCapeCloth     = CatBase + 0x288; // uint: the cape's CCloth (guest) — the ONE cloth ElfCave.CatCapeTint recolours (mod; 0 = none)
@@ -406,7 +406,7 @@ namespace Dark_Cloud_Improved_Version
             internal const long SsIconY     = Base + 0xA8;
             internal const long SsIconSize  = Base + 0xAC;
             /// <summary>Counters the two caves bump — the draw cave's draws issued; the copy cave's calls, calls with wepicon
-            /// registered, and copies issued — reported once in SuperSteveAbilities.DriveSphereIcon's log line.</summary>
+            /// registered, and copies issued — reported once in SuperSteve.DriveSphereIcon's log line.</summary>
             internal const long SsIconDiagDraws      = Base + 0xB0;
             internal const long SsIconDiagCopyCalls  = Base + 0xB4;
             internal const long SsIconDiagSheetSeen  = Base + 0xB8;

@@ -1,9 +1,9 @@
 # Divine Beast Title — the cat shot
 
-Reference for `Weapons/Xiao/DivineBeastCat.cs`, its ELF caves (`tools/stubs/cat_*.s`) and the pack bake (`IsoPatch/CatPackBakes.cs`
+Reference for `Weapons/Xiao/DivineBeastTitle.cs`, its ELF caves (`tools/stubs/cat_*.s`) and the pack bake (`IsoPatch/CatPackBakes.cs`
 + `WingBake.cs` + `CatWings.cs`, the byte-exact port of the authoring model `tools/iso_patch/build_cat_pack.py` / `wing_bake.py` /
 `tools/lib/cat_wings.py`, which the cat viewer still runs).
-The mod side is five classes that share their members through `using static`: `DivineBeastCat` (the constants, the looks, the
+The mod side is five classes that share their members through `using static`: `DivineBeastTitle` (the constants, the looks, the
 thread, charge and launch, the hit, the heap watch), `CatCopy` (the copy and her MOTION 1 channel), `CatFlight` (the cave
 handshake, aim, the hit's element, the flight step), `CatCape` (the cape cloth) and `CatTextures` (the texture block).
 

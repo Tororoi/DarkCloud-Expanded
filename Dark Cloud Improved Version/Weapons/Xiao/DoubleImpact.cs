@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -10,8 +11,8 @@ namespace Dark_Cloud_Improved_Version
     /// velocity and life. Every pellet is drawn as the Steel Slingshot's single stone (Mailbox.PelletSpriteId, the ISO's
     /// pellet-sprite hook), so the pair reads as two stones. Each pellet carries <see cref="DamageFactor"/> of the shot's
     /// attack: the game's own damage word is scaled down and the twin gets the same figure. Both pellets ricochet as the
-    /// Hardshooter's do (<see cref="Ricochet.Drive"/>, driven from here), each at a different target. Super Steve carrying
-    /// a Double Impact SynthSphere has it too (<see cref="CustomXiaoEffects.SuperSteveEffect"/> drives it).
+    /// Hardshooter's do (<see cref="Hardshooter.Drive"/>, driven from here), each at a different target. Super Steve carrying
+    /// a Double Impact SynthSphere has it too (<see cref="SuperSteve.SuperSteveEffect"/> drives it).
     /// </summary>
     internal static class DoubleImpact
     {
@@ -29,13 +30,13 @@ namespace Dark_Cloud_Improved_Version
             if (!active) return;
             if (!_spriteSet || Memory.ReadInt(CodeCaves.Mailbox.PelletSpriteId) != Items.steelslingshot)
             { Memory.WriteInt(CodeCaves.Mailbox.PelletSpriteId, Items.steelslingshot); _spriteSet = true; }   // every pellet a single stone
-            Ricochet.Drive(true);                                             // its ricochets, first: a ricochet is not twinned
+            Hardshooter.Drive(true);                                             // its ricochets, first: a ricochet is not twinned
             long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
             if (!Memory.IsValidGuest(pool)) return;
             for (int i = 0; i < PlayerShotPool.SlotCount; i++)
             {
                 bool live = Memory.ReadInt(PlayerShotPool.FlagAddr(pool, i)) != 0;
-                if (live && !_live[i] && !_twin[i] && !Ricochet.IsBounced(i)) Twin(pool, i);
+                if (live && !_live[i] && !_twin[i] && !Hardshooter.IsBounced(i)) Twin(pool, i);
                 if (!live) _twin[i] = false;
                 _live[i] = live;
             }
@@ -75,8 +76,22 @@ namespace Dark_Cloud_Improved_Version
         internal static void Stop()
         {
             if (_spriteSet) { Memory.WriteInt(CodeCaves.Mailbox.PelletSpriteId, 0); _spriteSet = false; }
-            Ricochet.Stop();
+            Hardshooter.Stop();
             Array.Clear(_live, 0, _live.Length); Array.Clear(_twin, 0, _twin.Length);
         }
+
+        // ── Double Impact ──────────────────────────────────────────────────────────────────
+        /// <summary>Xiao's Double Impact thread: hands every tick to <see cref="DoubleImpact.Drive"/> while the weapon is
+        /// equipped, and stands it down once when it goes.</summary>
+        public static void DoubleImpactEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.doubleimpact)
+            {
+                DoubleImpact.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                Thread.Sleep(16);
+            }
+            DoubleImpact.Stop();
+        }
+
     }
 }

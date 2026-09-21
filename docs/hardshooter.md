@@ -1,6 +1,6 @@
 # Hardshooter — ricochet
 
-`Weapons/Xiao/Ricochet.cs` (thread `CustomXiaoEffects.HardshooterEffect`; Super Steve drives it from `SuperSteveEffect`
+`Weapons/Xiao/Hardshooter.cs` (thread `Hardshooter.HardshooterEffect`; Super Steve drives it from `SuperSteveEffect`
 when a Hardshooter SynthSphere is attached; Double Impact drives it for its pair).
 
 A pellet that lands on an enemy spawns a second pellet at the exact impact point that flies at the next nearest enemy

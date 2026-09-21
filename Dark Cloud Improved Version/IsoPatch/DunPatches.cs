@@ -58,7 +58,7 @@ namespace Dark_Cloud_Improved_Version
             // The WINGS: the cat's wing bones/meshes/keys/textures cost another ~220 KB in this pool (chara
             // 3,400,336 → 3,620,496 measured), and the pool is shared with the weapons (~216 KB) and the floor's shot effects
             // (70-190 KB): 240000 units overflowed by 67-190 KB → a silent spin on the switch to Xiao. The allocator's own
-            // counter (DivineBeastCat.HeapWatch, GlobalPoolUsed 0x21C74980) shows the global buffer at 26,616,000 of
+            // counter (DivineBeastTitle.HeapWatch, GlobalPoolUsed 0x21C74980) shows the global buffer at 26,616,000 of
             // 27,039,984 B in every log — 26,499 units unused (which is exactly why +30,000 alone black-screened and the
             // read-buffer cut was needed) — so the heap takes 20,000 more of them: 260000 units = 4.16 MB, leaving 6,499
             // units (104 KB) of global slack. The literal 210000 is `lui r,3; ori r,r,0x3450` at four sites (carve, the two
@@ -119,7 +119,7 @@ namespace Dark_Cloud_Improved_Version
         internal const long GaugePatchAddrMmu = 0x201DB8090;
 
         /// <summary>The cat follower hook site (dun step loop `jal step__5CSHOT`) — the runtime checks the word to
-        /// know the native follower is live (DivineBeastCat falls back to its thread follower when it is not).</summary>
+        /// know the native follower is live (DivineBeastTitle falls back to its thread follower when it is not).</summary>
         internal const uint CatFollowHookAddr = 0x01DB874C;
         internal const uint CatFollowHookOrig = 0x0C06AF44;                                   // jal 0x1ABD10
         // …and it lands on the shot-slot sharing cave's step (preloads a monster shot config into a free slot of the pack), which

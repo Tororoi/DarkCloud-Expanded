@@ -1,6 +1,6 @@
 # Double Impact — two pellets a shot
 
-`Weapons/Xiao/DoubleImpact.cs` (thread `CustomXiaoEffects.DoubleImpactEffect`; Super Steve drives it from `SuperSteveEffect`
+`Weapons/Xiao/DoubleImpact.cs` (thread `DoubleImpact.DoubleImpactEffect`; Super Steve drives it from `SuperSteveEffect`
 when a Double Impact SynthSphere is attached).
 
 Every shot is two pellets. The one the game fires is joined by a twin the tick it appears in the player's shot pool
@@ -19,7 +19,7 @@ Each pellet carries 0.75 × the shot's attack: the game's damage word on the fir
 is made, and the twin gets the same figure (the word is the attack the entry is planted with; the enemy's defense
 applies on the hit).
 
-Both pellets ricochet as the Hardshooter's do (`Ricochet.Drive`, driven from here; docs/hardshooter.md), each at a
+Both pellets ricochet as the Hardshooter's do (`Hardshooter.Drive`, driven from here; docs/hardshooter.md), each at a
 different target — a target one pellet takes is left to it for the next 250 ms, so the second picks the next nearest,
 or flies in a random direction when no other is near. A ricochet is never twinned; a twin is never twinned again (a
 per-slot mark, cleared when the slot goes quiet); a full pool leaves that shot single.

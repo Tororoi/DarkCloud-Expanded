@@ -12,7 +12,7 @@ namespace Dark_Cloud_Improved_Version
     /// the mod's cadence patch, 240 vanilla), grants +1 HP through AddNowLife IF the live weapon flags carry HEAL
     /// (0x800) and resets it. While the guard channel is open the counter is FLOORED at threshold − 60: whenever it
     /// dips below (right after a proc) it is set there, so the native tick fires every 60 frames — the heal itself
-    /// stays the game's own +1, and the Angel Gear's party heal (<see cref="CustomXiaoEffects.DriveAngelGear"/>) rides
+    /// stays the game's own +1, and the Angel Gear's party heal (<see cref="AngelGear.DriveAngelGear"/>) rides
     /// the same wraps, so it speeds up with it. On release nothing is restored: the counter just climbs on from
     /// wherever it is.
     ///
@@ -30,16 +30,16 @@ namespace Dark_Cloud_Improved_Version
     /// GATING: the ability weapons (Angel Shooter 309 / Angel Gear 313) with the live HEAL flag — a weapon whose Heal
     /// was stripped (the Drain/Heal opposing-pair sanitizer after attaching a Drain item) gets nothing, matching the
     /// native tick which gates on the same flag; other Heal-sphere weapons keep the plain vanilla tick. Super Steve
-    /// INHERITS it from an attached Angel Shooter / Angel Gear SynthSphere (<see cref="SuperSteveAbilities.AttachedSphere"/>),
+    /// INHERITS it from an attached Angel Shooter / Angel Gear SynthSphere (<see cref="SuperSteve.AttachedSphere"/>),
     /// with that weapon's presentation and colour; the overlay resets the counter whether or not the flag is set, so the
     /// cadence and the Gear's party heal carry over as they are, and if Super Steve's record lacks the flag the +1 the
     /// native tick would have granted is given here on each wrap instead.
     /// </summary>
-    internal static class GuardianGrace
+    internal static class AngelShooter
     {
         internal static bool Enabled = true;
 
-        private const string Tag = "[GuardianGrace] ";
+        private const string Tag = "[AngelShooter] ";
 
         private const int  XiaoId          = 1;
         private const int  HealFlagOffset  = 0xEE;         // WEAPON_HAVE live ability flags (halfword)
@@ -99,7 +99,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void Start()
         {
             if (_thread != null && _thread.IsAlive) return;
-            _thread = new Thread(Loop) { IsBackground = true, Name = "GuardianGrace" };
+            _thread = new Thread(Loop) { IsBackground = true, Name = "AngelShooter" };
             _thread.Start();
         }
 
@@ -118,7 +118,7 @@ namespace Dark_Cloud_Improved_Version
                         sleep = FastTickMs;
                         int weaponId  = Memory.ReadUShort(WeaponHave.BattleWeaponRecord);
                         bool inherited = weaponId == Items.supersteve;
-                        int source    = inherited ? SuperSteveAbilities.AttachedSphere(WeaponHave.BattleWeaponRecord) : weaponId;
+                        int source    = inherited ? SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) : weaponId;
                         gear          = source == Items.angelgear;
                         bool ability  = gear || source == Items.angelshooter;
                         healFlag      = (Memory.ReadUShort(WeaponHave.BattleWeaponRecord + HealFlagOffset) & HealFlagBit) != 0;

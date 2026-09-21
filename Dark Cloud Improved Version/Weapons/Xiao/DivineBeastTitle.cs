@@ -29,12 +29,12 @@ namespace Dark_Cloud_Improved_Version
     /// subtree into the mod's caves, give the copy its own skin buffers and motion channel, host it in a dungeon
     /// chara slot, and let the engine step and draw it natively. Her own model is never touched.
     /// </summary>
-    internal static class DivineBeastCat
+    internal static class DivineBeastTitle
     {
         internal static bool Enabled = true;
         internal static bool Active { get; set; }
 
-        private const string Tag = "[DivineBeastCat] ";
+        private const string Tag = "[DivineBeastTitle] ";
         private const int  XiaoId = 1;
         internal const int  Slot   = 1;                 // DungeonCharaDraw host (0 = Mirage clone, 3 = Angel Gear slingshot)
         internal const int  CharCopySize = 0xD60, MotionStructSize = 0xC0;
@@ -132,7 +132,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  DamageMult    = 1.5f;     // × the weapon's attack (a charged pellet's worth)
         internal const int    PlantedLifeTicks = 4;   // ~4 frames for the enemy's CheckDmg to find the entry
 
-        // Hit-entry plumbing (CCollisionData pool, as GuardianReflector.PlantReflectedHit).
+        // Hit-entry plumbing (CCollisionData pool, as AngelGear.PlantReflectedHit).
         internal const long BattleWeaponAttack = WeaponHave.BattleWeaponRecord + 0x04;
 
         internal enum Phase { Resident, Flying, Falling, Landing, Running, TakeOff, Leaping, LandEnd, Fading }   // Resident = built, hidden, waiting
@@ -208,7 +208,7 @@ namespace Dark_Cloud_Improved_Version
         private static int LookKeyFor(int weapon)
         {
             if (weapon != Items.supersteve) return Looks.ContainsKey(weapon) ? weapon : -1;
-            int sphere = SuperSteveAbilities.AttachedSphere(WeaponHave.BattleWeaponRecord);
+            int sphere = SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord);
             if (sphere == Items.divinebeasttitle) return Items.divinebeasttitle;
             if (sphere == Items.angelshooter) return SuperSteveShooterKey;
             if (sphere == Items.angelgear)    return SuperSteveGearKey;
@@ -260,7 +260,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void Start()
         {
             if (_thread != null && _thread.IsAlive) return;
-            _thread = new Thread(Loop) { IsBackground = true, Name = "DivineBeastCat" };
+            _thread = new Thread(Loop) { IsBackground = true, Name = "DivineBeastTitle" };
             _thread.Start();
         }
 
@@ -756,7 +756,7 @@ namespace Dark_Cloud_Improved_Version
 
         // ─────────────────────────────────────────── the hit ───────────────────────────────────────────────
 
-        /// <summary>One pellet-style CollisionData entry at the pounce (GuardianReflector.PlantReflectedHit's
+        /// <summary>One pellet-style CollisionData entry at the pounce (AngelGear.PlantReflectedHit's
         /// recipe): base = the weapon's attack × <see cref="DamageMult"/>, the weapon's selected element as a pure
         /// bit (or none), her anti-category bytes and ability flags — CheckDmg does the rest.</summary>
         /// <param name="ox">…the kick's origin (the cat): CheckDmg pushes the enemy along enemy − origin with strength/decay

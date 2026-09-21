@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -11,8 +12,8 @@ namespace Dark_Cloud_Improved_Version
     /// on every entry whose base damage is <see cref="Mailbox.PelletKickDamage"/>, with the ORIGIN at that entry's own sphere
     /// centre — the burst — so each enemy it catches is shoved straight out of the burst; the guard window stands (no crush
     /// here). A charged shot costs ChargedShotWhp's weapon HP. Super Steve carrying a Dragon's Y SynthSphere has the same
-    /// shot, of its own selected element (<see cref="CustomXiaoEffects.SuperSteveEffect"/> drives it). The lock-on movement
-    /// buff is <see cref="LockOnSpeed"/>, inherited further.
+    /// shot, of its own selected element (<see cref="SuperSteve.SuperSteveEffect"/> drives it). The lock-on movement
+    /// buff is <see cref="LockOnSpeedDrive"/>, inherited further.
     /// </summary>
     internal static class DragonsY
     {
@@ -115,7 +116,7 @@ namespace Dark_Cloud_Improved_Version
         internal static bool Wields(long rec)
         {
             int id = Memory.ReadUShort(rec);
-            return id == Items.dragonsy || (id == Items.supersteve && SuperSteveAbilities.AttachedSphere(rec) == Items.dragonsy);
+            return id == Items.dragonsy || (id == Items.supersteve && SuperSteve.AttachedSphere(rec) == Items.dragonsy);
         }
 
         /// <summary>The config for a selected element (00 Fire … 04 Holy, 05 none), or null for anything else.</summary>
@@ -124,5 +125,84 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The weapon or the floor went: no charge held, no kick mark.</summary>
         internal static void Stop() { _holding = false; _armedUntil = DateTime.MinValue; ChargeTint.Clear(); Memory.WriteInt(CodeCaves.Mailbox.PelletKickDamage, 0); }
+
+        // ── Dragon's Y ─────────────────────────────────────────────────────────────────────
+        /// <summary>Xiao's Dragon's Y thread: hands every tick to <see cref="DragonsY.Drive"/> (the charged shot) while the
+        /// weapon is equipped, and stands it down once when it goes. Its movement buff has its own thread,
+        /// <see cref="LockOnSpeedEffect"/>, shared with the weapons that inherit it.</summary>
+        public static void DragonsYEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.dragonsy)
+            {
+                DragonsY.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                Thread.Sleep(16);
+            }
+            DragonsY.Stop();
+        }
+
+        // ── the lock-on movement buff (Dragon's Y, inherited by Divine Beast Title, Angel Shooter, Angel Gear) ──
+        /// <summary>
+        /// Dragon's Y's movement: while Xiao is locked on to an enemy she moves at <see cref="LockOnRate"/>× speed. The buff is
+        /// Dragon's Y's, inherited by its line — Divine Beast Title, Angel Shooter and Angel Gear — and by Super Steve carrying
+        /// any of the four's SynthSphere (<see cref="LockOnSpeedGrants"/>). Driven each tick by <see cref="LockOnSpeedEffect"/>
+        /// for the four weapons and by <see cref="SuperSteve.SuperSteveEffect"/> for the sphere.
+        ///
+        /// The dungeon walk is ROOT MOTION: motionDrive (dun 0x1DB7xxx) copies her position from her root frame's accumulated
+        /// translation every frame, and the stick only steers (the camera-relative stick vector at 0x1DC4540), so there is no
+        /// ground-speed constant — her speed is the moving clip at its play rate. Locked on she strafes with the attack-stance
+        /// clips (c04b KEYs 19–22: 攻撃態勢 right / left / forward / back, frames 180–230 and 120–170; 18 = the stance idle), so
+        /// the motion-speed override (<see cref="CharacterMotion.MotionSpeedOverride"/>, −1 = the KEY's rate) is held at
+        /// <see cref="LockOnRate"/> while a lock is on and one of those — or a guard clip (8–10, 33: the guard walk moves) —
+        /// plays, and put back to the KEY rate otherwise. The game itself writes −1 on every motion change, so the hold is
+        /// re-asserted each tick.
+        /// </summary>
+        private const float  LockOnRate = 1.3f;          // the strafes' play rate — and so the ground speed — while locked on (2.0 and 1.5 read too fast)
+        // c04b KEYs: the four attack-stance strafes 19–22 (18 is the stance idle) and the guard — 8 enter, 9 loop, 10 exit,
+        // 33 the guard walk (530–540, the one that moves).
+        private static readonly int[] LockOnMoves = { 19, 20, 21, 22, 8, 9, 10, 33 };
+        private static bool _lockOnHeld;
+
+        /// <summary>Whether a weapon carries the buff: Dragon's Y and the three that inherit it. Also the test for a
+        /// SynthSphere's source weapon on Super Steve.</summary>
+        internal static bool LockOnSpeedGrants(int weaponId)
+            => weaponId == Items.dragonsy || weaponId == Items.divinebeasttitle || weaponId == Items.angelshooter || weaponId == Items.angelgear;
+
+        /// <summary>Drive every tick while a granting weapon (or sphere) is equipped; <paramref name="active"/> false releases.</summary>
+        internal static void LockOnSpeedDrive(bool active)
+        {
+            if (!active) { if (_lockOnHeld) LockOnSpeedRelease(); return; }
+            bool locked = Memory.ReadInt(PlayerAction.LockOnActive) != 0 && Memory.ReadInt(PlayerAction.LockOnTargetSlot) >= 0;
+            int motion = Memory.ReadInt(CCharacter.Base + CCharacter.MotionId);
+            bool want = locked && Array.IndexOf(LockOnMoves, motion) >= 0;
+            if (want)
+            {
+                if (Memory.ReadFloat(CharacterMotion.MotionSpeedOverride) != LockOnRate) Memory.WriteFloat(CharacterMotion.MotionSpeedOverride, LockOnRate);
+                if (!_lockOnHeld) { _lockOnHeld = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"locked on — moving at ×{LockOnRate}"); }
+            }
+            else if (_lockOnHeld) LockOnSpeedRelease();
+        }
+
+        /// <summary>The weapon or the floor went: the KEY rate again.</summary>
+        internal static void LockOnSpeedStop() { if (_lockOnHeld) LockOnSpeedRelease(); }
+
+        private static void LockOnSpeedRelease()
+        {
+            _lockOnHeld = false;
+            if (Memory.ReadFloat(CharacterMotion.MotionSpeedOverride) == LockOnRate) Memory.WriteFloat(CharacterMotion.MotionSpeedOverride, CharacterMotion.MotionSpeedUseKey);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "lock-on speed released");
+        }
+
+        /// <summary>The lock-on movement buff's thread: hands every tick to <see cref="DragonsY.LockOnSpeedDrive"/> while one of the
+        /// weapons that carry it is equipped (<see cref="DragonsY.LockOnSpeedGrants"/>), and releases it once when it goes. Super Steve
+        /// drives the same buff from <see cref="SuperSteveEffect"/> when its sphere is one of theirs.</summary>
+        public static void LockOnSpeedEffect()
+        {
+            while (Player.InDungeonFloor() && DragonsY.LockOnSpeedGrants(Player.Weapon.GetCurrentWeaponId()))
+            {
+                DragonsY.LockOnSpeedDrive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                Thread.Sleep(16);
+            }
+            DragonsY.LockOnSpeedStop();
+        }
     }
 }

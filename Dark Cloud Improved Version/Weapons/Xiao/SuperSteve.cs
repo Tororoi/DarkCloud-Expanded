@@ -1,13 +1,14 @@
 using System;
+using System.Threading;
 using System.Collections.Generic;
 
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// Supporting implementations for Super Steve's SynthSphere inheritance. The master dispatch loop lives in
-    /// <see cref="CustomXiaoEffects.SuperSteveEffect"/>; these are the per-ability drivers/helpers it pulses
+    /// <see cref="SuperSteve.SuperSteveEffect"/>; these are the per-ability drivers/helpers it pulses
     /// each tick (one call per ability, gated by which sphere grants it). Callers qualify them
-    /// (<c>SuperSteveAbilities.X</c>), so the names omit the "SuperSteve" prefix.
+    /// (<c>SuperSteve.X</c>), so the names omit the "SuperSteve" prefix.
     ///
     /// Enemy-side abilities reuse the Toan weapon classes' drivers directly (they only touch enemy data);
     /// what lives here is the Xiao body adaptations. Each driver is named after its SOURCE weapon (the one
@@ -16,7 +17,7 @@ namespace Dark_Cloud_Improved_Version
     /// Defensive Legacy,
     /// <c>DriveBraveArk</c> = Hero's Courage.
     /// </summary>
-    internal static class SuperSteveAbilities
+    internal static class SuperSteve
     {
         /// <summary>The source weapon id of the single SynthSphere attached to Super Steve's record at
         /// <paramref name="rec"/> (0 if none). A weapon holds at most one SynthSphere (id 0x5A), so the first
@@ -39,7 +40,7 @@ namespace Dark_Cloud_Improved_Version
         private const ushort BattleSpeed = 350;       // effective Speed in Super Steve's BATTLE copy (past 99) → keeps the rate-of-fire gauge from being the bottleneck
 
         /// <summary>
-        /// Quick Draw inheritance for Xiao, driven each tick from <see cref="CustomXiaoEffects.SuperSteveEffect"/>.
+        /// Quick Draw inheritance for Xiao, driven each tick from <see cref="SuperSteve.SuperSteveEffect"/>.
         /// Xiao (controlled) shares Toan's shot plumbing — motion-frame cursor = AnimFrameCursor (0x21EA2010),
         /// shot action-state = ChargeActionState (0x21DC4494). Her shot is three c04b motions: draw (0xB, frames
         /// 240→251), a zero-speed "nocked" HOLD parked on 250 (0xC) that lasts until the fire input releases,
@@ -484,5 +485,221 @@ namespace Dark_Cloud_Improved_Version
                 else if (!live) _mrHandled[i] = false;
             }
         }
+
+        private const ushort AngelGearHealAmount = 1;
+        private static int _healTickPrev = -1;   // the counter last seen; -1 = not watching, re-seed on the next tick
+
+        /// <summary>Angel Gear's regen, driven every tick by Xiao's own thread and by Super Steve's when it inherits the
+        /// weapon. It rides the native HEAL ability's own cadence: each wrap of <see cref="HealAbility.TickCounter"/> —
+        /// the frame the game grants its +1 — heals each ally by <see cref="AngelGearHealAmount"/> (skipping the dead and
+        /// the already-full). Xiao is healed too UNLESS the equipped weapon carries the native Heal build-up attribute
+        /// (Special2 % 16 in 8..11), which already regenerates her. Opening mid-cycle never procs retroactively. While Xiao
+        /// guards, <see cref="AngelShooter"/> floors the counter so the native tick fires every second, and the party heal
+        /// follows — the counter only ever climbs, is set upward by that floor, or resets to 0 on a proc, so any decrease
+        /// is a proc.</summary>
+        internal static void DriveAngelGear(bool active)
+        {
+            if (!active || Player.CheckDunIsPausedOrMenu() || !Player.CheckDunIsWalkingMode()) { _healTickPrev = -1; return; }
+            int c = Memory.ReadInt(HealAbility.TickCounter);
+            bool wrapped = _healTickPrev >= 0 && c < _healTickPrev;   // the native +1 just fired
+            _healTickPrev = c;
+            if (!wrapped) return;
+
+            HealAlly(Player.Toan.GetHp(),   Player.Toan.GetMaxHp(),   Player.Toan.SetHp);
+            HealAlly(Player.Goro.GetHp(),   Player.Goro.GetMaxHp(),   Player.Goro.SetHp);
+            HealAlly(Player.Ruby.GetHp(),   Player.Ruby.GetMaxHp(),   Player.Ruby.SetHp);
+            HealAlly(Player.Ungaga.GetHp(), Player.Ungaga.GetMaxHp(), Player.Ungaga.SetHp);
+            HealAlly(Player.Osmond.GetHp(), Player.Osmond.GetMaxHp(), Player.Osmond.SetHp);
+
+            // Xiao only if the equipped weapon lacks the native Heal attribute (else the game already regens her).
+            int special2 = Player.Weapon.GetCurrentWeaponSpecial2() % 16;
+            if (special2 < 8 || special2 > 11)
+                HealAlly(Player.Xiao.GetHp(), Player.Xiao.GetMaxHp(), Player.Xiao.SetHp);
+        }
+
+        private static void HealAlly(ushort hp, int maxHp, Action<ushort> setHp)
+        {
+            if (hp > 0 && hp < maxHp) setHp((ushort)(hp + AngelGearHealAmount));
+        }
+
+        // ── Super Steve "Sphere Inheritance" ───────────────────────────────────────────────
+        /// <summary>
+        /// Super Steve (Xiao's ultimate slingshot) inherits the custom effect of the weapon whose SynthSphere
+        /// is attached to it. A weapon Status-Broken into a SynthSphere records its SOURCE weapon id at the
+        /// attach-entry's +0x02 (SetStatusBreak, ELF 0x2368D0), and attaching copies the whole 0x20-byte entry
+        /// into the weapon record's ATTACH_LIST, so the source id survives in-record and can be read straight
+        /// off the record — no stat-fingerprinting needed.
+        ///
+        /// This is the master dispatch loop: read the single attached sphere, then pulse each ability's driver
+        /// with <c>active &amp;&amp; sphere == Items.X</c>. Enemy-side abilities reuse the Toan weapon classes'
+        /// drivers verbatim (they only touch enemy data); the Xiao body adaptations live in
+        /// <see cref="SuperSteve"/>. Every driver is pulsed each tick (enabled or not) so it
+        /// self-restores the instant the sphere is swapped — no explicit per-swap teardown needed.
+        ///
+        /// NOT dispatched here: MIRAGE (Mirage / Hercules' Wrath spheres). It owns a thread and a state machine
+        /// (guard charge → decoy → clone → shimmer), so it gates itself in <see cref="Mirage"/> rather than being
+        /// pulsed per-tick like the stateless abilities below. Nothing to add here when its sphere is attached.
+        ///
+        /// NOT every weapon's ability transfers. Excluded by design:
+        ///   • Macho Sword, Wise Owl Sword, Chronicle 2 — rely on weapon ownership
+        ///   • Buster Sword, 7 Branch Sword - modify upgrading / status-breaks
+        /// </summary>
+        public static void SuperSteveEffect()
+        {
+            var ssSun = new SunSword.SunHarvestState(EnemyAddresses.FloorSlots.Count);
+            var xiaoCurse = new ToanCurses.CurseAddrs(Player.Xiao.status, Player.Xiao.statusTimer, Player.Xiao.hp);
+            var ssEvilcise = new ToanCurses.CurseState();
+            var ssManeater = new ToanCurses.CurseState();
+            var xiaoTuna = new CustomGoroEffects.FrozenTunaWielder(Player.XiaoId, Player.Xiao.hp, Player.Xiao.maxHP,
+                                                                   Player.Xiao.status, Player.Xiao.statusTimer);
+            var ssTuna = new CustomGoroEffects.FrozenTunaState();
+            var ssTallHammer = new CustomGoroEffects.TallHammerState();
+            var ssCactus = new CustomUngagaEffects.CactusState();
+            var ssSnail = new CustomOsmondEffects.SnailState();
+            var ssStarBreaker = new CustomOsmondEffects.StarBreakerState();
+            int lastSphere = 0;   // the sphere last seen: Charging Bull keeps a resident copy that must go when its sphere does
+            while (Player.InDungeonFloor())
+            {
+                int ch = Player.CurrentCharacterNum();
+                if (ch != Player.XiaoId) break;
+                int equipSlot = Memory.ReadByte(DngStatusData.Base +
+                                                DngStatusData.EquipSlotArrayOffset + ch);
+                if ((uint)equipSlot > 9) break;
+                long rec = DngStatusData.WeaponRecord(ch, equipSlot);
+                if (Memory.ReadUShort(rec) != Items.supersteve) break;
+
+                int sphere = SuperSteve.AttachedSphere(rec);
+                bool active = !Player.CheckDunIsPaused();
+
+                // Toan Effects
+                // Divine Guard (7th Heaven) + Guard Crush (Dark Cloud; 7th Heaven inherits Guard Crush by lineage).
+                SeventhHeaven.SeventhHeavenSoftenAttacks(active && sphere == Items.seventhheaven);
+                DarkCloud.DarkCloudDriveGuards(active && (sphere == Items.seventhheaven || sphere == Items.darkcloud));
+
+                // Defensive Legacy (Aga's Sword): +15 Xiao defense.
+                SuperSteve.DriveAgasSword(active && sphere == Items.agassword);
+
+                // The attached sphere's weapon icon on Xiao's character-menu panel (in place of the old palette swap).
+                SuperSteve.DriveSphereIcon(sphere);
+
+                // …and its pellet, when the sphere came from a slingshot.
+                SuperSteve.DriveSphereSprite(sphere);
+
+                // Hero's Courage (Brave Ark): clear Freeze/Poison/Curse/Goo each tick.
+                SuperSteve.DriveBraveArk(active && sphere == Items.braveark);
+
+                // Bone Rapier: bone-door bypass (the Xiao dispatcher no longer force-clears it, so this owns it).
+                BoneRapier.BoneRapierEffect(active && (sphere == Items.bonerapier || sphere == Items.boneslingshot));
+
+                // Solar Harvest (Sun Sword / Big Bang): ~1% of the floor's enemies drop a Sun attachment.
+                SunSword.SunHarvestDrive(sphere == Items.sunsword || sphere == Items.bigbang, ssSun);
+
+                // Curses (full inherit): curse Xiao. Not pause-gated — mirrors the Toan loops.
+                ToanCurses.EvilciseDrive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);
+                ToanCurses.ManeaterDrive(sphere == Items.maneater, xiaoCurse, rec, ssManeater);
+
+                // Quick Draw (Small Sword / Tsukikage / Heaven's Cloud): instant fire-on-release + rate-of-fire.
+                SuperSteve.DriveSmallSword(active && (sphere == Items.smallsword || sphere == Items.tsukikage || sphere == Items.heavenscloud));
+
+                // Moonlit Focus (Tsukikage / Heaven's Cloud): ×2 shot speed.
+                SuperSteve.DriveTsukikage(active && (sphere == Items.tsukikage || sphere == Items.heavenscloud));
+
+                // Heaven's Cloud (Heaven's Cloud): charge → grow the slingshot + pellet, flash, shrapnel burst.
+                SuperSteve.DriveHeavensCloud(active && sphere == Items.heavenscloud);
+
+                // A charged shot's weapon HP (Heaven's Cloud / Mobius Ring / the cat arm it): the word returns to 1.0 once fired.
+                ChargedShotWhp.Tick();
+
+                // Xiao Effects
+
+                // Angel Gear: slow party-wide HP regen.
+                DriveAngelGear(active && sphere == Items.angelgear);
+
+                // Lock-on speed (Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear): ×1.3 movement while locked on.
+                DragonsY.LockOnSpeedDrive(active && DragonsY.LockOnSpeedGrants(sphere));
+
+                // Lock-on reach (Flamingo / Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear): enemies locked from twice as far.
+                Flamingo.Drive(active && Flamingo.GrantsReach(sphere));
+
+                // Dragon's Y: the charged shot — the Gemron ball of Super Steve's own selected element.
+                DragonsY.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.dragonsy);
+
+                // Bandit Slingshot / Bandit's Ring: a steal takes the enemy's projectile; every pellet is that shot at 2× the attack.
+                BanditSlingshot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && (sphere == Items.banditslingshot || sphere == Items.banditsring));
+
+                // Double Impact: every shot is two pellets, each at 0.75× the attack (their ricochets driven with them).
+                DoubleImpact.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.doubleimpact);
+
+                // Hardshooter: a pellet that lands on an enemy ricochets at the next one.
+                if (lastSphere == Items.hardshooter && sphere != Items.hardshooter) Hardshooter.Stop();
+                Hardshooter.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.hardshooter);
+
+                // Steel Slingshot: half the WHP per shot while the weapon's WHP is low (the level-up bonus stays the Steel's own).
+                if (lastSphere == Items.steelslingshot && sphere != Items.steelslingshot) SteelSlingshot.Stop();
+                SteelSlingshot.Drive(active && sphere == Items.steelslingshot);
+
+                // Matador (Charging Bull): the charged pellet crushes guards and flies as a projection of the slingshot — Super
+                // Steve's own model, since the copy is of the live weapon. A held copy goes with the sphere.
+                if (lastSphere == Items.matador && sphere != Items.matador) Matador.Stop();
+                Matador.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.matador);
+                lastSphere = sphere;
+
+                // Goro Effects
+
+                // Cold Storage (Frozen Tuna): WHP losses bank a healing pool that drains after Xiao is hit;
+                // on-hit 5% chance to stop all non-ice enemies at the price of freezing Xiao too.
+                CustomGoroEffects.FrozenTunaDrive(active && sphere == Items.frozentuna, xiaoTuna, equipSlot, ssTuna);
+
+                // Tall Hammer: shrinks enemies Xiao's pellets hit.
+                CustomGoroEffects.TallHammerDrive(active && sphere == Items.tallhammer, Player.XiaoId, ssTallHammer);
+
+                // Ruby Effects
+
+                // Mobius Ring: holding the shot ramps damage ×1.5 per 1.5s (flash per step); the fired
+                // pellet gets the ramped damage + a Ruby-ball-style size to match.
+                SuperSteve.DriveMobiusRing(active && sphere == Items.mobiusring);
+
+                // Ungaga Effects
+
+                // Absorb (Cactus): pellet hits restore Xiao's thirst scaled by damage (rock/metal/undead immune).
+                CustomUngagaEffects.CactusDrive(active && sphere == Items.cactus, Player.XiaoId,
+                                                Player.Xiao.thirst, Player.Xiao.thirstMax, ssCactus);
+
+                // Osmond Effects
+
+                // Snail: 5% chance on hit to inflict gooey on the struck enemy.
+                CustomOsmondEffects.SnailDrive(active && sphere == Items.snail, Player.XiaoId, ssSnail);
+
+                // Star Breaker: 2% chance on an enemy kill to receive an empty SynthSphere.
+                CustomOsmondEffects.StarBreakerDrive(active && sphere == Items.starbreaker, ssStarBreaker);
+
+                Thread.Sleep(16);
+            }
+
+            // Restore everything on unequip / character-switch / dungeon exit (no-ops if not driven).
+            SeventhHeaven.SeventhHeavenSoftenAttacks(false);
+            DarkCloud.DarkCloudDriveGuards(false);
+            BoneRapier.BoneRapierEffect(false);
+            SunSword.SunHarvestDrive(false, ssSun);
+            ToanCurses.EvilciseDrive(false, xiaoCurse, ssEvilcise);
+            ToanCurses.ManeaterDrive(false, xiaoCurse, 0, ssManeater);
+            SuperSteve.DriveSmallSword(false);
+            SuperSteve.DriveTsukikage(false);
+            SuperSteve.DriveHeavensCloud(false);   // resets the flash latches
+            SuperSteve.DriveAgasSword(false);
+            SuperSteve.DriveSphereIcon(0);
+            SuperSteve.DriveSphereSprite(0);
+            SuperSteve.DriveMobiusRing(false);   // resets the damage ramp
+            CustomGoroEffects.FrozenTunaDrive(false, xiaoTuna, 0, ssTuna);   // resets the healing pool
+            DragonsY.LockOnSpeedStop();
+            Flamingo.Stop();
+            DragonsY.Stop();
+            Matador.Stop();   // the resident slingshot copy too
+            DoubleImpact.Stop();
+            BanditSlingshot.Stop();
+            SteelSlingshot.Stop();
+            Hardshooter.Stop();
+        }
+
     }
 }

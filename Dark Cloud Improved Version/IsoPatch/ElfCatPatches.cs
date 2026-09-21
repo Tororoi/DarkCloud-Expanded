@@ -7,7 +7,7 @@ using static Dark_Cloud_Improved_Version.IsoPatcher;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Divine Beast cat: the ELF patches behind the cat shot — its pellet follower, glow, sphere percentage, guard bypass, cape and mask tints, copy queue and palettes (docs/divine-beast-cat.md). Called in order from ElfPatches.ElfPatchAndCrc.</summary>
+    /// <summary>Divine Beast cat: the ELF patches behind the cat shot — its pellet follower, glow, sphere percentage, guard bypass, cape and mask tints, copy queue and palettes (docs/divine-beast-title.md). Called in order from ElfPatches.ElfPatchAndCrc.</summary>
     internal static class ElfCatPatches
     {
         // ── Town idle-motion override (idle → sit for the swapped-in cat) ────────────────────────────
