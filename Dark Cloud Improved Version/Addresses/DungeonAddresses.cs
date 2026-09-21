@@ -119,6 +119,31 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// The dungeon's ATMOSPHERE globals — pure data the dungeon overlay's MainDraw (dun 0x1DAE2A0) hands the renderer
+        /// EVERY frame, so a write here lasts until the zone script rewrites it: the front-floor set when <see cref="Mode"/>
+        /// is 0, the back-floor (ura) set otherwise. Per frame: MGSetLight(<c>*Dirs</c>, <c>*Colors</c>) → MGSetAmbient
+        /// (<c>*Ambient</c>) → background colour → fog (<c>*FogRate</c>, <c>*FogColor</c>). Colours are floats on a 0-255 scale
+        /// (an ambient of 255,255,255 lights every surface to full texture brightness and over); fog runs from
+        /// <c>FogRate[0]</c> (start distance) to <c>FogRate[1]</c> (fully the fog colour) — vanilla Demon Shaft ura is 140/190.
+        /// The zone cfg's AMBIENT / LIGHT_C / FOG lines are what fill these at floor load.
+        /// </summary>
+        internal static class DungeonLighting
+        {
+            internal const long Mode        = 0x202A34CC; // int — 0 = the main set is drawn, else the sub (ura) set (lightingMode)
+            internal const long MainDirs    = 0x21DF86B0; // 4 × float4 — directional light matrices (untouched by the mod)
+            internal const long MainColors  = 0x21DF86F0; // 4 × float4 — directional light colours, RGB(A) per row
+            internal const long MainAmbient = 0x21DF8730; // float4 — ambient RGBA
+            internal const long MainFogRate = 0x21DC24A0; // 4 floats — fog start, fog end, and two the mod leaves alone
+            internal const long MainFogColor= 0x202A22E4; // 3 bytes — fog RGB
+            internal const long SubDirs     = 0x21DF8740;
+            internal const long SubColors   = 0x21DF8780;
+            internal const long SubAmbient  = 0x21DF87C0;
+            internal const long SubFogRate  = 0x21DC24B0;
+            internal const long SubFogColor = 0x202A22E8;
+            internal const int  ColorRows   = 4;          // float4 rows in a Colors block
+        }
+
+        /// <summary>
         /// Placement-exclusion objects embedded in the CDungeonMap. ArrangementPos rejects any enemy spawn cell that
         /// lands near one of these (CheckTreasureBox/CheckAtra/CheckTrapCircle, each via DistVector). We mirror that
         /// when relocating Ice Queen so neither she nor a companion spawns on a chest/atra/trap. Each entry's world

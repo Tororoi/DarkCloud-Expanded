@@ -4066,7 +4066,7 @@ namespace Dark_Cloud_Improved_Version
         /// snapshot in <see cref="ScaleWeaponFrameByName"/>, which would then re-snapshot an ALREADY-SCALED
         /// matrix and compound the scale every tick.
         /// </summary>
-        static uint ResolveBladeFrame(string weaponCode)
+        internal static uint ResolveBladeFrame(string weaponCode)
         {
             if (string.IsNullOrEmpty(weaponCode) || weaponCode.Length < 4) return 0;
 
@@ -4204,7 +4204,7 @@ namespace Dark_Cloud_Improved_Version
         // The model root = *(*NowWeapon+0xBC) is a CFrame (name@+0x118, child@+0x138, next@+0x13c — confirmed
         // via CopyFrameVu1/SearchFrame); DFS from it exactly as the game's SearchFrame does. Returns the frame's
         // NAME address (base+0x118, so the +0xB8/0xE8/0xF0 offset conventions hold), or 0 if not resolvable.
-        static long LocateModelFrame(uint nameWord, byte? fifthByte)
+        internal static long LocateModelFrame(uint nameWord, byte? fifthByte)
         {
             int nw = Memory.ReadInt(WeaponModel.NowWeaponPtr);
             if (!IsRamPtr(nw)) return 0;

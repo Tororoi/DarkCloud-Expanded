@@ -5,10 +5,185 @@ using System.Threading.Tasks;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Sun Sword — every enemy killed has a chance to drop a Sun attachment (Big Bang inherits).</summary>
+    /// <summary>Sun Sword — every enemy killed has a chance to drop a Sun attachment (Big Bang inherits), and a guard-charged
+    /// blade whose next swing blinds the room (Solar Flash; helpers in SunSword/).</summary>
     internal static class SunSword
     {
         private static readonly Random random = new Random();
+
+        // ── Sun Sword "Solar Flash" ────────────────────────────────────────────────────────
+        private const int    TickMs               = 30;
+        private const double ChargeSeconds        = 1.5;    // guard held this long primes the blade
+        internal const float FlashRadius          = 300f;   // the hit and the blinding reach this far from Toan
+        private const float  FlashDamageFraction  = 0.25f;  // the hit's base damage, as a fraction of the weapon's attack
+        private const float  KickStrength = 2.0f, KickDecay = 0.3f;   // the hit's shove, sized like Toan's heavier combo hits
+        private const int    KickTypeMelee        = 2;      // +0x98: the melee-style reaction (flinch + shove)
+        private const int    HitLifeTicks         = 3;      // the planted sphere is withdrawn after this many ticks
+        private const float  FlashPulseSpeed      = 90f;    // Toan's own white pulse at the flash (the change effect's rate)
+        private const ushort FlashSe              = 0;      // sound effect at the flash (SeSeq id; 0 = none)
+        private const float  Combo1Hit = 825f, Combo2Hit = 835f, Combo3Hit = 843f, Combo4Hit = 852f, Combo5Hit = 870f;   // frame cursor at which each combo swing comes forward (docs/character-motion-table.md clips 37-41)
+
+        private enum Phase { Idle, Charging, Primed, Windup }
+        private sealed class SolarState
+        {
+            public Phase phase;
+            public DateTime holdStart;
+            public byte floor = 0xFF;
+            public readonly List<(int slot, int ticks)> planted = new List<(int, int)>();
+        }
+
+        /// <summary>
+        /// Ability Name: Solar Flash (Sun Sword)
+        /// Hold guard and the blade whitens over <see cref="ChargeSeconds"/>; at full it is PRIMED (the charge-complete
+        /// pulse marks it) and stays so, guard or not. The next attack carries the charge: as the swing comes forward the
+        /// blade returns to its own colour and the dungeon flashes blinding white, easing back over a second
+        /// (<see cref="SolarLighting"/>). Every enemy within <see cref="FlashRadius"/> takes a light hit — a quarter of the
+        /// weapon's attack through the normal formula, with the sword's element and a melee stagger — and is then blinded
+        /// for <see cref="SolarStun.StunSeconds"/>: it raises its guard and stands frozen, facing the spot Toan flashed from
+        /// (<see cref="SolarStun"/>). The blade tint is <see cref="SolarBlade"/>. Dungeon only; a sidekick out or a floor
+        /// change drops the charge.
+        /// </summary>
+        public static void SolarFlashEffect()
+        {
+            var st = new SolarState();
+            while (Player.Weapon.GetCurrentWeaponId() == Items.sunsword && Player.InDungeonFloor())
+            {
+                Thread.Sleep(TickMs);
+                try { SolarTick(st); }
+                catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SunSword] Solar Flash tick error: " + ex.Message); }
+            }
+            SolarReset(st);
+        }
+
+        private static void SolarTick(SolarState st)
+        {
+            byte floor = Memory.ReadByte(Addresses.checkFloor);
+            if (floor != st.floor) { if (st.floor != 0xFF) SolarReset(st); st.floor = floor; }
+
+            SolarLighting.Tick();
+            SolarStun.Tick();
+            ExpireHits(st);
+            if (Player.CheckDunIsPausedOrMenu()) return;
+            if (Player.CurrentCharacterNum() != Player.ToanId)
+            {
+                if (st.phase != Phase.Idle) { SolarBlade.Clear(); ChargeTint.Clear(); st.phase = Phase.Idle; }
+                return;
+            }
+
+            int action = Memory.ReadInt(PlayerAction.ChargeActionState);
+            switch (st.phase)
+            {
+                case Phase.Idle:
+                    if (GuardWatch.IsGuarding()) { st.phase = Phase.Charging; st.holdStart = GameClock.Now; }
+                    break;
+
+                case Phase.Charging:
+                {
+                    if (!GuardWatch.IsGuarding()) { st.phase = Phase.Idle; SolarBlade.Set(0f); ChargeTint.Clear(); break; }
+                    double held = (GameClock.Now - st.holdStart).TotalSeconds;
+                    SolarBlade.Set((float)(held / ChargeSeconds));
+                    ChargeTint.Ramp(ChargeSeconds - held);
+                    if (held >= ChargeSeconds)
+                    {
+                        st.phase = Phase.Primed;
+                        ChargeTint.Clear();
+                        Player.FlashChargeComplete();
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SunSword] Solar Flash primed");
+                    }
+                    break;
+                }
+
+                case Phase.Primed:
+                    SolarBlade.Set(1f);                                   // re-asserted each tick: a rebuilt model gets it back
+                    if (IsAttack(action)) st.phase = Phase.Windup;
+                    break;
+
+                case Phase.Windup:
+                {
+                    if (!IsAttack(action)) { st.phase = Phase.Primed; break; }     // the swing was cancelled: still primed
+                    bool forward = action == PlayerAction.ActionWhirlwind || action == PlayerAction.ActionLunge
+                                || Memory.ReadFloat(PlayerAction.AnimFrameCursor) >= ComboHitFrame(action);
+                    if (!forward) break;
+                    Flash(st);
+                    st.phase = Phase.Idle;
+                    break;
+                }
+            }
+        }
+
+        private static bool IsAttack(int action) =>
+            (action >= PlayerAction.ActionComboFirst && action <= PlayerAction.ActionComboLast)
+            || action == PlayerAction.ActionLunge || action == PlayerAction.ActionWhirlwind;
+
+        private static float ComboHitFrame(int action) => action switch
+        {
+            PlayerAction.ActionComboFirst     => Combo1Hit,
+            PlayerAction.ActionComboFirst + 1 => Combo2Hit,
+            PlayerAction.ActionComboFirst + 2 => Combo3Hit,
+            PlayerAction.ActionComboFirst + 3 => Combo4Hit,
+            _                                 => Combo5Hit,
+        };
+
+        /// <summary>The flash itself: blade back to normal, the light to white, Toan's pulse, the hit, the blinding.</summary>
+        private static void Flash(SolarState st)
+        {
+            float px = Memory.ReadFloat(Addresses.dunPositionX), ph = Memory.ReadFloat(Addresses.dunPositionZ), py = Memory.ReadFloat(Addresses.dunPositionY);
+            SolarBlade.Clear();
+            SolarLighting.Flash();
+            Player.FlashActiveCharacter(255f, 255f, 255f, FlashPulseSpeed, 1);
+            if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
+            PlantFlashHit(st, px, ph, py);
+            SolarStun.Begin(px, py, FlashRadius);
+        }
+
+        /// <summary>One player-attack sphere at Toan, <see cref="FlashRadius"/> wide (CollisionPool: the same entry CheckDmg
+        /// tests his sword swings against): base = attack × <see cref="FlashDamageFraction"/>, the sword's selected element as
+        /// a pure bit, and a melee kick from his position so every enemy it reaches flinches and is shoved outward.</summary>
+        private static void PlantFlashHit(SolarState st, float x, float h, float y)
+        {
+            long pool = CollisionPool.Resolve();
+            if (pool == 0) return;
+            int slot = CollisionPool.TakeFreeSlot(pool);
+            if (slot < 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SunSword] no free collision entry — the flash hit is lost"); return; }
+            float attack = Memory.ReadShort(WeaponHave.BattleWeaponRecord + 0x04);
+            int baseDmg = Math.Max(1, (int)Math.Round(attack * FlashDamageFraction));
+            uint elem = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
+            uint attr = (elem != 0 && (elem & (elem - 1)) == 0) ? elem : 0u;
+            byte[] e = CollisionPool.PlayerHitEntry(x, h, y, FlashRadius, baseDmg, attr);
+            void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
+            F(0x80, x); F(0x84, h); F(0x88, y);                        // kick origin: Toan
+            F(0x90, KickStrength); F(0x94, KickDecay);
+            BitConverter.GetBytes(KickTypeMelee).CopyTo(e, 0x98);
+            CollisionPool.Plant(pool, slot, e);
+            st.planted.Add((slot, HitLifeTicks));
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] flash hit at ({x:F0},{h:F0},{y:F0}) r={FlashRadius:F0}: base {baseDmg}, attr 0x{attr:X} → entry {slot}");
+        }
+
+        /// <summary>The engine withdraws its own swing spheres when the swing ends; ours is withdrawn here.</summary>
+        private static void ExpireHits(SolarState st)
+        {
+            if (st.planted.Count == 0) return;
+            long pool = CollisionPool.Resolve();
+            for (int i = st.planted.Count - 1; i >= 0; i--)
+            {
+                var (slot, ticks) = st.planted[i];
+                if (--ticks > 0) { st.planted[i] = (slot, ticks); continue; }
+                if (pool != 0) CollisionPool.Deactivate(pool, slot);
+                st.planted.RemoveAt(i);
+            }
+        }
+
+        private static void SolarReset(SolarState st)
+        {
+            SolarBlade.Clear();
+            ChargeTint.Clear();
+            SolarLighting.Restore();
+            SolarStun.Clear();
+            long pool = CollisionPool.Resolve();
+            foreach (var (slot, _) in st.planted) if (pool != 0) CollisionPool.Deactivate(pool, slot);
+            st.planted.Clear();
+            st.phase = Phase.Idle;
+        }
 
         // ── Sun Sword "Solar Harvest" ──────────────────────────────────────────────────────
         /// <summary>

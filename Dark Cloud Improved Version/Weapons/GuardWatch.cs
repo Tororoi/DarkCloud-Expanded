@@ -5,16 +5,17 @@ namespace Dark_Cloud_Improved_Version
     /// Flash, Babel Curse, Storm Flash, Guardian Reflector all key off the guard channel). One source
     /// of truth so every ability agrees on what "guarding" means.
     ///
-    /// The held-guard pose oscillates between motion 9 (guard loop) and 33 (guard-while-moving) under
-    /// R1 — proven by Mirage's watcher for BOTH its wielders (Ungaga and Xiao share the ids; see
-    /// Mirage.cs). Callers that need an edge ("guard just started") latch on their side: level-truth
-    /// lives here, edge semantics differ per ability (Mirage plants once per hold, Guardian Grace
-    /// heals for the whole hold, Solar Flash charges toward a threshold).
+    /// The held-guard pose oscillates between motion 9 (guard loop) and the guard-while-moving clip under
+    /// R1 — 33 for Xiao and Ungaga (proven by Mirage's watcher for both), 34 for Toan (his table has one
+    /// extra clip before it: docs/character-motion-table.md). Callers that need an edge ("guard just
+    /// started") latch on their side: level-truth lives here, edge semantics differ per ability (Mirage
+    /// plants once per hold, Guardian Grace heals for the whole hold, Solar Flash charges toward a threshold).
     /// </summary>
     internal static class GuardWatch
     {
-        internal const int GuardLoopMotion = 9;    // guard-hold loop
-        internal const int GuardMoveMotion = 33;   // guard-while-moving (oscillates with 9 under R1)
+        internal const int GuardLoopMotion     = 9;    // guard-hold loop (every character)
+        internal const int GuardMoveMotion     = 33;   // guard-while-moving, Xiao / Ungaga (oscillates with 9 under R1)
+        internal const int GuardMoveMotionToan = 34;   // guard-while-moving, Toan
 
         /// <summary>True while the ACTIVE character is holding a guard: R1 down AND the current motion
         /// is one of the guard-pose ids. Motion alone is not enough (the pose lingers a frame or two
@@ -23,7 +24,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if ((Memory.ReadUShort(Addresses.buttonInputs) & (ushort)Button.R1) == 0) return false;
             int mid = Memory.ReadInt(CCharacter.Base + CCharacter.MotionId);
-            return mid == GuardLoopMotion || mid == GuardMoveMotion;
+            return mid == GuardLoopMotion || mid == GuardMoveMotion || mid == GuardMoveMotionToan;
         }
     }
 }

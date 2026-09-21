@@ -145,6 +145,32 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(HookAddr + 4), 0);
         }
 
+        /// <summary>The Sun Sword's blade under its own ambient (SolarBlade): the mask-tint cave's BODY is generic — it adds
+        /// Mailbox.CatCapeTint to the ambient, calls the DrawVu1 in t9, restores — only its two 3-word entries name the skinned
+        /// class's overloads. A weapon model's mesh is a CVisualVu1, so these two entries load THAT class's overloads and jump
+        /// into the same body. Six words in the cave band's last gap; the private vtable SolarBlade builds points its DrawVu1
+        /// slots here.</summary>
+        internal static void PatchSolarBladeTint(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint DrawVu1Words = 0x00135000u, DrawVu1Packet = 0x00134BC0u;          // DrawVu1__10CVisualVu1, the uint* and sceVif1Packet* overloads
+            uint body = CodeCaves.ElfCave.CatMaskTint + 0x18;                             // past the mask cave's own two entries
+            if (RdU32(fs, ElfOff(CodeCaves.ElfCave.CatMaskTint)) != 0x3C190013u || RdU32(fs, ElfOff(body)) != 0x27BDFF70u)
+                throw new IOException("PatchSolarBladeTint must follow PatchCatMaskTint (its entries `lui t9,0x13` and body `addiu sp,sp,-0x90`).");
+            uint J(uint target) => 0x08000000u | ((target >> 2) & 0x03FFFFFFu);
+            uint[] words =
+            {
+                0x3C190000u | (DrawVu1Words >> 16),  J(body), 0x37390000u | (DrawVu1Words & 0xFFFFu),    // lui t9,HI; j body; ori t9,t9,LO  (vtable slot 6)
+                0x3C190000u | (DrawVu1Packet >> 16), J(body), 0x37390000u | (DrawVu1Packet & 0xFFFFu),   // (vtable slot 7)
+            };
+            for (int i = 0; i < words.Length; i++)
+            {
+                uint cur = RdU32(fs, ElfOff(CodeCaves.ElfCave.SolarBladeTint + (uint)(i * 4)));
+                if (cur != 0 && cur != words[i])
+                    throw new IOException($"Cave gap 0x{CodeCaves.ElfCave.SolarBladeTint + i * 4:X} holds 0x{cur:X8} — not free.");
+                WrU32(fs, ElfOff(CodeCaves.ElfCave.SolarBladeTint + (uint)(i * 4)), words[i]);
+            }
+        }
+
         /// <summary>Xiao's build-up tree, baked: the weapon template table's build-up word (WeaponList +0x3C, bit k = the weapon
         /// 299 + k may be built up into) — Hardshooter → Double Impact alone (vanilla: Double Impact or Matador), Double Impact →
         /// Matador alone (vanilla: Divine Beast Title).</summary>

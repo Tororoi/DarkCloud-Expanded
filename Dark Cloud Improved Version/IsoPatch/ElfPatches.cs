@@ -114,6 +114,7 @@ namespace Dark_Cloud_Improved_Version
             PatchCatGuardBypass(fs, ElfOff);              // Divine Beast cat: its hits pass an enemy's guard window (mimics re-register theirs faster than the mod can crush them)
             PatchCatCapeTint(fs, ElfOff);                 // Divine Beast cat: the Super Steve cape draws under its own ambient, not the cat's
             PatchCatMaskTint(fs, ElfOff);                 // …and its mask does too, reached through a private vtable rather than a hook
+            PatchSolarBladeTint(fs, ElfOff);              // the Sun Sword's blade too (SolarBlade): the rigid-mesh class's DrawVu1, into the mask cave's body
             PatchCatCopyQueue(fs, ElfOff);                // the cat's mesh copy runs inside the machine instead of over PINE
             PatchPropPelletFollow(fs, ElfOff);            // a chara-slot prop on one of Xiao's pellets — the Matador's charged shot (the hook in DunPatches now lands here)
             PatchBorrowedShotsEnter(fs, ElfOff);            // a species' shot config, borrowed by an ability, entered into every floor's shot pack (dun.bin hook in DunPatches)

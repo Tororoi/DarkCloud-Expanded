@@ -111,6 +111,7 @@ namespace Dark_Cloud_Improved_Version
         // Weapons.IsChargingWhirlwind / IsWhirlwindActive and the toan-charge-states memory.
         internal const long ChargeActionState = 0x21DC4494; // DAT_01dc4494 action id (values below)
         internal const int  ActionWindup      = 0xE;        // charge wind-up (meter accumulates; lunge OR whirlwind)
+        internal const int  ActionLunge       = 0xF;        // charge lunge executing
         internal const int  ActionWhirlwind   = 0x18;       // whirlwind executing
         internal const int  ActionComboFirst  = 0x24;       // combo swing states 0x24-0x28 = melee hits 1-5
         internal const int  ActionComboLast   = 0x28;       //   (each combo hit is its own action state)

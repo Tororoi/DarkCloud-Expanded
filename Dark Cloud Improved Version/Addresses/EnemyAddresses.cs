@@ -26,6 +26,8 @@ namespace Dark_Cloud_Improved_Version
             internal const long Base      = 0x21DF87D0;
             internal const int  SpeciesRowCount = 0x48;   // int — species rows the loader has set up on the floor (SetupBaseModel counts them)
             internal const int  LiveCount = 0x4C;     // int — number of live enemies on the floor; decrement when freeing a slot
+            internal const int  ScriptRunning = 0x50; // int[16] — per slot: 1 while its script label is mid-run (Step resumes it), 0 = Step starts label 100 next frame
+            internal static long ScriptRunningAddr(int slot) => Base + ScriptRunning + (long)slot * 4;
             /// <summary>The loader's copy of each species' record (EnemySpeciesTable's 0x9C bytes), one per row: SetupBaseModel
             /// overwrites its shot-config indices (+0x68/+0x6A) with the pack SLOT each config got, and SetupViewMonstor copies
             /// them to a unit's FloorSlots block (+0xAC/+0xAE) when it spawns. A refused config is stored as −(index + 2) by the
@@ -406,6 +408,13 @@ namespace Dark_Cloud_Improved_Version
         // AiSpeedParam is enemy species and state-specific: Auntie Medu alternates 0.36↔0.20; Pirate's Chariot uses 0.25/−1.0; Mask of Prajna uses 0.24–0.35.
         internal const int AiStatePacked     = 0x0EC; // int   — packed AI state. RE'd (ELF _SET_MOTION 0x1e1710 / commit 0x1dd890): low halfword (0xEC) = REQUESTED motion id, high halfword (0xEE) = motion flags. _SET_MOTION writes the queued motion here.
         internal const int AiSpeedParam      = 0x0F0; // float — REQUESTED motion speed; _SET_MOTION writes −1.0 (= use the motion's own KEY speed) here, matching the −1.0 seen at spawn.
+        // _SET_MOTION (ELF 0x1E1710) in full, for a mod that requests a motion the way a script does: slot+0xC0 = −1, +0xF0 = −1.0;
+        // speed = the model's motion table entry (ModelScaleOffsets.MotionTablePtr → entry motion*0x10, float @+8), halved while
+        // Gooey (+0x14 > 0); then the render object's id/flags(0)/speed (ModelScaleOffsets.PlayingMotion*) for the body AND each
+        // extra part (+0xB4 of them, ModelScaleOffsets.PartStride apart), and the queue words +0xEC (short id) / +0xEE (0) / +0xF0 (speed).
+        internal const int MotionRequestAux  = 0x0C0; // int   — set to −1 by _SET_MOTION with every request
+        internal const int MotionRequestFlags= 0x0EE; // short — the request's flags (0 = play as the clip is authored; bit 2 is consumed by Step)
+        internal const int PartCount         = 0x0B4; // short — extra render parts of a multi-part enemy (each gets the same motion)
         internal const int MotionCommitFlag  = 0x0F4; // halfword — commit gate (-0x1b3c). CMonstorUnit::Step (ELF 0x1dd890) commits the requested motion (0xEC) into the render object's player ONLY when this is nonzero; the engine sets it when the current clip finishes. Writing 1 forces an immediate motion switch (interrupt).
 
         // ── Lock-on target (regular enemies) — RESOLVED ──
@@ -789,6 +798,10 @@ namespace Dark_Cloud_Improved_Version
         // below are ModelBase-relative (ModelBase = that motion-block base + 0x90), i.e. subtract 0x90 from the
         // RE offsets, so they work with the usual ModelBase + slot*ModelStride + field addressing.
         internal const int PlayingMotionSpeed = 0xBD0; // float — playback speed for the current clip (−1.0 = use the motion's KEY speed). RE +0xc60.
+        internal const int PlayingMotionFlags = 0xBD4; // int   — the clip's play flags (_SET_MOTION writes 0; Step's commit writes 2 = play once). RE +0xc64.
+        internal const int MotionTablePtr     = 0x2B4; // native ptr — the model's motion (KEY) table: 0x10 per motion, KEY speed float @+8 (what _SET_MOTION reads for −1.0). RE unit+0x20014.
+        internal const int MotionTableStride  = 0x10, MotionTableSpeed = 0x8;
+        internal const int PartStride         = 0x11B0; // an extra render part of a multi-part enemy sits this far past the body's block
         internal const int PlayingMotionId    = 0xBD8; // int   — currently-PLAYING motion id (read by _STATUS_GET_MOTION_ID). RE +0xc68.
         internal const int PlayingMotionIdFromUnit    = ModelFromUnit + PlayingMotionId;    // 0x20938 — same field, unit-relative
         // PLAYING motion FRAME (float). Same field _SET_MOTION_FRM (ELF 0x1e1cb0) writes and _GET_MOTION_FRM reads.

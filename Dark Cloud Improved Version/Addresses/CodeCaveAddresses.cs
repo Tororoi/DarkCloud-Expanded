@@ -601,7 +601,12 @@ namespace Dark_Cloud_Improved_Version
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            // 0x01FB2278..0x1FB22BC (68 B) FREE
+            /// <summary>The Sun Sword's blade under its own ambient (SolarBlade): two 3-word entries that load the DrawVu1
+            /// overloads of CVisualVu1 (the rigid-mesh class a weapon model is; 0x135000 / 0x134BC0) into t9 and jump into the
+            /// BODY of <see cref="CatMaskTint"/> (+0x18, past its own two entries), which does the ambient add generically and
+            /// calls whatever t9 holds. Written as words by ElfWeaponPatches.PatchSolarBladeTint.</summary>
+            internal const uint SolarBladeTint     = 0x01FB2278;   // 24 B → 0x1FB2290
+            // 0x01FB2290..0x1FB22BC (44 B) FREE
             internal const uint CatCapeTint        = 0x01FB22C0;   // 176 B → 0x1FB2370: the cape's cloth draws under its own ambient
             internal const uint CatMaskTint        = 0x01FB2370;   // 228 B → 0x1FB2454: the mask's MESH does too, via a private vtable
             internal const uint CatCopyQueue       = 0x01FB2480;   // 584 B → 0x1FB26C8: the cat's mesh copy, done inside the machine; its tail also calls CatPalette
@@ -625,7 +630,7 @@ namespace Dark_Cloud_Improved_Version
             /// here and the tail at <see cref="BorrowedShotsEnterTail"/> (the head ends in a `b` to it).</summary>
             internal const uint BorrowedShotsEnter     = 0x01FB1ED0;   // 296 B → 0x1FB1FF8 (the first band's end is 0x1FB2000)
             internal const uint BorrowedShotsEnterTail = 0x01FB3F40;   // 176 B → 0x1FB3FF0 (the band's end is 0x1FB4000)
-            internal const uint NextFree = RegionEnd;    // the band is FULL; the last gap: 0x1FB2278..0x1FB22BC (68 B)
+            internal const uint NextFree = RegionEnd;    // the band is FULL; the last gap: 0x1FB2290..0x1FB22BC (44 B)
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
@@ -838,7 +843,19 @@ namespace Dark_Cloud_Improved_Version
         internal const int  LockOnFactorCount = 6, LockOnFactorOwner = 0x20;
         internal static readonly float[] LockOnFactorVanilla = { 1.2f, 1.4f, 1.1f, 1.5f, 1.0f, 1.8f };
 
-        // ── FREE: 0x21FAF4B0 .. 0x21FB0000 (0xB50 B) ────────────────────────────────────────────────────
+        /// <summary>A private copy of __vt__13CVisualMDTVu1 (32 B) for the Sun Sword's blade mesh: its two DrawVu1 slots point
+        /// at ElfCave.CatMaskTint, so the blade draws under the ambient Mailbox.CatCapeTint adds (SolarBlade). Toan's sword and
+        /// Xiao's cat are never live together, so the cave and its tint word are free for the blade.</summary>
+        internal const long SolarBladeVtable      = 0x21FAF4B0;
+        internal const uint SolarBladeVtableGuest = 0x01FAF4B0;
+        /// <summary>A run of STB-VM YIELD ops ending in `push 0; RET` (SolarStun.YieldOps of them, 12 B each): a blinded enemy's
+        /// script PC is parked here each tick, so its AI does nothing while the engine keeps stepping its motion. Bytecode the
+        /// VM reads — data, never executed as EE code.</summary>
+        internal const long SolarYieldBlock       = 0x21FAF4D0;
+        internal const uint SolarYieldBlockGuest  = 0x01FAF4D0;
+        internal const int  SolarYieldBlockBytes  = 0xF0;      // 20 ops
+
+        // ── FREE: 0x21FAF5C0 .. 0x21FB0000 (0xA40 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

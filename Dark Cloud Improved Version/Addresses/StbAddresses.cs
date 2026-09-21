@@ -39,6 +39,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int OpCallFunc    = 19; // call_func: jump to sub-program; operandB = code offset of callee
         internal const int OpCallFuncCond = 27; // call_func conditional variant (same layout)
         internal const int OpExt         = 21; // external-command call; operandB must be 0; first pushed arg = funcId
+        internal const int OpRet         = 15; // return: pops the result; at the top frame the label is finished
+        internal const int OpJmp         = 16; // jump: operandA = target, relative to CRunScript.CodeBase
+        internal const int OpYield       = 23; // wait a frame: saves the next op in CRunScript.Pc and returns to the engine
 
         // ── Operand type/scope qualifiers ─────────────────────────────────
         internal const int TypeInt    = 1; // operandA of OpPush3: int32 literal (operandB = the value)
@@ -111,16 +114,26 @@ namespace Dark_Cloud_Improved_Version
     /// Validate a read pointer by checking the STB magic 0x00425453 at +0x00 and the label-1 codeOffset at
     /// +0x54. Usage: stbBase = Memory.ReadInt(CRunScript.StbPtrAddr(slot)); patch at (stbBase | 0x20000000).
     ///
-    /// Other observed fields: +0x2C = current instruction pointer (into the running script),
-    /// +0x40 = code base (script base + label-1 code offset). See memory enemy-stat-normalization / stb-vm-cracked.
+    /// The VM (run__10CRunScript 0x23DE70 / resume 0x23DE40 / exe 0x23E080): run(label) re-initialises the frame, points
+    /// <see cref="Label"/> at the label's funcdata (STB base + the label table's codeOff) and executes from its entry;
+    /// exe keeps the CURRENT op's address in <see cref="Pc"/>; YIELD (op 23) stores the next op there and returns, and
+    /// resume() calls exe again from it while it is non-zero; RET (op 15) at the top frame zeroes it and sets
+    /// <see cref="Finished"/>. CMonstorUnit::Step (0x1DD540) runs a slot's script only while its FreezeTimer is 0: when
+    /// MainMonstorUnit.ScriptRunning is 0 it runs label 100 (label 50 once after spawn) and sets the flag; otherwise it
+    /// resumes, and clears the flag when Finished — label 110 (hit) and 120 (death) are run() straight from CheckDmg.
+    /// So a slot's AI is parked by pointing <see cref="Pc"/> at a run of YIELD ops (SolarStun does this), and restarted
+    /// cleanly by clearing ScriptRunning.
     /// </summary>
     internal static class CRunScript
     {
         internal const long Base   = EnemyAddresses.MainMonstorUnit.Base + 0x54DD0; // 0x21E4D5A0
         internal const int  Stride = 0x48;
-        internal const int  CurIp  = 0x2C; // current instruction pointer (native)
+        internal const int  Label  = 0x2C; // native ptr — funcdata of the label being run (STB base + its codeOff)
+        internal const int  Pc     = 0x30; // native ptr — the vmcode_t exe is at / resumes from; 0 = nothing to resume
+        internal const int  Finished = 0x34; // int — 1 once the label RETurned at its top frame
+        internal const int  ExtPending = 0x38; // int — non-zero while an external command is outstanding (YIELD and jumps wait for 0)
         internal const int  StbPtr = 0x3C; // ★ native base of the STB this slot executes
-        internal const int  CodeBase = 0x40; // script base + codeOffset
+        internal const int  CodeBase = 0x40; // script base + codeOffset (jump targets are relative to it)
 
         internal static long SlotAddr(int slot, int fieldOffset) => Base + (long)slot * Stride + fieldOffset;
         /// <summary>EE address of the STB-base pointer field for <paramref name="slot"/>.</summary>
