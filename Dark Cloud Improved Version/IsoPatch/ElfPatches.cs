@@ -128,6 +128,7 @@ namespace Dark_Cloud_Improved_Version
             PatchCatGlowPalette(fs, ElfOff);              // … and the cave that paints one of them into the 8-bit glow disc
             PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
             PatchXiaoBuildUp(fs, ElfOff);                 // Xiao's build-up tree: Hardshooter → Double Impact only, Double Impact → Matador only
+            PatchFishingPrizeSlingshot(fs, ElfOff);       // the fishing prize exchange sells the Flamingo for 1000 FP (vanilla: the Matador for 1400)
             PatchMapCarveRemainder(fs, ElfOff);           // the monster pool = the (grown) map carve minus the floor's map data (DunPatches grows the carve)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
@@ -259,6 +260,22 @@ namespace Dark_Cloud_Improved_Version
                 || U16(Rd(fs, rec + EnemySpeciesTable.FireRes, 2), 0) != 100 || U16(Rd(fs, rec + EnemySpeciesTable.ThunderRes, 2), 0) != 140)
                 throw new IOException($"Species row {Row} is not Blizzard as shipped (\"e65a\", fire 100 / ice 100 / thunder 140) — unmodified Dark Cloud (USA) ISO expected.");
             Wr(fs, ice, new byte[] { 0, 0 });                                                       // IceRes = 0: immune
+        }
+
+        /// <summary>The fishing prize exchange's slingshot: the Flamingo for 1000 FP in place of the Matador. The exchange's
+        /// stock is a static (item id, FP price) halfword table at 0x2929D0 (baits, powders, then the weapons); the Matador's
+        /// pair sits between the Tsukikage (266, 1100) and the Magical Hammer (317, 1800).</summary>
+        internal static void PatchFishingPrizeSlingshot(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Entry = 0x00292A3Cu;                                                         // (item, price) of the slingshot on offer
+            const ushort VanillaItem = Items.matador, VanillaPrice = 1400, OurItem = Items.flamingo, OurPrice = 1000;
+            byte[] row = Rd(fs, ElfOff(Entry - 4), 12);                                             // the neighbour pairs frame the check
+            ushort item = U16(row, 4), price = U16(row, 6);
+            bool vanilla = item == VanillaItem && price == VanillaPrice, ours = item == OurItem && price == OurPrice;
+            if (!(vanilla || ours) || U16(row, 0) != Items.tsukikage || U16(row, 2) != 1100 || U16(row, 8) != Items.magicalhammer || U16(row, 10) != 1800)
+                throw new IOException($"Fishing prize entry 0x{Entry:X} is ({item}, {price}), not the Matador at 1400 FP between the Tsukikage and the Magical Hammer — unmodified Dark Cloud (USA) ISO expected.");
+            byte[] ours4 = new byte[4]; U16(ours4, 0, OurItem); U16(ours4, 2, OurPrice);
+            Wr(fs, ElfOff(Entry), ours4);
         }
 
         // The dungeon draw loop's raster pass (dun 0x1DAEBCC, hooked by DunPatches) comes here; the cave performs it and then

@@ -5,13 +5,13 @@ using System.Threading.Tasks;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Maneater — Autophagy: Toan is cursed while it is equipped (reapplied each floor), cleansing it carries no penalty,
+    /// <summary>Maneater — Blood Price: Toan is cursed while it is equipped (reapplied each floor), cleansing it carries no penalty,
     /// and while the sword is in its low-WHP warning state it feeds on him, 1 HP for 1 WHP a second, never below 1 HP. Super Steve
     /// drives the same for Xiao.</summary>
     internal static class Maneater
     {
         /// <summary>
-        /// Ability Name: Autophagy (Maneater)
+        /// Ability Name: Blood Price (Maneater)
         /// Maneater effect: Toan is cursed while equipped (reapplied each floor), but unlike
         /// Evilcise, breaking the curse with holy water carries no penalty — the curse simply
         /// stays off until the next floor. While the weapon is in the game's low-durability
@@ -20,7 +20,7 @@ namespace Dark_Cloud_Improved_Version
         /// on Toan: each second it drains 1 HP to restore 1 WHP. It never kills — the drain
         /// stops at 1 HP and pauses during NearDeath.
         /// </summary>
-        public static void AutophagyEffect()
+        public static void BloodPriceEffect()
         {
             var st = new CurseState();
             var target = new CurseAddrs(ToanState.Status, ToanState.StatusTimer, ToanState.Hp);
@@ -36,7 +36,7 @@ namespace Dark_Cloud_Improved_Version
             Drive(false, target, 0, st);   // strip curse on unequip / dungeon exit
         }
 
-        // Autophagy (Maneater): curse the wielder (cleansing with holy water carries NO penalty,
+        // Blood Price (Maneater): curse the wielder (cleansing with holy water carries NO penalty,
         // stays off for the floor); while the weapon is in its native low-WHP warning state, drain
         // 1 HP/sec to restore 1 WHP (never kills). `weaponRecord` is the wielded weapon's record
         // (for the WHP drain); `active` false strips the curse. Shares CurseAddrs/CurseState with Evilcise (Toan/Shared/Curse.cs).
@@ -105,7 +105,7 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
 
-            // Autophagy: 1 HP -> 1 WHP per second while in the native low-WHP warning state.
+            // Blood Price: 1 HP -> 1 WHP per second while in the native low-WHP warning state.
             if (GameClock.Now - st.LastDrain >= TimeSpan.FromSeconds(1))
             {
                 st.LastDrain = GameClock.Now;

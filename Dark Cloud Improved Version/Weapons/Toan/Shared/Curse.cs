@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace Dark_Cloud_Improved_Version
 {
-    // ── The curse machinery Evilcise (Jealous Soul) and Maneater (Autophagy) share — also driven by Super Steve for Xiao ──
+    // ── The curse machinery Evilcise (Jealous Soul) and Maneater (Blood Price) share — also driven by Super Steve for Xiao ──
     /// <summary>The three per-character status/HP addresses a curse effect writes. Status BITS
     /// and the 3600-frame duration are character-independent (see ToanState); only these
     /// addresses differ between Toan and, e.g., Xiao.</summary>

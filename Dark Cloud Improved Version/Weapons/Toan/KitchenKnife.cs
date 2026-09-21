@@ -8,7 +8,7 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>Kitchen Knife — a healing spring blesses the knife: triple length, double attack, for a minute.</summary>
     internal static class KitchenKnife
     {
-        // ── Kitchen Knife: "Spring-Blessed Blade" ───────────────────────────────────────────
+        // ── Kitchen Knife: "Spring's Blessing" ───────────────────────────────────────────
         private const float KkTargetLength   = 12f;    // blade length while blessed (stock dcol1 = 4.187)
 
         private const float KkAttackMult     = 2f;     // battle-copy attack multiplier while blessed

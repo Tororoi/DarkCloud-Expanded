@@ -8,11 +8,11 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>Buster Sword — anti-category attachments are worth +4 instead of +3.</summary>
     internal static class BusterSword
     {
-        // ── Buster Sword "True Buster" ─────────────────────────────────────────────────────
+        // ── Buster Sword "Buster Boost" ─────────────────────────────────────────────────────
         private static DateTime _busterNextTick = DateTime.MinValue;
 
         /// <summary>
-        /// Ability Name: True Buster (Buster Sword)
+        /// Ability Name: Buster Boost (Buster Sword)
         /// Anti-category attachments (Dinoslayer..Mage Slayer, items 111-120) are worth +4
         /// instead of +3 while attached to a Buster Sword. Implemented by editing the attachment
         /// ENTRY inside the weapon record (its own anti byte, template base 3 → 4): the entry's

@@ -12,7 +12,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread seventhHeavenThread = new Thread(new ThreadStart(SeventhHeaven.DivineGuardEffect));
         private static Thread chronicleSwordThread = new Thread(new ThreadStart(ChronicleSword.ChronicleSwordEffect));
         private static Thread evilciseThread = new Thread(new ThreadStart(Evilcise.JealousSoulEffect));
-        private static Thread maneaterThread = new Thread(new ThreadStart(Maneater.AutophagyEffect));
+        private static Thread maneaterThread = new Thread(new ThreadStart(Maneater.BloodPriceEffect));
         private static Thread sunSwordThread = new Thread(new ThreadStart(SunSword.SolarHarvestEffect));
         private static Thread bigBangThread = new Thread(new ThreadStart(BigBang.DetonateEffect));
         private static Thread crossHinderThread = new Thread(new ThreadStart(CrossHinder.SanctifierEffect));
@@ -68,7 +68,7 @@ namespace Dark_Cloud_Improved_Version
             Player.Weapon.GetCurrentWeaponId() == Items.maneater &&
             !maneaterThread.IsAlive)
         {
-            maneaterThread = new Thread(new ThreadStart(Maneater.AutophagyEffect));
+            maneaterThread = new Thread(new ThreadStart(Maneater.BloodPriceEffect));
             maneaterThread.Start();
         }
         }
@@ -173,7 +173,7 @@ namespace Dark_Cloud_Improved_Version
 
                     if (!maneaterThread.IsAlive)
                     {
-                        maneaterThread = new Thread(new ThreadStart(Maneater.AutophagyEffect));
+                        maneaterThread = new Thread(new ThreadStart(Maneater.BloodPriceEffect));
                         maneaterThread.Start();
                     }
                     break;

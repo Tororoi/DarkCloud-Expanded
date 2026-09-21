@@ -263,9 +263,9 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Heaven's Cloud (Heaven's Cloud sphere) — a two-stage CHARGE, ending in a crowd-control blast.
         /// Tracks the hold as a 0..1 fraction (frozen on release so the fired pellet reads it) and flashes Xiao at
-        /// each stage. Past flash 1 the shot is "empowered": the slingshot, the pellet and its damage all grow with
+        /// each stage. Past flash 1 the shot is "empowered": the pellet and its damage grow with
         /// the hold, and the shot arms a wind burst that detonates on impact (see <see cref="ImpactBurstDrive"/>).
-        /// When inactive everything resets (slingshot back to 1×, latches cleared).</summary>
+        /// When inactive everything resets (latches cleared).</summary>
         internal static void DriveHeavensCloud(bool active)
         {
             int shotState = Memory.ReadInt(PlayerAction.ChargeActionState);
@@ -604,7 +604,7 @@ namespace Dark_Cloud_Improved_Version
                 // Moonlit Focus (Tsukikage / Heaven's Cloud): ×2 shot speed.
                 SuperSteve.DriveTsukikage(active && (sphere == Items.tsukikage || sphere == Items.heavenscloud));
 
-                // Heaven's Cloud (Heaven's Cloud): charge → grow the slingshot + pellet, flash, shrapnel burst.
+                // Heaven's Cloud (Heaven's Cloud): charge → grow the pellet, flash, shrapnel burst.
                 SuperSteve.DriveHeavensCloud(active && sphere == Items.heavenscloud);
 
                 // A charged shot's weapon HP (Heaven's Cloud / Mobius Ring / the cat arm it): the word returns to 1.0 once fired.
