@@ -228,6 +228,7 @@ namespace Dark_Cloud_Improved_Version
             long cave = TakeCave(CVisualMDT.Vu1VtableBytes, out uint caveG);
             if (cave == 0) { Log("mask tint: no cave room for the vtable copy"); return; }
             Memory.WriteBytesBatch(cave, tbl);
+            Guard(cave, tbl, "mask vtable copy");
             Memory.WriteUInt(_maskVisual + CVisualMDT.VisVtable, caveG);
             Log($"mask tint: the mask draws through its own vtable at 0x{caveG:X} → cave 0x{CodeCaves.ElfCave.CatMaskTint:X}, under the cape's ambient");
         }
@@ -235,9 +236,34 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Give the cat's software-skinned meshes their own copies in the MeshCave (CopyMeshNodes' recipe). HER copy
         /// of the cat skin sits collapsed under the hidden root, and MotionProc2 would skin a shared buffer for whichever
         /// character stepped last, so the copy must own it or the spawn is refused.</summary>
+        // ── the cave guard: blocks that must not change after the spawn (MDT headers, skin sources, the skin list clone, the
+        //    mask's vtable). The engine writes the VU double buffers and the node block by design; anything else moving is
+        //    another writer in the cat's caves — the wing shards and the collar spike after a mid-floor rebuild. Named once. ──
+        private static readonly List<(long addr, byte[] expect, string label)> _guards = new();
+        private static bool _guardTripped;
+        internal static void Guard(long addr, byte[] expect, string label) => _guards.Add((addr, (byte[])expect.Clone(), label));
+        internal static void CheckGuards()
+        {
+            if (_guardTripped) return;
+            foreach (var (addr, expect, label) in _guards)
+            {
+                byte[] now = Memory.ReadBytesBatch(addr, expect.Length);
+                if (now == null) continue;
+                int first = -1, diff = 0;
+                for (int o = 0; o < expect.Length; o++) if (now[o] != expect[o]) { if (first < 0) first = o; diff++; }
+                if (first < 0) continue;
+                first &= ~3;
+                string was = "", isNow = "";
+                for (int k = 0; k < 4 && first + k * 4 + 4 <= expect.Length; k++) { was += $" {BitConverter.ToUInt32(expect, first + k * 4):X8}"; isNow += $" {BitConverter.ToUInt32(now, first + k * 4):X8}"; }
+                Log($"CAVE OVERWRITTEN: {label} at 0x{Memory.ToGuest(addr):X}+0x{first:X} ({diff:N0} of {expect.Length:N0} bytes differ): was{was} now{isNow} — another writer is in the cat's caves");
+                _guardTripped = true;
+                return;
+            }
+        }
+
         private static bool CopyMeshes()
         {
-            _copied.Clear(); _jobs.Clear(); _pending.Clear();
+            _copied.Clear(); _jobs.Clear(); _pending.Clear(); _guards.Clear(); _guardTripped = false;
             long cave = CodeCaves.MeshCave, caveGuest = CodeCaves.MeshCaveGuest;
             long caveEnd = CodeCaves.CatMeshCaveEnd;                                // above it: the Angel Gear prop's meshes, then its track cave
             _ovFree = CodeCaves.CatOverflowCave;
@@ -304,6 +330,11 @@ namespace Dark_Cloud_Improved_Version
                 var e = _skinNodes[idx]; _skinNodes[idx] = (e.node, e.mdt, e.mdtSz, e.vu, cVU2, e.vuSz);
             }
             if (!RunCopyJobs() && !CopyJobsBySocket()) return false;               // the machine does it, or we do it the slow way
+            foreach (var (node, mdt, _, _, _, _) in _skinNodes)
+            {
+                byte[] hdr = Memory.ReadBytesBatch(mdt, 0x40);
+                if (hdr != null) Guard(mdt, hdr, $"mesh n{node} MDT header");
+            }
             Log($"mesh caves: main {_caveFree - CodeCaves.MeshCave:N0} of {CodeCaves.CatMeshCaveEnd - CodeCaves.MeshCave:N0} B, overflow {_ovFree - CodeCaves.CatOverflowCave:N0} of {CodeCaves.CatOverflowCaveSize:N0} B");
             BuildStep("meshes copied");
             return true;
@@ -366,11 +397,14 @@ namespace Dark_Cloud_Improved_Version
             if (keep.Count == nodes.Count) { Log($"{what}-off: no such runs in the skin list — they stay visible"); return; }
             long cave = TakeCave(keep.Count * SkinNodeSize, out uint caveG);
             if (cave == 0) { Log($"{what}-off: no cave room for the skin list clone — they stay visible"); return; }
+            var clone = new byte[keep.Count * SkinNodeSize];
             for (int i = 0; i < keep.Count; i++)
             {
                 BitConverter.GetBytes(i + 1 < keep.Count ? caveG + (uint)((i + 1) * SkinNodeSize) : 0u).CopyTo(keep[i], 0x14);
-                Memory.WriteBytesBatch(cave + i * SkinNodeSize, keep[i]);
+                Array.Copy(keep[i], 0, clone, i * SkinNodeSize, SkinNodeSize);
             }
+            Memory.WriteBytesBatch(cave, clone);
+            Guard(cave, clone, "skin list clone");
             Memory.WriteUInt(chan + MotionType.MotionSkinList, caveG);
             foreach (int i in hide) Memory.WriteUInt(CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride + CFrameVu1.GeomPtr, 0);
             Log($"{what} hidden: skin list {nodes.Count} → {keep.Count} runs (private clone at 0x{caveG:X}), {hide.Count} geometry pointers cleared");
@@ -496,6 +530,7 @@ namespace Dark_Cloud_Improved_Version
                         BitConverter.GetBytes(x * m[c] + y * m[4 + c] + z * m[8 + c] + w * m[12 + c]).CopyTo(dst, v * 16 + c * 4);
                 }
                 Memory.WriteBytesBatch(cave, dst);
+                Guard(cave, dst, $"skin n{node} sources");
                 BitConverter.GetBytes(count).CopyTo(fib, e + 4);
                 BitConverter.GetBytes(caveG).CopyTo(fib, e + 8);
                 Log($"skin n{node}: {count} source vertices built at 0x{caveG:X} from bind [{m[0]:F2} {m[5]:F2} {m[10]:F2} | {m[12]:F2},{m[13]:F2},{m[14]:F2}]");
@@ -667,15 +702,62 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(slot + DungeonCharaDraw.CharaMotionB, 0);
             Memory.WriteInt(slot + DungeonCharaDraw.CharaRampA, 0);
             Memory.WriteInt(slot + DungeonCharaDraw.CharaRampB, 0);
-            Memory.WriteInt(DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 1);
-            Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, _held ? 1 : 0);
-            Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 1);
             RetagCatTextures(HerTextureBlock, SlotTextureGroup);
             uint boneHead = (uint)BitConverter.ToInt32(mstr, MotListHead) & Memory.PhysAddrMask, skinHead = (uint)BitConverter.ToInt32(mstr, MotionType.MotionSkinList) & Memory.PhysAddrMask;
             string heads = $"bone list 0x{boneHead:X}" + (Memory.IsValidGuest(boneHead) ? $" (w0 {Memory.ReadInt(Memory.ToMmu(boneHead))}, type {Memory.ReadInt(Memory.ToMmu(boneHead) + 8)}, keys {Memory.ReadInt(Memory.ToMmu(boneHead) + 0xC)})" : "")
                          + $", skin list 0x{skinHead:X}" + (Memory.IsValidGuest(skinHead) ? $" (mesh {Memory.ReadInt(Memory.ToMmu(skinHead))}, bone {Memory.ReadInt(Memory.ToMmu(skinHead) + 4)}, type {Memory.ReadInt(Memory.ToMmu(skinHead) + 8)}, keys {Memory.ReadInt(Memory.ToMmu(skinHead) + 0xC)})" : "");
             Log($"slot {Slot}: cat channel cloned (keys {KeyBase}..{KeyBase + KeyCount - 1}, KEY table 0x{keyTable:X}), FrameInf 0x{fiSize:X}; {heads}");
+            GuardSharedData(boneHead, skinHead);
             return true;
+        }
+
+        /// <summary>The slot goes live: the engine steps and draws the copy from its next frame. Called only once every mesh the look
+        /// does not wear is hidden (<see cref="HideMeshes"/>). Registering first left the copy's wing and mask nodes pointing at HER
+        /// visuals for a dozen frames — a wingless look never copies them — so the engine skinned those runs through her packets with
+        /// the copy's bones and a null skin source (the loads from address 0 in PCSX2's log): her wing and mask packets came out posed
+        /// by garbage, and the next winged or masked spawn on the floor copied them as its source. Only a floor reload cleared it.</summary>
+        internal static void GoLive()
+        {
+            Memory.WriteInt(DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 1);
+            Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, _held ? 1 : 0);
+            Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 1);
+        }
+
+        /// <summary>The data the copy plays but does not own — HER .mot tracks (the wing bones' keys) and HER .wgt runs (the wing and mask
+        /// meshes' keys) — put under the cave guard, and where they live logged against the chara pool: a mid-floor menu build-up
+        /// left the wings and the mask garbage while everything the mod wrote stayed intact, so this is what must be moving.</summary>
+        private static void GuardSharedData(uint boneHead, uint skinHead)
+        {
+            const int NodeSize = 0x18, KeySize = 0x20;
+            uint charaBase = Memory.ReadUInt(DataPools.Chara), charaEnd = charaBase + (uint)Memory.ReadInt(DataPools.Chara + DataPools.Cap) * 16;
+            string Where(uint a) => a >= charaBase && a < charaEnd ? "chara pool" : "OUTSIDE the chara pool";
+            var notes = new List<string>();
+            void Walk(uint head, string what, Func<byte[], bool> want)
+            {
+                int guarded = 0; uint lo = uint.MaxValue, hi = 0;
+                for (uint p = head; Memory.IsValidGuest(p) && guarded < 64;)
+                {
+                    byte[] n = Memory.ReadBytesBatch(Memory.ToMmu(p), NodeSize);
+                    if (n == null) break;
+                    if (want(n))
+                    {
+                        int count = BitConverter.ToInt32(n, 0x0C); uint keys = (uint)BitConverter.ToInt32(n, 0x10) & Memory.PhysAddrMask;
+                        Guard(Memory.ToMmu(p), n, $"{what} node w0={BitConverter.ToInt32(n, 0)} w1={BitConverter.ToInt32(n, 4)}");
+                        if (count > 0 && count < 4096 && Memory.IsValidGuest(keys))
+                        {
+                            byte[] k = Memory.ReadBytesBatch(Memory.ToMmu(keys), count * KeySize);
+                            if (k != null) { Guard(Memory.ToMmu(keys), k, $"{what} keys w0={BitConverter.ToInt32(n, 0)} w1={BitConverter.ToInt32(n, 4)}"); lo = Math.Min(lo, keys); hi = Math.Max(hi, keys + (uint)(count * KeySize)); guarded++; }
+                        }
+                    }
+                    p = (uint)BitConverter.ToInt32(n, 0x14) & Memory.PhysAddrMask;
+                }
+                if (guarded > 0) notes.Add($"{what}: {guarded} key arrays at 0x{lo:X}..0x{hi:X} ({Where(lo)})");
+            }
+            // the copy's own input the engine only reads: the FrameInf table (bind rows, skin counts and source pointers)
+            byte[] fi = Memory.ReadBytesBatch(CodeCaves.FrameInfCave, (_nodeCount + 1) * MotionType.FrameInfEntry); if (fi != null) Guard(CodeCaves.FrameInfCave, fi, "FrameInf table");
+            Walk(boneHead, "wing track", n => BitConverter.ToInt32(n, 0) >= 37);                                   // the eight wing bones' tracks
+            Walk(skinHead, "wing/mask run", n => { int m = BitConverter.ToInt32(n, 0); return m == 45 || m == 46 || m == 47; });
+            Log($"shared data guarded — chara pool 0x{charaBase:X}..0x{charaEnd:X}; " + (notes.Count > 0 ? string.Join("; ", notes) : "nothing found to guard"));
         }
     }
 }

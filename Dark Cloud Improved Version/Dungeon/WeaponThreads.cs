@@ -31,6 +31,8 @@ namespace Dark_Cloud_Improved_Version
         private static Thread steelSlingshotThread = new Thread(new ThreadStart(SteelSlingshot.SteelSlingshotEffect));
         private static Thread hardshooterThread = new Thread(new ThreadStart(Hardshooter.HardshooterEffect));
         private static Thread lockOnReachThread = new Thread(new ThreadStart(Flamingo.FlamingoEffect));
+        private static Thread angelShooterThread = new Thread(new ThreadStart(AngelShooter.AngelShooterEffect));
+        private static Thread divineBeastTitleThread = new Thread(new ThreadStart(DivineBeastTitle.DivineBeastTitleEffect));
         private static Thread heavensCloudThread = new Thread(new ThreadStart(HeavensCloud.HeavensCloudEffect));
         private static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
         private static Thread agasSwordThread = new Thread(new ThreadStart(AgasSword.AgasSwordEffect));
@@ -304,6 +306,19 @@ namespace Dark_Cloud_Improved_Version
             {
                 lockOnReachThread = new Thread(new ThreadStart(Flamingo.FlamingoEffect));
                 lockOnReachThread.Start();
+            }
+            // The cat: the Divine Beast Title's, the two weapons that inherit it with their own looks, and Super Steve with any of
+            // their spheres — ONE thread for all of them (the cat must never have two drivers).
+            if (DivineBeastTitle.Wields() && !divineBeastTitleThread.IsAlive)
+            {
+                divineBeastTitleThread = new Thread(new ThreadStart(DivineBeastTitle.DivineBeastTitleEffect));
+                divineBeastTitleThread.Start();
+            }
+            // Guardian Grace: the Angel Shooter's, the Angel Gear's by inheritance, and Super Steve with either sphere — one thread.
+            if (AngelShooter.Carries() && !angelShooterThread.IsAlive)
+            {
+                angelShooterThread = new Thread(new ThreadStart(AngelShooter.AngelShooterEffect));
+                angelShooterThread.Start();
             }
             switch (Player.Weapon.GetCurrentWeaponId())
             {

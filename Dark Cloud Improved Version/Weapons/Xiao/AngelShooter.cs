@@ -91,94 +91,107 @@ namespace Dark_Cloud_Improved_Version
         // gives them room to ring out before the sequencer's auto-stop.
         private const ushort ChimeFrames = 90;
 
-        private const int  FastTickMs = 16, IdleTickMs = 250;
+        private const int  FastTickMs = 16;
 
-        private static Thread _thread;
         private static readonly Random _rng = new Random();
+        private static bool _open;             // the channel: the counter floored, the pulse running
+        private static int  _prevCounter = -1; // last counter seen while open (−1 = closed): a decrease is a proc
 
-        internal static void Start()
+        /// <summary>Whether the weapon in her hand carries Guardian Grace: the Angel Shooter, the Angel Gear (it inherits it), or Super
+        /// Steve with either one's sphere. The one gate for the thread and its launcher.</summary>
+        internal static bool Carries()
         {
-            if (_thread != null && _thread.IsAlive) return;
-            _thread = new Thread(Loop) { IsBackground = true, Name = "AngelShooter" };
-            _thread.Start();
+            int weaponId = Memory.ReadUShort(WeaponHave.BattleWeaponRecord);
+            if (weaponId == Items.angelshooter || weaponId == Items.angelgear) return true;
+            if (weaponId != Items.supersteve) return false;
+            int sphere = SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord);
+            return sphere == Items.angelshooter || sphere == Items.angelgear;
         }
 
-        private static void Loop()
+        /// <summary>Xiao's Angel Shooter thread: hands every tick to <see cref="Drive"/> while she wields a weapon that carries the
+        /// ability (<see cref="Carries"/>), and closes the channel once when it goes. One driver only, like the cat's.</summary>
+        public static void AngelShooterEffect()
         {
-            bool open = false;
-            int prevCounter = -1;      // last counter seen while open (−1 = closed): a decrease is a proc
-            while (true)
+            while (Player.InDungeonFloor() && Carries())
             {
-                int sleep = IdleTickMs;
-                try
+                Drive(true);
+                Thread.Sleep(FastTickMs);
+            }
+            Stop();
+        }
+
+        /// <summary>Drive every tick while a granting weapon (or sphere) is equipped: opens the channel while she guards with the
+        /// ability live, pulses her through it, closes it otherwise. <paramref name="active"/> false closes it.</summary>
+        internal static void Drive(bool active)
+        {
+            try
+            {
+                bool now = false; bool gear = false; bool healFlag = false;
+                if (active && Enabled && Player.InDungeonFloor() && Player.CurrentCharacterNum() == XiaoId)
                 {
-                    bool now = false; bool gear = false; bool healFlag = false;
-                    if (Enabled && Player.InDungeonFloor() && Player.CurrentCharacterNum() == XiaoId)
-                    {
-                        sleep = FastTickMs;
-                        int weaponId  = Memory.ReadUShort(WeaponHave.BattleWeaponRecord);
-                        bool inherited = weaponId == Items.supersteve;
-                        int source    = inherited ? SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) : weaponId;
-                        gear          = source == Items.angelgear;
-                        bool ability  = gear || source == Items.angelshooter;
-                        healFlag      = (Memory.ReadUShort(WeaponHave.BattleWeaponRecord + HealFlagOffset) & HealFlagBit) != 0;
-                        now = ability && (healFlag || inherited)
-                           && !Player.CheckDunIsPausedOrMenu()
-                           && Player.Xiao.GetHp() > 0
-                           && GuardWatch.IsGuarding();
-                    }
-                    if (now)
-                    {
-                        if (!open)
-                        {
-                            open = true;
-                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "channel open (" + (gear ? "Angel Gear" : "Angel Shooter") + ": native heal every second)");
-                            if (gear)
-                            {
-                                FabricateChangeBurst();
-                                Player.FlashActiveCharacter(WarmR, WarmG, WarmB, FlashSpeed, FlashCount);
-                                SeSeq.Play(SeSeq.ChangeJingle, ChimeFrames);
-                            }
-                            else
-                            {
-                                FabricateBurst();
-                                Player.FlashActiveCharacter(WhiteR, WhiteG, WhiteB, FlashSpeed, FlashCount);
-                                SeSeq.Play(SeSeq.HealChime, ChimeFrames);
-                            }
-                        }
-                        int threshold = HealThreshold(), floor = threshold - PulsePeriodFrames;
-                        int c = Memory.ReadInt(HealAbility.TickCounter);
-                        bool wrapped = prevCounter >= 0 && c < prevCounter;                             // a proc since the last tick
-                        if (c < floor) { Memory.WriteInt(HealAbility.TickCounter, floor); c = floor; }   // the native tick fires PulsePeriodFrames from now at the latest
-                        prevCounter = c;
-                        if (wrapped && !healFlag)                                                       // inherited without the flag: the +1 the native tick withheld
-                        {
-                            ushort hp = Player.Xiao.GetHp(), max = Player.Xiao.GetMaxHp();
-                            if (hp > 0 && hp < max) Player.Xiao.SetHp((ushort)(hp + 1));
-                        }
-                        float phase = Math.Clamp((c - floor) / (float)(threshold - 1 - floor), 0f, 1f);
-                        float ease  = 0.5f + 0.5f * (float)Math.Cos(2 * Math.PI * phase);              // peak at the proc, low mid-period, back to peak on the next: no cut at the wrap
-                        float[] lo = gear ? GearLow : ShooterLow, hi = gear ? GearHigh : ShooterHigh;
-                        Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint,
-                                         lo[0] + (hi[0] - lo[0]) * ease, lo[1] + (hi[1] - lo[1]) * ease, lo[2] + (hi[2] - lo[2]) * ease);
-                        if (Memory.ReadInt(Fx + FxActive) == 1)   // follow her while the spring burst plays
-                            WriteFxPos();
-                    }
-                    else if (open)
-                    {
-                        open = false; prevCounter = -1;
-                        Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint, 0f, 0f, 0f);
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "channel closed");
-                    }
+                    int weaponId  = Memory.ReadUShort(WeaponHave.BattleWeaponRecord);
+                    bool inherited = weaponId == Items.supersteve;
+                    int source    = inherited ? SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) : weaponId;
+                    gear          = source == Items.angelgear;
+                    bool ability  = gear || source == Items.angelshooter;
+                    healFlag      = (Memory.ReadUShort(WeaponHave.BattleWeaponRecord + HealFlagOffset) & HealFlagBit) != 0;
+                    now = ability && (healFlag || inherited)
+                       && !Player.CheckDunIsPausedOrMenu()
+                       && Player.Xiao.GetHp() > 0
+                       && GuardWatch.IsGuarding();
                 }
-                catch (Exception e)
+                if (now)
                 {
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "tick failed: " + e.Message);
-                    sleep = 1000;
+                    if (!_open)
+                    {
+                        _open = true;
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "channel open (" + (gear ? "Angel Gear" : "Angel Shooter") + ": native heal every second)");
+                        if (gear)
+                        {
+                            FabricateChangeBurst();
+                            Player.FlashActiveCharacter(WarmR, WarmG, WarmB, FlashSpeed, FlashCount);
+                            SeSeq.Play(SeSeq.ChangeJingle, ChimeFrames);
+                        }
+                        else
+                        {
+                            FabricateBurst();
+                            Player.FlashActiveCharacter(WhiteR, WhiteG, WhiteB, FlashSpeed, FlashCount);
+                            SeSeq.Play(SeSeq.HealChime, ChimeFrames);
+                        }
+                    }
+                    int threshold = HealThreshold(), floor = threshold - PulsePeriodFrames;
+                    int c = Memory.ReadInt(HealAbility.TickCounter);
+                    bool wrapped = _prevCounter >= 0 && c < _prevCounter;                             // a proc since the last tick
+                    if (c < floor) { Memory.WriteInt(HealAbility.TickCounter, floor); c = floor; }   // the native tick fires PulsePeriodFrames from now at the latest
+                    _prevCounter = c;
+                    if (wrapped && !healFlag)                                                       // inherited without the flag: the +1 the native tick withheld
+                    {
+                        ushort hp = Player.Xiao.GetHp(), max = Player.Xiao.GetMaxHp();
+                        if (hp > 0 && hp < max) Player.Xiao.SetHp((ushort)(hp + 1));
+                    }
+                    float phase = Math.Clamp((c - floor) / (float)(threshold - 1 - floor), 0f, 1f);
+                    float ease  = 0.5f + 0.5f * (float)Math.Cos(2 * Math.PI * phase);              // peak at the proc, low mid-period, back to peak on the next: no cut at the wrap
+                    float[] lo = gear ? GearLow : ShooterLow, hi = gear ? GearHigh : ShooterHigh;
+                    Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint,
+                                     lo[0] + (hi[0] - lo[0]) * ease, lo[1] + (hi[1] - lo[1]) * ease, lo[2] + (hi[2] - lo[2]) * ease);
+                    if (Memory.ReadInt(Fx + FxActive) == 1)   // follow her while the spring burst plays
+                        WriteFxPos();
                 }
-                Thread.Sleep(sleep);
+                else if (_open)
+                {
+                    _open = false; _prevCounter = -1;
+                    Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint, 0f, 0f, 0f);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "channel closed");
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "tick failed: " + e.Message);
             }
         }
+
+        /// <summary>The weapon or the floor went: the channel closed.</summary>
+        internal static void Stop() => Drive(false);
 
         /// <summary>The heal tick's threshold, read from the overlay's own `slti` so the floor is right on a patched
         /// (180) or vanilla (240) dun.bin.</summary>

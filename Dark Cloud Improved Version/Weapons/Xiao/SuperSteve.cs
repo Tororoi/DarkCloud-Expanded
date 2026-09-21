@@ -644,6 +644,9 @@ namespace Dark_Cloud_Improved_Version
                 Matador.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.matador);
                 lastSphere = sphere;
 
+                // NOT pulsed here: Guardian Grace and the cat. Both have their own thread, alive for Super Steve's spheres as well
+                // (AngelShooter.Carries / DivineBeastTitle.Wields), because the cat must never have two drivers.
+
                 // Goro Effects
 
                 // Cold Storage (Frozen Tuna): WHP losses bank a healing pool that drains after Xiao is hit;

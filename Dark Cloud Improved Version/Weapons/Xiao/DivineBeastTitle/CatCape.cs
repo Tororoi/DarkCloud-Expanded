@@ -16,7 +16,6 @@ namespace Dark_Cloud_Improved_Version
         // ── the Super Steve cape (CCloth 0x8550) ───────────────────────────────────────────────────────────
         internal static long _capeObj;
         private static uint _capeTemplate;                                    // her CCloth for cat_cape, taken out of her draw list by TakeHerCape
-        internal static int _capeSweepTick;
 
         /// <summary>The cape's cloth record lives in HER pack, so the engine builds it for XIAO and hangs it off her own cloth
         /// list — anchored to the hidden cat_cape node at her origin, where it draws as a sheet at her feet whether or not the cat

@@ -128,3 +128,12 @@ entry. Repainting that entry in the texture manager's own copy recolours the cap
 re-uploads the cat's texture group before drawing the slot — the same mechanism WeaponTextureSwap uses on Super Steve.
 Painting all 256 entries also makes it immune to CLUT ordering, since every entry holds the same colour. The mask shares
 `catcape` (wing_bake.MASK_TEX), so it follows with no work of its own.
+
+## The copy must be hidden before it goes live
+
+A look that does not wear the wings or the mask never copies those meshes; their nodes in the copy keep pointing at HER visuals until
+`HideMeshes` swaps in the private skin list and clears their geometry. The slot's registry word therefore goes last (`CatCopy.GoLive`).
+When it went first, the engine stepped the copy for the frames the texture re-tag took, skinning the wing and mask runs through her
+packets with the copy's bones and a null skin source (PCSX2 logs the reads from address 0), and every later winged or masked spawn on
+that floor copied the ruined packets as its source: shards for wings, a mask floating above the cat. A floor reload was the only cure,
+which is what made it look like a mid-floor build-up bug.

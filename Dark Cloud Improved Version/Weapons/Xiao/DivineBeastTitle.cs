@@ -38,7 +38,7 @@ namespace Dark_Cloud_Improved_Version
         private const int  XiaoId = 1;
         internal const int  Slot   = 1;                 // DungeonCharaDraw host (0 = Mirage clone, 3 = Angel Gear slingshot)
         internal const int  CharCopySize = 0xD60, MotionStructSize = 0xC0;
-        internal const int  TickMs = 16, IdleMs = 100;
+        internal const int  TickMs = 16;
         /// <summary>How long after arming the build waits for the texture manager to settle. The cat's VRAM window is claimed
         /// by writing a block's base and top DIRECTLY rather than through the allocator, so claiming it before the manager has
         /// finished handing out addresses lets later textures land on top of it.</summary>
@@ -137,7 +137,6 @@ namespace Dark_Cloud_Improved_Version
 
         internal enum Phase { Resident, Flying, Falling, Landing, Running, TakeOff, Leaping, LandEnd, Fading }   // Resident = built, hidden, waiting
 
-        private static Thread _thread;
         private static readonly bool[] _seenPellet = new bool[PlayerShotPool.SlotCount];
         private static bool   _holding, _flashed;
         private static DateTime _holdStart;
@@ -257,95 +256,107 @@ namespace Dark_Cloud_Improved_Version
 
         // ──────────────────────────────────────── the mod's thread ─────────────────────────────────────────
 
-        internal static void Start()
+        /// <summary>Whether the weapon in her hand wears a cat look: the Title, the Angel Shooter, the Angel Gear, or Super Steve
+        /// carrying one of their spheres. The one gate for the thread and its launcher.</summary>
+        internal static bool Wields() => Looks.ContainsKey(LookKeyFor(Memory.ReadUShort(WeaponHave.BattleWeaponRecord)));   // Super Steve's looks have NEGATIVE keys
+
+        /// <summary>Xiao's Divine Beast Title thread: hands every tick to <see cref="Drive"/> while she wields a weapon with a look, Super
+        /// Steve's spheres included, and stands the cat down once when it goes. The cat has exactly ONE driver: a spawn is hundreds of
+        /// writes and a machine-side copy, and a second thread stepping in mid-way (Super Steve's loop, when the weapon changed under a
+        /// look thread) corrupted the copy and once took the game down — so Super Steve does not pulse this one. The tick holds the cat
+        /// itself through the PAUSE screen and the menus, so nothing is gated here.</summary>
+        public static void DivineBeastTitleEffect()
         {
-            if (_thread != null && _thread.IsAlive) return;
-            _thread = new Thread(Loop) { IsBackground = true, Name = "DivineBeastTitle" };
-            _thread.Start();
+            while (Player.InDungeonFloor() && Wields())
+            {
+                Drive(true);
+                Thread.Sleep(TickMs);
+            }
+            Stop();
         }
 
-        /// <summary>The mod's tick. Decides each pass whether the cat may exist at all — Xiao, in a dungeon floor, a weapon
-        /// with a look, no script event — and then which of four states applies: stood down, held for the PAUSE screen, held
-        /// through a menu, or playing. A weapon change or a character switch tears the copy down; a menu does not. Runs at
-        /// <see cref="TickMs"/> while armed and <see cref="IdleMs"/> otherwise.</summary>
-        private static void Loop()
+        private static readonly object _gate = new object();   // Drive and Stop never overlap, whoever calls
+
+        /// <summary>The mod's tick. Decides each pass whether the cat may exist at all — Xiao, in a dungeon floor, a weapon with a look,
+        /// no script event — and then which of four states applies: stood down, held for the PAUSE screen, held through a menu, or
+        /// playing. A weapon change or a character switch tears the copy down; a menu does not. <paramref name="active"/> false stands
+        /// everything down.</summary>
+        internal static void Drive(bool active)
         {
-            while (true)
+            if (!active) { Stop(); return; }
+            lock (_gate)
+            try
             {
-                int sleep = IdleMs;
-                try
+                bool inDun = Player.InDungeonFloor();
+                int weapon = inDun ? LookKeyFor(Memory.ReadUShort(WeaponHave.BattleWeaponRecord)) : -1;   // Super Steve: by its sphere
+                bool paused = inDun && Player.CheckDunIsPaused();                       // the PAUSE screen: the world stops, the cat waits
+                bool menu = inDun && !paused && Player.CheckDunIsPausedOrMenu();        // the item menu: it can rebuild the texture manager under the copy — stand down
+                bool armed = Enabled && inDun && Player.CurrentCharacterNum() == XiaoId
+                          && Looks.ContainsKey(weapon)
+                          && Memory.ReadInt(DungeonScriptEvent.BtEventMode) == 0;   // a script event deletes her MOTION 1 and rebuilds textures: stand down
+                if (armed && Active && weapon != _weapon)
                 {
-                    bool inDun = Player.InDungeonFloor();
-                    if (inDun) { HeapWatch(); sleep = WatchMs; }
-                    int weapon = inDun ? LookKeyFor(Memory.ReadUShort(WeaponHave.BattleWeaponRecord)) : -1;   // Super Steve: by its sphere
-                    bool paused = inDun && Player.CheckDunIsPaused();                       // the PAUSE screen: the world stops, the cat waits
-                    bool menu = inDun && !paused && Player.CheckDunIsPausedOrMenu();        // the item menu: it can rebuild the texture manager under the copy — stand down
-                    // her own copy of the cape hangs off her cloth list from the moment the model loads — whatever the weapon is
-                    if (inDun && Player.CurrentCharacterNum() == XiaoId && ++_capeSweepTick >= 4) { _capeSweepTick = 0; TakeHerCape(); }
-                    bool armed = Enabled && inDun && Player.CurrentCharacterNum() == XiaoId
-                              && Looks.ContainsKey(weapon)
-                              && Memory.ReadInt(DungeonScriptEvent.BtEventMode) == 0;   // a script event deletes her MOTION 1 and rebuilds textures: stand down
-                    if (armed && Active && weapon != _weapon)
-                    {
-                        Log($"weapon {_weapon} → {weapon}: rebuilding the cat with its look");
-                        Despawn();
-                    }
-                    if (!armed)
-                    {
-                        if (Active) Despawn();
-                        Resume();
-                        _armedSince = DateTime.MinValue;
-                        _holding = false; _holdSeconds = 0;
-                        Array.Clear(_seenPellet, 0, _seenPellet.Length);
-                    }
-                    else if (paused)
-                    {
-                        sleep = TickMs;
-                        if (Active) { FreezeForPause(); Maintain(); }                       // hold the copy's frame; keep re-asserting it
-                    }
-                    else if (menu)
-                    {
-                        // The menu does NOT wipe the cat's texture entries, so the cat is held here exactly as the PAUSE
-                        // screen holds it. Only a weapon change or a character switch takes it away — both fall through to
-                        // the !armed branch above. `menu` covers the menu ROOT, not just the weapon pane, which is what the
-                        // cat has to survive.
-                        sleep = TickMs;
-                        if (Active)
-                        {
-                            FreezeForPause();
-                            Maintain();
-                            CheckTexturesStillOurs();                                       // safety net: a menu that DOES rebuild the manager still tears down
-                            if (Active && _look.Cape) WatchElementLook();                   // recolour cape, mask and glow WHILE the element is being changed
-                        }
-                    }
-                    else
-                    {
-                        sleep = TickMs;
-                        Resume();
-                        WatchHerCatChannel();
-                                    if (Active && ++_texCheckTick >= 30)
-                        {
-                            _texCheckTick = 0;
-                            CheckTexturesStillOurs();
-                            if (Active && _look.Cape) WatchElementLook(force: true);   // re-assert the colour if the entries were remade
-                        }
-                        if (_armedSince == DateTime.MinValue) _armedSince = GameClock.Now;
-                        // Built once, hidden, after the switch or menu has settled — her cat textures are still registering for
-                        // a moment. Not the real guard: Spawn refuses and retries while they are absent from the manager, so
-                        // arriving early costs a retry rather than a broken cat.
-                        if (!Active && (GameClock.Now - _armedSince).TotalSeconds >= SettleSeconds) SpawnResident();
-                        TrackCharge();
-                        if (_native) PollCave(); else WatchPellets();
-                        if (Active) { Step(); BreezeCape(); WatchCape(); if (_look.Cape) WatchElementLook(); }
-                    }
-                    if (!paused) RetirePlanted();
+                    Log($"weapon {_weapon} → {weapon}: rebuilding the cat with its look");
+                    Despawn();
                 }
-                catch (Exception e)
+                if (!armed) Stop();
+                else if (paused)
                 {
-                    Log("tick failed: " + e.Message);
-                    try { if (Active) Despawn(); } catch { }
+                    if (Active) { FreezeForPause(); Maintain(); }                       // hold the copy's frame; keep re-asserting it
                 }
-                Thread.Sleep(sleep);
+                else if (menu)
+                {
+                    // The menu does NOT wipe the cat's texture entries, so the cat is held here exactly as the PAUSE
+                    // screen holds it. Only a weapon change or a character switch takes it away — both fall through to
+                    // the !armed branch above. `menu` covers the menu ROOT, not just the weapon pane, which is what the
+                    // cat has to survive.
+                    if (Active)
+                    {
+                        FreezeForPause();
+                        Maintain();
+                        CheckTexturesStillOurs();                                       // safety net: a menu that DOES rebuild the manager still tears down
+                        if (Active && _look.Cape) WatchElementLook();                   // recolour cape, mask and glow WHILE the element is being changed
+                    }
+                }
+                else
+                {
+                    Resume();
+                    WatchHerCatChannel();
+                                if (Active && ++_texCheckTick >= 30)
+                    {
+                        _texCheckTick = 0;
+                        CheckTexturesStillOurs();
+                        CheckGuards();                                             // anything overwriting the copy's caves is named, once
+                        if (Active && _look.Cape) WatchElementLook(force: true);   // re-assert the colour if the entries were remade
+                    }
+                    if (_armedSince == DateTime.MinValue) _armedSince = GameClock.Now;
+                    // Built once, hidden, after the switch or menu has settled — her cat textures are still registering for
+                    // a moment. Not the real guard: Spawn refuses and retries while they are absent from the manager, so
+                    // arriving early costs a retry rather than a broken cat.
+                    if (!Active && (GameClock.Now - _armedSince).TotalSeconds >= SettleSeconds) SpawnResident();
+                    TrackCharge();
+                    if (_native) PollCave(); else WatchPellets();
+                    if (Active) { Step(); BreezeCape(); WatchCape(); if (_look.Cape) WatchElementLook(); }
+                }
+                if (!paused) RetirePlanted();
+            }
+            catch (Exception e)
+            {
+                Log("tick failed: " + e.Message);
+                try { if (Active) Despawn(); } catch { }
+            }
+        }
+
+        /// <summary>The weapon or the floor went: the cat down, the pause hold released, the charge forgotten.</summary>
+        internal static void Stop()
+        {
+            lock (_gate)
+            {
+                if (Active) Despawn();
+                Resume();
+                _armedSince = DateTime.MinValue;
+                _holding = false; _holdSeconds = 0;
+                Array.Clear(_seenPellet, 0, _seenPellet.Length);
             }
         }
 
@@ -480,81 +491,6 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteFloat(CodeCaves.Mailbox.CatCapeTint + i * 4, (_capeTint[i] - _catTint[i]) * lit);
         }
 
-        // ─────────────────────────────────────── character heap watch ──────────────────────────────────────
-        private const int  WatchMs = 50;
-        private static string _heapLast = "", _bgLast = "";
-        /// <summary>Free bytes below which the effects pool is reported as TIGHT. An effect that cannot allocate does not
-        /// warn — it simply never appears, which is what "Pirate's Chariot and Alexander fired nothing" looks like.</summary>
-        private const long EffectsTightBytes = 32 * 1024;
-        private static int _effectPeak, _effectCapLast, _weaponCapLast;
-        private static DateTime _effectTightAt = DateTime.MinValue;
-        /// <summary>Watch the character heap. Chara, weapons and effects share ONE CDataAlloc2 pool (210000 × 16 B vanilla,
-        /// 265000 × 16 = 4.24 MB with DunPatches' raise) and an overflow is a SILENT spin — Alloc__14CDataAlloc2&lt;1&gt;Fi is
-        /// printf + while(true), i.e. a freeze — so the counters and the background reads are logged whenever they change and
-        /// the last line before a freeze is the verdict. Also tracks the effects pool's high-water mark, since enemy
-        /// projectiles allocate from whatever the chara data leaves.</summary>
-        private static void HeapWatch()
-        {
-            int c = Memory.ReadInt(DataPools.Chara + DataPools.Used), w = Memory.ReadInt(DataPools.Weapon + DataPools.Used), e = Memory.ReadInt(DataPools.Effect + DataPools.Used);
-            int cCap = Memory.ReadInt(DataPools.Chara + DataPools.Cap), wCap = Memory.ReadInt(DataPools.Weapon + DataPools.Cap), eCap = Memory.ReadInt(DataPools.Effect + DataPools.Cap);
-            int poolUsed = Memory.ReadInt(DataPools.GlobalUsed);
-            // ── effects-pool high-water mark ──────────────────────────────────────────────────────────────────────
-            // The effects pool is only what the character heap has left after chara and weapons, so with the cat resident
-            // it is a FRACTION of what Toan gets — measured 70,144/175,904 B as Xiao against 190,272/1,907,968 as Toan.
-            // Enemy projectiles are effects, and the summary line below only prints when the whole string CHANGES, so a spike
-            // that empties the pool and drains again leaves no trace at all; the peak does.
-            if (eCap != _effectCapLast || wCap != _weaponCapLast)
-            {
-                _effectCapLast = eCap; _weaponCapLast = wCap; _effectPeak = 0;   // the caps move with chara: start a fresh peak
-                Log(
-                    $"effects pool now caps at {eCap * 16L:N0} B (weapons {wCap * 16L:N0} B) — char {Player.CurrentCharacterNum()}, cat {(Active ? "resident" : "down")}");
-            }
-            if (e > _effectPeak)
-            {
-                _effectPeak = e;
-                long freeB = (eCap - e) * 16L;
-                if (e * 2 >= eCap)                                                // only once it is worth knowing about
-                    Log(
-                        $"effects pool peak {e * 16L:N0} of {eCap * 16L:N0} B (free {freeB:N0})");
-            }
-            // Separately from the peak, and rate-limited: the pool being tight RIGHT NOW is the thing that makes an enemy
-            // projectile silently not appear, and it can happen on a floor whose peak never exceeds an earlier floor's.
-            if ((eCap - e) * 16L < EffectsTightBytes && (GameClock.Now - _effectTightAt).TotalSeconds >= 5)
-            {
-                _effectTightAt = GameClock.Now;
-                Log(
-                    $"effects pool TIGHT: {e * 16L:N0} of {eCap * 16L:N0} B used, only {(eCap - e) * 16L:N0} free — "
-                    + "an effect that cannot allocate never appears, and enemy projectiles are effects");
-            }
-            string heap = $"chara {c * 16L:N0}/{cCap * 16L:N0}, weapons {w * 16L:N0}/{wCap * 16L:N0}, effects {e * 16L:N0}/{eCap * 16L:N0} — total {(c + w + e) * 16L:N0} of {cCap * 16L:N0} B (free {(cCap - c - w - e) * 16L:N0}); global pool {poolUsed * 16L:N0} of {DataPools.GlobalCap * 16L:N0} B (free {(DataPools.GlobalCap - poolUsed) * 16L:N0})";
-            if (heap != _heapLast)
-            {
-                _heapLast = heap;
-                Log($"heap (char {Player.CurrentCharacterNum()}): " + heap);
-                var pools = new System.Text.StringBuilder();
-                foreach (var (addr, name) in DataPools.InCarveOrder)
-                    pools.Append($" {name} {Memory.ReadInt(addr + DataPools.Used) * 16L:N0}/{Memory.ReadInt(addr + DataPools.Cap) * 16L:N0}");
-                pools.Append($" cash {Memory.ReadInt(DataPools.Cash + DataPools.Used) * 16L:N0}/{Memory.ReadInt(DataPools.Cash + DataPools.Cap) * 16L:N0}");   // the floor script's work allocator (P840 on a first floor, the monster pool after)
-                Log("pools (used/cap B):" + pools);
-            }
-            var bg = new System.Text.StringBuilder();
-            for (int i = 0; i < 6; i++)
-            {
-                long ent = BgRead.Table + i * BgRead.Stride;
-                if (Memory.ReadInt(ent) == 0) continue;
-                byte[] nb = Memory.ReadBytesBatch(ent + BgRead.Name, 48);
-                int len = 0; while (nb != null && len < nb.Length && nb[len] != 0) len++;
-                string nm = nb == null ? "?" : System.Text.Encoding.ASCII.GetString(nb, 0, len);
-                bg.Append($" [{i}] {nm} → 0x{Memory.ReadInt(ent + BgRead.Dest):X} ({Memory.ReadInt(ent + BgRead.Size):N0} B)");
-            }
-            string bgs = bg.ToString();
-            if (bgs != _bgLast)
-            {
-                _bgLast = bgs;
-                if (bgs.Length > 0) Log("bg reads:" + bgs);
-            }
-        }
-
         // ───────────────────────────────────────── charge + launch ─────────────────────────────────────────
 
         /// <summary>Hold time on the draw/nocked states → the shot is charged past <see cref="ChargeSeconds"/>;
@@ -645,6 +581,7 @@ namespace Dark_Cloud_Improved_Version
             if (!_look.Wings) hide.AddRange(_wingMeshIdx);
             if (!_look.Cape && _maskMeshIdx >= 0) hide.Add(_maskMeshIdx);
             HideMeshes(hide, !_look.Wings && !_look.Cape ? "wings and mask" : !_look.Wings ? "wings" : "mask");
+            GoLive();                                                                      // the engine may step the copy only now: nothing of hers is reachable from it
             if (_look.Cape) { SpawnCape(); MaskTint(); WatchElementLook(force: true); }   // colour before the first frame draws
             Log($"look for weapon {_weapon}: glow row {(_look.Cape ? "element" : _look.PalRow.ToString())}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy), mask {(_look.Cape ? "on" : "off")} (n{_maskMeshIdx})");
             _native = (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew;
