@@ -218,9 +218,9 @@ namespace Dark_Cloud_Improved_Version
                 // weapon + level-up carry; runs in every mode (level-ups happen from any menu,
                 // self-gated ~10 Hz, kill tracking only while in a dungeon floor).
                 MachoSword.OvertrainingEffect();
-                // Atlamillia Sword "Insurance" — break watcher + dynamic atla + collected-slot
+                // Atlamillia Sword "Atlamillia Insurance" — break watcher + dynamic atla + collected-slot
                 // erasure; runs in every mode (self-gated ~2 Hz) so floor-select stays clean too.
-                AtlamilliaInsurance.Tick();
+                AtlamilliaSword.AtlamilliaInsuranceEffect();
 
                 //Check if player is in town
                 if (Memory.ReadByte(Addresses.mode) == 2)
