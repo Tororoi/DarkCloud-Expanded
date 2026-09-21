@@ -231,7 +231,7 @@ namespace Dark_Cloud_Improved_Version
             // Declare our locals. A label's header starts with the LOCAL VARIABLE COUNT. The labels we hijack
             // declare 0, so a script that touches var0 without raising this would be reaching outside its
             // frame. (header layout + Norune's per-label counts: memory stb-label-header-format.md,
-            // game_data/docs/fishing-engine-re.md §stb-label-header)
+            // the fishing engine RE notes §stb-label-header)
             if (w.Locals > 0) Memory.WriteInt(stb + codeOff + 8, w.Locals);
             // fd[3] (funcOff+0xC) = argument count. Native/baked spares carry 0 here, so only a genuine
             // subroutine (the shared menu) needs it — but a wrong non-zero value would misframe the callee.

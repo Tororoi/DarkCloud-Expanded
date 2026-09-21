@@ -9,6 +9,8 @@ using static Dark_Cloud_Improved_Version.IsoPatcher;
 using static Dark_Cloud_Improved_Version.ElfCameraPatches;
 using static Dark_Cloud_Improved_Version.ElfWaterPatches;
 using static Dark_Cloud_Improved_Version.ElfFishingPatches;
+using static Dark_Cloud_Improved_Version.ElfCatPatches;
+using static Dark_Cloud_Improved_Version.ElfWeaponPatches;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -16,7 +18,8 @@ namespace Dark_Cloud_Improved_Version
     /// ELF (SCUS_971.11) patching: the boot cave that registers fishsign.img, ElfPatchAndCrc (program-header
     /// resolve + the ordered Patch* dispatch + new PCSX2 CRC), and the small cave-stub hooks (tide-evict
     /// fade, Queens spray, spray bias). The fishing ELF patches live in ElfFishingPatches; camera and
-    /// water-visual patches in ElfCameraPatches / ElfWaterPatches.
+    /// water-visual patches in ElfCameraPatches / ElfWaterPatches; the cat's in ElfCatPatches and the weapon
+    /// abilities' in ElfWeaponPatches.
     /// </summary>
     internal static class ElfPatches
     {
@@ -104,6 +107,29 @@ namespace Dark_Cloud_Improved_Version
             PatchSprayBiasShim(fs, ElfOff);               // EffectWaterSpray → add a per-emitter velocity bias (mist facing + height)
             PatchFishLineSplit(fs, ElfOff);               // fishing rope: per-segment rest length (distpAbove/distpBelow) split at anchor 18
             PatchStiltsHeal(fs, ElfOff);                  // Brownboo stilts: re-upload scene bank 1 after FishLineDraw, before the waterside redraw (v4; chains the water-redraw jal)
+            PatchCatPelletFollow(fs, ElfOff);             // Divine Beast cat: native pellet follower cave (the dun.bin hook is in DunPatches)
+            PatchXiaoMeleeFlinch(fs, ElfOff);             // Divine Beast cat: its melee-type hits may stagger (dun.bin hook in DunPatches)
+            PatchCatGlowDraw(fs, ElfOff);                 // Divine Beast cat: blue torch-glow at its torso (dun.bin hooks in DunPatches)
+            PatchCatSpherePercent(fs, ElfOff);            // Divine Beast cat: a hurt sphere may admit the cat's kick (spare[1]) at its own % (spare[0]) — Minotaur Joe's face
+            PatchCatGuardBypass(fs, ElfOff);              // Divine Beast cat: its hits pass an enemy's guard window (mimics re-register theirs faster than the mod can crush them)
+            PatchCatCapeTint(fs, ElfOff);                 // Divine Beast cat: the Super Steve cape draws under its own ambient, not the cat's
+            PatchCatMaskTint(fs, ElfOff);                 // …and its mask does too, reached through a private vtable rather than a hook
+            PatchCatCopyQueue(fs, ElfOff);                // the cat's mesh copy runs inside the machine instead of over PINE
+            PatchPropPelletFollow(fs, ElfOff);            // a chara-slot prop on one of Xiao's pellets — the Matador's charged shot (the hook in DunPatches now lands here)
+            PatchBorrowedShotsEnter(fs, ElfOff);            // a species' shot config, borrowed by an ability, entered into every floor's shot pack (dun.bin hook in DunPatches)
+            PatchSharedShots(fs, ElfOff);                 // the monster shot pack's five slots shared among every config a floor needs (the step hook in DunPatches)
+            PatchPelletSprite(fs, ElfOff);                // a player pellet drawn as the sprite of the item id the mod names (Super Steve with a slingshot's sphere)
+            PatchSteelLevelUp(fs, ElfOff);                // the Steel Slingshot's level-ups: endurance and max WHP grow twice as much
+            PatchFlameSpacing(fs, ElfOff);                // Osmond's flamethrower reach from a mailbox word (the Skunk doubles it)
+            PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
+            PatchCatGlowPalettes(fs, ElfOff);             // the six glow ramps (data) …
+            PatchMirageHazeDraw(fs, ElfOff);              // Mirage: the heat shimmer drawn at the clone itself (dun.bin hook in DunPatches)
+            PatchSuperSteveIconDraw(fs, ElfOff);          // Super Steve: the attached sphere's weapon icon over Steve on the dungeon HUD (dun.bin hooks in DunPatches)
+            PatchCatGlowPalette(fs, ElfOff);              // … and the cave that paints one of them into the 8-bit glow disc
+            PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
+            PatchXiaoBuildUp(fs, ElfOff);                 // Xiao's build-up tree: Hardshooter → Double Impact only, Double Impact → Matador only
+            PatchFishingPrizeSlingshot(fs, ElfOff);       // the fishing prize exchange sells the Flamingo for 1000 FP (vanilla: the Matador for 1400)
+            PatchMapCarveRemainder(fs, ElfOff);           // the monster pool = the (grown) map carve minus the floor's map data (DunPatches grows the carve)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
             PatchExclamationHeight(fs, ElfOff);           // player "!" mark Y store: add ExclamationYBoost mailbox (0 = vanilla) → lift the mark off a shorter swapped-in ally's mesh (the cat)
@@ -118,7 +144,7 @@ namespace Dark_Cloud_Improved_Version
         // ── The ELF cave SEGMENT: hijack the degenerate phdr3 into a real PT_LOAD ────────────────────
         // SCUS_971.11 ships 4 program headers; phdr3 is a DEGENERATE placeholder (PT_LOAD, filesz=0,
         // MEMSZ=0 — it loads and reserves nothing). Rewrite it to load file span
-        // [ElfCave.SegmentFileOff, +0x2000) at guest [ElfCave.RegionStart, RegionEnd): that file span is
+        // [ElfCave.SegmentFileOff, +0x4000) at guest [ElfCave.RegionStart, RegionEnd): that file span is
         // dead .reldun debug data BEYOND every phdr's file extent (phdr0 loads only 0x100..0x1a2480;
         // phdr1-3 have filesz=0), so PCSX2 never reads it — and RE tooling uses the PRISTINE extracted
         // ELF, so clobbering it in the PATCHED ISO loses nothing. The guest band is inside the mod's
@@ -130,7 +156,7 @@ namespace Dark_Cloud_Improved_Version
         {
             const uint SegVa   = CodeCaves.ElfCave.RegionStart;
             const uint SegOff  = CodeCaves.ElfCave.SegmentFileOff;
-            const uint SegSize = CodeCaves.ElfCave.RegionEnd - CodeCaves.ElfCave.RegionStart;   // 0x2000
+            const uint SegSize = CodeCaves.ElfCave.RegionEnd - CodeCaves.ElfCave.RegionStart;   // 0x4000 (it can never grow past 0x1FB4000 — runtime data there)
 
             if (phnum != 4)
                 throw new IOException($"Expected 4 ELF program headers, got {phnum} — wrong ISO/version.");
@@ -207,19 +233,74 @@ namespace Dark_Cloud_Improved_Version
         // (confirmed clean across cold boots 2026-09-04). Recover from git if a future ally ever exceeds vanilla.
         // See [[ccloth-particle-layout]], [[town-ally-switch-reload]].
 
-        // ── Town idle-motion override (idle → sit for the swapped-in cat) ────────────────────────────
-        // EdMoveChara @0x16a160 drives the town character's idle/run/walk animation with ONE grounded write:
-        //   0x16a6a8  sw s0,0xc68(s2)   ; *(char+0xc68) = motion   (s0 = 0 idle / 1 run / 2 walk, s2 = char)
-        // guarded by `if ((chara_mode & 6)==0 && chara_fishing < 2)` — the plain locomotion store, NOT the
-        // airborne fall/land writes (which store the constants 8 and 9) nor the fishing-state writes. Redirect
-        // it to a tiny cave in the mod's ELF cave segment (loader-loaded at boot — a jal there is legal; runtime-
-        // written heap caves crash the recompiler): the cave keeps run/walk as-is, and when the motion is idle (0) it stores
-        // the IdleMotionOverride mailbox (guest 0x01F10070) instead — so a non-zero mailbox (the mod's sit index)
-        // makes an idle town character sit, while a zero mailbox leaves vanilla idle untouched. The jal's delay
-        // slot is the following `sw zero,0xc64(s2)` (kept — order-independent), and the cave returns via `jr $ra`
-        // to 0x16a6b0 (the c60 stores). Scratch = $v0 (reloaded by `lui v0` at the return) and $at (dead after
-        // the guard branch), both dead across the hook; $ra is stack-saved at function entry (`sq ra,0xc0(sp)`),
-        // so the jal's $ra clobber is safe. $s0/$s2 are read-only. (Cave hand-built via the MipsAsm encoders.)
+        // ── Blizzard: immune to ice ──────────────────────────────────────────────────────────────────────
+        // The enemy species table is static ELF data (EnemySpeciesTable @0x27FB00, 0x9C per record; element resistances
+        // are signed shorts, 0 = immune, 100 = neutral). Blizzard (row 57, "e65a") ships ice-neutral; the user wants it ice-immune
+        // like Ice Gemron. EnemyData.cs carries the patched value so the mod's tables agree with the disc.
+        /// <summary>BtMapJumpLoad sizes the monster pool as `0xA7F80 − map.used` (`lui v0,0xA; ori a1,v0,0x7F80` @0x1B2724):
+        /// the same 688,000 → 718,000 as DunPatches' map carve, or the pool would end 30,000 units short of its memory.</summary>
+        internal static void PatchMapCarveRemainder(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Site = 0x001B2728;                                                   // the ori; the lui 0xA before it is unchanged
+            uint cur = RdU32(fs, ElfOff(Site));
+            if (RdU32(fs, ElfOff(Site - 4)) != 0x3C02000Au || (cur != 0x34457F80u && cur != DunPatches.MapCarveGrownWord))
+                throw new IOException($"BtMapJumpLoad's map-carve remainder @0x{Site:X} is not vanilla ({cur:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+            if (cur == DunPatches.MapCarveGrownWord) return;
+            WrU32(fs, ElfOff(Site), DunPatches.MapCarveGrownWord);
+        }
+
+        internal static void PatchBlizzardIceImmunity(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const int Row = 57;                                                                     // EnemyData.Blizzard.TableIndex
+            long rec = ElfOff((uint)EnemySpeciesTable.RecordAddress(Row));
+            long ice = rec + EnemySpeciesTable.IceRes;
+            ushort cur = U16(Rd(fs, ice, 2), 0);
+            bool vanilla = cur == 100, ours = cur == 0;
+            if (RdU32(fs, rec) != 0x61353665u /* "e65a" */ || !(vanilla || ours)
+                || U16(Rd(fs, rec + EnemySpeciesTable.FireRes, 2), 0) != 100 || U16(Rd(fs, rec + EnemySpeciesTable.ThunderRes, 2), 0) != 140)
+                throw new IOException($"Species row {Row} is not Blizzard as shipped (\"e65a\", fire 100 / ice 100 / thunder 140) — unmodified Dark Cloud (USA) ISO expected.");
+            Wr(fs, ice, new byte[] { 0, 0 });                                                       // IceRes = 0: immune
+        }
+
+        /// <summary>The fishing prize exchange's slingshot: the Flamingo for 1000 FP in place of the Matador. The exchange's
+        /// stock is a static (item id, FP price) halfword table at 0x2929D0 (baits, powders, then the weapons); the Matador's
+        /// pair sits between the Tsukikage (266, 1100) and the Magical Hammer (317, 1800).</summary>
+        internal static void PatchFishingPrizeSlingshot(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Entry = 0x00292A3Cu;                                                         // (item, price) of the slingshot on offer
+            const ushort VanillaItem = Items.matador, VanillaPrice = 1400, OurItem = Items.flamingo, OurPrice = 1000;
+            byte[] row = Rd(fs, ElfOff(Entry - 4), 12);                                             // the neighbour pairs frame the check
+            ushort item = U16(row, 4), price = U16(row, 6);
+            bool vanilla = item == VanillaItem && price == VanillaPrice, ours = item == OurItem && price == OurPrice;
+            if (!(vanilla || ours) || U16(row, 0) != Items.tsukikage || U16(row, 2) != 1100 || U16(row, 8) != Items.magicalhammer || U16(row, 10) != 1800)
+                throw new IOException($"Fishing prize entry 0x{Entry:X} is ({item}, {price}), not the Matador at 1400 FP between the Tsukikage and the Magical Hammer — unmodified Dark Cloud (USA) ISO expected.");
+            byte[] ours4 = new byte[4]; U16(ours4, 0, OurItem); U16(ours4, 2, OurPrice);
+            Wr(fs, ElfOff(Entry), ours4);
+        }
+
+        // The dungeon draw loop's raster pass (dun 0x1DAEBCC, hooked by DunPatches) comes here; the cave performs it and then
+        // draws one raster at the Mirage clone's root when the mailbox says so.
+        internal static void PatchMirageHazeDraw(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.MirageHazeDraw;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.mirageHazeDraw.bin")
+                ?? throw new IOException("Embedded EE function missing: mirageHazeDraw.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u)   // opens its frame: addiu sp,sp,-0x20
+                throw new IOException($"mirageHazeDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            // The two words that make it THIS cave: the "alpha01" string's address (ori a1,a1,0xA0E8) and the draw call
+            // (jal DrawRaster__9CFireOmni 0x162310). A wrong immediate in either fails invisibly — nothing drawn, no error.
+            bool name = false, draw = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == 0x34A5A0E8u) name = true; if (w == 0x0C0588C4u) draw = true; }
+            if (!name || !draw)
+                throw new IOException("mirageHazeDraw.bin lacks the \"alpha01\" address or the DrawRaster call — it would draw nothing.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("mirageHazeDraw.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
         internal static void PatchIdleMotionOverride(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint HookAddr = 0x0016A6A8;   // EdMoveChara grounded locomotion store `sw s0,0xc68(s2)`

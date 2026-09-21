@@ -9,17 +9,12 @@ namespace Dark_Cloud_Improved_Version
         static byte currentDungeon;
         static byte currentFloor;
         static ushort currentWeapon;
-        static int currentAddress;
         static int prevFloor = 200;
         static byte prevBackFloor = 0;   // tracks backfloor-flag edges (the floor↔backfloor swap reloads enemies without changing checkFloor)
-        static int currentCharCursor = 0;
-        static int prevCharCursor = 0;
         static ushort currentGilda = 0;
         static byte _prevDunMode = 0;   // tracks dungeonMode edges (floor-select rising edge = new dungeon visit)
         static bool clownOnScreen = false;
         static bool chronicle2 = false;
-        static bool[] monstersDead = new bool[15];
-        static bool monsterQuestActive = false;
         static bool eventfloor = false;
         static bool squareActive = false;
         static bool dunEscapeConfirm = false;
@@ -41,16 +36,6 @@ namespace Dark_Cloud_Improved_Version
             EnemySpecies.DGFinalBeam, EnemySpecies.DGFinalBeamS,
         };
         static byte[] wepLevelArray = new byte[10];
-        public static bool monsterQuestMachoActive = false;
-        public static bool monsterQuestGobActive = false;
-        public static bool monsterQuestJakeActive = false;
-        public static bool monsterQuestChiefActive = false;
-        public static bool sambaChallengeQuest = false;
-        public static bool sambaChallengeQuestActive = false;
-        public static bool sambaChallengeQuestCheck = false;
-        public static bool mayorQuest = false;
-        public static bool mayorQuestCheck = false;
-        public static bool mayorQuestActive = false;
         public static bool hasMiniBoss = false;
         static bool wasOnBackFloor = false;
         static List<MiniBoss.MiniBossSnapshot> normalFloorSnapshot = null;
@@ -68,36 +53,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread miniBossMessage;
 
         //Weapon threads, only 1 should run at a time
-        public static Thread boneDoorThread = new Thread(new ThreadStart(CustomToanEffects.BoneDoorTrigger));
-        public static Thread seventhHeavenThread = new Thread(new ThreadStart(CustomToanEffects.SeventhHeavenEffect));
-        public static Thread chronicleSwordThread = new Thread(new ThreadStart(CustomToanEffects.ChronicleSwordEffect));
-        public static Thread evilciseThread = new Thread(new ThreadStart(CustomToanEffects.EvilciseEffect));
-        public static Thread maneaterThread = new Thread(new ThreadStart(CustomToanEffects.ManeaterEffect));
-        public static Thread sunSwordThread = new Thread(new ThreadStart(CustomToanEffects.SunSwordEffect));
-        public static Thread bigBangThread = new Thread(new ThreadStart(CustomToanEffects.BigBangEffect));
-        public static Thread crossHinderThread = new Thread(new ThreadStart(CustomToanEffects.CrossHinderEffect));
-        public static Thread tsukikageThread = new Thread(new ThreadStart(CustomToanEffects.TsukikageEffect));
-        public static Thread smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
-        public static Thread darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
-        public static Thread kitchenKnifeThread = new Thread(new ThreadStart(CustomToanEffects.KitchenKnifeEffect));
-        public static Thread angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
-        public static Thread angelGearHaloThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearHaloEffect));
-        public static Thread superSteveThread = new Thread(new ThreadStart(CustomXiaoEffects.SuperSteveEffect));
-        public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
-        public static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
-        public static Thread agasSwordThread = new Thread(new ThreadStart(CustomToanEffects.AgasSwordEffect));
-        public static Thread braveArkThread = new Thread(new ThreadStart(CustomToanEffects.BraveArkEffect));
-        public static Thread tallHammerThread = new Thread(new ThreadStart(CustomGoroEffects.TallHammerEffect));
-        public static Thread frozenTunaThread = new Thread(new ThreadStart(CustomGoroEffects.FrozenTunaEffect));
-        public static Thread infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
-        public static Thread mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
-        public static Thread herculesWrathThread = new Thread(new ThreadStart(CustomUngagaEffects.HerculesWrathEffect));
-        public static Thread babelSpearThread = new Thread(new ThreadStart(CustomUngagaEffects.BabelSpearEffect));
-        public static Thread cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.CactusEffect));
-        public static Thread supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
-        public static Thread starBreakerThread = new Thread(new ThreadStart(CustomOsmondEffects.StarBreakerEffect));
-        public static Thread wiseOwlSwordThread = new Thread(new ThreadStart(CustomToanEffects.WiseOwlSwordEffect));
-        public static Thread elementSwapThread = new Thread(new ThreadStart(Dayuppy.ElementSwapping)); //Create a new thread to run monitorElementSwapping()
+        public static Thread elementSwapThread = new Thread(new ThreadStart(DayRandomizers.ElementSwapping)); //Create a new thread to run monitorElementSwapping()
         public static Thread dunEscapeConfirmThread;
 
         public static Thread cheatCodeThread = new Thread(new ThreadStart(CheatCodes.InputBuffer.Monitor));
@@ -126,7 +82,7 @@ namespace Dark_Cloud_Improved_Version
         public static void InsideDungeonThread()
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Dungeon Thread Activated");
-            elementSwapThread = new Thread(new ThreadStart(Dayuppy.ElementSwapping));
+            elementSwapThread = new Thread(new ThreadStart(DayRandomizers.ElementSwapping));
             elementSwapThread.Start();
             if (!cheatCodeThread.IsAlive)
             {
@@ -156,396 +112,13 @@ namespace Dark_Cloud_Improved_Version
                 MiniBoss.MaintainAttackRange();        // per-tick: miniboss attack/engage range via shared-STB nearest-enemy trick
                 if (Player.InDungeonFloor())
                 {
-                    // Evilcise curse applies immediately on equip, even from the pause menu
-                    if (Player.CurrentCharacterNum() == Player.ToanId &&
-                        Player.Weapon.GetCurrentWeaponId() == Items.evilcise &&
-                        !evilciseThread.IsAlive)
-                    {
-                        evilciseThread = new Thread(new ThreadStart(CustomToanEffects.EvilciseEffect));
-                        evilciseThread.Start();
-                    }
-
-                    // Maneater curse likewise applies immediately on equip
-                    if (Player.CurrentCharacterNum() == Player.ToanId &&
-                        Player.Weapon.GetCurrentWeaponId() == Items.maneater &&
-                        !maneaterThread.IsAlive)
-                    {
-                        maneaterThread = new Thread(new ThreadStart(CustomToanEffects.ManeaterEffect));
-                        maneaterThread.Start();
-                    }
+                    WeaponThreads.LaunchCurses();
 
                     // Enemies.PollEnemyDynamics();
                     // Enemies.MonitorFlashTimer();
                     if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
                     {
-                        switch (Player.CurrentCharacterNum())
-                        {
-                            //Toan
-                            case Player.ToanId:
-                                if(magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
-
-                                switch (Player.Weapon.GetCurrentWeaponId())
-                                {
-                                    case Items.bonerapier:
-                                        CustomToanEffects.BoneRapierEffect(true);
-
-                                        if (!boneDoorThread.IsAlive)
-                                        {
-                                            boneDoorThread = new Thread(new ThreadStart(CustomToanEffects.BoneDoorTrigger));
-                                            boneDoorThread.Start();
-                                        }
-                                        break;
-                                    case Items.seventhheaven:
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!seventhHeavenThread.IsAlive)
-                                        {
-                                            seventhHeavenThread = new Thread(new ThreadStart(CustomToanEffects.SeventhHeavenEffect));
-                                            seventhHeavenThread.Start();
-                                        }
-
-                                        // 7th Heaven also inherits Dark Cloud's Guard Crush (lineage)
-                                        if (!darkCloudThread.IsAlive)
-                                        {
-                                            darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
-                                            darkCloudThread.Start();
-                                        }
-                                        break;
-                                    case Items.chroniclesword:
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!chronicleSwordThread.IsAlive)
-                                        {
-                                            chronicleSwordThread = new Thread(new ThreadStart(CustomToanEffects.ChronicleSwordEffect));
-                                            chronicleSwordThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.heavenscloud:
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!heavensCloudThread.IsAlive)
-                                        {
-                                            heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
-                                            heavensCloudThread.Start();
-                                        }
-
-                                        // Heaven's Cloud also inherits Moonlit Focus (Tsukikage lineage)
-                                        if (!tsukikageThread.IsAlive)
-                                        {
-                                            tsukikageThread = new Thread(new ThreadStart(CustomToanEffects.TsukikageEffect));
-                                            tsukikageThread.Start();
-                                        }
-
-                                        // ...and Quick Draw (Small Sword lineage)
-                                        if (!smallSwordThread.IsAlive)
-                                        {
-                                            smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
-                                            smallSwordThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.evilcise:
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!evilciseThread.IsAlive)
-                                        {
-                                            evilciseThread = new Thread(new ThreadStart(CustomToanEffects.EvilciseEffect));
-                                            evilciseThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.maneater:
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!maneaterThread.IsAlive)
-                                        {
-                                            maneaterThread = new Thread(new ThreadStart(CustomToanEffects.ManeaterEffect));
-                                            maneaterThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.tsukikage:
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!tsukikageThread.IsAlive)
-                                        {
-                                            tsukikageThread = new Thread(new ThreadStart(CustomToanEffects.TsukikageEffect));
-                                            tsukikageThread.Start();
-                                        }
-
-                                        // Tsukikage also inherits Quick Draw (Small Sword lineage)
-                                        if (!smallSwordThread.IsAlive)
-                                        {
-                                            smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
-                                            smallSwordThread.Start();
-                                        }
-                                        break;
-
-
-                                    case Items.smallsword:
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!smallSwordThread.IsAlive)
-                                        {
-                                            smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
-                                            smallSwordThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.darkcloud:
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!darkCloudThread.IsAlive)
-                                        {
-                                            darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
-                                            darkCloudThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.sunsword:
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!sunSwordThread.IsAlive)
-                                        {
-                                            sunSwordThread = new Thread(new ThreadStart(CustomToanEffects.SunSwordEffect));
-                                            sunSwordThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.bigbang:   // inherits Solar Harvest (Sun Sword lineage) + its own Detonate
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!sunSwordThread.IsAlive)
-                                        {
-                                            sunSwordThread = new Thread(new ThreadStart(CustomToanEffects.SunSwordEffect));
-                                            sunSwordThread.Start();
-                                        }
-                                        if (!bigBangThread.IsAlive)
-                                        {
-                                            bigBangThread = new Thread(new ThreadStart(CustomToanEffects.BigBangEffect));
-                                            bigBangThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.crosshinder:
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!crossHinderThread.IsAlive)
-                                        {
-                                            crossHinderThread = new Thread(new ThreadStart(CustomToanEffects.CrossHinderEffect));
-                                            crossHinderThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.agassword:
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!agasSwordThread.IsAlive)
-                                        {
-                                            agasSwordThread = new Thread(new ThreadStart(CustomToanEffects.AgasSwordEffect));
-                                            agasSwordThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.braveark:
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!braveArkThread.IsAlive)
-                                        {
-                                            braveArkThread = new Thread(new ThreadStart(CustomToanEffects.BraveArkEffect));
-                                            braveArkThread.Start();
-                                        }
-                                        break;
-
-                                    // Kitchen Knife is a TOAN sword — its effect gates on ToanId, so registering it under
-                                    // Xiao (where it used to live) made it unreachable: Xiao can never equip a Toan sword,
-                                    // so the thread never started, and the spring blessing could never fire.
-                                    case Items.kitchenknife:
-                                        CustomToanEffects.BoneRapierEffect(false);
-
-                                        if (!kitchenKnifeThread.IsAlive)
-                                        {
-                                            kitchenKnifeThread = new Thread(new ThreadStart(CustomToanEffects.KitchenKnifeEffect));
-                                            kitchenKnifeThread.Start();
-                                        }
-                                        break;
-
-                                    default:
-                                        CustomToanEffects.BoneRapierEffect(false);
-                                        break;
-                                }
-                                break;
-
-                            //Xiao
-                            case Player.XiaoId:
-                                // Super Steve manages the bone-door bypass itself (via an attached Bone Rapier sphere).
-                                if (Player.Weapon.GetCurrentWeaponId() != Items.supersteve) CustomToanEffects.BoneRapierEffect(false);
-                                if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
-
-                                switch (Player.Weapon.GetCurrentWeaponId())
-                                {
-
-                                    case Items.angelgear:
-                                        if (!angelGearThread.IsAlive)
-                                        {
-                                            angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
-                                            angelGearThread.Start();
-                                        }
-                                        if (!angelGearHaloThread.IsAlive)
-                                        {
-                                            angelGearHaloThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearHaloEffect));
-                                            angelGearHaloThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.supersteve:
-                                        if (!superSteveThread.IsAlive)
-                                        {
-                                            superSteveThread = new Thread(new ThreadStart(CustomXiaoEffects.SuperSteveEffect));
-                                            superSteveThread.Start();
-                                        }
-                                        break;
-
-                                    default:
-                                        break;
-                                }
-                                break;
-
-                            //Goro
-                            case Player.GoroId:
-                                CustomToanEffects.BoneRapierEffect(false);
-                                if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
-
-                                switch (Player.Weapon.GetCurrentWeaponId())
-                                {
-                                    case Items.tallhammer:
-                                        if (!tallHammerThread.IsAlive)
-                                        {
-                                            tallHammerThread = new Thread(new ThreadStart(CustomGoroEffects.TallHammerEffect));
-                                            tallHammerThread.Start();
-                                        }
-                                        break;
-                                    case Items.frozentuna:
-                                        if (!frozenTunaThread.IsAlive)
-                                        {
-                                            frozenTunaThread = new Thread(new ThreadStart(CustomGoroEffects.FrozenTunaEffect));
-                                            frozenTunaThread.Start();
-                                        }
-                                        break;
-                                    case Items.inferno:
-                                        if (!infernoHammerThread.IsAlive)
-                                        {
-                                            infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
-                                            infernoHammerThread.Start();
-                                        }
-                                        break;
-
-                                    default:
-                                        break;
-                                }
-                                break;
-
-                            //Ruby
-                            case Player.RubyId:
-                                CustomToanEffects.BoneRapierEffect(false);
-
-                                switch (Player.Weapon.GetCurrentWeaponId())
-                                {
-                                    case Items.mobiusring:
-                                        if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
-
-                                        if (!mobiusRingThread.IsAlive)
-                                        {
-                                            mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
-                                            mobiusRingThread.Start();
-                                        }
-                                        break;
-                                    case Items.secretarmlet:
-                                        if (!magicCircleChanged) {
-                                            bool executed = CustomRubyEffects.SecretArmletEnable();
-                                            if(executed) magicCircleChanged = true;
-                                        }
-                                        break;
-                                    default:
-                                        if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
-                                        break;
-                                }
-                                break;
-
-                            //Ungaga
-                            case Player.UngagaId:
-                                CustomToanEffects.BoneRapierEffect(false);
-                                if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
-
-
-                                switch (Player.Weapon.GetCurrentWeaponId())
-                                {
-                                    case Items.herculeswrath:
-                                        if (!herculesWrathThread.IsAlive)
-                                        {
-                                            herculesWrathThread = new Thread(new ThreadStart(CustomUngagaEffects.HerculesWrathEffect));
-                                            herculesWrathThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.babelsspear:
-                                        if (!babelSpearThread.IsAlive)
-                                        {
-                                            babelSpearThread = new Thread(new ThreadStart(CustomUngagaEffects.BabelSpearEffect));
-                                            babelSpearThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.cactus:
-                                        if (!cactusThread.IsAlive)
-                                        {
-                                            cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.CactusEffect));
-                                            cactusThread.Start();
-                                        }
-                                        break;
-                                    default:
-                                        break;
-                                }
-                                break;
-
-                            //Osmond
-                            case Player.OsmondId:
-                                CustomToanEffects.BoneRapierEffect(false);
-                                if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
-
-                                switch (Player.Weapon.GetCurrentWeaponId())
-                                {
-                                    case Items.supernova:
-                                        if (!supernovaThread.IsAlive)
-                                        {
-                                            supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
-                                            supernovaThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.starbreaker:
-                                        if (!starBreakerThread.IsAlive)
-                                        {
-                                            starBreakerThread = new Thread(new ThreadStart(CustomOsmondEffects.StarBreakerEffect));
-                                            starBreakerThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.snail:
-                                        if (!snailThread.IsAlive)
-                                        {
-                                            snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
-                                            snailThread.Start();
-                                        }
-                                        break;
-                                    default:
-                                        break;
-                                }
-                                break;
-                        }
-
-
+                        WeaponThreads.Launch();
                         CheckActiveItems();
                     }
 
@@ -567,7 +140,7 @@ namespace Dark_Cloud_Improved_Version
                     //Check if the player has killed all the floor enemies
                     if (ReusableFunctions.CheckIfAllEnemiesKilled() && !hasClearMessageShown)
                     {
-                        Dayuppy.DisplayMessage("DUMMY", 0, 0, 4000, true);
+                        DungeonMessages.DisplayMessage("DUMMY", 0, 0, 4000, true);
 
                         hasClearMessageShown = true;
                     }
@@ -578,15 +151,10 @@ namespace Dark_Cloud_Improved_Version
                     //Define event and boss floors
                     excludeFloors = GetDungeonEventFloors(currentDungeon);
 
-                    if (currentDungeon == 1 && !wiseOwlSwordThread.IsAlive)
-                    {
-                        wiseOwlSwordThread = new Thread(new ThreadStart(CustomToanEffects.WiseOwlSwordEffect));
-                        wiseOwlSwordThread.Start();
-                    }
+                    WeaponThreads.LaunchWiseOwl(currentDungeon);
 
                     //Get current Floor
                     currentFloor = Memory.ReadByte(Addresses.checkFloor);
-
 
                     //Check if the player has entered a new floor
                     if (currentFloor != prevFloor)
@@ -631,7 +199,7 @@ namespace Dark_Cloud_Improved_Version
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has entered an event floor!");
                             }
 
-                            FixUngagaDoors(currentDungeon);
+                            UngagaDoors.Fix(currentDungeon);
 
                             //Save current weapon
                             currentWeapon = Player.Weapon.GetCurrentWeaponId();
@@ -656,10 +224,10 @@ namespace Dark_Cloud_Improved_Version
                         }
                     }
 
-                    CheckUngagaSwap();
+                    UngagaDoors.CheckSwap();
                     CheckWepLvlUp();
                     CheckClown();
-                    CheckCurrentSidequests();
+                    DungeonSidequests.CheckCurrentSidequests(currentDungeon);
                     CheckDungeonLeaving();
                     UpdateMiniBossFloorState();
                     if (CheckWeaponChange(currentWeapon))
@@ -667,7 +235,6 @@ namespace Dark_Cloud_Improved_Version
                         ReusableFunctions.ClearRecentDamageAndDamageSource();
                         currentWeapon = Player.Weapon.GetCurrentWeaponId();
                     }
-
 
                 }
                 //Used to reset the floor data when going back to dungeon
@@ -837,91 +404,6 @@ namespace Dark_Cloud_Improved_Version
             return floors;
         }
 
-        public static void CheckEnemyKill(int currentEnemyAddress)
-        {
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Checking quest...");
-            if (monsterQuestMachoActive)
-            {
-                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Macho quest active");
-                int currentEnemyAddress2 = currentEnemyAddress + 0x0000001E;
-                if (Memory.ReadByte(currentEnemyAddress2) == Memory.ReadByte(0x21CE4406))
-                {
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest progress +1!");
-                    byte killsleft = Memory.ReadByte(0x21CE4405);
-                    killsleft--;
-                    Memory.WriteByte(0x21CE4405, killsleft);
-
-                    if (killsleft == 0)
-                    {
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest complete!!");
-                        Dayuppy.DisplayMessage("You completed Macho's quest!\nWell done!", 2, 30, 4000);
-                        Memory.WriteByte(0x21CE4402, 2);
-                        monsterQuestMachoActive = false;
-                    }
-                }
-            }
-            if (monsterQuestGobActive)
-            {
-                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Gob quest active");
-                int currentEnemyAddress2 = currentEnemyAddress + 0x0000001E;
-                if (Memory.ReadByte(currentEnemyAddress2) == Memory.ReadByte(0x21CE440B))
-                {
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest progress +1!");
-                    byte killsleft = Memory.ReadByte(0x21CE440A);
-                    killsleft--;
-                    Memory.WriteByte(0x21CE440A, killsleft);
-
-                    if (killsleft == 0)
-                    {
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest complete!!");
-                        Dayuppy.DisplayMessage("You completed Gob's quest!\nWell done!", 2, 30, 4000);
-                        Memory.WriteByte(0x21CE4407, 2);
-                        monsterQuestGobActive = false;
-                    }
-                }
-            }
-            if (monsterQuestJakeActive)
-            {
-                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Jake quest active");
-                int currentEnemyAddress2 = currentEnemyAddress + 0x0000001E;
-                if (Memory.ReadByte(currentEnemyAddress2) == Memory.ReadByte(0x21CE4410))
-                {
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest progress +1!");
-                    byte killsleft = Memory.ReadByte(0x21CE440F);
-                    killsleft--;
-                    Memory.WriteByte(0x21CE440F, killsleft);
-
-                    if (killsleft == 0)
-                    {
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest complete!!");
-                        Dayuppy.DisplayMessage("You completed Jake's quest!\nWell done!", 2, 30, 4000);
-                        Memory.WriteByte(0x21CE440C, 2);
-                        monsterQuestJakeActive = false;
-                    }
-                }
-            }
-            if (monsterQuestChiefActive)
-            {
-                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Chief quest active");
-                int currentEnemyAddress2 = currentEnemyAddress + 0x0000001E;
-                if (Memory.ReadByte(currentEnemyAddress2) == Memory.ReadByte(0x21CE4415))
-                {
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest progress +1!");
-                    byte killsleft = Memory.ReadByte(0x21CE4414);
-                    killsleft--;
-                    Memory.WriteByte(0x21CE4414, killsleft);
-
-                    if (killsleft == 0)
-                    {
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest complete!!");
-                        Dayuppy.DisplayMessage("You completed Chief Bonka´s quest!\nWell done!", 2, 35, 4000);
-                        Memory.WriteByte(0x21CE4411, 2);
-                        monsterQuestChiefActive = false;
-                    }
-                }
-            }
-        }
-
         /// <summary>
         /// Check enemy spawns upon entering a dungeon floor
         /// </summary>
@@ -991,21 +473,21 @@ namespace Dark_Cloud_Improved_Version
             }
             else Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Not enough normal enemies in floor!");
 
-            chronicle2 = CustomToanEffects.CheckChronicle2(chronicle2);
+            chronicle2 = ChronicleSword.CheckChronicle2(chronicle2);
             CustomChests.BasicChestRandomizer(currentDungeon, currentFloor, chronicle2); //Randomize the chest loot (old table-based version)
             Weapons.StartHeavensCloudReach(); // extend Heaven's Cloud reach (dcol1 frame + swing radii)
             Weapons.OnReachFloorEntered();    // re-locate the freshly reloaded model on this floor
 
-            CheckSidequests();
+            DungeonSidequests.CheckSidequests(currentDungeon, currentFloor);
 
-            CustomToanEffects.chronicleNewFloor = true;
+            ChronicleSword.chronicleNewFloor = true;
             ReusableFunctions.ClearRecentDamageAndDamageSource();
 
-            monsterQuestActive = SideQuestManager.CheckCurrentDungeonQuests(currentDungeon);
+            DungeonSidequests.monsterQuestActive = SideQuestManager.CheckCurrentDungeonQuests(currentDungeon);
 
-            for (int i = 0; i < monstersDead.Length; i++)
+            for (int i = 0; i < DungeonSidequests.monstersDead.Length; i++)
             {
-                monstersDead[i] = false;
+                DungeonSidequests.monstersDead[i] = false;
             }
 
             // Wait for miniboss thread so MiniBoss.miniBossEnemyNumbers is populated before we read/modify slots
@@ -1082,7 +564,7 @@ namespace Dark_Cloud_Improved_Version
                 continue;
             }
 
-            Dayuppy.DisplayMessage("A mysterious enemy lurks\naround. Be careful!", 2, 24, 4000);
+            DungeonMessages.DisplayMessage("A mysterious enemy lurks\naround. Be careful!", 2, 24, 4000);
 
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished message process!");
         }
@@ -1092,7 +574,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         public static bool IsBypassBoneDoor()
         {
-            return Memory.ReadByte(Addresses.BoneDoorOpenType) == 5 ? true: false;
+            return Memory.ReadByte(DungeonPools.Resolve(Addresses.BoneDoorOpenType)) == BoneDoorBypass;
         }
 
         /// <summary>
@@ -1101,119 +583,25 @@ namespace Dark_Cloud_Improved_Version
         /// <param name="flag">True if to activate the door</param>
         public static void SetBypassBoneDoor(bool flag)
         {
-            byte n;
-            if (flag) n = 5;
-            else n = 21;
-            Memory.WriteByte(Addresses.BoneDoorOpenType, n);
-        }
-
-        public static void FixUngagaDoors(byte currentdng)
-        {
-            switch (currentdng)
+            // The door type sits in a dungeon pool, so its address moves with the character heap (see DungeonPools) — the
+            // cat's heap growth is what silently killed this. Only write when the byte really holds one of the engine's two
+            // values: writing blind into a moved pool is what struck a line through every letter in the game's text.
+            long addr = DungeonPools.Resolve(Addresses.BoneDoorOpenType);
+            int now = Memory.ReadByte(addr);
+            if (now != BoneDoorNormal && now != BoneDoorBypass)
             {
-                case 3:
-                    if (Memory.ReadFloat(0x20928670) == 150)
-                    {
-                        Memory.WriteByte(0x20985E0, 30);
-                        Memory.WriteFloat(0x20928670, 50);
-                        Memory.WriteFloat(0x20928928, 50);
-                        Memory.WriteByte(0x20928B14, 30);
-                        Memory.WriteByte(0x20928AE4, 30);
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Fixed Ungaga Doors");
-                    }
-                    else
-                    {
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Couldn't fix ungaga doors, or they were fixed already");
-                    }
-                    break;
-
-                case 4:
-                    if (Memory.ReadFloat(0x2092FA08) == 150)
-                    {
-                        Memory.WriteByte(0x2092F978, 30);
-                        Memory.WriteFloat(0x2092FA08, 50);
-                        Memory.WriteFloat(0x2092FCC0, 50);
-                        Memory.WriteByte(0x2092FEAC, 30);
-                        Memory.WriteByte(0x2092FE7C, 30);
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Fixed Ungaga Doors");
-                    }
-                    else
-                    {
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Couldn't fix ungaga doors, or they were fixed already");
-                    }
-                    break;
-
-                case 5:
-                    if (Memory.ReadFloat(0x209244AC) == 150)
-                    {
-                        Memory.WriteByte(0x2092441C, 30);
-                        Memory.WriteFloat(0x209244AC, 50);
-                        Memory.WriteFloat(0x20924764, 50);
-                        Memory.WriteByte(0x20924920, 30);
-                        Memory.WriteByte(0x20924950, 30);
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Fixed Ungaga Doors");
-                    }
-                    else
-                    {
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Couldn't fix ungaga doors, or they were fixed already");
-                    }
-                    break;
-
-                default:
-                    break;
-
-            }
-        }
-
-        public static void CheckUngagaSwap()
-        {
-            currentCharCursor = Memory.ReadByte(0x202A2DE8); //current char
-
-            if (currentCharCursor != prevCharCursor)
-            {
-                if (currentCharCursor == 4)
+                if (!boneDoorWarned)
                 {
-                    int timer = 0;
-                    while (timer < 10)
-                    {
-                        Thread.Sleep(100);
-                        timer++;
-
-                        if (Memory.ReadByte(0x202A2010) == 3)
-                        {
-                            if (Memory.ReadUShort(0x2193A013) == 12850)
-                            {
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            if (Memory.ReadUShort(0x217E5453) == 12850)
-                            {
-                                break;
-                            }
-                        }
-
-
-                    }
-
-                    if (Memory.ReadByte(0x202A2010) == 3)
-                    {
-                        Memory.WriteByte(0x2193A013, 52);
-                        Memory.WriteByte(0x2193A014, 52);
-                    }
-                    else
-                    {
-                        Memory.WriteByte(0x217E5453, 52);
-                        Memory.WriteByte(0x217E5454, 52);
-                    }
+                    boneDoorWarned = true;
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog()
+                                      + $"Bone door: 0x{addr:X} holds {now}, not {BoneDoorNormal}/{BoneDoorBypass} — bypass skipped");
                 }
+                return;
             }
-
-            prevCharCursor = currentCharCursor;
+            Memory.WriteByte(addr, flag ? BoneDoorBypass : BoneDoorNormal);
         }
-
-
+        private const byte BoneDoorNormal = 21, BoneDoorBypass = 5;   // the engine's own door-open types
+        private static bool boneDoorWarned;
 
         public static void CheckClown()
         {
@@ -1231,212 +619,6 @@ namespace Dark_Cloud_Improved_Version
                     {
                         clownOnScreen = false;
                     }
-                }
-            }
-        }
-
-        public static void CheckSidequests()
-        {
-            if (currentDungeon == 4 && currentFloor == 6 && Memory.ReadByte(0x21CE445E) == 1)
-            {
-                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Yellow drops challenge active");
-                sambaChallengeQuest = true;
-            }
-            else
-            {
-                sambaChallengeQuest = false;
-            }
-
-            if (currentDungeon == 6)
-            {
-                if (Memory.ReadByte(0x21CE4468) == 1) //Mayor quest flag
-                {
-                    if (currentFloor == Memory.ReadByte(0x21CE4469) -1)
-                    {
-                        mayorQuest = true;
-                        //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Mayor quest active in this floor");
-                    }
-                    else
-                    {
-                        mayorQuest = false;
-                    }
-                }
-                else
-                {
-                    mayorQuest = false;
-                }
-            }
-            else
-            {
-                mayorQuest = false;
-            }
-        }
-
-        public static void CheckCurrentSidequests()
-        {
-            if (monsterQuestActive)
-            {
-                if (currentDungeon != 6)
-                {
-                    for (int i = 0; i < monstersDead.Length; i++)
-                    {
-                        currentAddress = 0x21E16BC4 + (i * 0x190);
-
-                        if (Memory.ReadUShort(currentAddress) > 0)
-                        {
-                            monstersDead[i] = false;
-                        }
-                        else
-                        {
-                            if (monstersDead[i] == false)
-                            {
-                                CheckEnemyKill(currentAddress);
-                            }
-
-                            monstersDead[i] = true;
-                        }
-                    }
-                }
-            }
-
-            if (sambaChallengeQuest)
-            {
-                SambaChallengeQuest();
-            }
-
-            if (mayorQuest)
-            {
-                MayorQuest();
-            }
-        }
-
-        public static void SambaChallengeQuest()
-        {
-            ushort currentweaponID = Memory.ReadUShort(0x21EA7590);
-            if (sambaChallengeQuestCheck == false && Memory.ReadByte(0x202A34CC) == 1)
-            {
-                if (Memory.ReadByte(Addresses.hideHud) == 0)
-                {
-                    if (Memory.ReadByte(0x202A3570) == 0 && (currentweaponID == 258 || currentweaponID == 257))
-                    {
-                        Memory.WriteInt(0x21CE205C, 0);
-                        Dayuppy.DisplayMessage("Samba's quest started!\nClear all enemies using only Dagger!\nUsing a throwable also\ncancels the mission.", 4, 40, 8000);
-                        sambaChallengeQuestActive = true;
-
-                        for (int i = 0; i < 8; i++)
-                        {
-                            monstersDead[i] = false;
-                        }
-                    }
-                    else if (Memory.ReadByte(0x202A3570) == 0 && currentweaponID != 258 && currentweaponID != 257)
-                    {
-                        Dayuppy.DisplayMessage("Samba's quest did not start.\nRe-enter with Dagger equipped.", 2, 30, 4000);
-                        sambaChallengeQuestActive = false;
-                    }
-                    sambaChallengeQuestCheck = true;
-                }
-            }
-            else if (sambaChallengeQuestCheck == true && Memory.ReadByte(0x202A34CC) == 0)
-            {
-                sambaChallengeQuestCheck = false;
-                sambaChallengeQuestActive = false;
-            }
-
-            if (sambaChallengeQuestActive)
-            {
-                if ((currentweaponID != 258 && currentweaponID != 257) || Memory.ReadByte(0x21DC4484) == 26 || Memory.ReadByte(0x21DC4484) == 27)
-                {
-                    Thread.Sleep(500);
-                    Dayuppy.DisplayMessage("Samba's quest has been cancelled.\nRe-enter in order to activate it.", 2, 40, 4000);
-                    sambaChallengeQuestActive = false;
-                }
-                byte enemieskilled = 0;
-                for (int i = 0; i < 8; i++)
-                {
-                    currentAddress = 0x21E16BC4 + (i * 0x190);
-
-                    if (Memory.ReadUShort(currentAddress) > 0)
-                    {
-                        monstersDead[i] = false;
-                    }
-                    else
-                    {
-                        monstersDead[i] = true;
-                        enemieskilled++;
-                    }
-                }
-
-                if (enemieskilled == 8)
-                {
-                    Dayuppy.DisplayMessage("Samba's quest completed!\nWell done!", 2, 28, 4000);
-                    Memory.WriteByte(0x21CE4462, 1);
-                    sambaChallengeQuest = false;
-                }
-            }
-        }
-
-        public static void MayorQuest()
-        {
-            if (mayorQuestCheck == false && Memory.ReadByte(0x202A34CC) == 1)
-            {
-                if (Memory.ReadByte(Addresses.hideHud) == 0)
-                {
-                    if (Memory.ReadByte(0x202A3570) == Memory.ReadByte(0x21CE446A)) //check if correct ally for quest
-                    {
-                        Memory.WriteInt(0x21CE205C, 0);
-                        Dayuppy.DisplayMessage("Mayor's quest started!\nClear all enemies.\nCannot change character.\nThrowables are not allowed.", 4, 26, 5000);
-
-                        mayorQuestActive = true;
-
-                        for (int i = 0; i < 8; i++)
-                        {
-                            monstersDead[i] = false;
-                        }
-                    }
-                    else
-                    {
-                        Dayuppy.DisplayMessage("Mayor's quest did not start.\nRe-enter with correct ally.", 2, 30, 4000);
-                        mayorQuestActive = false;
-                    }
-                    mayorQuestCheck = true;
-                }
-            }
-            else if (mayorQuestCheck == true && Memory.ReadByte(0x202A34CC) == 0)
-            {
-                mayorQuestCheck = false;
-                mayorQuestActive = false;
-            }
-
-            if (mayorQuestActive)
-            {
-                if (Memory.ReadByte(0x21DC4484) == 26 || Memory.ReadByte(0x21DC4484) == 27)
-                {
-                    Thread.Sleep(500);
-                    Dayuppy.DisplayMessage("Mayor's quest has been cancelled.\nRe-enter in order to re-attempt it.", 2, 40, 4000);
-                    mayorQuestActive = false;
-                }
-
-                byte enemieskilled = 0;
-                for (int i = 0; i < 8; i++)
-                {
-                    currentAddress = 0x21E16BC4 + (i * 0x190);
-
-                    if (Memory.ReadUShort(currentAddress) > 0)
-                    {
-                        monstersDead[i] = false;
-                    }
-                    else
-                    {
-                        monstersDead[i] = true;
-                        enemieskilled++;
-                    }
-                }
-
-                if (enemieskilled == 8)
-                {
-                    Dayuppy.DisplayMessage("Mayor's quest completed!\nWell done!", 2, 28, 4000);
-                    Memory.WriteByte(0x21CE4468, 2);
-                    mayorQuest = false;
                 }
             }
         }
@@ -1486,7 +668,7 @@ namespace Dark_Cloud_Improved_Version
                             if (dunEscapeConfirm == false)
                             {
                                 squareActive = true;
-                                Dayuppy.DisplayMessage("^RAre you sure you want to leave?\n^WPress square to use Escape Powder.", 2, 36, 3000);
+                                DungeonMessages.DisplayMessage("^RAre you sure you want to leave?\n^WPress square to use Escape Powder.", 2, 36, 3000);
                                 dunEscapeConfirmThread = new Thread(() => DunEscapeConfirmTimer());
                                 dunEscapeConfirmThread.Start();
                                 dunEscapeConfirm = true;
@@ -1556,7 +738,7 @@ namespace Dark_Cloud_Improved_Version
                             if (currentWHP < currentmaxWHP)
                             {
                                 Memory.WriteFloat(whp, currentmaxWHP);
-                                Dayuppy.DisplayMessage("Used Repair Powder!", 1, 20, 2000);
+                                DungeonMessages.DisplayMessage("Used Repair Powder!", 1, 20, 2000);
                                 byte currentPowders = Memory.ReadByte(0x21CDD8B2 + (0x2 * currentSlot));
                                 currentPowders--;
                                 Memory.WriteByte(0x21CDD8B2 + (0x2 * currentSlot), currentPowders);

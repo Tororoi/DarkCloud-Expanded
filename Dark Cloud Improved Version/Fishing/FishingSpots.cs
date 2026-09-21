@@ -45,7 +45,7 @@ namespace Dark_Cloud_Improved_Version
             /// WaterLevel-12); shallow ponds want less. Patched per-town into the inline constant. NaN = 12.</summary>
             /// <summary>Shallow fishing: fish sit at WaterLevel-FishDepth (vanilla 12) via a data write, and the
             /// bobber anchor is repointed (data toggle over the cold FishLineStep patch) so the hook rises to
-            /// reach them. NaN = vanilla depth. See game_data/docs/fishing-engine-re.md §fishing-line.</summary>
+            /// reach them. NaN = vanilla depth. See the fishing engine RE notes §fishing-line.</summary>
             internal readonly float FishDepth;
             internal bool HasFishDepth => !float.IsNaN(FishDepth);
 
@@ -101,7 +101,7 @@ namespace Dark_Cloud_Improved_Version
         // The trigger is a RADIUS around a world point, not a box, and the engine matches only ONE point —
         // so an over-large radius wins over every door and their "!" markers vanish (what happened at 2000
         // units). Keep it modest.
-        // (poly cap + match test: game_data/docs/fishing-engine-re.md §fishing-load, §event-dispatch)
+        // (poly cap + match test: the fishing engine RE notes §fishing-load, §event-dispatch)
         internal static readonly Spot[] Spots =
         {
             // Queens: the canal (static WATER e03c01/c02/c08), surface at Y=31. Trigger + fishing sign on the
@@ -180,7 +180,7 @@ namespace Dark_Cloud_Improved_Version
             // walls we drop. STILL WATCH cpoly on the FISHING SPOT LOADED line: the poly GATHER (PickUpPoly)
             // runs before our wall-removal and has a hard 1024 cap, so widening the rect can only be checked
             // by watching the count — if it approaches 1024 we must decouple the fish rect (roam bounds) from
-            // this cast/gather rect. Mirrored in tools/brownboo/brownboo_viewer.py (RECT_*).
+            // this cast/gather rect. Mirrored by the Brownboo scene viewer's RECT_* (a dev tool outside the repo).
             new Spot(14, "Brownboo lake", 5,    // area 5 = DEDICATED custom area, baked into FishingLoadFish (IsoPatcher) — Piccoly/Negie/Gummy + Garayan
                      -250f, -240f, 250f, 240f, water: 0f, ground: -15f,   // ±250 W/E, ±240 N/S, centre (0,0)
                      // trigger + stance just south of the sign (212,-53); face NORTH (yaw pi = -Z) toward the sign (212,-61)
@@ -199,7 +199,7 @@ namespace Dark_Cloud_Improved_Version
                      // Shallow fishing: the RESTING hook follows the fishing-line physics, NOT the rod animation
                      // (in the waiting state it is not pinned to the rod bone). Its depth = the below-bobber rest
                      // length distpBelow (mailbox @0x01F10048, read by the ISO split caves at fixed anchor A=18;
-                     // IsoPatcher.PatchFishLineSplit). See game_data/docs/fishing-line-split-and-cast-feasibility.md.
+                     // IsoPatcher.PatchFishLineSplit). See the fishing-line split feasibility notes.
                      ),
 
             // Yellow Drops: the yellow liquid.

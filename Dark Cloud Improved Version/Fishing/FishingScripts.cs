@@ -155,7 +155,7 @@ namespace Dark_Cloud_Improved_Version
             // We do NOT mirror Norune's _NPC_DRAW(0,-1) here (nor _NPC_DRAW(1,-1) on exit), and that is not a
             // shortcut — for the player it is a NO-OP. Its per-character draw flags are a villager-only array;
             // the player (id -1) bypasses it, and its only other write has zero readers in the binary. So
-            // Norune's hide/show around the model swap is vestigial. (game_data/docs/fishing-engine-re.md §npc-draw)
+            // Norune's hide/show around the model swap is vestigial. (the fishing engine RE notes §npc-draw)
 
             // SWAP TOAN FOR THE FISHING TOAN.
             //     _LOAD_MAIN_CHARA("chara/c01d_turi.chr", "c01d_turi.cfg", 1)
@@ -206,7 +206,7 @@ namespace Dark_Cloud_Improved_Version
             // Snap the player into the fishing stance. Norune does exactly this — _SET_WORLD_COORD, then
             // _SET_NPC_POS / _SET_NPC_ROT at its own fishing point. Without it the player keeps whatever
             // position and facing they walked in with, so the cast is aimed at dry land and the engine
-            // rejects it. This is the rod "bug". (Norune's exact coords: game_data/docs/fishing-engine-re.md §norune-script)
+            // rejects it. This is the rod "bug". (Norune's exact coords: the fishing engine RE notes §norune-script)
             //
             // _SET_WORLD_COORD is set to IDENTITY so that the position and rotation below are plain world
             // coordinates. Norune passes the pond part's transform instead, because its numbers are
@@ -237,7 +237,7 @@ namespace Dark_Cloud_Improved_Version
             //
             // That was the crash-after-fishing-when-you-walk-away. Vanilla starts a session with no bait and
             // you pick one with Square, so this is also the faithful behaviour, not just the safe one.
-            // (allocator + fields: game_data/docs/fishing-engine-re.md §fishing-load)
+            // (allocator + fields: the fishing engine RE notes §fishing-load)
 
             w.PushInt(StbCommands.GotoFishing);       // 997 — sets the event return code to 0xB
             w.Ext(1);                                 // command id only; matches Norune's `push 997; EXT argc=1`
@@ -265,7 +265,7 @@ namespace Dark_Cloud_Improved_Version
         /// Norune's script HAS labels 133 and 134. A town that never had fishing does not — so the button
         /// asks for a label that does not exist and nothing happens, which is exactly why the session could
         /// not be exited. We synthesise 133 ourselves; it is tiny.
-        /// (button -> label map: game_data/docs/fishing-engine-re.md §fishing-buttons)
+        /// (button -> label map: the fishing engine RE notes §fishing-buttons)
         ///
         /// The RET matters: we set no return code, so <c>EventMode</c> takes its <c>default:</c> branch and
         /// puts <c>GameMode</c> back to 1 (walking). That is how Norune's exit path ends too.
@@ -458,7 +458,7 @@ namespace Dark_Cloud_Improved_Version
         /// <c>_GOTO_CHANGE_ESA</c> (command 25) drives the game's own use-item menu: it copies a built-in bait
         /// list (so we do not have to supply one) and opens the menu. Its one meaningful argument is a POINTER
         /// to a script local, which the menu writes the chosen item id into. Hence
-        /// <see cref="StbWriter.PushVarRef"/>. (game_data/docs/fishing-engine-re.md §fishing-esa)
+        /// <see cref="StbWriter.PushVarRef"/>. (the fishing engine RE notes §fishing-esa)
         ///
         /// The single YIELD after it is enough: while <c>menu_mode != 0</c>, <c>EdEventMode</c> runs the menu
         /// instead of stepping the script, so we resume only once the player has chosen.

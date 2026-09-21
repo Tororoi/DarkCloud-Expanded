@@ -27,11 +27,13 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Max Thirst memory addresses** — Corrected the memory addresses used to read and write Max Thirst value.
 - **No-drop enemies** — Regular enemy species that ship unable to drop items (flyers, Gol/Sil, …) had a working `DropChance` but a `DeathDropFlag` of 0, which made the engine skip their entire death-drop block. The flag is now flipped to 1 in the static species table so every spawn drops as intended. Scoped to regular `e####` enemies; bosses, effects, and the steal item are untouched.
 - **Log file names** — Mod log filenames now use a correct `yyyy-MM-dd` date format (was `yyyy-dd-M`, which sorted wrong and collided across months).
+- **Copied-mesh pointer re-basing** — The block copier behind the Mirage decoy, the Angel Gear slingshot and the cat shot re-pointed any 32-bit word whose low bits fell inside the source block's address range, floats included. On the cat that bent five muzzle vertices into the floor (thin strips hanging from the chin); on the other copies it could bend any vertex whose float happened to match. Only words carrying a real EE pointer segment are re-based now.
 
 ---
 
 ## Game Mechanics
 
+- **Heal ability cadence** — Every weapon with the Heal ability now heals every 3 seconds instead of 4 (patched into the dungeon overlay on the ISO).
 ### Fishing
 
 - **Custom fishing spots — Queens, Brownboo, Yellow Drops** — Three new towns are fishable. Each spot gets a native carved sign and trigger, the vanilla entry/quit menus, bait menu, and catch text, all baked into a patched copy of the player's own ISO so the minigame runs fully natively. Each town has its own fish species pool, plus two vanilla pool tweaks (Matataki: Gummy → Niler; East Harbor: Piccoly → Gobbler).
@@ -39,6 +41,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Yellow Drops west bank** — The bank is reshaped to be wider and the town water raised so the new spot fishes naturally from shore.
 - **Casting & line feel** — The line pays out along the cast direction in normally unfishable areas due to the limitations of the vanilla line geometry (split into above/below-water segments at the bobber), casts into the Queens canal walls stop at the wall instead of clipping through, and the fishing camera centers on the bobber at a per-spot height (low over the canal floor).
 - **Brownboo pond rocks** — The three pond rocks have real collision: casts and fish no longer pass through them.
+- **Fishing prize exchange** — The slingshot on offer is now the Flamingo for 1000 FP, replacing the Matador (2000 FP in Dark Cloud Enhanced, 1400 in vanilla). Baked into the patched ISO's prize table.
 - **Fishing quest system** — Refactored fishing quest tracking. Tracks fishing quests for Pike (Norune, area 0), Pao (Matataki Waterfall, area 1), Sam (Area 19), and Devia (Area 3). Supports count quests and size-range quests; monitors quest state byte and fires the Sam post-loop queens-quest trigger after the required number of completions.
 - **Fish steering** — Passive fish-steering loop at Matataki Waterfall and East Harbor nudges all fish toward the player every 10 seconds. Mardan Eins ownership adds a separate steering pass for Garayan and Umadakara fish at an interval weighted by bait affinity.
 - **Mardan Sword rework** — Detects all Mardan swords from bag and storage (not only equipped). FP multipliers: Eins 1.2×, Twei 1.5×, Arise 2×. Mardan Twei and Arise Mardan trigger a second independent Garayan fish roll. Arise Mardan applies the full size transform: native smoothing, a linear scale to 2× the species max, then a second smoothing pass over the scaled range (hard cap at exactly 2× max).
@@ -201,21 +204,35 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Wise Owl Sword ("Wise Owl Always Knows")** — While a Wise Owl Sword is owned, a message displays when you are near an enemy carrying one of the three keys in Wise Owl Forest.
 - **Small Sword ("Quick Draw")** — The opening combo swing comes out almost instantly, skipping the wind-up. Inherited by Tsukikage and Heaven's Cloud through the buildup line.
 - **Tsukikage ("Moonlit Focus")** — Charge attacks build twice as fast (lunge ready in ~0.25 s, whirlwind in ~0.75 s). Inherits Small Sword effect. Inherited by Heaven's Cloud.
-- **Heaven's Cloud** — Holding the whirlwind charge grows the blade — up to 3× at a full hold, with a flash at max — for a bigger, longer-reaching whirlwind. Also inherits Small Sword and Tsukikage effects.
+- **Heaven's Cloud ("Typhoon")** — Holding the whirlwind charge grows the blade — up to 3× at a full hold, with a flash at max — for a bigger, longer-reaching whirlwind. Also inherits Small Sword and Tsukikage effects.
 - **Sun Sword ("Solar Harvest")** — While wielding Sun Sword (or its evolution Big Bang), every enemy killed has a 1% chance to drop a Sun attachment.
 - **Big Bang ("Detonate")** — Every enemy Toan hits triggers an explosion.
-- **Buster Sword ("True Buster")** — Anti-category attachments (Dinoslayer … Mage Slayer) are worth +4 instead of +3 when attached to a Buster Sword.
+- **Buster Sword ("Buster Boost")** — Anti-category attachments (Dinoslayer … Mage Slayer) are worth +4 instead of +3 when attached to a Buster Sword.
 - **Cross Hinder ("Sanctifier")** — Roughly double damage and double ABS reward against undead, and undead it kills can no longer revive.
+- **Bone Rapier ("Gravedigger")** — Alongside its Skeleton Key door bypass, the reviving undead it kills stay down. Super Steve inherits the Cross Hinder and both bone-key abilities with their spheres.
 - **Dark Cloud ("Guard Crush")** — Toan's hits cut straight through enemy guards; every blow connects even while an enemy is blocking. Inherited by 7th Heaven.
 - **7th Heaven ("Divine Guard")** — Perfect guard: blocks every enemy attack and projectile, including heavy hits that normally break guard (those just knock Toan back instead). Also inherits Dark Cloud effect.
-- **Kitchen Knife ("Spring-Blessed Blade")** — Stepping into a healing spring blesses the knife for ~60 seconds: the blade visibly grows to triple length and its attack doubles. Standing in the spring refreshes the timer.
+- **Kitchen Knife ("Spring's Blessing")** — Stepping into a healing spring blesses the knife for ~60 seconds: the blade visibly grows to triple length and its attack doubles. Standing in the spring refreshes the timer.
 - **Macho Sword ("Overtraining")** — While a Macho Sword is owned (bag or storage), every weapon's ABS keeps filling past its max — up to 2× — and the overflow carries into the next level, so a weapon starts its new level with a head start. (Replaces the old Shadow Boxing effect.)
 - **7 Branch Sword ("Sevenfold Rite")** — Refuses to Status Break below +7; at +7 or higher the resulting SynthSphere keeps 77% of the weapon's stats instead of the normal 60%. The Status Break menu hint explains the rule.
 - **Atlamillia Sword ("Atlamillia Insurance")** — While owned (bag or storage), a weapon breaking in a dungeon is no longer a total loss: an Atla appears on a random floor of that dungeon containing a SynthSphere of the broken weapon, keeping 10% of its stats per weapon level (up to 50% at +4 or higher). Attachments are lost. Collecting the Atla delivers the sphere like any georama Atla.
 
 **Xiao**
-- **Angel Gear ("Halo & Homing")** — Pellets fired with no enemy in range gather into a slow-spinning halo of up to 5 above Xiao's head. When an enemy approaches, pellets peel off one at a time with glowing trails and home in on it, arcing around walls and skipping enemies that are guarding. (The party-wide HP regen from Dark Cloud Enhanced remains.)
+- **Angel Shooter ("Guardian Grace")** — While Xiao guards, the slingshot's heal ability keeps ticking and each tick tops her up to 4 HP, with a spring sparkle, a soft white flash and the heal chime. Angel Gear inherits it at 8 HP per tick with a golden burst and the change jingle. Super Steve inherits either version with the matching sphere.
+- **Angel Gear ("Guardian Reflector")** — While Xiao guards, a giant copy of the slingshot stands in front of her and orbits to face the nearest incoming shot or enemy. Enemy shots that reach its pouch are caught (drawn back with the weapon's own animation) and fired back at the nearest enemy, dealing damage through the normal weapon formula with the shot's own element or status: fireballs burn, sticky shots goo, poison gas poisons; resistances, immunities and the "No Effect" flash all apply. The slingshot is also a physical shield: enemies stop at it and swing at it instead of her. Five melee hits break it (weapon-break sound), and the attack gauge doubles as its health bar, refilling before it can return. Super Steve carrying an Angel Gear sphere raises its own model as the shield. Replaces the earlier "Halo & Homing" ability.
+- **Divine Beast Title ("Spirit Beast")** — Hold the shot for a one-second charge (the charge flash marks it) and the pellet that leaves the slingshot becomes Xiao's cat: it flies out along the pellet's line, lands, runs at the locked-on enemy (straight ahead when nothing is locked), pounces, and the pounce hits through the normal weapon formula with the weapon's selected element. The cat rig, textures and leap clips are baked into Xiao's dungeon model by the ISO patcher (hidden until summoned), so it is resident in every dungeon. The cat copy is built once and kept hidden while the weapon is equipped, and a native catcher in the ISO binds it to the charged pellet on the very frame the pellet is born, then hands it the pellet's freshly stepped position every frame, so it never trails; it grows from the pellet's size to full over the first tenth of a second while the pellet's own sprite fades out. At full size the pellet is spent and the cat leaves its line: it falls with the pellet's forward speed, lands (its momentum dies the frame its paws touch), and as the landing motion ends it sets off toward its target (the locked-on enemy, otherwise the enemy nearest Xiao), following the real floor under it at the town's own walk pacing, stopping at walls, and pouncing when it gets close: a ready crouch and the town cat's own spring-up, during both of which it keeps turning to face the enemy, then a jump aimed at where the enemy is as the spring-up ends, and a landing. A script event that wipes the cat's textures (the chasm jump) no longer leaves it unable to appear: they are put back on the next charge. Its motions cross-fade into one another the way the town model's do, using the engine's own ten-frame blend; only the jump itself (take-off into leap into landing) and the drop into the landing cut straight across, as the town's own landing does. Touching an enemy while airborne or landing, from the first flight off the slingshot onward, lands one hit through the normal weapon formula as if the weapon's attack were doubled, with magic and the weapon's element applied, any guard the enemy holds ignored, and the same stagger and shove a sword blow gives (the game's own rule that Xiao's hits never stagger now exempts a hit that carries a melee-type kick, which only the cat's does); the cat sails on through and fades out over the next half second as it lands. It gives up after twenty seconds. The cat carries a glow in the summoning weapon's colour, drawn by the game's own wall-torch routine from a re-tinted copy of the Gallery of Time's purple torch disc, centred on its torso and fading with it.
+- **Spirit Beast up the line** — Angel Shooter and Angel Gear inherit the cat and dress it up: their cats fly on wings, come a little larger (1.1× and 1.2×), pounce from farther away and keep steering toward the target through the top of the leap. Super Steve fires the cat with a Divine Beast Title, Angel Shooter or Angel Gear sphere; its cat wears a cape and a mask instead of wings, and the cape, mask and glow take the colour of the slingshot's selected element (switching elements recolours them live).
+- **Dungeon character memory** — The dungeon's character-model pool (shared by the active character, their weapons and shot effects) is raised from 3.36 MB to 3.84 MB in the ISO's dungeon overlay, paid for by trimming the dungeon's 4.48 MB disc-read staging buffer to 4.00 MB (its largest single file is 3.86 MB). Xiao's model already sat within about 150 KB of the old ceiling, and the cat baked into it pushed a party switch to her into the allocator's silent hang.
 - **Super Steve ("Sphere Inheritance")** — Super Steve inherits the custom effect of whichever weapon's SynthSphere is attached to it (one sphere at a time = one inherited effect), and recolors itself in the source weapon's palette. Ownership/upgrade passives (Macho Sword, Wise Owl Sword, Chronicle 2, Buster Sword, 7 Branch Sword) deliberately don't transfer.
+- **Steel Slingshot ("Endurance Up")** — While its WHP is low (the gauge's warning state), each shot costs half the WHP; Durable and Fragile stack on top. Level-ups grant +2 endurance instead of +1 and twice the max-WHP roll. Super Steve inherits the WHP half with its sphere.
+- **Bandit Slingshot ("Steal Shot")** — A steal that lands on an enemy with a projectile takes the projectile: until another steal or the floor ends, every pellet is that enemy's shot, flags and all, at 2× attack and with its own element. The item's "acquired" notice adds "[enemy]'s projectile is now yours". Self-detonations are never taken (a species' other shot is). Super Steve inherits with either Bandit sphere.
+- **Bone Slingshot ("Skeleton Key", "Gravedigger")** — Bone doors open without their key, and the reviving undead stay down, as with the Bone Rapier. Super Steve inherits with either bone sphere.
+- **Hardshooter ("Ricochet")** — A pellet that lands on an enemy spawns a second pellet at the impact that flies at the next nearest enemy (or in a random direction with none near), once per shot; it cannot strike the enemy it came from. Super Steve inherits with its sphere.
+- **Double Impact** — Every shot is two real pellets side by side, each at 0.75× attack and each rolling the weapon's abilities on its own, drawn as the Steel Slingshot's stone; both ricochet as the Hardshooter's do, at different targets. Super Steve inherits with its sphere.
+- **Dragon's Y ("Dragon's Breath")** — Locked on, Xiao moves at 1.3× speed (inherited by Divine Beast Title, Angel Shooter and Angel Gear). Dragon's Breath: a shot held for a second fires the Gemron ball of the selected element (the Black Dragon's with none) at 1.5× attack with a knockback that shoves enemies out of the burst. Super Steve inherits the shot with its sphere and the speed with any of the four's.
+- **Flamingo ("Lock-On Distance")** — Enemies can be locked on to from twice as far (inherited by Dragon's Y, Divine Beast Title, Angel Shooter and Angel Gear, and by Super Steve with any of the five's sphere). Owned, up to three Flamingos each add 10 units to every bait's notice radius when fishing.
+- **Matador ("Charging Bull")** — Hold the shot for a second (the charge flash marks it) and the pellet released is charged: 1.5× damage, it lands through an enemy's guard, and it hits with a hammer-swing shove that knocks the enemy back along its flight line. The charged pellet flies as a projection of the slingshot itself: an orange copy of the model at its own size, wrapped in the cat's glow, with the pellet hidden inside. Super Steve inherits it with a Matador sphere, projecting its own model on the charged pellet. Super Steve's pellet is drawn as the sphere weapon's when the sphere came from a slingshot.
+- **Shot slots** — Floors are no longer limited to five monster shot types: the five slots are shared among every config the floor needs, each read from disc at most once per floor.
 
 **Goro**
 - **Frozen Tuna ("Cold Storage")** — Each point of WHP lost banks 2 HP into a healing pool. When Goro takes damage, the pool drains at 1 HP per 0.5 seconds. Healing pauses if HP reaches max; banked HP is preserved until the next hit. The pool resets on weapon repair or switch. On hit, 5% chance stops all non-ice enemies and freezes Goro for 3 seconds. Blizzard, Sam, and Ice Gemron are immune to the stop proc.
@@ -224,8 +241,12 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Cactus ("Absorb")** — Custom thirst effect which drains moisture from enemies. Dry enemies are unaffected.
 - **Mirage ("Decoy")** — Holding guard charges a mirage; on release a shimmering clone of Ungaga with a heat-haze effect is planted at that spot, and enemies chase the decoy instead of him for ~12 seconds (a new charge refreshes it). The illusion breaks per enemy — hit one and it re-targets you. Hercules' Wrath inherits the effect.
 
+**Ruby**
+- **Bandit's Ring ("Steal Shot")** — The Bandit Slingshot's stolen projectile for Ruby's quick fire only; her charged shot stays her own.
+
 **Osmond**
-- **Snail** — 5% chance on hit to apply Gooey to the struck enemy.
+- **Snail ("Slime Trail")** — 5% chance on hit to apply Gooey to the struck enemy.
+- **Skunk ("Longer Flame")** — The flamethrower reaches twice as far.
 
 #### Dark Cloud Enhanced
 
@@ -250,7 +271,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 **Osmond**
 - **Supernova** — 10% chance per hit to apply a random status effect (Freeze, Poison, Stamina, or Gooey) to each enemy struck.
-- **Star Breaker** — 2% chance on kill to receive an empty synthsphere.
+- **Star Breaker ("Shooting Stars")** — 2% chance on kill to receive an empty synthsphere.
 
 ### Weapon Ability Changes
 
@@ -258,7 +279,8 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 **Xiao**
 - **Bone Slingshot** — 50% Fragile
-- **Hardshooter** — 50% Fragile
+- **Hardshooter** — 50% Fragile; builds up to Double Impact only
+- **Double Impact** — builds up to Matador only
 
 **Goro**
 - **Frozen Tuna** — 100% Stop
@@ -419,15 +441,15 @@ Chronicle 2 ★
 
 ### Xiao
 
+> **Mod changes:** Hardshooter builds up to Double Impact only (Matador path removed). Double Impact builds up to Matador only (was Divine Beast Title), so every Steel and Bandit line runs through Matador before Divine Beast Title.
+
 ```
-Steel Slingshot → Hardshooter ─┬─ Double Impact ─┬─ Divine Beast Title → Angel Shooter → Angel Gear ★
-                                └─ Matador ────────┘
+Steel Slingshot → Hardshooter → Double Impact → Matador → Divine Beast Title → Angel Shooter → Angel Gear ★
 
 Bone Slingshot → Flamingo → Dragon's Y → Divine Beast Title → Angel Shooter → Angel Gear ★
 
-Bandit Slingshot ─┬─ Hardshooter ─┬─ Double Impact ─┬─ Divine Beast Title → Angel Shooter → Angel Gear ★
-                  │               └─ Matador ────────┘
-                  └─ Double Impact → Divine Beast Title → Angel Shooter → Angel Gear ★
+Bandit Slingshot ─┬─ Hardshooter → Double Impact → Matador → Divine Beast Title → Angel Shooter → Angel Gear ★
+                  └─ Double Impact → Matador → Divine Beast Title → Angel Shooter → Angel Gear ★
 
 Steve → Super Steve ★
 ```

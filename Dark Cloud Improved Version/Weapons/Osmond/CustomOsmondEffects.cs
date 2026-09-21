@@ -40,7 +40,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Osmond's own Snail weapon: loops the shared driver while it's equipped.</summary>
-        public static void SnailEffect()
+        public static void SlimeTrailEffect()
         {
             var st = new SnailState();
             while (Player.Weapon.GetCurrentWeaponId() == Items.snail && Player.InDungeonFloor())
@@ -69,14 +69,14 @@ namespace Dark_Cloud_Improved_Version
                     Player.Inventory.GetBagAttachmentsFirstAvailableSlot() >= 0)
                 {
                     Player.Inventory.SetBagAttachments(Items.synthsphere);
-                    Dayuppy.DisplayMessage("The Star Breaker sent\nyou a shooting star!", 2, 21);
+                    DungeonMessages.DisplayMessage("The Star Breaker sent\nyou a shooting star!", 2, 21);
                 }
             }
             st.PrevHp = cur;
         }
 
         /// <summary>Osmond's own Star Breaker weapon: loops the shared driver while it's equipped.</summary>
-        public static void StarBreakerEffect()
+        public static void ShootingStarsEffect()
         {
             var st = new StarBreakerState();
             while (Player.Weapon.GetCurrentWeaponId() == Items.starbreaker && Player.InDungeonFloor())
@@ -90,6 +90,18 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Triggers Supernova effect: Chance on hit to apply a random status
         /// </summary>
+        /// <summary>Osmond's Skunk thread: hands every tick to <see cref="Skunk.Drive"/> while the weapon is equipped, and
+        /// stands it down once when it goes.</summary>
+        public static void LongerFlameEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.skunk)
+            {
+                Skunk.Drive(!Player.CheckDunIsPaused());
+                Thread.Sleep(16);
+            }
+            Skunk.Stop();
+        }
+
         public static void SupernovaEffect()
         {
             //Get a read on all the enemies hp on the current floor

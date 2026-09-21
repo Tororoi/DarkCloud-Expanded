@@ -236,7 +236,7 @@ not flex, but the body would.
 
 ## 6. Modified Priscleen — exactly what we ship
 
-The runtime `.chr` (`Dark Cloud Improved Version/Resources/Fish/f19a.chr`) is built by two scripts:
+The runtime `.chr` (handed to `PriscleenFish.Model` by a provider; no copy is tracked or shipped) is built by two scripts:
 `dc2/build_priscleen_chr.py` (DC2 → DC1 container + info.cfg) then `dc2/fix_priscleen_texture.py`
 (IM3 → IM2 texture). Per sub-file:
 

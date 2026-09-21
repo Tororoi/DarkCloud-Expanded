@@ -20,7 +20,7 @@ namespace Dark_Cloud_Improved_Version
     ///   -> the engine matches the point and reads its script label
     ///   -> the VM runs that label
     /// </code>
-    /// (engine functions / record offsets: game_data/docs/fishing-engine-re.md §event-dispatch)
+    /// (engine functions / record offsets: the fishing engine RE notes §event-dispatch)
     ///
     /// So this needs exactly two data writes, both of which the mod can do:
     ///
@@ -591,7 +591,7 @@ namespace Dark_Cloud_Improved_Version
             if (param != _lastParam)
             {
                 _lastParam = param;
-                uint pt = Memory.ReadUInt(EventPoints.MatchedPoint) & Memory.PhysAddrMask;
+                uint pt = Memory.ReadGuestPtr(EventPoints.MatchedPoint);
                 long e = Memory.IsValidGuest(pt) ? Memory.ToMmu(pt) : 0;
 
                 if (param > 0 || e != 0)
@@ -646,7 +646,7 @@ namespace Dark_Cloud_Improved_Version
                 // Brownboo: drop the ladder-top platforms from the cpoly (bobber ground-lift guard). Native walls
                 // are KEPT — they contain the fish; the bobber probe never treats a wall as ground.
                 FishingCollision.DropLadderTopFloors(_spot.MapNo);
-                // APPEND the town's fishing collision (DCFC bin, tools/build_fishing_collision.py) so the
+                // APPEND the town's fishing collision (DCFC bin, built by the ISO patch flow from the scene in the ISO) so the
                 // fish are boxed in where the native geometry is open (Queens / Yellow Drops fish walls).
                 FishingCollision.AppendCustomCollision(_spot.MapNo);
 
@@ -662,7 +662,7 @@ namespace Dark_Cloud_Improved_Version
             if (!live) { _shallowFishApplied = false; _fishCPolySynced = false; }
             else
             {
-                uint fp = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;
+                uint fp = Memory.ReadGuestPtr(FishingSpot.Fish);
                 bool fishPlaced = Memory.IsValidGuest(fp) && Memory.ReadInt(FishingSpot.FishNum) > 0;
 
                 // Queens medium/high tide: the water is deep enough for VANILLA fish depths (and the hang is
@@ -743,7 +743,7 @@ namespace Dark_Cloud_Improved_Version
             // EXACTLY our fishing label — verified live: dialogue events read other ids, our fishing enter
             // reads FishingLabelId (400), and exit/bait run the engine's own labels 133/134. So the
             // running-event id is the clean, position-independent discriminator.
-            // (discriminator source: game_data/docs/fishing-engine-re.md §running-event)
+            // (discriminator source: the fishing engine RE notes §running-event)
             if (gm == EditLoop.GameModeEvent)
             {
                 int ev = Memory.ReadInt(EditEvent.Info);

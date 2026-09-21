@@ -108,7 +108,7 @@ namespace Dark_Cloud_Improved_Version
 
         // Model scale table (base 0x21E18530, stride 0x3510 per slot) — separate from enemy slot.
         // "BODY SIZE" triple, set from the MODEL file's info.cfg `BODY_SIZE height,width,depth` line via
-        // CommandBODY_SIZE (RE'd 2026-06-20; see ModelScaleOffsets.BodyWidth/BodyHeight/BodyDepth). Read live (not cached at spawn).
+        // CommandBODY_SIZE (RE'd; see ModelScaleOffsets.BodyWidth/BodyHeight/BodyDepth). Read live (not cached at spawn).
         // +0x020: body WIDTH / girth radius (7 small → 14 Gunny → 32 Prajna) — CCharacter::PickUpPoly floor-poly
         //         pickup radius (min 2.0, terrain collision) + _GET_NPC_BODY_SIZE script getter. No observable effect.
         internal float? BodyWidth;
@@ -1095,7 +1095,7 @@ namespace Dark_Cloud_Improved_Version
             Id=65, TableIndex=57, Name="Blizzard", ModelCode="e65a", ModelFootprint=51196,
             Abs=8, MinGoldDrop=5, DropChance=30, StealItemId=162, RareDropItemId=82,
             MaxHp=750, DamageReduction=5, WeaponDefense=0, KnockbackMult=0.5f,
-            Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=140, WindRes=140, HolyRes=100,
+            Category=EnemyCategory.Metal, FireRes=100, IceRes=0 /* vanilla 100; ISO patch ElfPatches.PatchBlizzardIceImmunity  */, ThunderRes=140, WindRes=140, HolyRes=100,
             ItemDamageRes=100, ItemStatusRes=50,
             BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f, EntityScale=14.0f, EntityScaleCopy=14.0f,
             MeleeDamage=new int[]{119,119,119,119,105,90,75}, ProjectileDamage=new int[]{105,105} };
@@ -2426,7 +2426,7 @@ namespace Dark_Cloud_Improved_Version
         // tightest floor the pair may not fit alongside a full requireFullFit group). See BuildThemedRoster.
         internal static readonly HashSet<string> ThemeGuaranteedMimics = new() { "Pirates" };
 
-        // Per-theme single-spawn: members pinned to SpawnCap 1 (one-of-each) only within the named theme, even on a
+        // Per-theme single-spawn: members pinned to MonsterType 1 (one-of-each) only within the named theme, even on a
         // whole-group floor; the rest of the group carries the floor population. Members spawn normally in their other
         // themes (e.g. Sil/Gol are one-of-each in Pirates but repeatable in Precious and the Demon Shaft regions).
         internal static readonly Dictionary<string, HashSet<int>> ThemeSingleSpawnByTheme = new()
@@ -2497,6 +2497,50 @@ namespace Dark_Cloud_Improved_Version
             { Gol.Id,         Gol.Name         },  // non-flying, but cannot drop an item
             { Sil.Id,         Sil.Name         },  // non-flying, but cannot drop an item
         };
+        /// <summary>Enemies the Divine Beast cat reaches with its VERTICAL leap (ready crouch → the town ladder jump's
+        /// float-up → fall) instead of the flat pounce: flyers, hoverers, and the tall or large bodies whose hit spheres
+        /// sit above a cat-height jump . Keyed by species id, so the "(Enhanced)" variants —
+        /// which share their base species' id — are covered without being listed. A miniboss spawn (MiniBoss, 1.5×
+        /// model) counts as well, by slot, regardless of species.</summary>
+        internal static readonly Dictionary<ushort, string> VerticalLeapTargets = new()
+        {
+            // flyers and hoverers
+            { Hornet.Id,           Hornet.Name           },
+            { WitchHellza.Id,      WitchHellza.Name      },
+            { WitchIllza.Id,       WitchIllza.Name       },
+            { Ghost.Id,            Ghost.Name            },
+            { Lich.Id,             Lich.Name             },
+            { Phantom.Id,          Phantom.Name          },
+            { CaveBat.Id,          CaveBat.Name          },
+            { EvilBat.Id,          EvilBat.Name          },
+            { Nikapous.Id,         Nikapous.Name         },
+            { CrescentBaron.Id,    CrescentBaron.Name    },
+            { MaskOfPrajna.Id,     MaskOfPrajna.Name     },
+            { Alexander.Id,        Alexander.Name        },
+            { Arthur.Id,           Arthur.Name           },
+            // tall or large bodies
+            { BlackKnight.Id,      BlackKnight.Name      },   // the Mount shares id 221
+            { DarkGenie.Id,        DarkGenie.Name        },
+            { DarkGenieForm2.Id,   DarkGenieForm2.Name   },
+            { DarkGenieFinal.Id,   DarkGenieFinal.Name   },
+            { MinotaurJoe.Id,      MinotaurJoe.Name      },
+            { KingsCurse.Id,       KingsCurse.Name       },
+            { KingsCurseCoffin.Id, KingsCurseCoffin.Name },
+            { MasterUtan.Id,       MasterUtan.Name       },
+            { Dran.Id,             Dran.Name             },
+            { Gol.Id,              Gol.Name              },
+            { Sil.Id,              Sil.Name              },
+            { Blizzard.Id,         Blizzard.Name         },
+            { SteelGiant.Id,       SteelGiant.Name       },
+            { Titan.Id,            Titan.Name            },
+            { Golem.Id,            Golem.Name            },
+            { BlackDragon.Id,      BlackDragon.Name      },
+            { BlueDragon.Id,       BlueDragon.Name       },
+            { Dragon.Id,           Dragon.Name           },
+            { Opar.Id,             Opar.Name             },
+
+        };
+
         // Overseas enemies appear in the USA/PAL version of Dark Cloud but are absent
         // from the Japanese release. Pool assignments match the Japanese versions of the
         // same dungeons (DBC area).

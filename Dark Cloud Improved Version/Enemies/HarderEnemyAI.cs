@@ -73,7 +73,7 @@ namespace Dark_Cloud_Improved_Version
         };
 
         /// <summary>The eight native revivers: file offset of the revive-roll threshold literal (see
-        /// CustomToanEffects.UndeadRevivers — same cells; buffed here instead of spliced). Complete per
+        /// CrossHinder.UndeadRevivers — same cells; buffed here instead of spliced). Complete per
         /// TWO rigid pattern sweeps of all 172 monster STBs: the mummy shape (roll after cmd 34) and the
         /// Silver Gear shape (rand BEFORE cmd 34, compare after — e118 is its only member).</summary>
         private static readonly Dictionary<string, (int ThrCell, int OrigThr)> NativeRevivers =

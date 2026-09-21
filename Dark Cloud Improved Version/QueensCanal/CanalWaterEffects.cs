@@ -64,7 +64,7 @@ namespace Dark_Cloud_Improved_Version
         private const int  RippleSlots  = 4;
 
         // ── WADING RIPPLE (v7 — static part drawn IN THE WATER PASS via its LAYER; full RE:
-        // game_data/docs/water-rendering-re.md §TEXANIME). The look = the plant/stilt ring look: a
+        // the water-rendering RE notes §TEXANIME). The look = the plant/stilt ring look: a
         // persistent mesh (Norune's hamon splat, ±39, part "wripple") whose e01b22 texture the town
         // TEX_ANIME animates (ring art baked in by the ISO post-step). DrawWater's static-part loop draws
         // every part whose LAYER field (+0xE4) == the pass arg (0x15) with the water texture group
@@ -172,7 +172,7 @@ namespace Dark_Cloud_Improved_Version
         /// leaving Queens, so identification always runs from a known-good state.</summary>
         private static long CanalBody()
         {
-            uint egGuest = Memory.ReadUInt(RippleEditGroundPtr) & Memory.PhysAddrMask;
+            uint egGuest = Memory.ReadGuestPtr(RippleEditGroundPtr);
             if (!Memory.IsValidGuest(egGuest)) return 0;
             long arr = Memory.ToMmu(egGuest) + RippleArrOff;
             if (_rippleSlot >= 0)
@@ -288,7 +288,7 @@ namespace Dark_Cloud_Improved_Version
             if (_poleL == 0 || _poleR == 0)
             {
                 if (_tickCount < _poleNextScan) return;
-                uint egGuest = Memory.ReadUInt(RippleEditGroundPtr) & Memory.PhysAddrMask;
+                uint egGuest = Memory.ReadGuestPtr(RippleEditGroundPtr);
                 if (!Memory.IsValidGuest(egGuest)) return;
                 long arr = Memory.ToMmu(egGuest) + StaticPartsOff;
                 _poleL = _poleR = 0;
@@ -343,7 +343,7 @@ namespace Dark_Cloud_Improved_Version
                 _decalPart = 0; _decalShown = false;
             }
             if (_tickCount < _decalNextScan) return 0;
-            uint egGuest = Memory.ReadUInt(RippleEditGroundPtr) & Memory.PhysAddrMask;
+            uint egGuest = Memory.ReadGuestPtr(RippleEditGroundPtr);
             if (!Memory.IsValidGuest(egGuest)) return 0;
             long arr = Memory.ToMmu(egGuest) + StaticPartsOff;
             for (int i = 0; i < StaticPartCount; i++)
@@ -364,7 +364,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         long q = arr + j * PartStride;
                         if (Memory.ReadInt(q + 0xE8) < 0) continue;
-                        uint vt = Memory.ReadUInt(q + 0xA0) & Memory.PhysAddrMask;
+                        uint vt = Memory.ReadGuestPtr(q + 0xA0);
                         uint fn94 = 0;
                         if (Memory.IsValidGuest(vt)) fn94 = Memory.ReadUInt(Memory.ToMmu(vt) + 0x94);
                         sb.Append($"[{j}: L={Memory.ReadInt(q + PartLayer)} T={Memory.ReadInt(q + 0x118)} " +

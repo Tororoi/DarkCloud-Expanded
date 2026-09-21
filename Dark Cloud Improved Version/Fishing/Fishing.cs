@@ -62,6 +62,7 @@ namespace Dark_Cloud_Improved_Version
             questActive.Clear();
             TakeBagSnapshot();
             CheckMardanSword();
+            Flamingo.ApplyBaitBonus();   // the bait notice table: +10 units on every bait per Flamingo owned, up to three
             if (FishingAreas.TryGetValue(_fishingAreaId, out AreaFishData areaData) && ResolveLiveSlotBase(ref areaData))
             {
                 InitSlots(areaData);
@@ -87,7 +88,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool ResolveLiveSlotBase(ref AreaFishData areaData)
         {
             if (areaData.SlotBase != 0) return true;            // native area — fixed base already set
-            uint p = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;
+            uint p = Memory.ReadGuestPtr(FishingSpot.Fish);
             if (!Memory.IsValidGuest(p)) return false;          // CFish array not allocated yet
             areaData.SlotBase = (int)Memory.ToMmu(p);
             return true;

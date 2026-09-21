@@ -4,14 +4,14 @@ into a new scene.scn (offline), validating that the whole scene still decodes. T
 growth + IsoPatcher) is a separate, later step — this tool proves the edit end-to-end without touching the ISO.
 
   # 1. export a node to OBJ (+ .mtl + .mdtjson sidecar) for Blender:
-  python3 tools/lib/remodel_mesh_workflow.py export gedit/s13/scene.scn s1308 obj2__n game_data/yellowdrops/edit/obj2
+  python3 tools/lib/remodel_mesh_workflow.py export gedit/s13/scene.scn s1308 obj2__n <workdir>/obj2
 
-  # 2. edit game_data/yellowdrops/edit/obj2.obj in Blender (add/remove/move tris; keep an existing usemtl
+  # 2. edit <workdir>/obj2.obj in Blender (add/remove/move tris; keep an existing usemtl
   #    for new faces; DON'T rename the object), export back over the same .obj (triangulate on export).
 
   # 3. apply the edited OBJ -> a new scene.scn, with full-scene validation:
-  python3 tools/lib/remodel_mesh_workflow.py apply gedit/s13/scene.scn s1308 obj2__n game_data/yellowdrops/edit/obj2 \
-          game_data/yellowdrops/edit/scene_s13_edited.scn
+  python3 tools/lib/remodel_mesh_workflow.py apply gedit/s13/scene.scn s1308 obj2__n <workdir>/obj2 \
+          <workdir>/scene_s13_edited.scn
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

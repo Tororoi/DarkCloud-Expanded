@@ -216,6 +216,41 @@ namespace Dark_Cloud_Improved_Version
         internal const long InZoneFlag = 0x21DC4514;   // short (16-bit)
     }
 
+    /// <summary>The passive HEAL ability (weapon flag 0x800): the dun overlay's per-frame loop (0x1DB8240) counts frames
+    /// here and, when the count reaches its period, grants +1 HP through AddNowLife and starts over. The period is 240
+    /// frames as shipped and 180 with DunPatches' cadence patch. Frame-driven, so it stands still whenever the floor's
+    /// loop does — a hold, the menu — and a wrap is the one moment the native heal has just fired.</summary>
+    internal static class HealAbility
+    {
+        internal const long TickCounter = 0x202A3684;   // int, gp-0x616C
+    }
+
+    /// <summary>The dungeon's CDataAlloc2 bump pools — each {base +0, used +8, cap +0xC}, the last two in 16-byte units —
+    /// carved in <see cref="InCarveOrder"/> by GameInit (dun 0x1DAC1C0) from the 27 MB global buffer (GlobalDataBuffer
+    /// @0x2AB080, whose bump counter sits at the array's end). Chara, weapons and effects share ONE pool: the chara cap is
+    /// the pool size and LoadChara2's other two counters take what is left. An overflow is a silent spin
+    /// (Alloc__14CDataAlloc2: printf + while(true)). Raising the character heap (DunPatches) moves every pool carved after
+    /// it — DungeonPools measures the shift.</summary>
+    internal static class DataPools
+    {
+        internal const int  Used = 0x8, Cap = 0xC;
+        internal const long Common = 0x21F06640, Motion = 0x202AB020, Chara = 0x21F06660, ShotFx = 0x21F06690;
+        internal const long Texture = 0x202AB030, P870 = 0x21F06870, P6A0 = 0x21F066A0, P6B0 = 0x21F066B0;
+        internal const long P6C0 = 0x21F066C0, P840 = 0x21F06840, Monstor = 0x21F066D0, Map = 0x21F06650;
+        internal const long Weapon = 0x21F06670, Effect = 0x21F06680;   // LoadChara2's counters inside the chara pool
+        /// <summary>BtCashBuffer: the floor system script's work allocator (BtSystemScriptRun). On a dungeon's first floor it
+        /// is aimed at BtScriptWorkBuffer (P840, 100,000 units — whose own counter therefore never moves); on every later
+        /// floor at the monster pool's region with its capacity + 35,000. Its used counter is the only record of that demand.</summary>
+        internal const long Cash = 0x21F06850;
+        internal const long GlobalUsed = 0x21C74980;                    // the global buffer's bump counter (units)
+        internal const int  GlobalCap  = 0x19C98F;
+        internal static readonly (long addr, string name)[] InCarveOrder =
+        {
+            (Common, "common"), (Motion, "motion"), (Chara, "chara"), (ShotFx, "shotfx"), (Texture, "texture"), (P870, "p870"),
+            (P6A0, "p6a0"), (P6B0, "p6b0"), (P6C0, "p6c0"), (P840, "p840"), (Monstor, "monstor"), (Map, "map"),
+        };
+    }
+
     /// <summary>
     /// The active floor's 20×20 minimap tile grid, RE'd from CDungeonMap (checkMask 0x1C39C0 gives the
     /// world→tile transform; DrawMiniMap 0x1C3180 gives the per-tile struct). World→tile:
@@ -281,6 +316,16 @@ namespace Dark_Cloud_Improved_Version
     /// walks the same slots; <see cref="StepSkipTable"/> lets you have a slot DRAWN but not STEPPED.
     /// (Slot gates below are CNPCharacter fields, i.e. past the embedded CCharacter.)
     /// </summary>
+    /// <summary>Dungeon SCRIPT EVENT state (the battle-system script runner). Non-zero while an in-floor scripted
+    /// event runs (the jump-across, chest and story beats that load event models such as c04bjump.chr);
+    /// BtSystemScriptAfter (0x1BB5E0) zeroes it at the event's end — right after EdEventAllClear, which deletes the
+    /// player's extend motions (MOTION 1+), and alongside a reset of her motion-speed/flags/id words. Anything that
+    /// depends on the player's extra motion channels or the texture manager must stand down while it is set.</summary>
+    internal static class DungeonScriptEvent
+    {
+        internal const long BtEventMode = 0x202A3608;
+    }
+
     internal static class DungeonCharaDraw
     {
         internal const long CharaArray    = 0x21EA8460;  // guest 0x01EA8460 (hardcoded in the dungeon draw)
@@ -298,7 +343,7 @@ namespace Dark_Cloud_Improved_Version
 
     /// <summary>
     /// The dungeon FIRE / HEAT-HAZE system — the only framebuffer distortion in the game, and the vehicle
-    /// for the Mirage clone's shimmer (Mirage hijacks a torch's raster emitter; see [[mirage-decoy-aggro]]).
+    /// for the Mirage clone's shimmer (ElfCave.MirageHazeDraw draws one raster at the clone; docs/mirage.md).
     ///
     /// DrawRaster__11CDungeonMap (0x1C4610) walks a 20x20 per-tile fire array, but ONLY tiles within +/-4 of
     /// the CAMERA and with dist &lt;= 240 (both camera-relative — DrawMap__11CDungeonMap @0x1C286C RECOMPUTES

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Diagnostics;
 using static Dark_Cloud_Improved_Version.IsoBytes;
 using static Dark_Cloud_Improved_Version.SceneBaker;
 using static Dark_Cloud_Improved_Version.TownSceneBakes;
@@ -90,7 +89,7 @@ namespace Dark_Cloud_Improved_Version
 
         // Carved ladder climb points, WORLD space (the ladder verts are world-baked so its part sits at origin
         // identity). Derived by running the vanilla Moon-Factory hasigo1 climb points — bottom (9.9,0,-48.4),
-        // top (7.6,90,-34.6) — through the SAME de-yaw + placement transform as the mesh (tools/carve_queens_ladder),
+        // top (7.6,90,-34.6) — through the SAME de-yaw + placement transform as the mesh (CarveLadder),
         // so the climb-path geometry (stand-off from the rail + lean) matches the Factory exactly. Bottom sits
         // ~6.5u out in front of the ladder's canal edge (z≈47.4); top is on the walkway side.
         internal static readonly float[] LadderClimbBottom = { LadderWorldX, 0f, 40.9f };
@@ -135,186 +134,87 @@ namespace Dark_Cloud_Improved_Version
             using (var fs = new FileStream(outIso, FileMode.Open, FileAccess.ReadWrite))
                 crc = ApplySignPatch(fs, progress);
 
-            // Town camera/structure collision bake — scene data only (the ELF CRC above is unaffected). Runs
-            // AFTER the stream above is closed so the baker can reopen the ISO.
+            // The scene parts rebuilt from the disc's own geometry, and the fishing collision bins — scene data only
+            // (the ELF CRC above is unaffected). Runs AFTER the stream above is closed so the baker can reopen the ISO,
+            // and BEFORE the collision bake, which reads the scenes as this leaves them.
+            progress("Baking the Queens statue collision, the Yellow Drops bank and the fishing walls …");
+            BakeTownSceneParts(outIso, progress);
+
+            // Town camera/structure collision bake — scene data only.
             progress("Baking town camera collision …");
             BakeStructureCollision(outIso, progress);
 
-            // Battle-run transplant — graft the polished battle run onto the lighter ally-swap models (scene
-            // data only; ELF CRC unaffected). Runs AFTER the collision bake so it appends past its tail redirects.
-            progress("Transplanting battle-run animations …");
-            BakeMotionTransplants(outIso, progress);
-
-            // Town-model assembly — build each swapped-in ally's full town motion set (idle/run/walk/doors/
-            // item-get/fall/land) by transplanting clips into the safe base model + rewriting its KEY table
-            // (docs/town-swap-animation-map.md). Scene data only. Runs after the transplant (composes on the tail).
+            // Town-model assembly — each swapped-in ally's full town motion set (idle/run/walk/doors/item-get/fall/land)
+            // by transplanting clips into the safe base model + rewriting its KEY table (docs/town-swap-animation-map.md).
+            // Scene data only; composes on the tail after the collision bake.
             progress("Assembling town-ally animation sets …");
-            BakeTownModels(outIso, progress);
+            using (var arc = new IsoArchive(outIso, progress)) TownModelBakes.Run(arc, progress);
+
+            // Divine Beast Title cat shot — bake Xiao's cat rig (mesh, textures, leap clips) INTO her dungeon
+            // character pack (dun\mainchara\c04b.chr) as hidden extra nodes + a second motion channel. Scene data
+            // only; composes on the tail after the town models. (NOT the weapon pack: the weapon menu rebuilds
+            // every carried weapon into a 944 KB arena and a bigger weapon pack overflowed it.)
+            progress("Baking the Divine Beast Title cat into Xiao's dungeon model …");
+            BakeCatPack(outIso, progress);
+
+            // Hurt-sphere fixes baked into the monster scripts (dun\monstor\*.stb, redirected into the tail): Blizzard takes
+            // Titan's four spheres, Sam and Billy take Mr. Blare's two, and Minotaur Joe's face admits the Divine Beast
+            // cat's kick at 100 % (ElfCatPatches.PatchCatSpherePercent reads the armed spare table).
+            progress("Baking monster script fixes (hurt spheres, mimic wake guard) …");
+            BakeMonsterSpheres(outIso, progress);
+
+            // Effect containers the shot-effect pack can load under the dead dun\effect names (BorrowedShots): each is a copy
+            // with the cfg record the pack's loader asks for by name appended; the sources are untouched.
+            progress("Baking borrowed shot effects …");
+            BakeBorrowedShots(outIso, progress);
 
             progress("Publishing pnach to PCSX2 …");
             ReshipPnach(crc);
             return outIso;   // the caller sets the final informative message (avoids overwriting it)
         }
 
-        // ── town camera/structure collision bake (post-step; Python for now, port to C# later) ──────────
-        // Invoke the proven baker tools/iso_patch/collision/patch_iso_town_collision.py against our output ISO. It
-        // rebuilds e03's ground `_a` from that ISO's OWN structure meshes + trigger quads (nothing game-derived
-        // is bundled — the collision is carved from the user's disc; the perimeter/canal walls are authored
-        // constants) and redirects it into the free DATA.DAT tail, composing with the redirects ApplySignPatch
-        // already made. Scene data only — the ELF CRC is untouched. Repo root is derived like FishingCollision's
-        // game_data path (AppContext.BaseDirectory/../../../..), overridable via DC_REPO; python via DC_PYTHON.
-        // TODO: port the bake to pure C# for the standalone distributed build (subprocess needs python3 + repo).
+        /// <summary>The town camera/structure collision: Queens' ground `_a` and camera `_c` rebuilt from the scene's own structure
+        /// meshes + the authored walls, the canal cap and ripple texture; Brownboo's camera variant and fishing rocks. Scene data
+        /// only — the ELF CRC is untouched (TownCollisionBakes).</summary>
         static void BakeStructureCollision(string outIso, Action<string> progress)
         {
-            string repo = Environment.GetEnvironmentVariable("DC_REPO");
-            if (string.IsNullOrEmpty(repo))
-                repo = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
-            string script = Path.Combine(repo, "tools", "iso_patch", "collision", "patch_iso_town_collision.py");
-            if (!File.Exists(script))
-            {
-                progress($"⚠ collision baker not found at {script} — camera collision NOT baked (set DC_REPO).");
-                return;
-            }
-            string py = Environment.GetEnvironmentVariable("DC_PYTHON");
-            if (string.IsNullOrEmpty(py)) py = "python3";
-            var psi = new ProcessStartInfo
-            {
-                FileName = py,
-                WorkingDirectory = repo,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            };
-            psi.ArgumentList.Add(script);
-            psi.ArgumentList.Add("--iso");
-            psi.ArgumentList.Add(outIso);
-
-            string so, se; int code;
-            try
-            {
-                using var p = Process.Start(psi) ?? throw new IOException($"Process.Start returned null for '{py}'.");
-                so = p.StandardOutput.ReadToEnd();
-                se = p.StandardError.ReadToEnd();
-                p.WaitForExit();
-                code = p.ExitCode;
-            }
-            catch (Exception e)
-            {
-                throw new IOException($"Could not run the collision baker ('{py}'). Is Python installed / on PATH? "
-                                      + "Set DC_PYTHON to your python3, or DC_REPO to the repo root.\n" + e.Message);
-            }
-            if (code != 0)
-                throw new IOException($"Collision bake failed (exit {code}).\n{so}\n{se}");
-            foreach (string line in so.Split('\n'))
-                if (line.Contains("redirected") || line.Contains("camera nodes") || line.Contains("DONE"))
-                    progress(line.Trim());
+            using var arc = new IsoArchive(outIso, progress);
+            TownCollisionBakes.Run(arc, progress);
         }
 
-        // ── battle-run transplant (post-step; Python, mirrors BakeStructureCollision) ────────────────────
-        // The ally swap loads lighter town models chosen for size/shadow/cloth, not run quality — e.g. Ungaga's
-        // e323_2c10a plays a poor event-scene run even sped up. This grafts the polished run from the character's
-        // big DUNGEON BATTLE model (too large to swap in whole) onto the town model's motion file: it reads BOTH
-        // models from the user's OWN ISO, splices only the run window's keyframes per-joint-by-NAME (the rigs
-        // share the core body nodes but the town/event model inserts extra joints, so a positional copy garbles
-        // the arms — tools/lib/mot_codec.splice_motion_by_joint, game_data/docs/mot-format.md §5), and redirects
-        // the grown town .chr into the free DATA.DAT tail. Scene/model data only — the ELF CRC is untouched.
-        // Same repo/python resolution + subprocess contract as BakeStructureCollision. TODO: port to pure C#.
-        static void BakeMotionTransplants(string outIso, Action<string> progress)
+        /// <summary>The Divine Beast Title cat pack: the s86 cat rig, Dran's wings, the cape and the mask baked into Xiao's dungeon
+        /// pack c04b.chr (CatPackBakes) and redirected into the DATA.DAT tail. Reads every model from the user's OWN ISO.
+        /// Idempotent; also reverts the earlier weapon-pack bake if an ISO carries it.</summary>
+        static void BakeCatPack(string outIso, Action<string> progress)
         {
-            string repo = Environment.GetEnvironmentVariable("DC_REPO");
-            if (string.IsNullOrEmpty(repo))
-                repo = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
-            string script = Path.Combine(repo, "tools", "iso_patch", "transplant_battle_run.py");
-            if (!File.Exists(script))
-            {
-                progress($"⚠ run-transplant tool not found at {script} — battle run NOT grafted (set DC_REPO).");
-                return;
-            }
-            string py = Environment.GetEnvironmentVariable("DC_PYTHON");
-            if (string.IsNullOrEmpty(py)) py = "python3";
-            var psi = new ProcessStartInfo
-            {
-                FileName = py,
-                WorkingDirectory = repo,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            };
-            psi.ArgumentList.Add(script);
-            psi.ArgumentList.Add("--iso");
-            psi.ArgumentList.Add(outIso);
-
-            string so, se; int code;
-            try
-            {
-                using var p = Process.Start(psi) ?? throw new IOException($"Process.Start returned null for '{py}'.");
-                so = p.StandardOutput.ReadToEnd();
-                se = p.StandardError.ReadToEnd();
-                p.WaitForExit();
-                code = p.ExitCode;
-            }
-            catch (Exception e)
-            {
-                throw new IOException($"Could not run the run-transplant tool ('{py}'). Is Python installed / on PATH? "
-                                      + "Set DC_PYTHON to your python3, or DC_REPO to the repo root.\n" + e.Message);
-            }
-            if (code != 0)
-                throw new IOException($"Battle-run transplant failed (exit {code}).\n{so}\n{se}");
-            foreach (string line in so.Split('\n'))
-                if (line.Contains("redirected") || line.Contains("grafted") || line.Contains("DONE"))
-                    progress(line.Trim());
+            using var arc = new IsoArchive(outIso, progress);
+            CatPackBakes.Run(arc, progress);
         }
 
-        // ── town-model assembly (post-step; Python, mirrors BakeMotionTransplants) ───────────────────────
-        // Builds each swapped-in ally's full town motion set: transplants the chosen clips (same-rig, by joint
-        // name) into the safe base model's body+shadow .mot and rewrites its cfg KEY table to the 10 town slots
-        // (idle/run/walk/doors/item-get/fall/land — docs/town-swap-animation-map.md), then redirects the rebuilt
-        // .chr into the free DATA.DAT tail. Reads every model from the user's OWN ISO. Scene data only — ELF CRC
-        // untouched. Runs AFTER BakeMotionTransplants so it appends past those redirects. TODO: port to pure C#.
-        static void BakeTownModels(string outIso, Action<string> progress)
+        // MonsterScriptBakes rewrites the hurt-sphere declarations of a few monster scripts (each `_SET_BODY_COL` block
+        // becomes a CALL_FUNC into a function appended to the script; nothing else moves) and redirects them into the
+        // DATA.DAT tail. Idempotent (appended marker).
+        static void BakeMonsterSpheres(string outIso, Action<string> progress)
         {
-            string repo = Environment.GetEnvironmentVariable("DC_REPO");
-            if (string.IsNullOrEmpty(repo))
-                repo = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
-            string script = Path.Combine(repo, "tools", "iso_patch", "assemble_town_model.py");
-            if (!File.Exists(script))
-            {
-                progress($"⚠ town-model assembler not found at {script} — town anim sets NOT built (set DC_REPO).");
-                return;
-            }
-            string py = Environment.GetEnvironmentVariable("DC_PYTHON");
-            if (string.IsNullOrEmpty(py)) py = "python3";
-            var psi = new ProcessStartInfo
-            {
-                FileName = py,
-                WorkingDirectory = repo,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            };
-            psi.ArgumentList.Add(script);
-            psi.ArgumentList.Add("--iso");
-            psi.ArgumentList.Add(outIso);
+            using var arc = new IsoArchive(outIso, progress);
+            MonsterScriptBakes.Run(arc, progress);
+        }
 
-            string so, se; int code;
-            try
-            {
-                using var p = Process.Start(psi) ?? throw new IOException($"Process.Start returned null for '{py}'.");
-                so = p.StandardOutput.ReadToEnd();
-                se = p.StandardError.ReadToEnd();
-                p.WaitForExit();
-                code = p.ExitCode;
-            }
-            catch (Exception e)
-            {
-                throw new IOException($"Could not run the town-model assembler ('{py}'). Is Python installed / on PATH? "
-                                      + "Set DC_PYTHON to your python3, or DC_REPO to the repo root.\n" + e.Message);
-            }
-            if (code != 0)
-                throw new IOException($"Town-model assembly failed (exit {code}).\n{so}\n{se}");
-            foreach (string line in so.Split('\n'))
-                if (line.Contains("assembled") || line.Contains("redirected") || line.Contains("DONE"))
-                    progress(line.Trim());
+        // BorrowedShotBakes copies effect containers onto the unused dun\effect archive names with a `<name>.cfg` record
+        // appended, so Entry__12CSHOT_EFFECT (which asks the container for that record) can load them.
+        static void BakeBorrowedShots(string outIso, Action<string> progress)
+        {
+            using var arc = new IsoArchive(outIso, progress);
+            BorrowedShotBakes.Run(arc, progress);
+        }
+
+        /// <summary>Queens' snake-statue part collision, the Yellow Drops west bank, and the fishing collision bins the
+        /// mod appends at session start (Resources/FishingCollision beside the app), all rebuilt from the scenes in the
+        /// ISO being patched (TownScenePartBakes), so nothing derived from the disc is stored anywhere.</summary>
+        static void BakeTownSceneParts(string outIso, Action<string> progress)
+        {
+            using var arc = new IsoArchive(outIso, progress);
+            TownScenePartBakes.Run(arc, progress, Path.Combine(AppContext.BaseDirectory, "Resources", "FishingCollision"));
         }
 
         internal static uint ApplySignPatch(FileStream fs, Action<string> progress)
@@ -385,7 +285,7 @@ namespace Dark_Cloud_Improved_Version
             progress("Carving + injecting the canal ladder …");
             byte[] ladderMds = CarveLadder(ReadArchive(MoonFactoryScene));   // from the user's ISO (Factory e05a01/hasigo1)
             // Queens north-bank kanban carries the label-400 fishing trigger (QueensTriggerOffset local offset).
-            byte[] e03scene = BuildInjectedScene(ApplyQueensPartSwaps(ReadArchive(QueensScene)), kanbanMds, tmplHdr, BuildKanbanCollision(),
+            byte[] e03scene = BuildInjectedScene(ReadArchive(QueensScene), kanbanMds, tmplHdr, BuildKanbanCollision(),
                                                  funcData: BuildFishingFunc(QueensTriggerOffset));
             // The canal-floor sign is its OWN part `kanbanc` (small duplicate of the kanban mesh) carrying a
             // DIFFERENT trigger (label 401 -> its own per-sign script with the canal-floor stance), so triggering
@@ -421,7 +321,7 @@ namespace Dark_Cloud_Improved_Version
             // Yellow Drops (s13): no native/injected sign, so inject the same kanban sign at its fishing spot,
             // carrying the baked fishing trigger — makes all three custom towns uniform (sign + native trigger).
             progress("Injecting the Yellow Drops sign …");
-            Redirect(YellowDropsScene, BuildInjectedScene(RaiseYellowDropsSurfaceMesh(ReplaceYellowDropsGround(ReadArchive(YellowDropsScene))), kanbanMds, tmplHdr, BuildKanbanCollision(),
+            Redirect(YellowDropsScene, BuildInjectedScene(RaiseYellowDropsSurfaceMesh(ReadArchive(YellowDropsScene)), kanbanMds, tmplHdr, BuildKanbanCollision(),
                                                    funcData: BuildFishingFunc(YellowDropsTriggerOffset)));
             Redirect(YellowDropsMapinfo, BuildInjectedMapinfo(RaiseYellowDropsWaterPlane(ReadArchive(YellowDropsMapinfo)), YellowDropsSignX, YellowDropsSignY, YellowDropsSignZ, YellowDropsSignRotY, YellowDropsAnchorPart));
 
@@ -474,6 +374,15 @@ namespace Dark_Cloud_Improved_Version
                                    (20, menu20), (21, menu21), (22, menu22), (LadderMsgId, ladderMsg)));
             }
 
+            // 5.2) the dungeon's "acquired" notices (meswin/system_ae.bin, ids 10/20/30) moved into 80-word blocks at the bank's
+            //      end, so the Bandit Slingshot can append its line to the one an item's arrival will show (BanditSlingshot).
+            progress("Baking room into the item notices …");
+            {
+                var moves = new (int, int)[BanditSlingshot.NoticeIds.Length];
+                for (int i = 0; i < moves.Length; i++) moves[i] = (BanditSlingshot.NoticeIds[i], BanditSlingshot.NoticeReserveWords);
+                Redirect(BanditSlingshot.NoticeFile, RelocateMes(ReadArchive(BanditSlingshot.NoticeFile), moves));
+            }
+
             // 5.5) Ungaga run animation: speed up the ally-swap model's run to match his battle run. The swap
             //      loads e323_2c10a.chr — the only Ungaga model with BOTH cloth and a real run (c10p had cloth
             //      but its run KEY reused the walk frames; the NPC c10a had a real run but no cloth). That event
@@ -489,6 +398,10 @@ namespace Dark_Cloud_Improved_Version
                     throw new IOException("Ungaga run-speed site is not vanilla (expected \"0.30\") — unmodified Dark Cloud (USA) ISO expected.");
                 Wr(fs, uAt, new byte[] { (byte)'0', (byte)'.', (byte)'5', (byte)'5' });
             }
+
+            // 5b) dungeon overlay words (dun.bin — a flat image; CRC-neutral, it is not the ELF)
+            if (!recs.TryGetValue("DUN.BIN", out var dunRec)) throw new IOException("DUN.BIN not found in the ISO root — unexpected ISO layout.");
+            DunPatches.Apply(fs, dunRec, progress);
 
             // 6) ELF boot-cave + CRC
             progress("Patching the boot loader …");

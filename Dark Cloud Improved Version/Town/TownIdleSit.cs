@@ -57,7 +57,7 @@ namespace Dark_Cloud_Improved_Version
             // would cut the shake short). Reset local state WITHOUT writing: TownLadder owns the release.
             if (TownLadder.RefusalPlaying) { _idleTicks = 0; _armed = false; return; }
 
-            uint chara = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
+            uint chara = Memory.ReadGuestPtr(EditLoop.CharaPtr);
             if (!Memory.IsValidGuest(chara)) { Disarm(); return; }
             int m = Memory.ReadInt(Memory.ToMmu(chara) + MotionId);
 

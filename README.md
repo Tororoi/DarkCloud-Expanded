@@ -168,16 +168,16 @@ Power/testing tools kept out of normal play:
 - [ ] **Heaven's Cloud (charge scale)** — Hold the whirlwind charge: blade grows up to 3× with a flash at max; whirlwind reach matches the grown blade
 - [ ] **Sun Sword (Solar Harvest)** — Kill many enemies with Sun Sword or Big Bang wielded; confirm occasional (1%) Sun attachment drops
 - [ ] **Big Bang (Detonate)** — Hits explode with fireball + shockwave; nearby enemies take real splash damage and knockback; chained kills also explode
-- [ ] **Buster Sword (True Buster)** — Attach an anti-category attachment: value counts as +4 in menu stats, damage, evolution, and absorb
+- [ ] **Buster Sword (Buster Boost)** — Attach an anti-category attachment: value counts as +4 in menu stats, damage, evolution, and absorb
 - [ ] **Cross Hinder (Sanctifier)** — ~2× damage and ~2× ABS vs undead; undead killed by it never revive
 - [ ] **Dark Cloud (Guard Crush)** — Hits land through a blocking enemy's guard (e.g. guarding skeletons)
 - [ ] **7th Heaven (Divine Guard)** — Guard blocks every attack including guard-breakers (knockback only, no damage); Guard Crush also active
-- [ ] **Kitchen Knife (Spring-Blessed Blade)** — Step into a healing spring: blade triples in length and attack doubles for ~60s; standing in the spring refreshes the timer
+- [ ] **Kitchen Knife (Spring's Blessing)** — Step into a healing spring: blade triples in length and attack doubles for ~60s; standing in the spring refreshes the timer
 - [ ] **Macho Sword (Overtraining)** — With a Macho Sword owned, weapon ABS fills past max (up to 2×) and the overflow carries into the next level after level-up
 - [ ] **Maneater (Blood Price)** — Curse applies per floor; holy water cures with no penalty; at critical durability drains 1 HP/s to restore durability, never killing
 - [ ] **7 Branch Sword (Sevenfold Rite)** — Status Break refused below +7; at +7 the sphere keeps 77% of stats; menu hint reflects the rule
-- [ ] **Atlamillia Sword (Insurance)** — With it owned, break a weapon in a dungeon: an Atla appears on a random floor of that dungeon containing the broken weapon's SynthSphere with level-scaled stats
-- [ ] **Angel Gear (Halo & Homing)** — Fire with no target: pellets form a spinning halo (max 5); approach an enemy: pellets peel off with trails and home in, curving around walls, skipping guarding enemies
+- [ ] **Atlamillia Sword (Atlamillia Insurance)** — With it owned, break a weapon in a dungeon: an Atla appears on a random floor of that dungeon containing the broken weapon's SynthSphere with level-scaled stats
+- [ ] **Angel Gear (Guardian Reflector)** — Hold guard: a giant slingshot copy stands in front of Xiao and turns to face incoming shots; an enemy shot caught at its pouch is fired back with its own element/status; melee enemies swing at it instead of her, five hits break it and the attack gauge shows its health
 - [ ] **Super Steve (Sphere Inheritance)** — Attach spheres of several source weapons (e.g. Dark Cloud, Heaven's Cloud, Angel Gear, Mirage) and confirm the matching effect activates and the slingshot recolors to the source weapon's palette; detach and confirm it reverts
 - [ ] **Mirage (Decoy)** — Hold guard to charge, release: a shimmering clone appears and enemies chase it (~12s); hitting an enemy makes only that enemy re-target you; Hercules' Wrath grants the same effect
 - [ ] **Snail (Osmond)** — 5% Goo proc on hit

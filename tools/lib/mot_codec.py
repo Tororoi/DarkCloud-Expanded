@@ -3,7 +3,7 @@
 sub-file, decode it into tracks/keyframes, edit or splice a named motion's frame range, and
 rebuild a byte-valid `.mot` (and `.chr`) the game will load.
 
-FORMAT (reverse-engineered from SCUS_971.11; see game_data/docs/mot-format.md for the full write-up):
+FORMAT (reverse-engineered from SCUS_971.11; see the .mot format notes for the full write-up):
 
   A `.chr` is a PACK: a flat, chained sequence of records, NO front index. Each record is
       0x00  name        up to 0x40 bytes, NUL-terminated, '\' or '/' path seps (basename matched)
@@ -40,10 +40,11 @@ FORMAT (reverse-engineered from SCUS_971.11; see game_data/docs/mot-format.md fo
   model B play model A's motion, copy A's keyframes in A's window into B's window, per matching bone.
 
   Companion files: `.bbp` = the memcpy'd header/bind block (param_3[1..2] of MOTION_FILE_INFO);
-  `.wgt` = a SECOND track list in the identical format but vertex-morph (keyframe +0x00 = vertex
-  index, +0x10 = weight; consumed by MotionProc2 @0x148860). Neither is needed to SPLICE a skeletal
-  motion: the `.mot` is self-contained per-frame rotation data. (If a transplant looks wrong on the
-  fingers/cloth, the `.wgt` morph is what differs — but the body run does not depend on it.)
+  `.wgt` = a SECOND track list in the identical format holding the SKIN WEIGHTS (corrected ; it is
+  not a morph): one track per bone — w0 = the skinned mesh's node index, w1 = the bone's node index,
+  w2 = 20 — whose "keyframes" are (frame = vertex index, value[0] = weight in percent); every vertex
+  covered, weights sum to 100 (consumed by MotionProc2 @0x148860). Not needed to SPLICE a skeletal
+  motion: the `.mot` is self-contained per-frame rotation data.
 
 This module is byte-exact: parse -> rebuild of an unmodified record equals the original.
 """
@@ -72,6 +73,22 @@ class Record:
 
     def __repr__(self):
         return f"<Record {self.name!r} dataOff=0x{self.data_off:X} size=0x{self.size:X} stride=0x{self.stride:X}>"
+
+
+REC_TAG = 0x00140E02          # word at record +0x4C on every vanilla record
+
+
+def new_record(name, payload, tag=REC_TAG):
+    """A fresh Record (header + payload, stride padded to 16 like every vanilla record)."""
+    data_off = DATA_OFF_STD
+    stride = (data_off + len(payload) + 15) & ~15
+    head = bytearray(data_off)
+    nb = name.encode('latin1')[:0x3F]
+    head[:len(nb)] = nb
+    struct.pack_into('<III', head, 0x40, data_off, len(payload), stride)
+    struct.pack_into('<I', head, 0x4C, tag)
+    raw = bytes(head) + payload + b'\x00' * (stride - data_off - len(payload))
+    return Record(name, data_off, len(payload), stride, raw)
 
 
 class Pack:

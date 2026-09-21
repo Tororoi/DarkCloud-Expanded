@@ -15,4 +15,8 @@ In particular revisit `GameDataFiles` + the Iso9660 reader: with a user-selected
 path we know the exact disc up front and could patch/extract deterministically instead of the
 current on-the-fly `~/ROMs` / app-dir / config search.
 
-Runtime on-demand callers today: `HarderEnemyAI`, `WeaponTextureSwap`, `CustomToanEffects`.
+Runtime on-demand callers today: `HarderEnemyAI`, `WeaponTextureSwap`, `MachoSword`.
+
+Done (2026-09): every patch post-step is pure C# (`IsoPatch/*Bakes.cs` behind `IsoPostBakes`), so patching needs
+neither a Python interpreter nor a repo checkout — the app is the whole toolchain. The Python that remains under
+`tools/` is dev tooling (viewers' authoring models, the palette generator the build runs, analysis).

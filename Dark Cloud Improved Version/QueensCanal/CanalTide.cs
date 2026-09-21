@@ -21,7 +21,7 @@ namespace Dark_Cloud_Improved_Version
     /// The frame is found by name-scanning the map allocator (LoadMDSFile allocates scene frames from the
     /// CDataAlloc2 at guest 0x1F06650); the address is cached and only re-scanned when the town changes.
     ///
-    /// Levels (design, judged in tools/queens/queens_viewer.py): LOW = morning 8 (canal floor exposed and fishable —
+    /// Levels (design, judged in the Queens scene viewer, a dev tool outside the repo): LOW = morning 8 (canal floor exposed and fishable —
     /// climb the ladder down), MEDIUM = afternoon + night 31 (vanilla ~30), HIGH = dusk 52. See
     /// <see cref="TargetY"/> for the live values. Period from the same clock the fishing code reads
     /// (<see cref="Fishing.GetCurrentTimeOfDay()"/>).
@@ -185,7 +185,7 @@ namespace Dark_Cloud_Improved_Version
         // can be pinned down; EditInfo.Base is logged for reference.
         private static long FindMizuFrame()
         {
-            uint ei = Memory.ReadUInt(EditInfo.EditInfoPtr) & Memory.PhysAddrMask;
+            uint ei = Memory.ReadGuestPtr(EditInfo.EditInfoPtr);
             Log($"EditInfo.Base=0x{ei:X} — broad-scanning for mizu__a01…");
             const long START = 0x20300000, END = 0x21E00000;
             const int PAGE = 0x40000;                              // 256 KB pages, overlapped by the needle
@@ -220,7 +220,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static void LadderGateApply(bool low)
         {
-            uint arrGuest = Memory.ReadUInt(EvArrPtr) & Memory.PhysAddrMask;
+            uint arrGuest = Memory.ReadGuestPtr(EvArrPtr);
             if (!Memory.IsValidGuest(arrGuest)) return;
             long arr = Memory.ToMmu(arrGuest);
             int count = Memory.ReadInt(EvCountAddr);

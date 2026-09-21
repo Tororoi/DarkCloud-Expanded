@@ -24,7 +24,13 @@ namespace Dark_Cloud_Improved_Version
         internal static class MainMonstorUnit
         {
             internal const long Base      = 0x21DF87D0;
+            internal const int  SpeciesRowCount = 0x48;   // int — species rows the loader has set up on the floor (SetupBaseModel counts them)
             internal const int  LiveCount = 0x4C;     // int — number of live enemies on the floor; decrement when freeing a slot
+            /// <summary>The loader's copy of each species' record (EnemySpeciesTable's 0x9C bytes), one per row: SetupBaseModel
+            /// overwrites its shot-config indices (+0x68/+0x6A) with the pack SLOT each config got, and SetupViewMonstor copies
+            /// them to a unit's FloorSlots block (+0xAC/+0xAE) when it spawns. A refused config is stored as −(index + 2) by the
+            /// shot-slot sharing cave (SharedShots).</summary>
+            internal const int  SpeciesRows = 0x1DE30;
         }
 
         /// <summary>
@@ -58,7 +64,7 @@ namespace Dark_Cloud_Improved_Version
         /// that moment CMonstorUnit::CheckDmg (0x1D9F10) blocks the player's hit — plays the guard clink (SE 0xA2),
         /// nudges the enemy back, and SKIPS the damage. Zeroing the flag makes CheckDmg's guard check find no
         /// active window, so the hit lands (the enemy still animates its guard). Written once at spawn (not per
-        /// frame), so a data-side zero holds with no race. Used by CustomToanEffects.DarkCloudEffect (guard-break).
+        /// frame), so a data-side zero holds with no race. Used by DarkCloud.GuardCrushEffect (guard-break).
         /// </summary>
         internal static class GuardWindows
         {
@@ -81,7 +87,7 @@ namespace Dark_Cloud_Improved_Version
         /// 4=light). CMonstorUnit::CheckDmg (0x1D9F10) rebuilds the enemy's attack CCollisionData entry from these
         /// each frame (reaction → entry +0x4C), which BtCheckDamageProc reads to decide guardability. So writing
         /// ReactionAddr from 3→2 makes that melee attack guardable (the player's guard then blocks it). See
-        /// [[guard-break-and-knockback]] and CustomToanEffects.SeventhHeavenEffect. Up to 16 cols per enemy.
+        /// [[guard-break-and-knockback]] and SeventhHeaven.DivineGuardEffect. Up to 16 cols per enemy.
         /// </summary>
         internal static class EnemyAttackParams
         {
@@ -94,133 +100,6 @@ namespace Dark_Cloud_Improved_Version
             internal static long ReactionAddr(int slot, int col)
                 => MainMonstorUnit.Base + (long)slot * SlotStride + col * ColStride + ReactionOffset;
         }
-    }
-
-    /// <summary>
-    /// STB behavior-script file format and VM constants. RE'd 2026-06-19 via exe__10CRunScript @0x23E080.
-    ///
-    /// Header (all 32-bit little-endian):
-    ///   +0x00  magic "STB\0" (0x00425453) — validate before patching
-    ///   +0x04  total code-section size in bytes
-    ///   +0x08  byte offset of the code section from the header base (read with <see cref="CodeSectionOff"/>)
-    ///   +0x0C  byte offset of the label table (8-byte entries: labelId@+0, codeOff@+4)
-    ///   +0x10  number of label-table entries
-    ///
-    /// Every instruction is a fixed-size 12-byte record (vmcode_t): op@+0, operandA@+4, operandB@+8.
-    /// Dispatch table at 0x29FB80 (31 ops). See <see cref="Op*"/> constants for the opcodes used in
-    /// enemy scripts. External commands (op21) are dispatched via a per-program funcdata table; the
-    /// funcId is pushed as an int literal immediately before the op21 instruction. See <see cref="Fn*"/>.
-    /// </summary>
-    internal static class StbVm
-    {
-        // RAM window (PS2-native) that loaded .stb scripts land in — the bound for companion-locate / pattern scans.
-        internal const long ScanLo = 0x01000000;
-        internal const long ScanHi = 0x01A00000;
-
-        // ── Header ───────────────────────────────────────────────────────────
-        internal const int Magic          = 0x00425453; // "STB\0" — first word; validate before patching
-        internal const int CodeSectionOff = 0x08;       // header field: byte offset of the code section
-        internal const int LabelTableOff  = 0x0C;       // header field: byte offset of the label table
-        internal const int LabelCount     = 0x10;       // header field: number of label-table entries
-
-        // ── Instruction layout ────────────────────────────────────────────
-        internal const int InstrSize = 0x0C;    // 12 bytes per vmcode_t
-        internal const int OperandA  = 0x04;    // byte offset of operandA within a vmcode_t (type for op3; variable index for op1)
-        internal const int OperandB  = 0x08;    // byte offset of operandB within a vmcode_t (value for op3 int-literal; scope for op1; callee offset for call_func)
-
-        // ── Opcodes (op field) ────────────────────────────────────────────
-        internal const int OpPush1       = 1;  // push-VARIABLE: operandA = variable index, operandB = scope (ScopeLocal = arg/local)
-        internal const int OpPush2       = 2;  // push-VARIABLE: float variant (same layout)
-        internal const int OpPush3       = 3;  // push-LITERAL:  operandA = type (TypeInt/Float/String), operandB = value
-        internal const int OpCallFunc    = 19; // call_func: jump to sub-program; operandB = code offset of callee
-        internal const int OpCallFuncCond = 27; // call_func conditional variant (same layout)
-        internal const int OpExt         = 21; // external-command call; operandB must be 0; first pushed arg = funcId
-
-        // ── Operand type/scope qualifiers ─────────────────────────────────
-        internal const int TypeInt    = 1; // operandA of OpPush3: int32 literal (operandB = the value)
-        internal const int TypeFloat  = 2; // operandA of OpPush3: float literal (operandB = IEEE-754 bits)
-        internal const int ScopeLocal = 1; // operandB of OpPush1: scope 1 = local / call argument (as opposed to global)
-
-        // ── External command function IDs (as pushed in the STB as funcId to OpExt) ─────────────
-        // These are the per-program funcIds observed in monster STBs, one step before the global
-        // dispatch table (0x2917C8). _SET_SHOT and _SET_SHOT2 entries: argc==6 → explicit damage arg
-        // (5th pushed value); argc!=6 → "default" shot (damage comes from BehaviorScriptTable +0x3C).
-        internal const int FnSetShot      = 133; // _SET_SHOT   with explicit damage (argc==6)
-        internal const int FnSetShotReg   = 135; // _SET_SHOT   registry entry (not observed in any monster STB)
-        internal const int FnSetShot2     = 229; // _SET_SHOT2 / second-shot with explicit damage (argc==6)
-    }
-
-    /// <summary>
-    /// ENEMY TARGETING — the vanilla path by which every enemy learns where its target is, and the single
-    /// lever for redirecting it. All addresses here are VANILLA engine facts; nothing mod-specific.
-    ///
-    /// Enemy AI never stores the player's position: each frame it asks for it through two STB external
-    /// commands (op21, dispatched via the funcdata table @<see cref="StbExternCmd.DispatchTable"/>):
-    ///   • _GET_POSITION — where is my target?
-    ///   • _GET_DISTANCE — how far away is it?
-    /// Both load <see cref="PlayerPosGuest"/> — the live player global — with a HARDCODED address, then
-    /// sceVu0CopyVector it out. So the player's position enters enemy AI at exactly two instructions.
-    ///
-    /// Because the dispatch entries are function POINTERS the game dereferences, hosting a modified copy of
-    /// either function and repointing its slot redirects targeting for ALL enemies with a pure data write —
-    /// no in-place code surgery (see CodeCaveFunctions). Splice at the player-load offsets below; the copy's
-    /// own `jal sceVu0CopyVector` is left intact and is where a helper jumps back to.
-    ///
-    /// Mirage's decoy is the first consumer (it makes the load per-enemy indirect), but nothing here is
-    /// Mirage's — any feature that wants to lie to enemies about where the player is starts from these.
-    /// </summary>
-    internal static class StbExternCmd
-    {
-        internal const long DispatchTable = 0x202917C8;  // funcdata table: 8-byte {funcPtr, id} entries
-        internal const int  EntryStride   = 8;
-
-        internal const long GetPositionSlot = 0x202918A8;  // _GET_POSITION funcPtr slot
-        internal const long GetDistanceSlot = 0x202918A0;  // _GET_DISTANCE funcPtr slot
-        internal const long GetPositionFn   = 0x201E1DF0;  // _GET_POSITION (ELF 0x1E1DF0)
-        internal const long GetDistanceFn   = 0x201E1D00;  // _GET_DISTANCE (ELF 0x1E1D00)
-
-        /// <summary>The live player-position global both commands read (16 bytes: x, z/height, y, w).</summary>
-        internal const uint PlayerPosGuest  = 0x01EA1D30;
-
-        // Where, inside each function, the hardcoded player-address load sits — and the sceVu0CopyVector jal
-        // that consumes it. These are the splice points for anyone hosting a modified copy.
-        internal const int  PosPlayerLdOff  = 0x84;
-        internal const int  PosCopyJalOff   = 0x8C;
-        internal const int  DistPlayerLdOff = 0x5C;
-        internal const int  DistCopyJalOff  = 0x64;
-
-        // Sanity words — assert these before cloning, or you'll copy someone's stale in-place patch.
-        internal const uint VanillaPrologue = 0x27BDFFB0;  // addiu sp,-0x50
-        internal const uint VanillaPlayerLd = 0x3C0201EA;  // lui v0,0x1ea  (the player-addr load itself)
-    }
-
-    /// <summary>
-    /// CRunScript — the per-enemy-slot STB-VM state, a sub-array inside CMainMonstorUnit at
-    /// Base + 0x54DD0 (PCSX2 0x21E4D5A0), stride 0x48. One entry per FloorSlots/CCharacter slot index.
-    /// (Listed in EnemyModelInjector._slotBlocks as the third per-slot block.)
-    ///
-    /// ★ RUNTIME STB LOCATION (confirmed 2026-06-19, live RE): <see cref="StbPtr"/> (+0x3C) holds the NATIVE
-    /// base address of the exact .stb behaviour script this slot's VM is executing — i.e. the way to find any
-    /// enemy's loaded STB in RAM with no scan and no roster math. This supersedes BossScriptPatcher's
-    /// KnownAddrs table + signature scan (which can also locate a STALE/duplicate copy — e.g. Minotaur Joe
-    /// loads twice, at 0x011A8990 and 0x01698CC0; CRunScript+0x3C names the live one, 0x011A8990).
-    /// Validate a read pointer by checking the STB magic 0x00425453 at +0x00 and the label-1 codeOffset at
-    /// +0x54. Usage: stbBase = Memory.ReadInt(CRunScript.StbPtrAddr(slot)); patch at (stbBase | 0x20000000).
-    ///
-    /// Other observed fields: +0x2C = current instruction pointer (into the running script),
-    /// +0x40 = code base (script base + label-1 code offset). See memory enemy-stat-normalization / stb-vm-cracked.
-    /// </summary>
-    internal static class CRunScript
-    {
-        internal const long Base   = EnemyAddresses.MainMonstorUnit.Base + 0x54DD0; // 0x21E4D5A0
-        internal const int  Stride = 0x48;
-        internal const int  CurIp  = 0x2C; // current instruction pointer (native)
-        internal const int  StbPtr = 0x3C; // ★ native base of the STB this slot executes
-        internal const int  CodeBase = 0x40; // script base + codeOffset
-
-        internal static long SlotAddr(int slot, int fieldOffset) => Base + (long)slot * Stride + fieldOffset;
-        /// <summary>EE address of the STB-base pointer field for <paramref name="slot"/>.</summary>
-        internal static long StbPtrAddr(int slot) => SlotAddr(slot, StbPtr);
     }
 
     /// <summary>
@@ -254,7 +133,7 @@ namespace Dark_Cloud_Improved_Version
 
     /// <summary>
     /// The enemy DAMAGE HITBOX — the per-bone collision spheres your weapon must reach to hurt the enemy
-    /// (RE'd 2026-06-20 + confirmed in-game). NOT EntityScale and NOT the BODY_SIZE triple; this is its own system.
+    /// (RE'd + confirmed in-game). NOT EntityScale and NOT the BODY_SIZE triple; this is its own system.
     ///
     /// PIPELINE:
     ///   • At spawn the enemy's STB script issues <c>_SET_BODY_COL(boneName, radius, …)</c> (cmd 0x82, handler ELF
@@ -279,9 +158,18 @@ namespace Dark_Cloud_Improved_Version
         internal const long RadiusArray   = 0x55390; // ★ float — the sphere radius = the hittable size (the knob)
         internal const long Param1Array   = 0x553D0; // float — _SET_BODY_COL 3rd arg (0 unless argc==4); height band?
         internal const long Param2Array   = 0x55410; // float — _SET_BODY_COL 4th arg (0 unless argc==4)
+        internal const long CentreArray   = 0x55250; // vec4 (CentreStride) — the sphere's world centre, rebuilt each frame
+        internal const long ActiveArray   = 0x55450; // int — 1 while the sphere is in use
+        internal const long SpareArray    = 0x55490; // 5 ints (SpareStride) — _SET_BODY_COL_PARA's spare table; [1] = the kick type admitted at [0] %
+        internal const long DamagePctArray = 0x555D0; // 6 ints (DamagePctStride) — damage % by attacker character (_SET_BODY_COL_PARA 10+char)
+        internal const long LastHitSphere = 0x55750; // int per SLOT — the sphere the last accepted hit landed on; CheckDmg writes it past its guard and invincibility gates
         internal const int  SlotStride     = 0x510;
         internal const int  BodyPartStride = 4;
+        internal const int  CentreStride   = 0x10, SpareStride = 0x14, DamagePctStride = 0x18;
         internal const int  MaxBodyParts   = 16;     // each sub-array spans 0x40 (= 16 floats) before the next one
+
+        /// <summary>EE address of a slot's body-collision block: add the array and the part's stride.</summary>
+        internal static long SlotBase(int slot) => EnemyAddresses.MainMonstorUnit.Base + (long)slot * SlotStride;
 
         /// <summary>EE address of (slot, bodyPart)'s hitbox sphere radius. Write once at/after spawn to resize it.</summary>
         internal static long RadiusAddr(int slot, int bodyPart = 0) =>
@@ -339,7 +227,7 @@ namespace Dark_Cloud_Improved_Version
     /// 0x1E450). The normalized direction sits alongside it at 0x1E430/0x1E434/0x1E438 (x/y/z). Same per-slot 0x3510
     /// stride as the CCharacter/model arrays.
     ///
-    /// ★ WHY A PER-SLOT SPEED-UP IS NOT FEASIBLE (RE'd 2026-06-22; a miniboss "move faster" attempt was dropped here).
+    /// ★ WHY A PER-SLOT SPEED-UP IS NOT FEASIBLE (RE'd; a miniboss "move faster" attempt was dropped here).
     /// <c>CMonstorUnit::Step</c> (ELF 0x1DE540) integrates motion as a plain <c>pos += dir * speed</c> per axis
     /// (0x1DE60C–0x1DE674: lwc1 dir@-0x1BD0/-0x1BCC/-0x1BC8 × speed@-0x1BB0, add to pos) — there is NO third per-slot
     /// scale factor to set once. Both dir and speed are REWRITTEN every frame by _SET_MOVE / _CHK_MOVE while an enemy
@@ -368,7 +256,7 @@ namespace Dark_Cloud_Improved_Version
     ///   SHOT  struct base  = MMU.Base + slot*0x30 + 0x5FF50,  damage int @ +0x5FF78
     ///   SHOT2 struct base  = MMU.Base + slot*0x30 + 0x60250,  damage int @ +0x60278   (SHOT2 array sits exactly
     ///   after the 16-slot SHOT array: 16*0x30 = 0x300, and 0x60250 − 0x5FF50 = 0x300.)
-    /// Struct fields (RE'd 2026-06-19): +0x00/+0x04/+0x08 = three floats (shot params), +0x0C = 1.0f, +0x20 =
+    /// Struct fields : +0x00/+0x04/+0x08 = three floats (shot params), +0x0C = 1.0f, +0x20 =
     /// validated effect handle, +0x24 = active flag, +0x28 = DAMAGE (int).
     ///
     /// ★ DAMAGE SEMANTICS — UNLIKE MELEE, THIS IS NOT INIT-LATCHED. The handler inits the damage to −1 and only
@@ -383,7 +271,7 @@ namespace Dark_Cloud_Improved_Version
     /// active flag toggles), so probing it confirms a species' live shot damage. (The per-species explicit values
     /// are mirrored in EnemyDefaults.ProjectileDamage; default/−1 shots source their damage at fire time elsewhere.)
     ///
-    /// STB VM reference (RE'd 2026-06-19, exe__10CRunScript @0x23E080): vmcode_t = 12-byte {op@+0, operandA@+4,
+    /// STB VM reference (RE'dexe__10CRunScript @0x23E080): vmcode_t = 12-byte {op@+0, operandA@+4,
     /// operandB@+8}; opcode dispatch table @0x29FB80 (31 ops). op3 = push-LITERAL (operandA = type 1=int/2=float/
     /// 3=string, operandB = the inline value), op1 = push-VARIABLE (operandB = scope-size, operandA = index into
     /// runtime storage; no inline value), op20 = _PRINT, op21 = external-command call (ext @0x23DD00 → dispatch
@@ -417,6 +305,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int PoisonPeriod      = 0x00C; // int   — poison tick interval; 0 at rest
         internal const int StaminaTimer      = 0x010; // int   — stamina/status countdown; starts at a large value (e.g. 0x004F0000 ≈ 5.2M) and decrements each frame; 0 when expired
         internal const int GooeyState        = 0x014; // int   — gooey/slime status; 0 at rest
+        internal const int StatusSusceptibility = 0x0DE; // short — species ItemStatusRes copy (unit +0x1E4AE): 0 = immune to poison/freeze/gooey
         internal const int DistanceToPlayer  = 0x018; // float — live distance to player in world units; updated each frame; used as proximity filter
 
         // ── HP / Stats ───────────────────────────────────────────────────────
@@ -426,7 +315,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int ResistancePack1   = 0x028; // [Category, FireRes]      — Category = enemy category index; fire confirmed; scale: 100=neutral, >100=weak, <100=resistant
         internal const int ResistancePack2   = 0x02C; // [IceRes, ThunderRes] — both confirmed
         internal const int ResistancePack3   = 0x030; // [WindRes, HolyRes]   — wind confirmed
-        internal const int MinGoldDrop       = 0x034; // int   — minimum gold dropped on death
+        internal const int MinGoldDrop       = 0x034; // int   — minimum gold dropped on death. ⚠ Also what CheckDmg's element branch
+                                                       //   multiplies by when a player-side entry's +0x50 holds ONLY status bits (element index 5
+                                                       //   = one short past the resistance row) — a vanilla quirk; never plant status bits in +0x50.
         internal const int DropChance        = 0x038; // int   — item drop chance (0–100)
 
         // ── Identity ─────────────────────────────────────────────────────────
@@ -481,7 +372,7 @@ namespace Dark_Cloud_Improved_Version
         // ENEMY → PLAYER DAMAGE block above EnemySpeciesTable.DamageReduction for the full enemy→player formula.
         internal const int DefenseStats      = 0x090; // packed: low ushort = DamageReduction, high ushort = WeaponDefense
 
-        internal const int HitStunTimer      = 0x098; // int   — 0 at rest; set to a positive value on hit (e.g. 966 observed); presumably a stun or invincibility-frame countdown
+        internal const int HitStunTimer      = 0x098; // int   — INVINCIBILITY frame countdown (record +0x1E468): scripts set it with `_STATUS_SET_MUTEKI` (cmd 101: 9 after a hit, 100 when a mimic wakes, 1000 while dying); CheckDmg__12CMonstorUnit skips the whole hit test while > 0
 
         internal const int ForceItemDrop     = 0x0A0; // int   — forces a specific item drop when nonzero
         internal const int RenderDistance    = 0x0A4; // float — CONFIRMED controls render distance and map-dot appearance threshold
@@ -517,17 +408,17 @@ namespace Dark_Cloud_Improved_Version
         internal const int AiSpeedParam      = 0x0F0; // float — REQUESTED motion speed; _SET_MOTION writes −1.0 (= use the motion's own KEY speed) here, matching the −1.0 seen at spawn.
         internal const int MotionCommitFlag  = 0x0F4; // halfword — commit gate (-0x1b3c). CMonstorUnit::Step (ELF 0x1dd890) commits the requested motion (0xEC) into the render object's player ONLY when this is nonzero; the engine sets it when the current clip finishes. Writing 1 forces an immediate motion switch (interrupt).
 
-        // ── Species data pointer (regular enemies) ───────────────────────────
-        // +0x0FC: PS2-native pointer to a per-species data block, set at spawn and SHARED by all
-        // live slots of the same species (slots of species 3 → 0x010A5260, species 6 → 0x011D94B0, etc.;
-        // changes with the species). This is the regular-enemy analog of the boss SpeciesDataPtr (0x04C),
-        // which is 0 for non-bosses. Confirmed (savestate analysis 2026-06-09) NOT read by the per-frame
-        // DrawMonstor / Step / MoveChara / CheckDmg paths, so its exact role is unconfirmed (likely a
-        // spawn/despawn or stat/asset reference). Add 0x20000000 for the PCSX2 address.
-        // NOTE: the rendered MODEL/animation is NOT driven by this nor by any FloorSlot field — the
-        // engine draws each enemy from a separate CCharacter "render object" at
-        // (MonstorUnit + slot*0x3510 + 0x1FCD0), i.e. the ModelScaleOffsets region (see below).
-        internal const int SpeciesParamPtr   = 0x0FC; // int   — per-species data block ptr (PS2-native); shared by same-species slots; not read per-frame
+        // ── Lock-on target (regular enemies) — RESOLVED ──
+        // +0x0FC: PS2-native pointer to the enemy's LOCK-ON FRAME — the CFrame node named by the STB's
+        // `_STATUS_SET_LOCKON_TRG("lockon", w, h)` (handler 0x1E3710: SearchFrame on the species model →
+        // unit+slot*400+0x1E4CC; w/h → ReticleWidth/Height below). Same-species slots share the model, hence
+        // the shared pointer a savestate analysis puzzled over. +0x100: that frame's WORLD position
+        // (vec4 x, h, y, w), refreshed by DrawMonstor (GetWorldPosition) every draw. setTargetCursor (dun
+        // 0x1DC07A0) copies it to the lock-on aim point global 0x1DC4500 — the point Xiao's pellets fly at
+        // (BattleActionPlay_Jinn); with no lock-on frame the aim point is the enemy origin raised by 8.
+        internal const int LockOnFrame       = 0x0FC; // int   — lock-on CFrame ptr (PS2-native); 0 = species set none
+        internal const int LockOnPoint       = 0x100; // vec4  — lock-on frame WORLD position, engine-refreshed every draw
+        internal const float LockOnFallbackLift = 8f; // aim = origin + this when there is no lock-on frame
 
         // ── World Position ────────────────────────────────────────────────────
         internal const int LocationX         = 0x100; // float — world X position; updated each frame as enemy moves
@@ -721,14 +612,23 @@ namespace Dark_Cloud_Improved_Version
         internal const int Abs        = 0x06C; // int    — XP rewarded to the player on kill; written to slot Abs (0x0B0) at spawn
         internal const int MinGoldDrop= 0x070; // int    — minimum gold dropped on death; written to slot MinGoldDrop (0x034) at spawn
         internal const int DropChance = 0x074; // int    — item drop chance (0–100); written to slot DropChance (0x038) at spawn
-        // +0x078: per-species SPAWN-CAP flag, read (as a halfword) by CMonstorUnit::ArrangementPos when
-        // assigning species to floor slots. Value 0 or 3 = repeatable (may fill many slots); any other
-        // value (observed 2, 4) = spawn at most ONCE per floor — the placement loop retries so the other
-        // slots still fill (floor enemy total is unchanged). The game ships ~19/90 species flagged once.
-        // Confirmed 2026-06-09 by disassembly + the EnemyModelInjector spawn-once experiment.
-        internal const int SpawnCap   = 0x078; // int    — spawn-cap: 0/3 = repeatable, else once-per-floor
+        // +0x078: the species' MONSTER TYPE (halfword), copied to the unit at spawn (SetupViewMonstor → unit +0x1E410):
+        //   0 = regular   2 = boss (and boss companions)   3 = mimic   4 = king mimic   (1 = nothing shipped; see below)
+        // Every reader (docs/enemy-monster-type-field.md):
+        //   ArrangementPos (placement): 0 and 3 may fill many slots; ANY other value spawns at most once per floor (the loop
+        //     retries, the floor total is unchanged) — so 1 is a "once per floor" with no other effect.
+        //   CheckViewLevel: type 2 is never proximity-activated (bosses are script-started).
+        //   SoundCheck: type 2 is audible from 350/1000 instead of 50/500 units.
+        //   CheckDmg: type 2 is immune to the Critical ability (docs/game-formulas.md).
+        //   Step (death): type 2 skips the rare-drop roll.
+        //   setTargetCursor / DrawTargetLife: type 2 hides the HP gauge and aims the lock-on cursor differently.
+        // The randomizer's one-of-each floors write 1; the injector's spawn-once writes 1 too (2 would make the enemy a boss).
+        internal const int MonsterType = 0x078; // halfword (int-sized slot) — see above
 
-        internal const int EnemySpeciesId    = 0x07C; // ushort — enemy species ID stored in table (matches EnemyDefaults.Id); used by engine to verify record ownership
+        // +0x07C: the enemy's ID (EnemyDefaults.Id; boss companions carry 0), copied to the unit at +0x1E412: the lock-on
+        // cursor shows the HP gauge and name only for id > 0, and Steve's monster chatter (weapons 303/312) picks message
+        // 4000 + id × 10 from it.
+        internal const int EnemySpeciesId    = 0x07C; // ushort — enemy species ID stored in table (matches EnemyDefaults.Id)
         // +0x07E: 2 bytes padding (always 0)
 
         internal const int StealItemId= 0x080; // ushort — item ID for steal mechanic; 65535 if none
@@ -740,7 +640,7 @@ namespace Dark_Cloud_Improved_Version
 
         // +0x084 ItemDamageRes: the enemy's DAMAGE-TAKEN multiplier for thrown items (gems/bombs/etc.) — scale 100 =
         // neutral, <100 = resistant (same scale as the elemental resistances). Read in CheckDmg (@0x1dc170, on the
-        // non-elemental / s3==-1 damage path). CONFIRMED in-game (2026-06-25) on Minotaur Joe: ItemDamageRes 50->90
+        // non-elemental / s3==-1 damage path). CONFIRMED in-game on Minotaur Joe: ItemDamageRes 50->90
         // raised a thrown fire-gem's damage 14->26 (≈ the 90/50 ratio), and 0 made it deal 0 (fully immune). Bosses
         // ~30-50 (item-resistant), regulars ~90-100. (Whether it also scales non-item damage on the same path is untested.)
         internal const int ItemDamageRes   = 0x084; // ushort — thrown-item damage-taken multiplier (×/100, 100=neutral); see comment
@@ -748,7 +648,7 @@ namespace Dark_Cloud_Improved_Version
         // damage resistance. In CheckDmg, for each player weapon/item status-attribute bit (0x20/0x40/0x100/0x200/
         // 0x800/0x1000; 0x80 = steal) the engine rolls rand vs ItemStatusRes and, if it passes, sets the matching status
         // timer on the slot (+0x08 Freeze / +0x0C Poison / +0x10 Stamina / +0x14 Gooey). 0 = the roll never passes =
-        // immune. All bosses ship 0 (status-immune); regulars are 50-90. CONFIRMED in-game (2026-06-25): raising
+        // immune. All bosses ship 0 (status-immune); regulars are 50-90. CONFIRMED in-game: raising
         // Minotaur Joe's ItemStatusRes 0->90 made him poison-able, and the landed poison then ticked for real damage
         // (~12/tick at his normal HP).
         internal const int ItemStatusRes   = 0x086; // ushort — status-effect susceptibility (0 = immune); see comment
@@ -792,7 +692,7 @@ namespace Dark_Cloud_Improved_Version
         // CheckDmg computes knockback = weaponHitForce (0x90 of the hit data) * KnockbackMult and writes it to
         // slot+0x180; Step__CMonstorUnit then drives the enemy's velocity from slot+0x180 each frame and decays it
         // (slot+0x180 -= slot+0x184) to 0. So lower = knockback-resistant, 0 = immovable on hit, higher = flies
-        // further. (Copied to slot+0x188 at spawn.) CONFIRMED in-game (2026-06-25): Skeleton Soldier at 5.0 was
+        // further. (Copied to slot+0x188 at spawn.) CONFIRMED in-game: Skeleton Soldier at 5.0 was
         // knocked back noticeably further per hit (scales the impulse, which then decays, so distance grows
         // sub-linearly). It is a DELIBERATE per-species knockback-resistance stat (read from the ELF table, all 167
         // records): 0.0 = immovable (every boss + their effect entities, and rooted plants like Cannibal Plant/
@@ -895,153 +795,6 @@ namespace Dark_Cloud_Improved_Version
         // NOTE: the motion-table KEY "speed" is NOT the frame-advance rate, so to retime a clip drive THIS directly.
         internal const int PlayingMotionFrame = 0x260; // float — RE +0x2F0.
         internal const int PlayingMotionFrameFromUnit = ModelFromUnit + PlayingMotionFrame; // 0x1FFC0 — same field, unit-relative
-    }
-
-    /// <summary>
-    /// Per-dungeon / per-floor enemy spawn layout tables — the data that decides WHICH enemy
-    /// species (and therefore which model + AI) spawn on each floor of each dungeon.
-    ///
-    /// Confirmed from ELF binary analysis 2026-06-07 by disassembling BtLoadMonstor__Fi (dun.bin).
-    ///
-    /// Reference chain (how a dungeon floor populates its enemy slots):
-    ///   BtEnemyLayoutList    @ 0x002917B0  — 7 dungeon pointers (NORMAL floors)
-    ///   BtUraEnemyLayoutList @ 0x002917D0  — 7 dungeon pointers (URA / back floors; 裏 = "back")
-    ///       │ index by dungeon number ([gp − 0x625C])
-    ///       ▼
-    ///   BtEnemyLayout0N / BtUraEnemyLayout0N  — per-dungeon array, one 0x70-byte block per floor
-    ///       │ + floor * 0x70
-    ///       ▼
-    ///   Floor block = 9 entries × 0x0C bytes (see EnemyLayoutEntry below)
-    ///       │ for each entry whose Id (+0x4) != -1:
-    ///       ▼
-    ///   CMonstorUnit::SetupBaseModel(this, _, enemyId, 0x26, MonstorModelBuffer)  (ELF 0x001DFE90)
-    ///       │ enemyId → packed species record (EnemySpeciesTable @ 0x0027FB00) → ModelCode "eNNa"/"cNNx"
-    ///       ▼
-    ///   loads mesh into MonstorModelBuffer (PS2 0x01F066D0) and behavior/AI script into
-    ///   MonstorScriptBuffer (PS2 0x01F066E0). Both the live enemy slot array (0x21E16BA0) and the
-    ///   ModelScale table (0x21E18530) are sub-arrays of one global, MainMonstorUnit (PS2 0x01DF87D0,
-    ///   size 0x60750). BtArrengeMonstor__Fv wires each of the 16 slots to a 0x10-byte script entry.
-    ///
-    /// IMPORTANT — CORRECTED 2026-06-19: the value at entry +0x4 is the physical species-table ROW INDEX
-    /// (EnemyDefaults.TableIndex), NOT the internal enemy id. Confirmed two ways: (1) BtLoadMonstor passes
-    /// +0x4 straight to SetupBaseModel's tableIndex arg; (2) a raw ELF dump of DBC floor 0 has +0x4 = 52/1/3
-    /// = the TableIndex of CaveBat(Id 60)/SkeletonSoldier(Id 3)/Dasher(Id 6), i.e. TableIndex not Id. This is
-    /// why SetSpawnRosterMix correctly writes EnemyDefaults.TableIndex here. (The prior note claiming this was
-    /// EnemyDefaults.Id was wrong.) Always resolve via EnemySpeciesTable / EnemyData.cs.
-    ///
-    /// Full decoded rosters for all 7 dungeons (normal + Ura) are in /enemy-spawn-layout.md at repo root.
-    /// </summary>
-    internal static class BtEnemyLayout
-    {
-        // ── Master pointer tables (PS2-native = file-resident in the main ELF segment) ──
-        // PCSX2 address = native + 0x20000000.  ELF file offset = native − 0x100000 + 0x100.
-        internal const int EnemyLayoutListBase    = 0x002917B0; // 7 × 4-byte ptrs → BtEnemyLayout00..06   (normal floors)
-        internal const int UraEnemyLayoutListBase = 0x002917D0; // 7 × 4-byte ptrs → BtUraEnemyLayout00..06 (back floors)
-        internal const int DungeonCount           = 7;
-
-        // ── Floor block geometry ──
-        internal const int FloorStride = 0x70; // bytes per floor block
-        internal const int EntryStride = 0x0C; // bytes per enemy entry
-        internal const int EntriesPerFloor = 9; // max distinct species entries per floor (block tail at +0x6C, =1)
-
-        // Per-dungeon layout symbol addresses (PS2-native) and floor counts, from ELF symbol sizes.
-        // Index = dungeon number. Names are best-effort (dun\dNN*.cfg ordering); floor counts are authoritative.
-        //                                     normal       ura          floors  dungeon
-        // [0] BtEnemyLayout00 / Ura00         0x002860D0   0x00286760    15      Divine Beast Cave (d01)
-        // [1] BtEnemyLayout01 / Ura01         0x00286DF0   0x00287560    17      Wise Owl Forest (d02)
-        // [2] BtEnemyLayout02 / Ura02         0x00287CD0   0x002884B0    18      Lake Gilna / Coastal (d03)
-        // [3] BtEnemyLayout03 / Ura03         0x00288C90   0x00289470    18      Queens (d04)
-        // [4] BtEnemyLayout04 / Ura04         0x00289C50   0x0028A2E0    15      Shipwreck (d05)
-        // [5] BtEnemyLayout05 / Ura05         0x0028A970   0x0028B4D0    26      Muska Lacka / Sun & Moon (d06)
-        // [6] BtEnemyLayout06 / Ura06         0x0028C030   0x0028EBF0   100      Moon Sea + Demon Shaft (d07)
-        internal static readonly int[] LayoutBase    = { 0x002860D0, 0x00286DF0, 0x00287CD0, 0x00288C90, 0x00289C50, 0x0028A970, 0x0028C030 };
-        internal static readonly int[] UraLayoutBase = { 0x00286760, 0x00287560, 0x002884B0, 0x00289470, 0x0028A2E0, 0x0028B4D0, 0x0028EBF0 };
-        internal static readonly int[] FloorCount    = { 15, 17, 18, 18, 15, 26, 100 };
-
-        /// <summary>PCSX2 address of a floor block's first entry. Pass a base from LayoutBase/UraLayoutBase.</summary>
-        internal static int FloorAddress(int layoutBaseNative, int floor) =>
-            (int)(layoutBaseNative + Memory.Pcsx2Base) + floor * FloorStride;
-
-        /// <summary>PCSX2 address of entry <paramref name="entry"/> (0–8) within a floor block.</summary>
-        internal static int EntryAddress(int layoutBaseNative, int floor, int entry) =>
-            FloorAddress(layoutBaseNative, floor) + entry * EntryStride;
-
-        // ── Entry field offsets (0x0C bytes per entry) ──
-        // CONFIRMED 2026-06-19 by disassembling the ONLY pool reader, BtLoadMonstor__Fi (dun.bin overlay
-        // @ 0x01DB9330): it loads BtEnemyLayoutList[dungeon] (0x2917B0) / Ura (0x2917D0), adds floor*0x70,
-        // then walks entries 0..8 at stride 0xC reading ONLY +0x4 (Id), calling SetupBaseModel for each,
-        // and BREAKING when +0x4 == -1. It never reads +0x0 or +0x8. A whole-binary scan (main ELF + dun
-        // overlay) found no other reader of the 0x2860D0..0x291660 pool. So ONLY Id (+0x4) drives spawns.
-        // +0x0: entry 0 holds a per-floor value (3/4/5/7/8, rising with depth — this is DungeonData's
-        // "tier"); entries 1..8 are always 1. NOT read by any code → vestigial authoring metadata (matches
-        // the 2026-06-09 test where overwriting it changed nothing). Floor population is fixed by spawn-point
-        // generation at floor assembly, not by this table.
-        internal const int Count    = 0x0; // int   — entry-0 = DungeonData "tier"; UNUSED at runtime (see note)
-        // +0x4: species-table row index (= EnemyDefaults.TableIndex; NOT EnemyDefaults.Id — see the note
-        // above). -1 = terminator/empty. This is the tableIndex SetupBaseModel loads. (Const kept named
-        // `Id` to match the field's conventional name, but it holds a TableIndex.)
-        internal const int Id       = 0x4; // int   — species TableIndex; -1 = unused/terminator
-        // +0x8: spawn weight (percent); source data sums to ~100 per floor, but NOT read by the spawn path —
-        // species selection is uniform rand%(distinct loaded species). No reader of +0x8 exists in the binary.
-        internal const int Weight   = 0x8; // int   — spawn weight %; UNUSED at runtime (uniform pick)
-    }
-
-    /// <summary>
-    /// Global state variables written by the boss-defeat function at ELF 0x0F5DF0.
-    ///
-    /// The game uses r28 (gp = PS2-native 0x01E00000) as the global data pointer.
-    /// All addresses below are PCSX2 (= PS2-native + 0x20000000).
-    ///
-    /// Write order observed in the function (abbreviated):
-    ///   1. 0x21DF94D8 — receives arg1 (boss slot pointer); first write in function
-    ///   2. 0x21DF94E0 / 0x21DF9500 / 0x21DF94F8 / 0x21DF9510 / 0x21DF94EC / 0x21DF94F4 — dungeon exit state struct
-    ///   3. jal BGM transition (PS2=0x0022BA00) — audio state changes before any C# poll can react
-    ///   4. 0x21DF881C — dungeonClear flag (Dungeon.cs already resets this, but too late)
-    ///   5. 0x21DF94E4 — written four separate times by the function
-    ///   6. 0x21DF94FC — written to 1; likely the "boss defeated / trigger exit" flag
-    ///   7. 0x21DF94E8 — cleared to 0
-    ///   8. 0x21DF9504 — cleared to 0
-    ///   9. 0x21D90408 — secondary write (r1 = 0x01D90000; base is separate from gp block)
-    ///
-    /// Key insight: all nine writes above happen inside a single MIPS frame.  No C# poller
-    /// (even at 50 ms / ~3 frames) can observe and undo them before the engine processes the
-    /// exit sequence.  The only reliable prevention is to null the on-death callback pointer
-    /// inside the SpeciesDataPtr behavior block BEFORE the boss dies.
-    ///
-    /// The "boss defeated" exit trigger is believed to be <see cref="BossDefeatedFlag"/> (0x21DF94FC),
-    /// since it is the only field explicitly set to 1 rather than copied from a computed value.
-    /// Resetting DungeonClear alone is insufficient.
-    /// </summary>
-    internal static class BossDefeatState
-    {
-        // All addresses are PCSX2 (PS2-native + 0x20000000).
-
-        // ── Boss slot state cluster (gp − 0x6B28 .. gp − 0x6AEC) ────────────────
-        // This block is a contiguous struct. The full span is 0x21DF94D8–0x21DF9510.
-        internal const int BossSlotPtr      = 0x21DF94D8; // arg1 passed in; first value written
-        internal const int ExitState0       = 0x21DF94E0; // dungeon exit state field
-        internal const int ExitStateE4      = 0x21DF94E4; // written four times with computed values
-        internal const int ExitStateEC      = 0x21DF94EC; // dungeon exit state field
-        internal const int ExitStateF4      = 0x21DF94F4; // dungeon exit state field
-        internal const int ExitStateF8      = 0x21DF94F8; // dungeon exit state field
-        internal const int ExitState00      = 0x21DF9500; // dungeon exit state field
-        internal const int ExitState04      = 0x21DF9504; // cleared to 0
-        internal const int ExitState10      = 0x21DF9510; // dungeon exit state field
-
-        // ── "Boss defeated" / exit trigger ──────────────────────────────────────
-        // Written to 1 (literal addiu r2,r0,1) late in the function; believed to be the
-        // primary flag the engine polls to start the exit/ending sequence.
-        // Resetting only DungeonClear (0x21DF881C) is NOT sufficient — this field must also
-        // be kept at 0 to prevent the exit from triggering on non-boss floors.
-        internal const int BossDefeatedFlag = 0x21DF94FC; // int — 0=normal, 1=boss defeated (triggers exit)
-
-        // ── DungeonClear (separate gp block) ────────────────────────────────────
-        // Written by the same defeat function.  Dungeon.cs already polls and resets this,
-        // but the reset races against the engine reading it in the same or next frame.
-        internal const int DungeonClear     = 0x21DF881C; // int — 0=in progress, nonzero=cleared (already handled by Dungeon.cs)
-
-        // ── Secondary write (different base: r1 = 0x01D90000) ───────────────────
-        internal const int Secondary0408    = 0x21D90408; // int — written near function end; purpose unknown
     }
 
     /// <summary>

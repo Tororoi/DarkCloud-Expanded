@@ -119,7 +119,6 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteByte(0x2027D81C, 0); //make revival powder stackable
             Memory.WriteByte(0x2027D830, 0); //make repair powder equipable+stackable
             Memory.WriteByte(0x2027D8A8, 0); //make auto-repair powder stackable
-            Memory.WriteUShort(0x20292A3E, 2000); //make matador fishing cost to 2k
             Memory.WriteByte(0x21CB6AEC, 50); //fix matador model in chest loot
             Memory.WriteByte(0x21CB6AF7, 50); //
             Memory.WriteByte(0x21CB6B02, 51); //
@@ -208,19 +207,19 @@ namespace Dark_Cloud_Improved_Version
 
             while (true)
             {
-                // Buster Sword "True Buster" absorb watcher — runs in every mode (self-gated to
+                // Buster Sword "Buster Boost" absorb watcher — runs in every mode (self-gated to
                 // ~2.5 Hz) because ABS level-ups can happen from any menu, sword equipped or not.
-                CustomToanEffects.BusterSwordEffect();
+                BusterSword.BusterBoostEffect();
                 // 7 Branch Sword "Sevenfold Rite" — status-break patch keyed on the weapon-menu
                 // selection; runs in every mode because the menu exists everywhere (self-gated ~10 Hz).
-                CustomToanEffects.SevenBranchSwordEffect();
+                SevenBranchSword.SevenfoldRiteEffect();
                 // Macho Sword "Overtraining" — ownership passive: ABS rollover past max on every
                 // weapon + level-up carry; runs in every mode (level-ups happen from any menu,
                 // self-gated ~10 Hz, kill tracking only while in a dungeon floor).
-                CustomToanEffects.MachoSwordEffect();
-                // Atlamillia Sword "Insurance" — break watcher + dynamic atla + collected-slot
+                MachoSword.OvertrainingEffect();
+                // Atlamillia Sword "Atlamillia Insurance" — break watcher + dynamic atla + collected-slot
                 // erasure; runs in every mode (self-gated ~2 Hz) so floor-select stays clean too.
-                AtlamilliaInsurance.Tick();
+                AtlamilliaSword.AtlamilliaInsuranceEffect();
 
                 //Check if player is in town
                 if (Memory.ReadByte(Addresses.mode) == 2)

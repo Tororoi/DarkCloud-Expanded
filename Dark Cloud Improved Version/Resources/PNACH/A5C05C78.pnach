@@ -387,6 +387,36 @@ patch=1,EE,201C4714,extended,3C034370 //  dist gate -> 240.0
 patch=1,EE,20162FB4,extended,3C024180 //  distortion amplitude -> 16.0
 patch=1,EE,201622A4,extended,3C034000 //  wave speed -> 2.0
 
+//Xiao Angel Gear shield — attack-gauge refill multiplier DEFAULT. The ISO's dun.bin patch (IsoPatch/DunPatches.cs)
+//makes Xiao's gauge refill read data word 0x01F10090 (1.5 = vanilla) instead of its immediate 1.5. While
+//0x01F1008C == 0 (the app is not driving the shield) PCSX2 re-seeds it to 1.5 every frame, so the game is vanilla
+//with the app closed; the app sets 0x01F1008C = 1 and writes 0 / a slow-refill value while the shield is up / broken.
+patch=1,EE,E1010000,extended,01F1008C //if nobody owns the word (apply next 1)
+patch=1,EE,21F10090,extended,3FC00000 //  refill multiplier = 1.5
+//Xiao charged shots — per-shot WHP factor DEFAULT. The ISO's dun.bin patch makes her fire routine pass data word
+//0x01F100E8 to the WHP drain instead of its immediate 1.0. While 0x01F100EC == 0 (the app is not driving it) PCSX2
+//re-seeds 1.0 every frame; the app sets 0x01F100EC = 1 and writes the charge's factor (1.5 / 2.25) while a shot is held.
+patch=1,EE,E1010000,extended,01F100EC //if nobody owns the word (apply next 1)
+patch=1,EE,21F100E8,extended,3F800000 //  WHP factor = 1.0
+
+//Osmond's flamethrower — the spacing of its 24 flame particles along the aim (the reach is 23 × this). The ISO's ELF patch
+//makes CSHOT_FIREBAR's Set and Init read 0x01F100F8 instead of their immediate 2.0. While 0x01F100FC == 0 (the app is not
+//driving it) PCSX2 re-seeds 2.0 every frame; the app sets 0x01F100FC = 1 and writes 4.0 while the Skunk is equipped.
+patch=1,EE,E1010000,extended,01F100FC //if nobody owns the word (apply next 1)
+patch=1,EE,21F100F8,extended,40000000 //  flame spacing = 2.0
+
+//Lock-on reach factor table — one float per character (the enemy's lock-on distance × this = how far the player can lock on).
+//The ISO's dun.bin patch makes SetNearLockOnTarget and setTargetCursor read the table from 0x01FAF480 instead of dun.bin.
+//While 0x01FAF4A0 == 0 (the app is not driving it) PCSX2 re-seeds the vanilla six every frame; the app sets 0x01FAF4A0 = 1
+//and writes Xiao's entry (2.8 while the Flamingo is equipped).
+patch=1,EE,E1060000,extended,01FAF4A0 //if nobody owns the table (apply next 6)
+patch=1,EE,21FAF480,extended,3F99999A //  Toan 1.2
+patch=1,EE,21FAF484,extended,3FB33333 //  Xiao 1.4
+patch=1,EE,21FAF488,extended,3F8CCCCD //  Goro 1.1
+patch=1,EE,21FAF48C,extended,3FC00000 //  Ruby 1.5
+patch=1,EE,21FAF490,extended,3F800000 //  Ungaga 1.0
+patch=1,EE,21FAF494,extended,3FE66666 //  Osmond 1.8
+
 patch=1,EE,E1010001,extended,01F10028 //Option 1 Flag
 patch=1,EE,2025E036,extended,00000000 //beeping sound value
 patch=1,EE,E1010000,extended,01F10028 //Option 1 Flag

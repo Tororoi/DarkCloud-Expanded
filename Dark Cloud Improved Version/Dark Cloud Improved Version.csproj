@@ -28,6 +28,66 @@
     <EmbeddedResource Include="Resources\isoPatch\stiltsHeal.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.stiltsHeal.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catPelletFollow.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catPelletFollow.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\xiaoMeleeFlinch.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.xiaoMeleeFlinch.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catGlowDraw.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowDraw.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catSpherePercent.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catSpherePercent.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\borrowedShotsEnter.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.borrowedShotsEnter.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\borrowedShotsEnterTail.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.borrowedShotsEnterTail.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\sharedShots.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.sharedShots.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\pelletSprite.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.pelletSprite.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\steelLevelUp.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.steelLevelUp.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\propPelletFollow.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.propPelletFollow.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catGuardBypass.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGuardBypass.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catCapeTint.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catCapeTint.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catMaskTint.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catMaskTint.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catPalette.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catPalette.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catGlowPalette.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowPalette.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\mirageHazeDraw.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.mirageHazeDraw.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\superSteveIconDraw.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconDraw.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\superSteveIconCopy.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconCopy.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catGlowPalettes.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowPalettes.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catCopyQueue.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catCopyQueue.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\waterOrderGate.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.waterOrderGate.bin</LogicalName>
     </EmbeddedResource>
@@ -63,35 +123,19 @@
     <EmbeddedResource Include="Resources\PNACH\A5C05C78.pnach">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </EmbeddedResource>
-    <!-- Queens fishing collision embeds ISO-derived bridge/pipe geometry, so it lives in the UNTRACKED
-         game_data/ tree (built by tools/build_fishing_collision.py, like yellowdrops_23.bin) and is Linked in, guarded by Exists(). -->
-    <None Include="..\game_data\queens\queens_2.bin" Condition="Exists('..\game_data\queens\queens_2.bin')">
-      <Link>Resources\FishingCollision\queens_2.bin</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Include="..\game_data\yellowdrops\yellowdrops_23.bin" Condition="Exists('..\game_data\yellowdrops\yellowdrops_23.bin')">
-      <Link>Resources\FishingCollision\yellowdrops_23.bin</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Include="..\game_data\yellowdrops\yellowdrops_westbank_ground.bin" Condition="Exists('..\game_data\yellowdrops\yellowdrops_westbank_ground.bin')">
-      <Link>Resources\isoPatch\yellowdrops_westbank_ground.bin</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Include="..\game_data\queens\queens_parts.bin" Condition="Exists('..\game_data\queens\queens_parts.bin')">
-      <Link>Resources\isoPatch\queens_parts.bin</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <!-- Extracted game assets from the UNTRACKED game_data/ folder. Guarded by Exists() so a clean checkout
-         builds without them (these features degrade gracefully at runtime when the file is absent). Link
-         keeps the output layout (Resources/Fish) so runtime load paths are unchanged. Never
-         redistributed. f19a (Priscleen, from a DC2 disc) is pending a runtime-extraction path. -->
-    <None Include="..\game_data\priscleen\f19a.chr" Condition="Exists('..\game_data\priscleen\f19a.chr')">
-      <Link>Resources\Fish\f19a.chr</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <Content Include="ModIcon.ico" />
     <AvaloniaResource Include="Resources\d06o_out_result.png" />
   </ItemGroup>
+  <!-- The embedded binaries above are GENERATED from sources in tools/ (the EE cave stubs' .s files, and the glow
+       ramp tables from build_cat_pack.GLOW_ELEMENTS). Editing a source without re-running its generator embeds stale
+       bytes and fails SILENTLY — the glow kept its old colours through a whole patch-and-test cycle that way
+       (2026-09-16) — so the build regenerates them first. Missing prerequisites skip with a message rather than
+       failing, which keeps a checkout without the extracted disc buildable. -->
+  <Target Name="RegenerateGeneratedResources" BeforeTargets="BeforeBuild">
+    <Exec Command="python3 &quot;$(MSBuildProjectDirectory)/../tools/build_resources.py&quot;"
+          StandardOutputImportance="high" />
+  </Target>
+
 </Project>

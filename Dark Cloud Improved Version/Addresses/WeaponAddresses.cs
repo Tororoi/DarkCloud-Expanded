@@ -107,7 +107,7 @@ namespace Dark_Cloud_Improved_Version
     {
 
         // ── Charge attack state (ToanKey_Play, RE'd from SCUS_971.11) ──
-        // Drives CustomToanEffects.HeavensCloudEffect's charge ramp + MaintainEnemyHitbox's whirl gate. See
+        // Drives HeavensCloud.TyphoonEffect's charge ramp + MaintainEnemyHitbox's whirl gate. See
         // Weapons.IsChargingWhirlwind / IsWhirlwindActive and the toan-charge-states memory.
         internal const long ChargeActionState = 0x21DC4494; // DAT_01dc4494 action id (values below)
         internal const int  ActionWindup      = 0xE;        // charge wind-up (meter accumulates; lunge OR whirlwind)
@@ -125,6 +125,10 @@ namespace Dark_Cloud_Improved_Version
         // iRam01dc4498: reset to 0 by BattleActionOn_Jinn at shot start, set to 1 when the fire input
         // releases → what makes the 0xC hold advance to the 0xD shoot. Forcing it = fire now (no hold).
         internal const long XiaoShotReleaseFlag = 0x21DC4498;
+        // ── Lock-on (SetNearLockOnTarget dun 0x1DC0160 / LockOffTargte 0x1DBFCE0, gp-relative globals) ──
+        // iGpffff9d94 = the locked-on MONSTOR SLOT (0..15; -1 = none), uGpffff9d90 = 1 while a lock is held.
+        internal const long LockOnTargetSlot = 0x202A3584;
+        internal const long LockOnActive     = 0x202A3580;
         // iRam01dc4490: nonzero while a shot is in progress (set at BattleActionOn start, cleared at the
         // shoot-motion end). iRam01dc44c8 (float): the ranged "speed bar" — BattleActionOn starts a shot
         // only when it reaches 100.0, then resets it to 0; its fill rate is the weapon's speed stat.
@@ -142,7 +146,7 @@ namespace Dark_Cloud_Improved_Version
         //   ~830         motion end → chain to 0x25 / windup / exit
         // Snapping the cursor forward once it has passed the step-in window preserves the
         // step-in, trail, sound and hit — only the wind-up frames disappear. See
-        // CustomToanEffects.SmallSwordEffect (Quick Draw).
+        // SmallSword.QuickDrawEffect (Quick Draw).
         internal const long  AnimFrameCursor        = 0x21EA2010; // float: active-char motion frame cursor
         internal const float Combo1WindupSettled    = 820.5f;     // past the engine's one-shot step-in write
         internal const float Combo1TrailSpawn  = 824.0f;     // just before trail spawn + hit window
@@ -203,6 +207,8 @@ namespace Dark_Cloud_Improved_Version
                                                                     //   ABS level-up absorbs the attachments
         internal const int  InventoryWeaponMaxWhpOffset = 0x0C;     // short: max WHP
         internal const int  InventoryWeaponWhpOffset    = 0x10;     // float: current WHP
+        internal const int  AbilityFlagsOffset          = 0xEE;     // ushort: the live ability flags (Effect1 | Effect2 << 8)
+        internal const int  FragileFlag = 0x100, DurableFlag = 0x200;   // WHP drain ×2 / ×0.5 (BattleSubWeaponDmg 0x1B5D90)
         internal const int  InventoryWeaponAbsOffset    = 0x14;     // short: current ABS points
         internal const int  WeaponAntiOffset            = 0x1C;     // 10 bytes: anti-category values in
                                                                     //   EnemyCategory order (Dragon..Mage), cap 99
@@ -309,10 +315,6 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Heaven's Cloud's visible-blade mesh frame name ("w14\0"). Scaling this frame's local 3x3
         /// grows the blade + its dcol collision children together (the runtime reach lever above).</summary>
-
-        /// <summary>Xiao's slingshot weapon mesh frame name ("c04w"). Scaled by Super Steve's Heaven's Cloud
-        /// charge (Weapons.ScaleWeaponFrameByName).</summary>
-        internal const uint XiaoSlingMeshNameWord = 0x77343063;
     }
 
     /// <summary>
@@ -390,7 +392,7 @@ namespace Dark_Cloud_Improved_Version
         internal const uint KiruNameWord  = 0x7572696B; // "kiru" little-endian (the fuusya root frame)
         internal const int  FuusyaFrameStride = 0x270;  // CFrame object size; fkiri = kiru + this
 
-        // ── Direct POINTER to the fuusya roots (no RAM scan) — RE'd 2026-06-30, offsets CONFIRMED in-game ──
+        // ── Direct POINTER to the fuusya roots (no RAM scan) — RE'd: offsets CONFIRMED in-game ──
         // Toan's charge whirl lives in the main-character effect object (a CSHOT_EFFECT) at the FIXED global
         // 0x1e8da60 (MMU 0x21E8DA60). Set by MainChara_Effect (dun 0x1dba230: Entry2(0x1e8da60,…); gp slot
         // uGpffff9cfc also points at it). It is a POOL of up to 8 CONCURRENT effect instances (CSHOT_EFFECT::
@@ -510,11 +512,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int  BreakStateAnimation   = 5;
         internal const int  BreakStateWindDown    = 6;
 
-        // ⚠ LESSON (2026-07-05): PINE writes to EE CODE pages crash PCSX2 outright — the first
+        // ⚠ LESSON: PINE writes to EE CODE pages crash PCSX2 outright — the first
         // value-changing poke to a hot instruction killed the emulator the same second (log:
         // 19:24:09). Identical-value writes were benign. ALL patching must stay data-only; the
         // 7 Branch Sword status-break effect is therefore implemented post-hoc on the sphere
-        // (see AttachBoard below + CustomToanEffects.SevenBranchSwordEffect), not by patching
+        // (see AttachBoard below + SevenBranchSword.SevenfoldRiteEffect), not by patching
         // WeaponStatusBreakEnable/SetStatusBreak.
 
         /// <summary>The status-break stat-transfer factor: a DATA float (0.6f) at native 0x2A1890,
@@ -562,6 +564,83 @@ namespace Dark_Cloud_Improved_Version
         internal static long DamageAddr(long poolBase, int slot)=> poolBase + DamageOffset + slot * ScalarStride;
         internal static long ScaleAddr(long poolBase, int slot) => poolBase + ScaleOffset  + slot * ScalarStride;
         internal static long NoCollideAddr(long poolBase, int slot) => poolBase + NoCollideOffset + slot * ScalarStride;
+        internal static long LifetimeAddr(long poolBase, int slot)  => poolBase + LifetimeOffset  + slot * ScalarStride;
+    }
+
+    /// <summary>
+    /// The monster SHOT-EFFECT pack (CSHOT_EFFECT_PACK at *NowShotEffect): five CSHOT_EFFECT slots of 0xA160, one per
+    /// BT_SHOT_EFFECT config entered for the floor (SetupBaseModel → Entry, from the species row's +0x68 into
+    /// <see cref="CfgTable"/>), each with eight sub-shots. Per-sub-shot fields index by sub-shot; the sub-shot's own
+    /// effect-CCharacter sits at <see cref="OffObj"/> + i × <see cref="ObjStride"/>. Step__12CSHOT_EFFECT plants each hit
+    /// as CollisionData: +0x58 = <see cref="OffOwner"/>, +0x60 = <see cref="OffUserCol"/>, +0x64 = <see cref="OffAntiPtr"/>,
+    /// +0x6C = <see cref="OffWepFlags"/>, +0x5C = <see cref="OffA060"/>, +0x68 = <see cref="OffA110"/>; the config gives the
+    /// victim mask (+0x48: 1 = the player, 2 = enemies), the hit reaction (+0x44), the element (+0x40), the wait (+0x38) and
+    /// the default damage (+0x3C). RE: AngelGear, BorrowedShots.
+    /// </summary>
+    internal static class ShotEffectPack
+    {
+        internal const long NowShotEffectPtr = 0x202A35D8;
+        internal const int  PackSlots  = 5;
+        internal const int  SlotStride = 0xA160;
+        internal const int  SubShots   = 8;
+        internal const int  OffCfg     = 0x000;     // BT_SHOT_EFFECT cfg ptr (EE): +0x38 wait, +0x3C life, +0x4E fly motion
+        internal const int  OffDir     = 0x9F40;    // + i*0x10, vec3 — per-frame position delta (velocity)
+        internal const int  OffAttr2   = 0x9FC0;    // + i*2, short — Set param_6
+        internal const int  OffWait    = 0x9FD0;    // + i*4 — phase-1 countdown
+        internal const int  OffPhase   = 0x9FF0;    // + i*2 — 0 muzzle, 1 flying, 3+ impact chain
+        internal const int  OffActive  = 0xA000;    // + i*2 (Set writes it LAST)
+        internal const int  OffDamage  = 0xA010;    // + i*4 — the shot's DAMAGE (Set: cfg+0x3C; SetDmg; Step passes it as entry +0x34). Life/wait = OffWait.
+        internal const int  OffOwner   = 0xA050;    // + i*2, short — owner attr → CollisionData +0x58
+        internal const int  OffA060    = 0xA060;    // + i*2, short — Set writes 0xFFFF; SetUserID2 (0x1AE400) then stamps the FIRING ENEMY SLOT
+        internal const int  OffUserCol = 0xA070;    // + i*4 — Set param_5 (user/collider id → entry +0x60); −1 default
+        internal const int  OffA0B0    = 0xA0B0;    // + i*4 — Set: -1
+        internal const int  OffA0D0    = 0xA0D0;    // + i*4 — Set: -1.0f
+        internal const int  OffA0F0    = 0xA0F0;    // + i*4 — Set: -1
+        internal const int  OffA110    = 0xA110;    // + i*4 — Set: -1
+        internal const int  OffSndFlag = 0xA130;    // + i, byte
+        internal const int  OffReload  = 0xA138;    // + i, byte — after each planted entry the latch is set to this: frames without another plant
+        internal const int  OffLatch   = 0xA140;    // + i, byte — held ≥1 = plants no damage
+        internal const int  OffLastIdx = 0xA150;    // int — Set records the spawned index
+        internal const int  OffCount   = 0xA14C;
+        internal const int  OffObj     = 0x11C0;    // + i*0x11B0 — the sub-shot's effect-CCharacter
+        internal const int  ObjStride  = 0x11B0;
+        internal const int  ObjPos     = 0x10;      // vec: [+0] x, [+4] height, [+8] y
+        internal const int  ObjFrame   = 0x2F0;     // motion frame (float)
+        internal const int  ObjFrameTb = 0x344;     // → per-motion frame table (int per 0x10)
+        internal const int  ObjMotSpd  = 0xC60;     // -1.0f = keyframe rate
+        internal const int  ObjMotFlag = 0xC64;     // Set: 4 on the flying phase
+        internal const int  ObjMotId   = 0xC68;     // motion id
+        internal const int  CfgFlags = 0x40, CfgRadiusFlying = 0x2C;   // BT_SHOT_EFFECT: the element/attribute word (→ entry +0x50); the flying radius
+        internal const int  CfgElementBits = 0x1F;                     // CfgFlags: 1 Fire, 2 Ice, 4 Thunder, 8 Wind, 16 Holy; 0x100+ are ailments
+        // The per-phase damage radius the step plants with EVERY frame the phase lasts (cfg +0x28 + phase × 4): 0 muzzle, 1 flying,
+        // 2 the impact after a contact, 3 the burst when the wait runs out. 0 = that phase plants nothing.
+        internal const int  CfgRadiusMuzzle = 0x28, CfgRadiusImpact = 0x30, CfgRadiusExpire = 0x34;
+        internal const int  OffWepFlags = 0xA030;   // + i*4 — SetWepStatus: the weapon's ability flags → entry +0x6C
+        internal const int  OffAntiPtr  = 0xA090;   // + i*4 — SetVsMonster: → the weapon's anti-category bytes → entry +0x64
+        /// <summary>The 34 BT_SHOT_EFFECT configs (0x70 B each, the effect's file name at +0) the species rows index.</summary>
+        internal const long CfgTable   = 0x2027FA70;
+        internal const int  CfgCount   = 34;
+        internal const int  CfgSize    = 0x70;
+        internal const int  CfgVictimMask = 0x48;   // 1 = hurts the player, 2 = hurts enemies
+        internal const int  CfgWait    = 0x38;      // frames of flight before the impact chain
+        internal const int  CfgName    = 0x00, CfgNameLen = 0x28;   // the effect's file name: dun/effect/<name>.chr
+        // The motion (the .chr's KEY ordinal) each phase plays, shorts; −1 = none: muzzle, flying, impact, expiry burst.
+        internal const int  CfgMuzzleMotion = 0x4C, CfgFlyMotion = 0x4E, CfgImpactMotion = 0x50, CfgExpireMotion = 0x52;
+        /// <summary>Dragon's Y's charged shot per selected element, 00 Fire … 04 Holy: the Gemrons' f_boll_3, i_boll, t_boll,
+        /// e114a_ex, e115a_ex — and at 05 (no element) the Black Dragon's b_boll.</summary>
+        internal static readonly int[] DragonsYCfg = { 5, 20, 23, 24, 25, 22 };
+        internal const long ReadBufferPtr   = 0x202A2384;   // → the dungeon loader's file read buffer (Entry's third argument)
+        /// <summary>The MAIN-CHARACTER effect instances (CharaMainEffect, CharaMainEffectCrash): two more CSHOT_EFFECTs of this
+        /// same layout beside the pack, one config each, which the floor loader fills with the active character's wep_eff
+        /// effect (MainChara_Effect → Entry2) and the dungeon loop steps and draws through the live pointer at 0x2A34EC.
+        /// Xiao's holds mgan01, which nothing of hers fires — the borrowed shots take it over (BorrowedShots).</summary>
+        internal const long CharaMainEffect = 0x21E8DA60, CharaMainEffectCrash = 0x21E97BC0, MainEffectLivePtr = 0x202A34EC;
+        /// <summary>dun.bin's table of the characters' wep_eff configs (Get_Main_EffectPtr, dun 0x1DBA060 → pointers at 0x1DC21F0):
+        /// Toan's whirlwind `c01_fuusya` — muzzle radius 20, wait 160, damage 8, Wind, reaction 2, mask 2, muzzle motion 0 (the
+        /// swoosh, KEY 5–40), nothing after: the effect plays out where it is planted.</summary>
+        internal const long WhirlwindCfg = 0x201DC1B60;
+        internal const uint MonsterPoolAlloc = 0x01F066D0;  // the CDataAlloc2 the floor's monster models and their shot effects come from
+        internal const int  EntryParam4     = 0x26;         // what the species loader passes Entry as its fourth argument
     }
 
     /// <summary>
@@ -612,7 +691,7 @@ namespace Dark_Cloud_Improved_Version
     /// while the player is monster-transformed (<see cref="DngStatusData.TransformStateOffset"/> == 10) kills
     /// DRAIN abs instead of granting.
     ///
-    /// Backs CustomToanEffects.MachoSwordEffect ("Overtraining"), which owns the rollover POLICY — this class
+    /// Backs MachoSword.OvertrainingEffect ("Overtraining"), which owns the rollover POLICY — this class
     /// holds only what the game itself does.
     /// </summary>
     internal static class AbsRewards

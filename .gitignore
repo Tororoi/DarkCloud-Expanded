@@ -368,3 +368,6 @@ tools/stubs/*.bin
 
 # Runtime probe dump (GeoramaProbe DumpDir writes it; readers look in game_data/, never tools/)
 tools/ground_grid.csv
+
+# The WebGL viewers (scripts, templates and the pages they bake, which embed the game's meshes and textures)
+# are dev-only and live in game_data/viewers/ — nothing of them is tracked.

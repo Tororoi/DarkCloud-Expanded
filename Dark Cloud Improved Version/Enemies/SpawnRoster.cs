@@ -48,9 +48,9 @@ namespace Dark_Cloud_Improved_Version
             // Tame a boss-class species before the floor spawns it. Boss detection is by ModelCode 'c'
             // inside RegularizeBossRecord. This edits the shared species record (persists for the session, like
             // RedirectEnemyModel). A single-species roster MUST be repeatable, or ArrangementPos can't fill
-            // the floor and hangs (the spawn-once retry trap). Force SpawnCap repeatable, then regularize.
+            // the floor and hangs (the spawn-once retry trap). Force MonsterType repeatable, then regularize.
             SnapshotSpeciesRecordIfNeeded(tableIndex);
-            Memory.WriteInt(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.SpawnCap, 0);
+            Memory.WriteInt(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.MonsterType, 0);
             RegularizeBossRecord(tableIndex);
             // Boss-class species can't be a single-species roster: repeatable spawns many, but multi-part
             // bosses share one skeleton so the extras' limbs desync. Use a mix (e.g. "20,83") so the boss
@@ -404,8 +404,8 @@ namespace Dark_Cloud_Improved_Version
             // (Weight +0x8 is intentionally NOT written: the spawn path never reads it — selection is uniform
             // rand%(distinct loaded species). Only Id +0x4 matters. See EnemyAddresses.BtEnemyLayout.)
 
-            // Per-species "spawn once vs repeatable" flag = EnemySpeciesTable.SpawnCap (+0x78): 0/3 = repeatable,
-            // anything else = at most one per floor (the placement loop retries, so total stays 15). Write
+            // Per-species MONSTER TYPE = EnemySpeciesTable.MonsterType (+0x78): 0 regular / 3 mimic = repeatable, anything
+            // else = at most one per floor (the placement loop retries, so total stays 15); 2 = boss to every reader. Write
             // it on the source record so the floor-load copy carries it.
             // The boss (cNNx) is spawn-once. Mark companions spawn-once with '!'. Leave at least one REGULAR enemy
             // unmarked (repeatable) so it fills the remaining slots up to the floor's population (15) — the floor
@@ -422,7 +422,9 @@ namespace Dark_Cloud_Improved_Version
                 bool isBossClass = Memory.ReadByte(rec + EnemySpeciesTable.ModelCode) == (byte)'c';
                 bool isOnce = (spawnOnce != null && i < spawnOnce.Length && spawnOnce[i]) || isBossClass;
                 SnapshotSpeciesRecordIfNeeded(tableIndices[i]);
-                Memory.WriteInt(rec + EnemySpeciesTable.SpawnCap, isOnce ? 2 : 0);
+                // Once-per-floor is 1: any value but 0/3 is "once" to the placement loop, and 1 has no other reader — 2 would make
+                // the species a BOSS to every other reader (no HP gauge, critical-immune, no rare drop, boss sound range).
+                Memory.WriteInt(rec + EnemySpeciesTable.MonsterType, isBossClass ? 2 : isOnce ? 1 : 0);
                 // Tame ONLY the boss (cNNx) — lowers its HP. Companions are left untouched so their behavior is intact.
                 if (isBossClass) RegularizeBossRecord(tableIndices[i]);
                 // Arm the script patch for the first boss that has a known _INITIALIZE fix (Dran/Master Utan/
@@ -528,7 +530,7 @@ namespace Dark_Cloud_Improved_Version
                 long rec = EnemySpeciesTable.RecordAddress(id);
                 bool bossClass = Memory.ReadByte(rec + EnemySpeciesTable.ModelCode) == (byte)'c';
                 SnapshotSpeciesRecordIfNeeded(id);
-                Memory.WriteInt(rec + EnemySpeciesTable.SpawnCap, bossClass ? 2 : 0);  // boss spawn-once
+                Memory.WriteInt(rec + EnemySpeciesTable.MonsterType, bossClass ? 2 : 0);  // the boss keeps its type (2 = once, and a boss to every reader)
                 if (bossClass) RegularizeBossRecord(id);                                // de-sentinel ONLY the boss (companions stay sentinel effect entities)
                 if (armed < 0 && BossScriptPatcher.IsPatchable(id)) armed = id;
             }

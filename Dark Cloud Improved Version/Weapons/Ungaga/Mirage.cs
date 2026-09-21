@@ -63,8 +63,8 @@ namespace Dark_Cloud_Improved_Version
         ///     standard Super Steve inheritance (the sphere's SOURCE weapon id selects the effect).
         ///
         /// Both wielders work unchanged because Ungaga and Xiao share the guard motions this triggers on
-        /// (9 / 33), and Xiao fits the clone's mesh cave. Mirage is NOT driven from CustomXiaoEffects'
-        /// SuperSteveEffect hub — it owns a thread and a state machine (guard charge → decoy → clone → haze),
+        /// (9 / 33), and Xiao fits the clone's mesh cave. Mirage is NOT driven from SuperSteve's
+        /// SphereInheritanceEffect hub — it owns a thread and a state machine (guard charge → decoy → clone → haze),
         /// so it gates itself here rather than being pulsed per-tick like the stateless abilities.</summary>
         private static bool MirageArmed()
         {
@@ -83,7 +83,7 @@ namespace Dark_Cloud_Improved_Version
                 if ((uint)equipSlot > 9) return false;
                 long rec = DngStatusData.WeaponRecord(ch, equipSlot);
                 if (Memory.ReadUShort(rec) != Items.supersteve) return false;
-                int sphere = SuperSteveAbilities.AttachedSphere(rec);
+                int sphere = SuperSteve.AttachedSphere(rec);
                 return sphere == Items.mirage || sphere == Items.herculeswrath;
             }
 
@@ -112,7 +112,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool CharacterSettled()
         {
             int  ch   = Player.CurrentCharacterNum();
-            uint root = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.CharModel) & Memory.PhysAddrMask;
+            uint root = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel);
             if (ch != _seenChar || root != _seenRoot)
             {
                 _seenChar = ch; _seenRoot = root; _seenSince = DateTime.UtcNow;
@@ -142,6 +142,9 @@ namespace Dark_Cloud_Improved_Version
 
         internal static void Start() => new Thread(Loop) { IsBackground = true }.Start();
 
+        /// <summary>Both per-slot redirect caves armed (the pointer table is live for every enemy read).</summary>
+        internal static bool Armed => _armed;
+
         /// <summary>Arm both engine redirects at the COLD window (from ApplyNewChanges, retried from the loop).
         /// _GET_POSITION and _GET_DISTANCE are hosted in COLD-PINE CAVES reached via the STB external-command
         /// dispatch table — a pure DATA path (see docs/cave-code-execution.md), so there's no in-place code
@@ -158,28 +161,14 @@ namespace Dark_Cloud_Improved_Version
         }
 
 
-        // ── Clone heat-haze by HIJACKING an existing torch's fire-raster (pure data; no cave, no crash) ──
-        // The ONLY framebuffer distortion in the game is CFireOmni::DrawRaster (0x162310, via
-        // blendTextuerTest + MGGetFBuffTex); it's driven by DrawRaster__11CDungeonMap (0x1C4610), which
-        // iterates the 20×20 fire-tile array at dngMap+0x9C50 (0x10/entry: +0=fireIdx, +4=rot,
-        // +8=dist(≤240 draws), +C=enabled) and, per enabled tile, draws the raster emitters of the fire
-        // struct at dngMap+fireIdx*0x1D0 (raster count @+0x4A2, emitter[0] local pos @+0x4B0/4B4/4B8) at
-        // world (localX*10 + col*160, localY*10, localZ*10 + row*160).
+        // ── Clone heat-haze: the game's fire-raster distortion, drawn at the clone by ElfCave.MirageHazeDraw ──
+        // HeatHaze names the clone's root CFrame in the mailbox and ramps the strength; the cave draws one raster
+        // there every frame, in the map's own raster pass. (The mechanisms tried before it: docs/mirage.md.)
         //
-        // The earlier "make a NEW fire tile" version broke floor collision (marking a floor tile as a
-        // fire made the engine treat it as fire-tile geometry) — the tile-array write, NOT the struct
-        // write, was the culprit (the ForceRaster probe wrote +0x4A2 on a real torch struct with NO
-        // collision effect). So instead we reuse an EXISTING enabled torch tile's struct: set its raster
-        // count=1 and point emitter[0] at the CLONE (using that tile's col/row as the anchor, so any tile
-        // works no matter how far). The torch keeps its flame (flame emitters live at +0x490, untouched,
-        // and the raster is now positioned at the clone, not overlapping the torch). Only struct writes —
-        // the collision-safe ones. Prefer a torch whose fireIdx no OTHER enabled tile shares (else every
-        // sharer would draw a second raster at its own offset). Restored on despawn.
         // Clone materialize / dematerialize. The clone fades IN over FadeSeconds, holds at full, then fades
-        // OUT over the last FadeSeconds before the decoy expires. Derived from the DEADLINE rather than a
-        // wall-clock start, so it inherits the pause semantics for free (while paused the deadline is pushed
-        // forward, so the envelope freezes with it) and a re-cast that re-plants the decoy restarts the fade
-        // in naturally. The heat-haze is deliberately NOT gated by this — it runs the clone's full lifetime.
+        // OUT over the last FadeSeconds before the decoy expires. Derived from the DEADLINE, which is on GameClock,
+        // so the envelope holds through a pause, and a re-cast that re-plants the decoy restarts the fade in
+        // naturally. The heat-haze is deliberately NOT gated by this — it runs the clone's full lifetime.
         // Sequencing is mirrored: on cast the HAZE leads and the clone resolves into it; on expiry the CLONE
         // dissolves FIRST and the haze tails off after it, so the shimmer is the last thing to go.
         //   0 .. 0.5s          haze 0→full, clone invisible
@@ -217,10 +206,10 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_handoff)   // outgoing clone dissolving in place; the incoming one is still invisible
             {
-                double ht = (DateTime.UtcNow - _handoffStart).TotalSeconds;
+                double ht = (GameClock.Now - _handoffStart).TotalSeconds;
                 return (float)Math.Clamp(1.0 - ht / HandoffFade, 0.0, 1.0);
             }
-            double remaining = (_decoyDeadline - DateTime.UtcNow).TotalSeconds;
+            double remaining = (_decoyDeadline - GameClock.Now).TotalSeconds;
             double elapsed   = DecoySeconds - remaining;
             double a = 1.0;
             double inT  = elapsed   - HazeRampSeconds;   // materialize only AFTER the haze has ramped in
@@ -234,8 +223,7 @@ namespace Dark_Cloud_Improved_Version
         // Envelope: 0 → full over HazeRampSeconds on cast (leading the clone in), full through the decoy's life,
         // then back to 0 as the clone dissolves — so the shimmer is the first thing to appear and the last to go.
         private const double HazeRampSeconds = 0.25;
-        private const float  HazeBack  = 8f;    // pull the shimmer BACK along the clone's facing (the raster renders forward)
-        private const float  HazeBodyY = -15f;  // and DOWN onto the body (the raster is built to rise above a flame)
+        private const float  HazeBodyY = -15f;  // the shimmer's anchor sits this far DOWN the clone (the raster is built to rise above a flame)
         private static float _decoyYaw;               // clone's heading, latched at cast and PINNED onto the clone each tick
         private static float _decoyFwdX, _decoyFwdY;  // forward vector derived from _decoyYaw
 
@@ -243,7 +231,7 @@ namespace Dark_Cloud_Improved_Version
         {
             // No hand-off case needed: a re-cast resets the deadline, so this reads elapsed≈0 and ramps up from
             // zero AT THE NEW DECOY — i.e. the shimmer vanishes from the old spot the instant we cast.
-            double remaining = (_decoyDeadline - DateTime.UtcNow).TotalSeconds;
+            double remaining = (_decoyDeadline - GameClock.Now).TotalSeconds;
             double elapsed   = DecoySeconds - remaining;
             double g = 1.0;
             if (elapsed   < HazeRampSeconds) g = elapsed / HazeRampSeconds;                 // ramp in  (leads the clone)
@@ -253,7 +241,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Drive the shimmer at the clone: pushed back along its facing and down onto its body.</summary>
         private static void ShowDecoyHaze()
-            => HeatHaze.Show(_dx - HazeBack * _decoyFwdX, _dz + HazeBodyY, _dy - HazeBack * _decoyFwdY, HazeGain01());
+            => HeatHaze.Show(CharacterClone.RootGuest, HazeBodyY, HazeGain01());   // pinned to the clone's root by the haze cave
 
 
         // ── The decoy's cave payload ─────────────────────────────────────────────────────────────────
@@ -302,20 +290,11 @@ namespace Dark_Cloud_Improved_Version
         {
             bool guardLatched = false;
             DateTime guardPoseSince = default;
-            DateTime lastTick = DateTime.UtcNow;
             while (true)
             {
                 int sleep = IdleTickMs;
                 try
                 {
-                    // REAL elapsed wall time since the previous iteration. A tick can take substantially
-                    // longer than FastTickMs (MaintainClone batch-reads the whole fire-tile grid and does a
-                    // pile of PINE writes), so freezing the decoy timer by pushing the deadline a hardcoded
-                    // FastTickMs under-compensates and the timer keeps draining while paused. Push by this.
-                    DateTime nowTick = DateTime.UtcNow;
-                    TimeSpan dt = nowTick - lastTick;
-                    lastTick = nowTick;
-
                     bool inDun = Player.InDungeonFloor();
                     if (!_armed && !inDun) ArmColdPatch();
 
@@ -334,6 +313,7 @@ namespace Dark_Cloud_Improved_Version
 
                         bool mirageArmed = MirageArmed();
                         bool paused = Player.CheckDunIsPausedOrMenu();   // "PAUSE" screen OR the in-dungeon item menu — freeze the decoy for both
+                        CharacterClone.Held = paused;                    // the clone's slot is drawn but not stepped while held
 
                         if (mirageArmed && !paused)
                         {
@@ -349,8 +329,8 @@ namespace Dark_Cloud_Improved_Version
                             {
                                 // Hold the guard pose for GuardChargeMs, THEN flash the player (Mobius-charge
                                 // style) and plant the decoy at that same moment. One flash+decoy per guard-hold.
-                                if (guardPoseSince == default) guardPoseSince = DateTime.UtcNow;
-                                else if (DateTime.UtcNow - guardPoseSince >= TimeSpan.FromMilliseconds(GuardChargeMs))
+                                if (guardPoseSince == default) guardPoseSince = GameClock.Now;
+                                else if (GameClock.Now - guardPoseSince >= TimeSpan.FromMilliseconds(GuardChargeMs))
                                 {
                                     Player.FlashChargeComplete();
                                     if (_handoff) { }                           // a hand-off is already running — ignore
@@ -363,13 +343,10 @@ namespace Dark_Cloud_Improved_Version
                         }
                         else if (_decoyActive && paused)
                         {
-                            // Freeze while paused: hold the deadline (timer stops) and keep the clone drawn — the
-                            // flag-3 gate below freezes its step + cloth. Covers BOTH pause types: the item menu
-                            // (engine already freezes the clone there) and the PAUSE screen (where the chara loop
-                            // otherwise keeps stepping the clone).
-                            _decoyDeadline += dt;   // hold the timer: push by the REAL tick delta, not a fixed FastTickMs
-                            if (_handoff) _handoffStart += dt;                      // freeze a hand-off mid-dissolve
-                            if (_aggroHoldUntil != default) _aggroHoldUntil += dt;   // ...and its aggro lag
+                            // Held: keep the clone drawn; its slot is marked skip-step (CharacterClone.Held), which
+                            // freezes body and cloth for both hold types — the item menu (the engine already freezes
+                            // the clone there) and the PAUSE screen (where the chara loop otherwise keeps stepping
+                            // it). The decoy timer, a hand-off and its aggro lag stand still on their own: GameClock.
                             PoseClone();
                             ShowDecoyHaze();
                         }
@@ -378,20 +355,29 @@ namespace Dark_Cloud_Improved_Version
                             EndDecoy();   // weapon swapped away from Mirage
                         }
 
-                        WriteTable();   // fills the per-slot table both _GET_POSITION and _GET_DISTANCE now read
+                        // Angel Gear's shield ring OWNS the per-slot table while it is up (Mirage and Angel
+                        // Gear can never be wielded simultaneously) — stand down, resume when it releases.
+                        if (!AngelGear.RingActive)
+                            WriteTable();   // fills the per-slot table both _GET_POSITION and _GET_DISTANCE now read
                         // PNACH gate flag: 1 = clone drawn → NOP the chara-loop gates; 2 = in a dungeon w/o a decoy
                         // → RESTORE the vanilla gates (they don't auto-revert). 0 (town) is set below so the shared
                         // town overlay at those addresses is never touched.
-                        // 1 = decoy up & running (NOP scene+step gates); 3 = decoy up but PAUSED (NOP scene only →
-                        // clone still drawn but frozen); 2 = dungeon, no decoy (restore vanilla).
-                        Memory.WriteInt(CodeCaves.MirageSceneGateFlag, (_decoyActive && CharacterClone.IsActive) ? (paused ? 3 : 1) : 2);
+                        // 1 = decoy up (NOP scene+step gates; a hold freezes the clone's own slot instead, so the
+                        // PNACH's 3 = "up but paused" state is never written); 2 = dungeon, no decoy (restore vanilla).
+                        // Guardian Reflector's slingshot prop and Divine Beast Title's cat share this gate flag
+                        // (and the chara slots / caves): while either copy is up, IT drives the flag — stand down.
+                        // (Mirage and Xiao's weapons can never be wielded simultaneously.) A competing 2 here made
+                        // the slot loop run only on the frames the other writer won — the cat flickered.
+                        if (!SlingshotProp.Active && !DivineBeastTitle.Active)
+                            Memory.WriteInt(CodeCaves.MirageSceneGateFlag, (_decoyActive && CharacterClone.IsActive) ? 1 : 2);
                         sleep = FastTickMs;
                     }
                     else
                     {
                         guardLatched = false;
                         if (_decoyActive || CharacterClone.IsActive) EndDecoy();   // left the floor
-                        Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 0);   // town: leave the gates to the overlay reload
+                        if (!SlingshotProp.Active && !DivineBeastTitle.Active)
+                            Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 0);   // town: leave the gates to the overlay reload
                     }
                 }
                 catch (Exception e) { Console.WriteLine("[Mirage] tick failed: " + e.Message); }
@@ -432,7 +418,7 @@ namespace Dark_Cloud_Improved_Version
             if (refreshAggro) RefreshAggro();
             _decoyActive = true;
             _decoyChar = Player.CurrentCharacterNum();   // the clone is bound to THIS character's model
-            _decoyDeadline = DateTime.UtcNow.AddSeconds(DecoySeconds);   // timer + haze ramp start HERE
+            _decoyDeadline = GameClock.Now.AddSeconds(DecoySeconds);   // timer + haze ramp start HERE
             if (spawnClone)
             {
                 CharacterClone.Despawn();   // clear any stale slot from a previous decoy
@@ -451,7 +437,7 @@ namespace Dark_Cloud_Improved_Version
             Array.Clear(_brokenThisDecoy, 0, _brokenThisDecoy.Length);
             _prevHp = ReusableFunctions.GetEnemiesHp();
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count && s < MaxSlots; s++)
-                if (IsLiveEnemy(s)) _fooled[s] = true;
+                if (Enemies.IsLive(s)) _fooled[s] = true;
         }
 
         /// <summary>Re-cast with a clone already up. The new decoy is created RIGHT NOW and normally (timer,
@@ -462,7 +448,7 @@ namespace Dark_Cloud_Improved_Version
         {
             _oldDx = _dx; _oldDz = _dz; _oldDy = _dy; _oldYaw = _decoyYaw;   // hold the outgoing clone in place
             _handoff = true;
-            _handoffStart = DateTime.UtcNow;
+            _handoffStart = GameClock.Now;
             _aggroHoldUntil = _handoffStart.AddSeconds(AggroHoldSeconds);    // aggro lags on the old spot past the swap
             var o = ReadDecoyOrigin();
             PlaceDecoyAt(o.dx, o.dz, o.dy, o.yaw, spawnClone: false, refreshAggro: false);   // new decoy live now; aggro state preserved
@@ -479,16 +465,16 @@ namespace Dark_Cloud_Improved_Version
 
         private static void UpdateDecoyState()
         {
-            if (_handoff && (DateTime.UtcNow - _handoffStart).TotalSeconds >= HandoffFade)
+            if (_handoff && (GameClock.Now - _handoffStart).TotalSeconds >= HandoffFade)
                 CompleteHandoff();   // outgoing clone hit alpha 0 → respawn it at the new decoy and fade it in
-            if (_aggroHoldUntil != default && DateTime.UtcNow >= _aggroHoldUntil)
+            if (_aggroHoldUntil != default && GameClock.Now >= _aggroHoldUntil)
             {
                 _aggroHoldUntil = default;   // new clone is fully materialized → enemies finally notice the switch
                 RefreshAggro();              // incl. the ones that had broken the old illusion: they only fall for the NEW clone
                 WriteDecoyPos();
                 Console.WriteLine("[Mirage] hand-off: new clone fully faded in — enemies re-target it");
             }
-            if (DateTime.UtcNow > _decoyDeadline)
+            if (GameClock.Now > _decoyDeadline)
             {
                 EndDecoy();
                 Console.WriteLine("[Mirage] decoy faded; enemies re-target the player");
@@ -499,7 +485,7 @@ namespace Dark_Cloud_Improved_Version
             int[] hp = ReusableFunctions.GetEnemiesHp();
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count && s < MaxSlots; s++)
             {
-                if (!IsLiveEnemy(s)) { _fooled[s] = false; continue; }
+                if (!Enemies.IsLive(s)) { _fooled[s] = false; continue; }
                 if (_prevHp != null && s < _prevHp.Length && hp[s] < _prevHp[s])
                 { _fooled[s] = false; _brokenThisDecoy[s] = true; continue; }
                 if (!_fooled[s] && !_brokenThisDecoy[s]) _fooled[s] = true;
@@ -536,20 +522,13 @@ namespace Dark_Cloud_Improved_Version
             // new clone has fully materialized (AggroHoldSeconds) — deliberately outliving the clone swap, so
             // enemies commit to the body they were fighting and only notice the switch once the new one is
             // actually there, instead of psychically peeling off the instant we cast.
-            bool hold = DateTime.UtcNow < _aggroHoldUntil;
+            bool hold = GameClock.Now < _aggroHoldUntil;
             var b = new byte[16];
             BitConverter.GetBytes(hold ? _oldDx : _dx).CopyTo(b, 0);
             BitConverter.GetBytes(hold ? _oldDz : _dz).CopyTo(b, 4);
             BitConverter.GetBytes(hold ? _oldDy : _dy).CopyTo(b, 8);
             BitConverter.GetBytes(1.0f).CopyTo(b, 12);
             Memory.WriteBytesBatch(CodeCaves.DecoyPos, b);
-        }
-
-        private static bool IsLiveEnemy(int s)
-        {
-            int id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
-            if (id == 0 || id == 0xFFFF) return false;
-            return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) > 0;
         }
     }
 }

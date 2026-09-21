@@ -78,7 +78,7 @@ namespace Dark_Cloud_Improved_Version
     /// in the same order as the bait affinity fields in <see cref="FishSlotOffsets"/>.
     /// The game copies entry.Radius into each fish slot's <see cref="FishSlotOffsets.NoticeRadius"/>
     /// every frame, keyed by the equipped bait's item ID.
-    /// Confirmed via ScanFor25f cluster dump (2026-06-03). Bait validity is enforced elsewhere —
+    /// Confirmed via ScanFor25f cluster dump. Bait validity is enforced elsewhere —
     /// writing a non-bait item ID into an entry's Id address has no effect on the bait screen.
     /// </summary>
     internal static class BaitDetectionRadiusTable
@@ -99,7 +99,13 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly BaitTableEntry Minon           = new BaitTableEntry(0x2026AEDC,  25.0f); // id=188
         internal static readonly BaitTableEntry Battan          = new BaitTableEntry(0x2026AEE4,  25.0f); // id=189
         internal static readonly BaitTableEntry Petitefish      = new BaitTableEntry(0x2026AEEC,  25.0f); // id=190
-        internal static readonly BaitTableEntry Unknown14       = new BaitTableEntry(0x2026AEF4,  40.0f); // id=0 — purpose unknown
+        internal static readonly BaitTableEntry BareHook        = new BaitTableEntry(0x2026AEF4,  40.0f); // id=0 — no bait on the hook
+        /// <summary>Every entry, the bare hook included (the Flamingo's passive raises them all).</summary>
+        internal static readonly BaitTableEntry[] All =
+        {
+            Evy, Mimi, Prickly, ThrobbingCherry, GooeyPeach, Bombnuts, PoisonousApple, MellowBanana, Carrot, PotatoCake, Minon,
+            Battan, Petitefish, BareHook,
+        };
     }
 
     /// <summary>

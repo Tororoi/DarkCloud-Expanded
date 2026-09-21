@@ -4002,12 +4002,12 @@ namespace Dark_Cloud_Improved_Version
             new Thread(ReachLoop) { IsBackground = true }.Start();
         }
 
-        // ── HC reach control (data-side; driven by CustomToanEffects.HeavensCloudEffect's charge ramp) ──
+        // ── HC reach control (data-side; driven by HeavensCloud.TyphoonEffect's charge ramp) ──
         // Everything is keyed to a blade `factor` (1.0 = original). Three writes:
         //   • blade mesh "w14" scaled by factor → the visible blade AND its dcol hit point grow together;
         //   • whirlwind effect (c01_fuusya) scaled to match: WhirlVisualScale = stockZ*factor / visualRadius;
         //   • enemy body radii inflated (distance-gated) to reach = stockZ*factor.
-        // HeavensCloudEffect grows factor during the charge windup and applies whirl+hitbox on the whirlwind
+        // TyphoonEffect grows factor during the charge windup and applies whirl+hitbox on the whirlwind
         // release, then ResetHeavensCloudReach snaps everything back. (docs/weapon-reach.md top section.)
         const float HcStockDcol1Z = 9.2053f;       // HC commenu dcol1 Z
         static float _hcHitboxDelta;               // persistent delta added to enemy body radii (0 = none)
@@ -4236,7 +4236,7 @@ namespace Dark_Cloud_Improved_Version
         public static void OnReachFloorEntered()
         {
             _whirlRoots = System.Array.Empty<long>(); _whirlLocateBackoff = 0;
-            _sfFrameNameAddr = 0; _sfHasSnapshot = false; _sfWeaponId = -1;   // model moved: re-locate + re-snapshot
+            _sfFrameNameAddr = 0; _sfHasSnapshot = false; _sfWeaponId = -1; _sfLastFactor = 1f;   // model moved: re-locate + re-snapshot
             _bladeName = 0; _bladeWeaponId = -1;
         }
 
@@ -4301,6 +4301,8 @@ namespace Dark_Cloud_Improved_Version
         static int  _sfWeaponId = -1;   // two Toan swords share the "c01w" key — re-locate + re-snapshot on a swap
         static readonly float[] _sfOrig = new float[9];
         static bool _sfHasSnapshot;
+        static float _sfLastFactor = 1f;   // what the frame currently holds relative to the snapshot (1 = nothing of ours)
+        static bool SfIdentity(float f) => Math.Abs(f - 1f) < 1e-4f;
 
         public static bool ScaleWeaponFrameByName(uint nameWord, float factor)
         {
@@ -4315,20 +4317,30 @@ namespace Dark_Cloud_Improved_Version
                 if (_sfFrameNameAddr == 0) return false;
             }
             long m = _sfFrameNameAddr + WeaponModel.Vu1LocalMatrixDiag0;   // 3x3 base: row stride 0x10, col stride 4
-            if (!_sfHasSnapshot)
-            {
-                for (int r = 0; r < 3; r++)
-                    for (int c = 0; c < 3; c++)
-                        _sfOrig[r * 3 + c] = Memory.ReadFloat(m + r * 0x10 + c * 4);
-                _sfHasSnapshot = true;
+            var cur = new float[9];
+            for (int r = 0; r < 3; r++)
+                for (int c = 0; c < 3; c++)
+                    cur[r * 3 + c] = Memory.ReadFloat(m + r * 0x10 + c * 4);
+            // At rest nothing is written: the snapshot just follows whatever the frame holds. A weapon swap rebuilds the model
+            // at the same addresses, and this key (name word + weapon id) can survive it while the frame's bind rotation does
+            // not — forcing the previous model's snapshot back in left the new slingshot turned a quarter in her hand.
+            bool idle = SfIdentity(factor) && SfIdentity(_sfLastFactor);
+            if (idle || !_sfHasSnapshot) { Array.Copy(cur, _sfOrig, 9); _sfHasSnapshot = true; }
+            if (idle) return true;
+            if (!SfIdentity(_sfLastFactor))                                       // mid-scale: the frame must still hold our last write,
+            {                                                                     // else the model was rebuilt under us — re-snapshot
+                bool ours = true;
+                for (int k = 0; k < 9 && ours; k++) ours = Math.Abs(cur[k] - _sfOrig[k] * _sfLastFactor) <= 0.001f;
+                if (!ours) Array.Copy(cur, _sfOrig, 9);
             }
             for (int r = 0; r < 3; r++)
                 for (int c = 0; c < 3; c++)
                 {
                     long addr = m + r * 0x10 + c * 4;
                     float want = _sfOrig[r * 3 + c] * factor;
-                    if (Math.Abs(Memory.ReadFloat(addr) - want) > 0.001f) Memory.WriteFloat(addr, want);
+                    if (Math.Abs(cur[r * 3 + c] - want) > 0.001f) Memory.WriteFloat(addr, want);
                 }
+            _sfLastFactor = factor;
             return true;
         }
 
@@ -4346,11 +4358,11 @@ namespace Dark_Cloud_Improved_Version
         {
             // Whirlwind VISUAL scale applies to ALL of Toan's weapons (the fuusya effect is character-, not
             // weapon-bound), sized to each weapon's own dcol1 reach — EXCEPT Heaven's Cloud, whose blade/whirl/
-            // hitbox are driven per-charge by CustomToanEffects.HeavensCloudEffect (which owns the shared whirl state
+            // hitbox are driven per-charge by HeavensCloud.TyphoonEffect (which owns the shared whirl state
             // while HC is equipped, so this loop must not also write it). Recompute on weapon swap.
             if (Player.CurrentCharacterNum() != Player.ToanId) return;
             int wid = GetEquippedWeaponId();
-            if (wid == HeavensCloudReachId) return;   // HC → HeavensCloudEffect
+            if (wid == HeavensCloudReachId) return;   // HC → TyphoonEffect
 
             if (wid != _whirlWeaponId)
             {
