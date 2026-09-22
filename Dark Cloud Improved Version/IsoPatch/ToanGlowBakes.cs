@@ -11,7 +11,7 @@ namespace Dark_Cloud_Improved_Version
     /// character. This gives him a disc of his own.
     ///
     /// It is the Gallery of Time's torch glow re-tinted through the same builder the cat's disc uses
-    /// (<see cref="CatPackBakes.GlowT8Tim2"/>) with the Angel Shooter's white ramp (<see cref="CatPackBakes.GlowWhite"/>)
+    /// (<see cref="CatPackBakes.GlowT8Tim2"/>) with the Angel Gear cat's GOLD ramp (<see cref="CatPackBakes.GlowGold"/>)
     /// resting in its CLUT. ⚠ The name must NOT be the cat's: the palette cave (tools/stubs/cat_glow_palette.s) finds its
     /// target by matching "catglowp", so a disc under any other name is never repainted and keeps its baked white for good
     /// — no cave change and no tenth palette table. One 8-bit 64×64 disc is ~5 KB, so his pack grows by that much.
@@ -30,21 +30,25 @@ namespace Dark_Cloud_Improved_Version
             var pack = ChrPack.Parse(host);
             var imgRec = pack.Find(HostImg) ?? throw new IOException($"{HostChr} lacks {HostImg}");
             var bank = new CatPackBakes.Bank(imgRec.Payload);
-            if (bank.Entries.Any(e => e.name == GlowName)) { log($"Toan's glow disc already in {HostChr} — skipped"); return; }
             if (!bank.Entries.Any(e => e.name == Template)) throw new IOException($"{HostImg} lacks {Template}, the picture the disc borrows its headers from");
 
             var fire = ChrPack.Parse(arc.Read(CatPackBakes.GlowSrc)).Find("fire.img")
                        ?? throw new IOException("glow source pack lacks fire.img");
             byte[] light = new CatPackBakes.Bank(fire.Payload).Block("lightling");
-            var white = CatPackBakes.GlowWhite;
-            byte[] disc = CatPackBakes.GlowT8Tim2(bank.Block(Template), light, white.core, white.outer);
+            var ramp = CatPackBakes.GlowGold;
+            byte[] disc = CatPackBakes.GlowT8Tim2(bank.Block(Template), light, ramp.core, ramp.outer);
 
-            var items = bank.Entries.Select(e => (e.name, bank.Block(e.name))).ToList();
-            items.Add((GlowName, disc));
+            // Already there AND already this colour: nothing to do. Already there in a DIFFERENT colour (the ramp was
+            // re-authored): replace it, rather than skipping and leaving the old palette baked in.
+            bool present = bank.Entries.Any(e => e.name == GlowName);
+            if (present && bank.Block(GlowName).AsSpan().SequenceEqual(disc)) { log($"Toan's glow disc already in {HostChr} — skipped"); return; }
+
+            var items = bank.Entries.Select(e => (e.name, e.name == GlowName ? disc : bank.Block(e.name))).ToList();
+            if (!present) items.Add((GlowName, disc));
             imgRec.ReplacePayload(CatPackBakes.Bank.Build(bank.Magic, items));
             byte[] outp = pack.Rebuild();
             arc.Redirect(HostChr, outp);
-            log($"Toan's glow disc `{GlowName}` ({disc.Length:N0} B) added to {HostChr}: {items.Count} textures, pack {host.Length:N0} -> {outp.Length:N0} B");
+            log($"Toan's glow disc `{GlowName}` ({disc.Length:N0} B) {(present ? "recoloured in" : "added to")} {HostChr}: {items.Count} textures, pack {host.Length:N0} -> {outp.Length:N0} B");
         }
     }
 }

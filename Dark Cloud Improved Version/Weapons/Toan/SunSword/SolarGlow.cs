@@ -26,7 +26,8 @@ namespace Dark_Cloud_Improved_Version
         private const float  Pull  = 5f;      // toward the camera, as the cat and the Matador use (the torches' 15 is to clear their wall)
         private const float  Lift  = 0f;      // AT the anchor bone. It is a spine bone, around chest height, so +8 put the
                                               // glow on his head and +14 above it; centred on his mid-height is 0.
-        private const double GrowSeconds = 0.25;   // it swells from nothing rather than snapping on
+        internal const double GrowSeconds = 0.25;  // it swells from nothing rather than snapping on — and the charge starts
+                                                   // it this early, so it is at full size the instant the charge is ready
         private const double FadeSeconds = 0.50;   // …and shrinks away again when a charge is spent unused
         private static bool  _on, _fading;
         private static DateTime _shownAt, _fadeAt;

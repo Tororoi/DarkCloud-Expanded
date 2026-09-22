@@ -6,7 +6,8 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>
     /// The blinding flash: the dungeon's atmosphere globals (<see cref="DungeonLighting"/> — ambient, the directional light
     /// colours, fog colour and range, whichever set MainDraw is drawing) are captured, driven to white with the fog pulled in
-    /// to nothing so the whole scene washes out, and eased back to the captured values over the BLINDING's own length
+    /// to nothing so the whole scene washes out — the light in <see cref="FlashColour"/>, the fog pure white — and eased
+    /// back to the captured values over the BLINDING's own length
     /// (<see cref="EaseSeconds"/> = <see cref="SunSword.BlindSeconds"/>), so the room brightens as the enemies recover.
     /// MainDraw re-reads the globals every frame, so the writes take effect at once and the ease is a per-tick lerp.
     /// </summary>
@@ -15,7 +16,12 @@ namespace Dark_Cloud_Improved_Version
         // The wash recedes over the whole blinding, so the room brightens back exactly as the enemies recover — tied to that
         // duration rather than restating it, so the two cannot drift apart.
         private static double EaseSeconds => SunSword.BlindSeconds;
-        private const float  White       = 255f;
+        /// <summary>The colour the LIGHT is driven to — the ambient, the directional rows and Toan's own pulse. A warm
+        /// near-white rather than pure white, so the flash reads as sunlight and sits with the gold glow.</summary>
+        internal static readonly float[] FlashColour = { 255f, 240f, 200f };
+        /// <summary>The fog, though, goes PURE white: it is the haze the light blows out through, and tinting it warm as
+        /// well muddied the wash rather than warming it.</summary>
+        private static readonly float[] FogColour = { 255f, 255f, 255f };
         private const float  FogStart    = 0f,  FogEnd = 1f;   // at the peak: everything past one unit is fog colour (white)
         private const double FogSeconds  = 1.0;    // the fog lifts in a second; only the LIGHT takes the full blinding
         private const double Decay       = 4.0;    // how sharply the wash falls away; higher puts more of the drop in the first moments
@@ -80,10 +86,10 @@ namespace Dark_Cloud_Improved_Version
         private static void Write(float k, float kf)
         {
             var amb = (float[])_amb.Clone();
-            for (int c = 0; c < 3; c++) amb[c] = Lerp(_amb[c], White, k);
+            for (int c = 0; c < 3; c++) amb[c] = Lerp(_amb[c], FlashColour[c], k);
             var cols = (float[])_cols.Clone();
             for (int r = 0; r < DungeonLighting.ColorRows; r++)
-                for (int c = 0; c < 3; c++) cols[r * 4 + c] = Lerp(_cols[r * 4 + c], White, k);
+                for (int c = 0; c < 3; c++) cols[r * 4 + c] = Lerp(_cols[r * 4 + c], FlashColour[c], k);
             var fog = (float[])_fog.Clone();
             if (_fog[1] > _fog[0])                          // a floor without fog keeps none: the light alone carries the flash there
             {
@@ -91,7 +97,7 @@ namespace Dark_Cloud_Improved_Version
                 fog[1] = Lerp(_fog[1], FogEnd, kf);
             }
             var rgb = new byte[3];
-            for (int c = 0; c < 3; c++) rgb[c] = (byte)Math.Round(Lerp(_fogRgb[c], White, kf));
+            for (int c = 0; c < 3; c++) rgb[c] = (byte)Math.Round(Lerp(_fogRgb[c], FogColour[c], kf));
             Memory.WriteBytesBatch(Ambient, Bytes(amb));
             Memory.WriteBytesBatch(Colors, Bytes(cols));
             Memory.WriteBytesBatch(FogRate, Bytes(fog));

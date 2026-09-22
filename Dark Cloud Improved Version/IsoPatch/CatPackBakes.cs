@@ -47,8 +47,9 @@ namespace Dark_Cloud_Improved_Version
             ((211, 73, 236), (33, 0, 175)),                 // Holy     purple
             ((50, 50, 50), (160, 160, 160)),                // None     the dimmed white
         };
-        /// <summary>Row 7's ramp — the Angel Shooter's white. Toan's own glow disc rests on it (ToanGlowBakes).</summary>
-        internal static ((int, int, int) core, (int, int, int) outer) GlowWhite => GlowLooks[1];
+        /// <summary>Row 8's ramp — the Angel Gear cat's GOLD: a pale gold core out to a deeper gold edge. Toan's own glow
+        /// disc rests on it (ToanGlowBakes).</summary>
+        internal static ((int, int, int) core, (int, int, int) outer) GlowGold => GlowLooks[2];
         private static ((int, int, int) core, (int, int, int) outer)[] GlowRows => GlowElements.Concat(GlowLooks).ToArray();   // the cave's table, in row order
         internal const string CapeCloName = "catcape.clo";
         internal const string DranChr = @"dun\monstor\c12a.chr";                   // the wing donor

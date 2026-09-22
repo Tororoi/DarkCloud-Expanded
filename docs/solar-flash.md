@@ -3,8 +3,9 @@
 Hold guard with the Sun Sword and the blade whitens over 1.5 s; at full it is PRIMED and stays so, guard or not -
 the white it holds IS the readiness cue, so the game's own cyan charge-complete pulse is deliberately not fired (the cyan
 ramp during the build-up stays, since that reads as charging rather than ready). The next attack carries the charge: as
-the swing comes forward the blade goes back to its own colour and the dungeon flashes blinding white, receding over the
-whole five seconds so the room brightens exactly as the enemies recover. Every enemy within 300 units takes a
+the swing comes forward the blade goes back to its own colour and the dungeon flashes blinding — the LIGHT a warm near-white
+(255,240,200, so it reads as sunlight beside the gold glow) and the FOG pure white — receding over the whole five
+seconds so the room brightens exactly as the enemies recover. Every enemy within 300 units takes a
 light hit and is then blinded for 5 s. `Weapons/Toan/SunSword.cs` (`SunSword.SolarFlashEffect`, a thread per equip
 from `WeaponThreads`) drives it with three helpers in `Weapons/Toan/SunSword/`.
 
@@ -111,6 +112,10 @@ have none at all - and skipping those left them flying on through the flash, whi
 A species without a guard holds its IDLE instead: grounded enemies brace, flyers hover, and neither acts. The guard
 LOWERING clip in the wind-down only applies to the ones that actually raised a guard.
 
+`SolarGlow`: GrowSeconds 0.25, FadeSeconds 0.5 — and the CHARGE starts the glow a grow-time early, so it reaches full
+size the instant the charge primes (a guard released before then hides it again). `SolarLighting.FlashColour` 255,240,200 drives the ambient, the four directional light rows and Toan's own pulse;
+the fog is driven to pure white separately (`FogColour`), and lifts in 1 s while the light takes the full 5.
+
 ⚠ The flash plants ONE SPHERE PER ENEMY, not one big one. A CollisionData entry is CONSUMED by the first victim the
 engine matches it against, so a single 300-unit sphere damaged exactly one enemy - which read as 'one per species',
 since a species tends to be clustered. Each enemy in range gets its own small sphere centred on it, with the kick
@@ -154,8 +159,9 @@ switch a standing enemy's clip — the render-object words `_SET_MOTION` writes 
 The glow cave draws a texture BY NAME, and the cat's disc (`catglowp`) is baked into XIAO's dungeon pack, so none of it is
 resident when Toan is the active character. This appends a disc of his own to his pack's texture bank
 (`dun\mainchara\c01d.chr` → record `c01d01_dun.img`), built by the SAME builder the cat's disc uses
-(`CatPackBakes.GlowT8Tim2`) from the Gallery of Time's torch glow, with the Angel Shooter's white ramp
-(`CatPackBakes.GlowWhite`, row 7) resting in its CLUT. `c01d01` supplies the TIM2 headers.
+(`CatPackBakes.GlowT8Tim2`) from the Gallery of Time's torch glow, with the Angel Gear cat's GOLD ramp
+(`CatPackBakes.GlowGold`, row 8 - a pale gold core out to a deeper gold edge) resting in its CLUT. Re-running the bake on an
+already-patched ISO RECOLOURS the disc rather than skipping it, so re-authoring the ramp takes effect on the next patch. `c01d01` supplies the TIM2 headers.
 
 ⚠ **The name must not be `catglowp`.** The palette cave (`tools/stubs/cat_glow_palette.s`) finds its target by matching
 that name, so a disc under any other name is never repainted and keeps its baked white for good — no cave change and no

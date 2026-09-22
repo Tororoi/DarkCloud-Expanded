@@ -89,11 +89,14 @@ namespace Dark_Cloud_Improved_Version
                 case Phase.Charging:
                 {
                     // One flash at a time, and that includes a charge already in flight when the last one went off.
-                    if (_blindUntil != default) { st.phase = Phase.Idle; SolarBlade.Set(0f); ChargeTint.Clear(); break; }
-                    if (!GuardWatch.IsGuarding()) { st.phase = Phase.Idle; SolarBlade.Set(0f); ChargeTint.Clear(); break; }
+                    if (_blindUntil != default) { st.phase = Phase.Idle; SolarBlade.Set(0f); ChargeTint.Clear(); SolarGlow.Hide(); break; }
+                    // Guard released before it primed: the glow goes with it rather than lingering.
+                    if (!GuardWatch.IsGuarding()) { st.phase = Phase.Idle; SolarBlade.Set(0f); ChargeTint.Clear(); SolarGlow.Hide(); break; }
                     double held = (GameClock.Now - st.holdStart).TotalSeconds;
                     SolarBlade.Set((float)(held / ChargeSeconds));
                     ChargeTint.Ramp(ChargeSeconds - held);
+                    // The glow LEADS the charge: started a grow-time early, it reaches full size exactly as it primes.
+                    if (held >= ChargeSeconds - SolarGlow.GrowSeconds) { SolarGlow.Show(); SolarGlow.Tick(); }
                     if (held >= ChargeSeconds)
                     {
                         st.phase = Phase.Primed; st.primedAt = GameClock.Now;
@@ -179,7 +182,7 @@ namespace Dark_Cloud_Improved_Version
             ChargeTint.Clear();                                          // …and the white Toan was holding
             SolarGlow.Hide();
             SolarLighting.Flash();
-            Player.FlashActiveCharacter(255f, 255f, 255f, FlashPulseSpeed, 1);
+            Player.FlashActiveCharacter(SolarLighting.FlashColour[0], SolarLighting.FlashColour[1], SolarLighting.FlashColour[2], FlashPulseSpeed, 1);
             if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
             PlantFlashHit(st, px, ph, py);
             SolarScript.Begin();           // the enemies' OWN scripts hold the guard from here
