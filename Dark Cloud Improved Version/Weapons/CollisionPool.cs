@@ -21,6 +21,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int  Radius     = 0x3C;
         internal const int  Mask       = 0x48;        // bit 0 = hurts the player
         internal const int  Element    = 0x50;        // ONE pure element bit, or 0 — a status bit here misroutes CheckDmg's element branch
+        internal const int  BlowDir    = 0x20;        // vec3 — the direction the PLAYER path throws its victim. Set__CCollisionData
+                                                      // defaults it to (1,0,0): BtCheckDamageProc copies it to a scratch and hands
+                                                      // that to unitBlowActionRot, which takes atan2(x, z) − π and SETS the player's
+                                                      // facing from it. Left at the default, every hit throws him the same way in
+                                                      // WORLD space, which reads as a random direction relative to him.
         internal const int  Owner      = 0x58;        // enemy swings: slot*5+200
         internal const int  GateA      = 0x70, GateB = 0x74;   // the entry is open to CheckHitUser while these are equal
         internal const uint HurtsPlayerMask = 1;
@@ -68,6 +73,37 @@ namespace Dark_Cloud_Improved_Version
             I(0x44, 1); I(Mask, 2); I(0x4C, 2); I(Element, (int)attr); I(0x54, 0);
             I(Owner, 1); I(0x5C, -1); I(0x60, 0);
             I(0x64, (int)(BattleWeaponStats - 0x20000000)); I(0x68, -1); I(0x6C, Memory.ReadShort(BattleWeaponFlags));
+            I(GateA, 0); I(GateB, 0); F(0x8C, 1f);
+            return e;
+        }
+
+        /// <summary>A sphere at (x, h, y) that hurts the PLAYER — the form BtCheckDamageProc (dun 0x1DBAFD0) accepts as
+        /// an enemy's attack. <paramref name="baseDmg"/> is the damage BEFORE the player's defence: the handler
+        /// subtracts it and clamps at zero, so the HP lost is exactly baseDmg − defence.
+        ///
+        /// <paramref name="reaction"/> (+0x4C) is the one field governing guardability and knockover: 2 guardable
+        /// knockback, 3 unguardable knockdown (damage, <c>unitBlowActionRot</c> spins the player to the blow
+        /// direction, the big-damage stagger motion, ~160-frame stun), 4 light flinch. <see cref="Owner"/> is left −1
+        /// so no enemy slot is credited — the handler only runs its attacker-specific work when it is not −1. The
+        /// status-flag word (+0x50) is 0: no ailment rides along.
+        ///
+        /// <paramref name="dirX"/>/<paramref name="dirY"/>/<paramref name="dirZ"/> is the BLOW DIRECTION
+        /// (<see cref="BlowDir"/>) — the one thing that steers where the victim is thrown. ⚠ NOT the kick words at
+        /// +0x80..+0x98: those are the ENEMY path's, written with the attacker's POSITION, and the player path never
+        /// reads them. Pass the direction pointing from the blow toward the player.</summary>
+        internal static byte[] PlayerHurtEntry(float x, float h, float y, float radius, int baseDmg, int reaction,
+                                               float dirX, float dirY, float dirZ)
+        {
+            var e = new byte[Stride];
+            void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
+            void I(int o, int v)   => BitConverter.GetBytes(v).CopyTo(e, o);
+            F(0x00, x); F(0x04, h); F(0x08, y); F(0x0C, 1f);
+            F(0x1C, 1f);
+            F(BlowDir, dirX); F(BlowDir + 4, dirY); F(BlowDir + 8, dirZ);
+            I(0x34, baseDmg); I(EntryClass, 0); F(Radius, radius);
+            I(0x44, 2); I(Mask, (int)HurtsPlayerMask); I(0x4C, reaction); I(Element, 0); I(0x54, 0);
+            I(Owner, -1); I(0x5C, -1); I(0x60, -1);
+            I(0x64, 0); I(0x68, -1); I(0x6C, 1);
             I(GateA, 0); I(GateB, 0); F(0x8C, 1f);
             return e;
         }

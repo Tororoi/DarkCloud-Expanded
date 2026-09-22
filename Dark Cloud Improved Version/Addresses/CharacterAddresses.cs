@@ -229,6 +229,20 @@ namespace Dark_Cloud_Improved_Version
         internal const int  LocalTransX   = 0x200;  // local-matrix translation row (y +0x204, z +0x208)
         internal const int  LocalTransY   = 0x204;
         internal const int  LocalTransZ   = 0x208;
+        // The frame's EULER cache. GetRotation__6CFrame (0x128E30) copies the vector at +0x230 — but ONLY while
+        // <see cref="EulerValid"/> is 0; otherwise it returns (0,0,0). This is what the engine means by a
+        // character's facing: getCharacterVector (0x1D41A0) reads it off the MODEL ROOT frame and rotates the
+        // constant (0,0,1) by it, so forward = (sin yaw, 0, cos yaw). ⚠ NOT the same field as the CObject euler at
+        // CCharacter+0x60/+0x64/+0x68 — the two differ by the model's bind rotation.
+        internal const int  EulerX        = 0x230;
+        internal const int  EulerY        = 0x234;  // the yaw the engine's own forward vector is built from
+        internal const int  EulerZ        = 0x238;
+        internal const int  EulerValid    = 0x244;  // 0 = the euler cache is trustworthy (same word as WorldCacheB)
+        // SetFrameAttr's "__c" suffix (UNLIT constant colour): +0xC4 = 1 and the colour floats below = 128.0, with
+        // the frame's light matrix zeroed. A mesh drawn this way is IMMUNE to an ambient add — to brighten it the
+        // colour itself must be written. (Big Bang's blade `w18b__c` is such a mesh; its handle `w18a` is not.)
+        internal const int  UnlitFlag     = 0xC4;
+        internal const int  UnlitColourR  = 0xD0;   // g +0xD4, b +0xD8, a +0xDC
         internal const int  TrsScaleX     = 0x210;  // TRS scale x (y +0x214, z +0x218) — SetScale path
         internal const int  TrsPosX       = 0x220;  // TRS translation x (y +0x224, z +0x228) — SetPosition path
         internal const int  TrsPosY       = 0x224;

@@ -3,10 +3,11 @@ using System;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// The white glow Toan carries while Solar Flash is primed. It is drawn by the game's own wall-torch routine through the
+    /// The glow Toan carries while a charged sword is primed. It is drawn by the game's own wall-torch routine through the
     /// Divine Beast cat's glow cave (ElfCave.CatGlowDraw) — the same path the Matador's charged pellet borrows — and the
     /// mailbox words are written in that cave's order: everything set while it is off, then armed last. The disc is Toan's
-    /// own (<see cref="ToanGlowBakes.GlowName"/>, baked into his dungeon pack); the cat's is in Xiao's pack and is not
+    /// own, baked into his dungeon pack, and <see cref="Show"/> names it: <see cref="ToanGlowBakes.GlowName"/>'s gold for
+    /// Sun Sword, <see cref="ToanGlowBakes.BlueName"/>'s blue for Big Bang. The cat's is in Xiao's pack and is not
     /// resident for him. Both anchors are his model root, so the glow needs no named bone — <see cref="Lift"/> raises it
     /// from his feet to his chest, and <see cref="Scale"/> sizes it to him rather than to the cat.
     /// </summary>
@@ -14,7 +15,10 @@ namespace Dark_Cloud_Improved_Version
     {
         // Binding one of Toan's OWN shipped textures here drew NOTHING at all, which cleared the baked disc of suspicion:
         // the texture was never the problem, the DRAW was — an unposed anchor (see Show) rather than a missing upload.
-        private const string Disc  = ToanGlowBakes.GlowName;
+        // The COLOUR is the disc: Toan's discs carry their ramp baked into the CLUT and the palette cave repaints only the
+        // cat's, so Sun Sword's gold and Big Bang's blue are two textures rather than two palette rows. Held from Show to
+        // Hide, because Reserve and Release must move and restore the same manager entry.
+        private static string _disc = ToanGlowBakes.GlowName;
         // ⚠ SCALE IS NOT A MODEL SCALE. The sprite is 45 × 22.5 units at 1.0 (cat_glow_draw.s), so 1.0 is already
         // wider than Toan is tall: a wall torch uses 1.0, the cat 0.5 × its look scale, the Matador's pellet 0.4.
         // 1.15 with the torches' 15-unit pull put a sprite bigger than a torch right in front of the camera and
@@ -33,9 +37,10 @@ namespace Dark_Cloud_Improved_Version
         private static DateTime _shownAt, _fadeAt;
 
         /// <summary>Up, once. Re-arming every tick would re-bind the texture each frame.</summary>
-        internal static void Show()
+        internal static void Show(string disc = ToanGlowBakes.GlowName)
         {
             if (_on) { KeepAlive(); return; }
+            _disc = disc;
             uint root = Anchor();
             if (root == 0) return;                                       // no posed bone yet: try again next tick
             Reserve();                                                   // …and give the disc a home that is actually uploaded, BEFORE the cave binds it
@@ -46,7 +51,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, Lift);
             Memory.WriteUInt (CodeCaves.Mailbox.CatGlowNodeA, root);
             Memory.WriteUInt (CodeCaves.Mailbox.CatGlowNodeB, root);
-            byte[] nm = new byte[16]; System.Text.Encoding.ASCII.GetBytes(Disc).CopyTo(nm, 0);
+            byte[] nm = new byte[16]; System.Text.Encoding.ASCII.GetBytes(_disc).CopyTo(nm, 0);
             Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowReady, 0);        // bind the disc
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 1);           // armed last
@@ -57,7 +62,7 @@ namespace Dark_Cloud_Improved_Version
             float anchorH = Memory.ReadFloat(Memory.ToMmu(root) + CFrameVu1.WorldMatrix + 0x30 + 4);
             float feetH   = Memory.ReadFloat(Addresses.dunPositionZ);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[SunSword] glow up at bone 0x{root:X} (disc `{Disc}`, scale {Scale:0.00}, lift {Lift:0}); bone sits {anchorH - feetH:0.#} above his feet");
+                $"[SunSword] glow up at bone 0x{root:X} (disc `{_disc}`, scale {Scale:0.00}, lift {Lift:0}); bone sits {anchorH - feetH:0.#} above his feet");
         }
 
         /// <summary>One line describing where the disc actually LIVES: its manager entry, the block it belongs to, its TEX0
@@ -110,7 +115,7 @@ namespace Dark_Cloud_Improved_Version
         private static void Reserve()
         {
             if (_block >= 0) return;
-            long e = FindEntry(Disc);
+            long e = FindEntry(_disc);
             if (e == 0) return;
             uint highest = 0;
             for (int b2 = 0; b2 < 0x48; b2++)
@@ -147,7 +152,7 @@ namespace Dark_Cloud_Improved_Version
         private static void Release()
         {
             if (_block < 0) return;
-            long e = FindEntry(Disc);
+            long e = FindEntry(_disc);
             if (e != 0)
             {
                 Memory.WriteUInt(e + TextureManager.EntryTex0, (uint)_tex0Saved);

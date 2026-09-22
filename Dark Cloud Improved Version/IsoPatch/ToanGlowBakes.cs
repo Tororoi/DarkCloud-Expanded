@@ -5,24 +5,27 @@ using System.Linq;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// Toan's own glow disc, appended to his dungeon pack. Solar Flash lights him white while the charge is held, drawn by
+    /// Toan's own glow discs, appended to his dungeon pack. A primed charge lights him while it is held, drawn by
     /// the game's own torch routine through the Divine Beast cat's glow cave (ElfCave.CatGlowDraw) — but that cave draws a
     /// texture BY NAME, and the cat's disc lives in XIAO's pack, so nothing of it is resident when Toan is the active
-    /// character. This gives him a disc of his own.
+    /// character. This gives him discs of his own: <see cref="GlowName"/> in the Angel Gear cat's GOLD for Sun Sword's
+    /// Solar Flash, and <see cref="BlueName"/> in the Divine Beast Title cat's BLUE for Big Bang.
     ///
-    /// It is the Gallery of Time's torch glow re-tinted through the same builder the cat's disc uses
-    /// (<see cref="CatPackBakes.GlowT8Tim2"/>) with the Angel Gear cat's GOLD ramp (<see cref="CatPackBakes.GlowGold"/>)
-    /// resting in its CLUT. ⚠ The name must NOT be the cat's: the palette cave (tools/stubs/cat_glow_palette.s) finds its
-    /// target by matching "catglowp", so a disc under any other name is never repainted and keeps its baked white for good
-    /// — no cave change and no tenth palette table. One 8-bit 64×64 disc is ~5 KB, so his pack grows by that much.
-    /// Idempotent: the disc's presence in the bank is the check.
+    /// Each is the Gallery of Time's torch glow re-tinted through the same builder the cat's disc uses
+    /// (<see cref="CatPackBakes.GlowT8Tim2"/>) with that ramp (<see cref="CatPackBakes.GlowGold"/>,
+    /// <see cref="CatPackBakes.GlowBlue"/>) resting in its CLUT. ⚠ The names must NOT be the cat's: the palette cave
+    /// (tools/stubs/cat_glow_palette.s) finds its target by matching "catglowp", so a disc under any other name is never
+    /// repainted and keeps its baked colour for good — which is why a second colour is a second DISC here rather than a
+    /// palette row, and why neither needs a cave change. One 8-bit 64×64 disc is ~5 KB, so his pack grows by that per disc.
+    /// Idempotent: a disc already in the bank in exactly its colour is left alone.
     /// </summary>
     internal static class ToanGlowBakes
     {
         internal const string HostChr  = @"dun\mainchara\c01d.chr";
         internal const string HostImg  = "c01d01_dun.img";   // his texture bank (Xiao's is c04b01.img)
         internal const string Template = "c01d01";           // an 8-bit TIM2 with a 0x30 picture header in that bank — the headers the disc is built on
-        internal const string GlowName = "toanglow";
+        internal const string GlowName = "toanglow";    // Sun Sword — the Angel Gear cat's gold
+        internal const string BlueName = "toanglowb";   // Big Bang — the Divine Beast Title cat's blue
 
         internal static void Run(IsoArchive arc, Action<string> log)
         {
@@ -35,20 +38,27 @@ namespace Dark_Cloud_Improved_Version
             var fire = ChrPack.Parse(arc.Read(CatPackBakes.GlowSrc)).Find("fire.img")
                        ?? throw new IOException("glow source pack lacks fire.img");
             byte[] light = new CatPackBakes.Bank(fire.Payload).Block("lightling");
-            var ramp = CatPackBakes.GlowGold;
-            byte[] disc = CatPackBakes.GlowT8Tim2(bank.Block(Template), light, ramp.core, ramp.outer);
+            var ramps = new[]
+            {
+                (name: GlowName, ramp: CatPackBakes.GlowGold),
+                (name: BlueName, ramp: CatPackBakes.GlowBlue),
+            };
+            var discs = ramps.Select(d => (d.name, bytes: CatPackBakes.GlowT8Tim2(bank.Block(Template), light, d.ramp.core, d.ramp.outer))).ToArray();
+            bool Present(string name) => bank.Entries.Any(e => e.name == name);
+            byte[] Fresh(string name) => discs.FirstOrDefault(d => d.name == name).bytes;
 
-            // Already there AND already this colour: nothing to do. Already there in a DIFFERENT colour (the ramp was
-            // re-authored): replace it, rather than skipping and leaving the old palette baked in.
-            bool present = bank.Entries.Any(e => e.name == GlowName);
-            if (present && bank.Block(GlowName).AsSpan().SequenceEqual(disc)) { log($"Toan's glow disc already in {HostChr} — skipped"); return; }
+            // Every disc already there AND already its colour: nothing to do. One there in a DIFFERENT colour (its ramp
+            // was re-authored): replace it, rather than skipping and leaving the old palette baked in.
+            if (discs.All(d => Present(d.name) && bank.Block(d.name).AsSpan().SequenceEqual(d.bytes)))
+            { log($"Toan's glow discs already in {HostChr} — skipped"); return; }
 
-            var items = bank.Entries.Select(e => (e.name, e.name == GlowName ? disc : bank.Block(e.name))).ToList();
-            if (!present) items.Add((GlowName, disc));
+            var items = bank.Entries.Select(e => (e.name, Fresh(e.name) ?? bank.Block(e.name))).ToList();
+            foreach (var d in discs) if (!Present(d.name)) items.Add((d.name, d.bytes));
             imgRec.ReplacePayload(CatPackBakes.Bank.Build(bank.Magic, items));
             byte[] outp = pack.Rebuild();
             arc.Redirect(HostChr, outp);
-            log($"Toan's glow disc `{GlowName}` ({disc.Length:N0} B) {(present ? "recoloured in" : "added to")} {HostChr}: {items.Count} textures, pack {host.Length:N0} -> {outp.Length:N0} B");
+            string what = string.Join(", ", discs.Select(d => $"`{d.name}` {(Present(d.name) ? "recoloured" : "added")}"));
+            log($"Toan's glow discs in {HostChr}: {what} ({discs[0].bytes.Length:N0} B each); {items.Count} textures, pack {host.Length:N0} -> {outp.Length:N0} B");
         }
     }
 }
