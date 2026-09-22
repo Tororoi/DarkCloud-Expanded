@@ -800,7 +800,10 @@ namespace Dark_Cloud_Improved_Version
         internal const int PlayingMotionSpeed = 0xBD0; // float — playback speed for the current clip (−1.0 = use the motion's KEY speed). RE +0xc60.
         internal const int PlayingMotionFlags = 0xBD4; // int   — the clip's play flags (_SET_MOTION writes 0; Step's commit writes 2 = play once). RE +0xc64.
         internal const int MotionTablePtr     = 0x2B4; // native ptr — the model's motion (KEY) table: 0x10 per motion, KEY speed float @+8 (what _SET_MOTION reads for −1.0). RE unit+0x20014.
-        internal const int MotionTableStride  = 0x10, MotionTableSpeed = 0x8;
+        internal const int MotionTableStride  = 0x10;
+        internal const int MotionTableStart   = 0x00;  // int   — the clip's first frame …
+        internal const int MotionTableEnd     = 0x04;  // int   — … and its last: a clip's true length, per species, live
+        internal const int MotionTableSpeed   = 0x08;  // float — frames advanced per engine frame (its KEY rate)
         internal const int PartStride         = 0x11B0; // an extra render part of a multi-part enemy sits this far past the body's block
         internal const int PlayingMotionId    = 0xBD8; // int   — currently-PLAYING motion id (read by _STATUS_GET_MOTION_ID). RE +0xc68.
         internal const int PlayingMotionIdFromUnit    = ModelFromUnit + PlayingMotionId;    // 0x20938 — same field, unit-relative

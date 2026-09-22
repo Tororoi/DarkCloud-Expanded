@@ -6,15 +6,19 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>
     /// The blinding flash: the dungeon's atmosphere globals (<see cref="DungeonLighting"/> — ambient, the directional light
     /// colours, fog colour and range, whichever set MainDraw is drawing) are captured, driven to white with the fog pulled in
-    /// to nothing so the whole scene washes out, and eased back to the captured values over <see cref="EaseSeconds"/>.
+    /// to nothing so the whole scene washes out, and eased back to the captured values over the BLINDING's own length
+    /// (<see cref="EaseSeconds"/> = <see cref="SunSword.BlindSeconds"/>), so the room brightens as the enemies recover.
     /// MainDraw re-reads the globals every frame, so the writes take effect at once and the ease is a per-tick lerp.
     /// </summary>
     internal static class SolarLighting
     {
-        private const double EaseSeconds = 1.0;    // full white back to the floor's own light
+        // The wash recedes over the whole blinding, so the room brightens back exactly as the enemies recover — tied to that
+        // duration rather than restating it, so the two cannot drift apart.
+        private static double EaseSeconds => SunSword.BlindSeconds;
         private const float  White       = 255f;
         private const float  FogStart    = 0f,  FogEnd = 1f;   // at the peak: everything past one unit is fog colour (white)
         private const int    FogEasePow  = 2;      // the fog clears faster than the light dims: its whiteness is k^this
+        private const double Decay       = 4.0;    // how sharply the wash falls away; higher puts more of the drop in the first moments
 
         private static bool     _active, _sub;
         private static DateTime _start;
@@ -55,7 +59,10 @@ namespace Dark_Cloud_Improved_Version
             if (!_active) return;
             double t = (GameClock.Now - _start).TotalSeconds / EaseSeconds;
             if (t >= 1.0) { Restore(); return; }
-            float k = (float)((1.0 - t) * (1.0 - t));      // ease-out: bright for the first moments, then the light settles
+            // Exponential decay, normalised to reach exactly 0 at the end: most of the wash is gone in the first moments and
+            // the last of it lingers, which reads as a flash dying away rather than a dimmer being turned down.
+            double d = Math.Exp(-Decay * t), d1 = Math.Exp(-Decay);
+            float k = (float)((d - d1) / (1.0 - d1));
             Write(k);
         }
 

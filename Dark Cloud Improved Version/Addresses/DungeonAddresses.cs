@@ -223,9 +223,17 @@ namespace Dark_Cloud_Improved_Version
     /// The engine's _SET/_GET_GLOBAL_INT scratch array (handler @ ELF 0x1E5190): global[i] = Base + i*4.
     /// ELF global-int array @0x1D8FC80, read at PCSX2 0x21D8FC80. Used by the Ice Queen fight handshake.
     /// </summary>
+    /// <summary>The script-visible global integers (<c>GL_INT</c>, 64 of them): what <c>_SET_GLOBAL_INT</c> / <c>_GET_GLOBAL_INT</c>
+    /// (commands 220/221) read and write, and the only channel by which the mod can say something to a running enemy script.
+    /// The Ice Queen cluster owns 0-8; anything new must sit well clear of those.</summary>
     internal static class GlobalInt
     {
         internal const long Base = 0x21D8FC80;
+        internal const int  Count = 64;
+        internal static long Addr(int i) => Base + (long)i * 4;
+        /// <summary>Solar Flash: non-zero while the flash is blinding the floor, read by the guard preamble the mod
+        /// writes into each species' AI label (see <see cref="SolarScript"/>).</summary>
+        internal const int  SolarBlindIndex = 40;
     }
 
     /// <summary>Set to 1 while the player stands inside a healing spring's zone, and cleared at the top of

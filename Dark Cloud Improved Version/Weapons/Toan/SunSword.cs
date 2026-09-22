@@ -20,6 +20,10 @@ namespace Dark_Cloud_Improved_Version
         private const int    KickTypeMelee        = 2;      // +0x98: the melee-style reaction (flinch + shove)
         private const int    HitLifeTicks         = 3;      // the planted sphere is withdrawn after this many ticks
         private const float  FlashPulseSpeed      = 90f;    // Toan's own white pulse at the flash (the change effect's rate)
+        internal const double BlindSeconds        = 5.0;    // how long the flash holds the floor
+        private  const double WakeSeconds         = 1.3;    // …of which this much is the guard coming back down
+        private static DateTime _blindUntil;
+        private const float  PrimedTint           = 45f;    // the slight white Toan keeps while the charge is held, per channel (the tint is an ambient ADD)
         private const ushort FlashSe              = 0;      // sound effect at the flash (SeSeq id; 0 = none)
         private const float  Combo1Hit = 825f, Combo2Hit = 835f, Combo3Hit = 843f, Combo4Hit = 852f, Combo5Hit = 870f;   // frame cursor at which each combo swing comes forward (docs/character-motion-table.md clips 37-41)
 
@@ -39,8 +43,8 @@ namespace Dark_Cloud_Improved_Version
         /// blade returns to its own colour and the dungeon flashes blinding white, easing back over a second
         /// (<see cref="SolarLighting"/>). Every enemy within <see cref="FlashRadius"/> takes a light hit — a quarter of the
         /// weapon's attack through the normal formula, with the sword's element and a melee stagger — and is then blinded
-        /// for <see cref="SolarStun.StunSeconds"/>: it raises its guard and stands frozen, facing the spot Toan flashed from
-        /// (<see cref="SolarStun"/>). The blade tint is <see cref="SolarBlade"/>. Dungeon only; a sidekick out or a floor
+        /// for <see cref="BlindSeconds"/>: its OWN script holds its guard and cancels its movement, frame by frame
+        /// (<see cref="SolarScript"/>). The blade tint is <see cref="SolarBlade"/>. Dungeon only; a sidekick out or a floor
         /// change drops the charge.
         /// </summary>
         public static void SolarFlashEffect()
@@ -61,7 +65,7 @@ namespace Dark_Cloud_Improved_Version
             if (floor != st.floor) { if (st.floor != 0xFF) SolarReset(st); st.floor = floor; }
 
             SolarLighting.Tick();
-            SolarStun.Tick();
+            SolarBlind();
             ExpireHits(st);
             if (Player.CheckDunIsPausedOrMenu()) return;
             if (Player.CurrentCharacterNum() != Player.ToanId)
@@ -86,8 +90,9 @@ namespace Dark_Cloud_Improved_Version
                     if (held >= ChargeSeconds)
                     {
                         st.phase = Phase.Primed;
-                        ChargeTint.Clear();
-                        Player.FlashChargeComplete();
+                        ChargeTint.Clear();                                  // the cyan build-up ends; the white hold below takes over
+                        SolarBlade.PaintPeak(true);                          // the blade's own gold goes near-white, all at once
+                        SolarGlow.Show();                                    // …and Toan takes a white glow of his own
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SunSword] Solar Flash primed");
                     }
                     break;
@@ -95,11 +100,16 @@ namespace Dark_Cloud_Improved_Version
 
                 case Phase.Primed:
                     SolarBlade.Set(1f);                                   // re-asserted each tick: a rebuilt model gets it back
+                    SolarBlade.PaintPeak(true);
+                    SolarGlow.Show();
+                    HoldPrimedTint();
                     if (IsAttack(action)) st.phase = Phase.Windup;
                     break;
 
                 case Phase.Windup:
                 {
+                    SolarBlade.Set(1f);
+                    HoldPrimedTint();
                     if (!IsAttack(action)) { st.phase = Phase.Primed; break; }     // the swing was cancelled: still primed
                     bool forward = action == PlayerAction.ActionWhirlwind || action == PlayerAction.ActionLunge
                                 || Memory.ReadFloat(PlayerAction.AnimFrameCursor) >= ComboHitFrame(action);
@@ -109,6 +119,21 @@ namespace Dark_Cloud_Improved_Version
                     break;
                 }
             }
+        }
+
+        /// <summary>The slight white Toan carries while the charge is held: the same ambient-add field the charge ramp uses,
+        /// re-asserted each tick so a status tint or a character swap cannot leave it stuck on.</summary>
+        private static void HoldPrimedTint() =>
+            Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint, PrimedTint, PrimedTint, PrimedTint);
+
+        /// <summary>The blinding's clock. The behaviour itself is the enemies' own scripts (SolarScript); this only decides
+        /// when they lower their guard and when they get their AI back.</summary>
+        private static void SolarBlind()
+        {
+            if (_blindUntil == default) return;
+            double left = (_blindUntil - GameClock.Now).TotalSeconds;
+            if (left <= 0) { SolarScript.End(); _blindUntil = default; }
+            else if (left <= WakeSeconds) SolarScript.Wake();
         }
 
         private static bool IsAttack(int action) =>
@@ -128,12 +153,15 @@ namespace Dark_Cloud_Improved_Version
         private static void Flash(SolarState st)
         {
             float px = Memory.ReadFloat(Addresses.dunPositionX), ph = Memory.ReadFloat(Addresses.dunPositionZ), py = Memory.ReadFloat(Addresses.dunPositionY);
-            SolarBlade.Clear();
+            SolarBlade.Clear();                                          // tint off, and the blade's own palette back
+            ChargeTint.Clear();                                          // …and the white Toan was holding
+            SolarGlow.Hide();
             SolarLighting.Flash();
             Player.FlashActiveCharacter(255f, 255f, 255f, FlashPulseSpeed, 1);
             if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
             PlantFlashHit(st, px, ph, py);
-            SolarStun.Begin(px, py, FlashRadius);
+            SolarScript.Begin();           // the enemies' OWN scripts hold the guard from here
+            _blindUntil = GameClock.Now.AddSeconds(BlindSeconds);
         }
 
         /// <summary>One player-attack sphere at Toan, <see cref="FlashRadius"/> wide (CollisionPool: the same entry CheckDmg
@@ -176,9 +204,10 @@ namespace Dark_Cloud_Improved_Version
         private static void SolarReset(SolarState st)
         {
             SolarBlade.Clear();
+            SolarGlow.Hide();
             ChargeTint.Clear();
             SolarLighting.Restore();
-            SolarStun.Clear();
+            SolarScript.End(); _blindUntil = default;
             long pool = CollisionPool.Resolve();
             foreach (var (slot, _) in st.planted) if (pool != 0) CollisionPool.Deactivate(pool, slot);
             st.planted.Clear();

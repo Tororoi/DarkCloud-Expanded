@@ -42,6 +42,14 @@ namespace Dark_Cloud_Improved_Version
         internal const int OpRet         = 15; // return: pops the result; at the top frame the label is finished
         internal const int OpJmp         = 16; // jump: operandA = target, relative to CRunScript.CodeBase
         internal const int OpYield       = 23; // wait a frame: saves the next op in CRunScript.Pc and returns to the engine
+        internal const int OpBrIfFalse   = 17; // pops a value; jumps to operandA (relative to CodeBase) when it is FALSE
+        internal const int OpBrIfTrue    = 18; // … and when it is true
+
+        // ── External command ids used by the mod's own injected bytecode ──
+        // The command id is pushed FIRST and counts toward argc: `push id; push arg…; ext(argc = 1 + nargs)`.
+        internal const int FnSetMoveCancel = 0x22; // _SET_MOVE_CANSEL() — zeroes the slot's scripted movement, argc 1
+        internal const int FnSetMotion     = 200;  // _SET_MOTION(idx, ?, flags) — writes the render object's id/flags/KEY rate, argc 4
+        internal const int FnGetGlobalInt  = 221;  // _GET_GLOBAL_INT(i) — pops i, leaves GL_INT[i] on the stack, argc 2
 
         // ── Operand type/scope qualifiers ─────────────────────────────────
         internal const int TypeInt    = 1; // operandA of OpPush3: int32 literal (operandB = the value)
@@ -121,7 +129,8 @@ namespace Dark_Cloud_Improved_Version
     /// <see cref="Finished"/>. CMonstorUnit::Step (0x1DD540) runs a slot's script only while its FreezeTimer is 0: when
     /// MainMonstorUnit.ScriptRunning is 0 it runs label 100 (label 50 once after spawn) and sets the flag; otherwise it
     /// resumes, and clears the flag when Finished — label 110 (hit) and 120 (death) are run() straight from CheckDmg.
-    /// So a slot's AI is parked by pointing <see cref="Pc"/> at a run of YIELD ops (SolarStun does this), and restarted
+    /// So a slot's AI is parked by pointing <see cref="Pc"/> at a run of YIELD ops (SolarScript replaced this with a
+    /// guard sequence written into the label itself), and restarted
     /// cleanly by clearing ScriptRunning.
     /// </summary>
     internal static class CRunScript

@@ -848,14 +848,21 @@ namespace Dark_Cloud_Improved_Version
         /// Xiao's cat are never live together, so the cave and its tint word are free for the blade.</summary>
         internal const long SolarBladeVtable      = 0x21FAF4B0;
         internal const uint SolarBladeVtableGuest = 0x01FAF4B0;
-        /// <summary>A run of STB-VM YIELD ops ending in `push 0; RET` (SolarStun.YieldOps of them, 12 B each): a blinded enemy's
+        /// <summary>A run of STB-VM YIELD ops ending in `push 0; RET` (no longer used — SolarScript drives
+        /// blinded enemies through their own AI label instead; 12 B each): a blinded enemy's
         /// script PC is parked here each tick, so its AI does nothing while the engine keeps stepping its motion. Bytecode the
         /// VM reads — data, never executed as EE code.</summary>
         internal const long SolarYieldBlock       = 0x21FAF4D0;
         internal const uint SolarYieldBlockGuest  = 0x01FAF4D0;
         internal const int  SolarYieldBlockBytes  = 0xF0;      // 20 ops
 
-        // ── FREE: 0x21FAF5C0 .. 0x21FB0000 (0xA40 B) ────────────────────────────────────────────────────
+        /// <summary>One CFrameVu1 (0x270 B) with no geometry and no children: the model of Solar Flash's carrier chara slot.
+        /// The slot has to be DRAWABLE for the scene draw to service its texture group, and this is a real node the draw can
+        /// walk that renders nothing at all — an invisible character, rather than a blank slot the loop may skip.</summary>
+        internal const long SolarCarrierNode      = 0x21FAF5C0;
+        internal const uint SolarCarrierNodeGuest = 0x01FAF5C0;
+
+        // ── FREE: 0x21FAF830 .. 0x21FB0000 (0x7D0 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

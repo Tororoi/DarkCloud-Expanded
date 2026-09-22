@@ -47,6 +47,8 @@ namespace Dark_Cloud_Improved_Version
             ((211, 73, 236), (33, 0, 175)),                 // Holy     purple
             ((50, 50, 50), (160, 160, 160)),                // None     the dimmed white
         };
+        /// <summary>Row 7's ramp — the Angel Shooter's white. Toan's own glow disc rests on it (ToanGlowBakes).</summary>
+        internal static ((int, int, int) core, (int, int, int) outer) GlowWhite => GlowLooks[1];
         private static ((int, int, int) core, (int, int, int) outer)[] GlowRows => GlowElements.Concat(GlowLooks).ToArray();   // the cave's table, in row order
         internal const string CapeCloName = "catcape.clo";
         internal const string DranChr = @"dun\monstor\c12a.chr";                   // the wing donor
@@ -232,7 +234,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The per-element glow disc as an 8-bit TIM2 (64×64 indices + a 256-entry CLUT) built off a vanilla 8-bit picture's headers. The
         /// CLUT baked here is only the resting look; the cave repaints it per element.</summary>
-        private static byte[] GlowT8Tim2(byte[] template, byte[] lightling, (int, int, int) core, (int, int, int) outer)
+        internal static byte[] GlowT8Tim2(byte[] template, byte[] lightling, (int, int, int) core, (int, int, int) outer)
         {
             var info = Tim2Info(template);
             if (info.bpp != 5 || info.hdr != 0x30) throw new IOException("glow_t8_tim2: template is not an 8-bit TIM2 with a 0x30 picture header");

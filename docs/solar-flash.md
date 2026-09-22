@@ -1,8 +1,10 @@
 # Sun Sword — Solar Flash
 
-Hold guard with the Sun Sword and the blade whitens over 1.5 s; at full it is PRIMED (the game's own charge-complete
-pulse) and stays so, guard or not. The next attack carries the charge: as the swing comes forward the blade goes back to
-its own colour and the dungeon flashes blinding white, easing back over a second. Every enemy within 300 units takes a
+Hold guard with the Sun Sword and the blade whitens over 1.5 s; at full it is PRIMED and stays so, guard or not -
+the white it holds IS the readiness cue, so the game's own cyan charge-complete pulse is deliberately not fired (the cyan
+ramp during the build-up stays, since that reads as charging rather than ready). The next attack carries the charge: as
+the swing comes forward the blade goes back to its own colour and the dungeon flashes blinding white, receding over the
+whole five seconds so the room brightens exactly as the enemies recover. Every enemy within 300 units takes a
 light hit and is then blinded for 5 s. `Weapons/Toan/SunSword.cs` (`SunSword.SolarFlashEffect`, a thread per equip
 from `WeaponThreads`) drives it with three helpers in `Weapons/Toan/SunSword/`.
 
@@ -24,6 +26,17 @@ from `WeaponThreads`) drives it with three helpers in `Weapons/Toan/SunSword/`.
   `Clear` zeroes it and puts the class vtable back. The blade frame is found by `Weapons.ResolveBladeFrame("c01w10")` →
   `LocateModelFrame` (the template name sits at node + 0x118; the visual is the node's `GeomPtr`). A skinned visual would
   take the mask cave's own entries; any other class is left alone (logged once, no tint).
+- **The peak palette step** (`SolarBlade.PaintPeak`) — the instant the charge completes, the blade's OWN 256-entry palette
+  is EXPOSED in the texture manager's copy: every entry multiplied by `PeakGain`, and an entry bright enough after that
+  gain washed toward white by up to `PeakWash`. Multiplying keeps the ratios between entries, so the blade's shading
+  survives and only its brightest gold blows out. Selecting "the gold entries" and pushing each the same distance instead
+  drove dark golds as far as bright ones, which flattened the shading into one cream with hard edges at the selection
+  boundary. The original palette is kept and written back when the charge ends.
+- **Toan's tint and glow** — while primed he holds a slight white on the character tint (`SunSword.PrimedTint`,
+  re-asserted each tick so a status tint cannot strand it) and carries a white glow (`SolarGlow`), drawn by the game's
+  own wall-torch routine through the cat's glow cave in the Matador's order: everything written while it is off, armed
+  last. Both anchors are his model root (`CCharacter.CharModel`), so no named bone is needed — `Lift` raises it to his
+  chest. The disc is HIS (`toanglow`): the cat's lives in Xiao's pack and is not resident for him — see the bake below.
 - **Trigger** — `PlayerAction.ChargeActionState`: a combo swing (0x24-0x28) flashes when the frame cursor
   (`AnimFrameCursor`) passes that swing's forward point (clips 37-41 of docs/character-motion-table.md: 825 / 835 / 843
   / 852 / 870 — the first is the measured hit-window start, the rest are start + 5 and the finisher's midpoint, to tune);
@@ -44,14 +57,17 @@ from `WeaponThreads`) drives it with three helpers in `Weapons/Toan/SunSword/`.
   saved PC (`CRunScript.Pc`, ctx+0x30), which YIELD (op 23) sets to the next op. So each tick the slot's PC is parked on
   `CodeCaves.SolarYieldBlock` (18 YIELDs then `push 0; RET`, bytecode in mod RAM) with the running word set: the script
   only waits, no `_SET_MOTION`, no `_SET_MOVE`, while the engine keeps stepping the motion. The scripted move speed
-  (`MoveControl.SpeedAddr`, unit+0x1E450) is zeroed once, since nothing rewrites it now, so the enemy stops where it
-  stands; its facing (`+0x60`/`+0x68`) is pointed at the flash spot each tick. The hold starts 0.1 s after the flash so
+  (`MoveControl.SpeedAddr`, unit+0x1E450) is zeroed every tick — a further hit runs the label-110 reaction from the top
+  and its `_SET_MOVE` would leave the enemy sliding once the next park cut it short — so the enemy stops where it stands; its facing (`+0x60`/`+0x68`) is pointed at the flash spot each tick. The hold starts 0.1 s after the flash so
   CheckDmg's label-110 reaction has requested the damage clip; once that clip is seen past its end (or 1.5 s, never
   before 0.35 s) the guard raise is requested exactly as `_SET_MOTION` (ELF 0x1E1710) requests a motion — the render
   object's motion id, flags 0 and the KEY speed from the model's motion table (halved while Gooey), body and parts, plus
   the slot's request words — then the hold loop when the raise has played out (it loops on its own); a species with no
   guard gets its idle. A clip not seen playing is requested again after 0.25 s (counted in the log; should be rare now).
-  When the timer ends the PC and running word are cleared and Step starts label 100 afresh. A death during the hold is
+  For the last 1.3 s the guard comes DOWN through the model's own guard-return clip (ガード戻り, 108 of the 158 species
+  have one) and the enemy settles into its idle, so the player sees the pose break and can back off instead of being
+  attacked the instant the hold ends. Dropping straight to idle instead read as the enemy snapping out of the guard far
+  faster than it ever does in play. When the timer ends the PC and running word are cleared and Step starts label 100 afresh. A death during the hold is
   the engine's: the moment the slot's label (`CRunScript.Label`, ctx+0x2C) is the death label's funcdata the hold lets
   go. (Freeze status was tried and rejected; a lost-target redirect through the aggro table stopped the walking but the
   AI kept re-requesting its own clips every quarter second.) Per-species idle / damage / guard clips:
@@ -61,8 +77,31 @@ from `WeaponThreads`) drives it with three helpers in `Weapons/Toan/SunSword/`.
 ## Tuning knobs (constants)
 
 `SunSword`: ChargeSeconds 1.5, FlashRadius 300, FlashDamageFraction 0.25, Kick 2.0/0.3, HitLifeTicks 3, FlashPulseSpeed
-90, FlashSe 0 (no sound yet — a resident SE id goes here), the five combo forward frames. `SolarBlade.WhiteMax` 200.
-`SolarLighting`: EaseSeconds 1.0, FogStart/End 0/1, FogEasePow 2. `SolarStun`: StunSeconds 5, ParkDelay 0.1, StaggerMin 0.35, StaggerCap 1.5, RequestRetry 0.25, YieldOps 18.
+90, FlashSe 0 (no sound yet — a resident SE id goes here), the five combo forward frames. `SolarBlade`: WhiteMax 200 (the ambient add), PeakGain 1.60, PeakWash 0.50, WashFrom 150.
+`SunSword.PrimedTint` 45. `SolarLighting`: EaseSeconds = SolarStun.StunSeconds (5 s), FogStart/End 0/1, FogEasePow 2 (the
+fog clears ahead of the light). `SolarGlow`: Scale 1.0, Flags 2, Pull 5, Lift 8. ⚠ Flags 2 is the flickering flame sprite ALONE — 1 adds the steady
+glow pair (18 × 9 at 1.0), which draws as a second much smaller glow beside the first, so 3 shows a tiny duplicate; the
+cat and the Matador both use 2. ⚠ The disc is NOT carried by a chara slot - that was tried and disproved. Nothing services the chara texture groups
+0x20+i: clearing an unused group's loaded flag left it zero even with the slot registered and holding a real active
+character. The cat never relied on it either; its textures live in Xiao's own block, which the scene draw reloads every
+frame, and the group retag only governs binding. So the disc stays tagged to Toan's block (reloaded every frame) and only
+its pixels move, into a page-aligned window above every block's top where nothing else uploads - its original home at
+0x2000 sat inside block 3's window, and block 3 re-uploads every frame, which shredded it. The block's loaded flag is
+cleared each tick, because the uploader otherwise skips an entry sitting above its block's top.
+
+⚠ Guard clips are TIMED, not frame-polled, and each from the model's OWN motion table in RAM (entry =
+motion*0x10: start +0, end +4, KEY rate +8) - so a raise, a hold and a return each run at their own native rate on
+every species. The decoded table (EnemyGuardMotions) carries only ONE speed, the guard loop's, which is right only
+where a species shares that rate and otherwise cuts a clip short or overruns it; it is kept for the clip INDICES,
+which RAM cannot supply since they come from the Japanese names, and as the fallback if a live read looks wrong.
+Playback was always native - the request hands the engine that same table's rate. Arthur: return is clip 7, 10
+frames at 0.2, so ~0.83 s, and the wind-down window is 1.3 s to leave room for it plus a moment of idle.
+
+⚠ The glow anchors on a POSED bone, never the model root. A root carries an unposed transform while the engine poses
+its children, so a glow hung there sits at the world origin - that was the stray sprite, and why lowering the lift made
+it vanish rather than slide down his chest. The live weapon is parented to the wielder's hand bone, so reading that
+pointer gives a posed bone for free (CharacterClone reads it the same way rather than trusting a bone INDEX, since
+every character's skeleton differs); walking up its parents to just below the root lands on the spine.
 
 ## Open until played
 
@@ -70,3 +109,21 @@ The fog range semantics at the peak, the combo forward frames for swings 2-5, wh
 PC restored rather than restarted, the re-request count in the log, and a flash sound. Seen in play:
 the lighting flash works (ambient 50,50,50 / fog 250..650 captured on the first floor); writing `+0xEC`/`+0xF4` alone did NOT
 switch a standing enemy's clip — the render-object words `_SET_MOTION` writes are what switch it.
+
+## Toan's glow disc (an ISO bake)
+
+`IsoPatch/ToanGlowBakes.cs`, post-step `toan-glow`, run right after the cat pack in `IsoPatcher.BakeCharacterPacks`.
+
+The glow cave draws a texture BY NAME, and the cat's disc (`catglowp`) is baked into XIAO's dungeon pack, so none of it is
+resident when Toan is the active character. This appends a disc of his own to his pack's texture bank
+(`dun\mainchara\c01d.chr` → record `c01d01_dun.img`), built by the SAME builder the cat's disc uses
+(`CatPackBakes.GlowT8Tim2`) from the Gallery of Time's torch glow, with the Angel Shooter's white ramp
+(`CatPackBakes.GlowWhite`, row 7) resting in its CLUT. `c01d01` supplies the TIM2 headers.
+
+⚠ **The name must not be `catglowp`.** The palette cave (`tools/stubs/cat_glow_palette.s`) finds its target by matching
+that name, so a disc under any other name is never repainted and keeps its baked white for good — no cave change and no
+tenth palette table.
+
+One 8-bit 64×64 disc is 5,184 B, so his pack grows by that much (1,620,480 → 1,625,712 B) and is redirected into the
+DATA.DAT tail like any grown file. The step is idempotent (the disc's presence in the bank is the check) and, like the
+cat pack, it must run AFTER the sign patch — that is what creates the tail room.
