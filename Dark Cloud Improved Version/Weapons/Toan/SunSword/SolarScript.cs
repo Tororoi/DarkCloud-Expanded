@@ -30,6 +30,7 @@ namespace Dark_Cloud_Improved_Version
     internal static class SolarScript
     {
         private const int LabelAi = 100, LabelHit = 110;
+        private const double IdleBeat = 0.4;           // the pause every enemy gets between lowering its guard and acting
         private const int StaggerFrames = 20;          // the flash's own hit reaction, before the guard comes up (~1/3 s)
         private const int StaggerFramesMin = 4;        // …shortened to fit a cramped label rather than skipped entirely
         private const int RoomMargin = 0x60;           // bytes left untouched at the end of a label's span — see BelongsToUs
@@ -46,10 +47,10 @@ namespace Dark_Cloud_Improved_Version
             public byte[] Written;     // … and exactly what we put there, so a restore can tell the script is still ours
             public long HitAt;         // …and the hit-reaction label, when there was room to take it over
             public byte[] HitOriginal, HitWritten;
+            public double ReturnSeconds;  // how long THIS species' guard-lowering clip runs …
+            public bool   Woken;          // … and whether its wind-down has been started
         }
         private static readonly List<Patched> _patched = new List<Patched>();
-
-        private static bool _woken;
 
         internal static bool Active => _patched.Count > 0;
 
@@ -57,7 +58,6 @@ namespace Dark_Cloud_Improved_Version
         internal static void Begin()
         {
             if (Active) return;
-            _woken = false;
             Memory.WriteInt(GlobalInt.Addr(GlobalInt.SolarBlindIndex), 1);
             var seen = new HashSet<uint>();
             var seenPatched = new HashSet<uint>();
@@ -68,7 +68,7 @@ namespace Dark_Cloud_Improved_Version
                 if (!Memory.IsValidGuest(stb) || !seen.Add(stb)) continue;      // one patch per species, not per slot
                 int slotOf = s;
                 if (!Ordinary(s)) continue;                                      // mimics, king mimics and bosses are left alone
-                if (!HoldClipOf(s, out int guard, out int back)) continue;        // no motions at all: leave it to its own AI
+                if (!HoldClipOf(s, out int guard, out int back, out var clips)) continue;   // no motions at all: leave it to its own AI
                 long b = Memory.ToMmu(stb);
                 if (Memory.ReadInt(b) != StbVm.Magic) continue;
                 long code = LabelCode(b, LabelAi, out int entryPc, out int aiRoom);
@@ -77,7 +77,8 @@ namespace Dark_Cloud_Improved_Version
                 if (orig == null) continue;
                 byte[] hold = HoldSeq(guard, entryPc);
                 Memory.WriteByteArray(code, hold);
-                var rec = new Patched { Stb = stb, CodeAt = code, EntryPc = entryPc, Guard = guard, Return = back, Original = orig, Written = hold };
+                var rec = new Patched { Stb = stb, CodeAt = code, EntryPc = entryPc, Guard = guard, Return = back, Original = orig, Written = hold,
+                                        ReturnSeconds = back >= 0 ? ClipSeconds(slotOf, back, clips) : 0 };
 
                 // The hit reaction as well. CheckDmg runs label 110 DIRECTLY when the flash's own hit lands, which overrides
                 // the AI label for its whole duration and is free to turn the enemy toward the player — the tracking that
@@ -143,28 +144,49 @@ namespace Dark_Cloud_Improved_Version
             return n;
         }
 
-        /// <summary>The last stretch before the AI resumes: each script swaps its held guard for that species' own guard-
-        /// LOWERING clip, so the pose breaks visibly a moment before the enemy acts. Species without one simply hold.</summary>
-        internal static void Wake()
+        /// <summary>Wind each species down on ITS OWN clock.
+        ///
+        /// One shared window could not fit them all: the guard-lowering clips run from 0.21 s to 1.67 s, so a single figure
+        /// either cut the long ones off mid-animation or left the short ones standing idle for most of a second. Each
+        /// species is started exactly its own clip-length plus <see cref="IdleBeat"/> before the end, so every enemy gets
+        /// the same brief pause between lowering its guard and acting, whatever its animation costs.</summary>
+        internal static void Wake(double secondsLeft)
         {
-            if (_woken || !Active) return;
-            _woken = true;
-            int n = 0;
+            if (!Active) return;
             var stbs = new HashSet<uint>();
+            int n = 0;
             foreach (var p in _patched)
-                if (p.Return >= 0 && StillOurs(p.CodeAt, p.Written))
-                {
-                    byte[] seq = HoldSeq(p.Return, p.EntryPc, once: true);
-                    Memory.WriteByteArray(p.CodeAt, seq); p.Written = seq; stbs.Add(p.Stb); n++;
-                }
-            // ⚠ Rewriting the block is not enough. By now each enemy's saved PC is parked in the loop at the TAIL of the
-            // sequence, and the replacement has the same shape — so the PC still lands in that loop and the records that
-            // ISSUE the motion, at the top, are never reached. The guard would simply hold until the restore snapped it
-            // away, which is the abrupt exit. Re-enter the label from the top, exactly as Begin and End do. (Enemies that
-            // happened to be hit during the blinding recovered by accident: their hit reaction returns and re-enters it.)
+            {
+                if (p.Woken || p.Return < 0) continue;                       // no lowering clip: it simply holds to the end
+                if (secondsLeft > p.ReturnSeconds + IdleBeat) continue;      // not yet its turn
+                p.Woken = true;
+                if (!StillOurs(p.CodeAt, p.Written)) continue;               // reloaded underneath us: leave it alone
+                byte[] seq = HoldSeq(p.Return, p.EntryPc, once: true);
+                Memory.WriteByteArray(p.CodeAt, seq); p.Written = seq;
+                stbs.Add(p.Stb); n++;
+            }
+            if (n == 0) return;
+            // As with every rewrite: re-enter the label, or the saved PC stays in the loop and the new clip is never issued.
             int restarted = RestartScripts(stbs);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[SunSword] blinding ending: {n} scripts lowering their guard, {restarted} enemies re-entered to play it");
+                $"[SunSword] {n} script(s) lowering their guard ({secondsLeft:0.00}s left), {restarted} enemies re-entered to play it");
+        }
+
+        /// <summary>How long a clip runs, from the model's OWN motion table — its frame range at its own KEY rate — falling
+        /// back to the decoded table when the live read looks implausible.</summary>
+        private static double ClipSeconds(int slot, int motion, EnemyGuardMotions.Guard g)
+        {
+            long model = ModelScaleOffsets.ModelBase + (long)slot * ModelScaleOffsets.ModelStride;
+            uint table = Memory.ReadGuestPtr(model + ModelScaleOffsets.MotionTablePtr);
+            if (Memory.IsValidGuest(table))
+            {
+                long e = Memory.ToMmu(table) + (long)motion * ModelScaleOffsets.MotionTableStride;
+                int start = Memory.ReadInt(e + ModelScaleOffsets.MotionTableStart);
+                int end   = Memory.ReadInt(e + ModelScaleOffsets.MotionTableEnd);
+                float step = Memory.ReadFloat(e + ModelScaleOffsets.MotionTableSpeed);
+                if (end > start && step > 0.01f && step < 10f) return (end - start) / (step * 60.0);
+            }
+            return Math.Max(1, g.ReturnEnd - g.ReturnStart) / (Math.Max(0.05f, g.Speed) * 60.0);
         }
 
         /// <summary>Clear the flag and give every script its own AI back.</summary>
@@ -196,7 +218,6 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(GlobalInt.Addr(GlobalInt.SolarBlindIndex), 0);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] blinding over: {restored} scripts restored");
             _patched.Clear();
-            _woken = false;
         }
 
         /// <summary>The blinded AI, in the enemy's own bytecode:
@@ -336,12 +357,12 @@ namespace Dark_Cloud_Improved_Version
         /// carrying on through the flash untouched, which is exactly what "bats are unaffected" looked like. Holding the
         /// idle instead stuns everything: a grounded enemy braces, a flyer hovers in place, and neither acts. The guard
         /// LOWERING clip is only meaningful for the ones that actually raised a guard.</summary>
-        private static bool HoldClipOf(int slot, out int motion, out int back)
+        private static bool HoldClipOf(int slot, out int motion, out int back, out EnemyGuardMotions.Guard g)
         {
-            motion = -1; back = -1;
+            motion = -1; back = -1; g = default;
             ushort eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.EnemySpeciesId));
             if (!EnemySpecies.Defaults.TryGetValue(eid, out var def) || !def.TableIndex.HasValue) return false;
-            if (!EnemyGuardMotions.TryGet(def.TableIndex.Value, out var g)) return false;
+            if (!EnemyGuardMotions.TryGet(def.TableIndex.Value, out g)) return false;
             motion = g.HasGuard ? g.Loop : g.Idle;
             back = g.HasGuard && g.HasReturn ? g.Return : -1;
             return true;

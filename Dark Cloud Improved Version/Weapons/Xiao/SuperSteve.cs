@@ -574,7 +574,7 @@ namespace Dark_Cloud_Improved_Version
                 // Toan Effects
                 // Divine Guard (7th Heaven) + Guard Crush (Dark Cloud; 7th Heaven inherits Guard Crush by lineage).
                 SeventhHeaven.SeventhHeavenSoftenAttacks(active && sphere == Items.seventhheaven);
-                DarkCloud.DarkCloudDriveGuards(active && (sphere == Items.seventhheaven || sphere == Items.darkcloud));
+                GuardBreak.Drive(active && (sphere == Items.seventhheaven || sphere == Items.darkcloud));
 
                 // Defensive Legacy (Aga's Sword): +15 Xiao defense.
                 SuperSteve.DriveAgasSword(active && sphere == Items.agassword);
@@ -681,7 +681,7 @@ namespace Dark_Cloud_Improved_Version
 
             // Restore everything on unequip / character-switch / dungeon exit (no-ops if not driven).
             SeventhHeaven.SeventhHeavenSoftenAttacks(false);
-            DarkCloud.DarkCloudDriveGuards(false);
+            GuardBreak.Drive(false);
             BoneRapier.SkeletonKeyEffect(false);
             SunSword.SunHarvestDrive(false, ssSun);
             Evilcise.Drive(false, xiaoCurse, ssEvilcise);

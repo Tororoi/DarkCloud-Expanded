@@ -65,7 +65,7 @@ from `WeaponThreads`) drives it with three helpers in `Weapons/Toan/SunSword/`.
   object's motion id, flags 0 and the KEY speed from the model's motion table (halved while Gooey), body and parts, plus
   the slot's request words — then the hold loop when the raise has played out (it loops on its own); a species with no
   guard gets its idle. A clip not seen playing is requested again after 0.25 s (counted in the log; should be rare now).
-  For the last 1.3 s the guard comes DOWN through the model's own guard-return clip (ガード戻り, 108 of the 158 species
+  Near the end the guard comes DOWN through the model's own guard-return clip (ガード戻り, 108 of the 158 species
   have one) and the enemy settles into its idle, so the player sees the pose break and can back off instead of being
   attacked the instant the hold ends. Dropping straight to idle instead read as the enemy snapping out of the guard far
   faster than it ever does in play. When the timer ends the PC and running word are cleared and Step starts label 100 afresh. A death during the hold is
@@ -133,6 +133,23 @@ longer matches is left alone and its enemies are not force-restarted. Only BOSSE
 rewritten by BossScriptPatcher and two writers on one script would collide; mimics are patched like anything else. A label's span
 is not entirely free either - scripts keep subroutine bodies between label regions - so a margin is left unused and the
 records about to be replaced must decode as real opcodes first.
+
+⚠ The flash BREAKS GUARDS for as long as it is blinding the floor. Blinded enemies hold a real guard and it really
+blocks, so without this the stun made them harder to hit rather than easier. Guarding is data - three guard-window
+active flags per slot, consulted by CheckDmg - so `GuardBreak.Drive(true)` holds them at zero while the blinding lasts
+and restores the captured originals when it ends or the ability tears down. Nothing native is patched. A hit then lands,
+the enemy's OWN hit reaction staggers it, and returning from that reaction drops it back into the guard hold - the
+stagger-then-resume-guarding sequence comes free from the script takeover.
+`GuardBreak` is shared (Weapons/GuardBreak.cs): Dark Cloud and 7th Heaven drive it while drawn, Super Steve through
+their spheres, Solar Flash only during its flash. It owns the capture/restore and the floor-change reset, so no weapon
+reaches into another's state; Toan holds one sword at a time, so no two ever drive it at once.
+
+⚠ The wind-down runs on a PER-SPECIES clock, not one shared window. The guard-lowering clips run from 0.21 s to
+1.67 s (median 0.49 s), so a single figure was wrong at both ends: 1.3 s cut the longest clip off 0.37 s early - the
+abruptness it was meant to fix - and left a median enemy standing idle for 0.81 s. Each species is now started exactly
+its own clip-length plus IdleBeat (0.4 s) before the blinding ends, so every enemy gets the same brief pause between
+lowering its guard and acting. Each clip is measured from the model's OWN motion table (frame range at its KEY rate),
+with the decoded table as the fallback.
 
 ⚠ The guard HOLD and the guard RETURN are requested differently. A hold uses the 2-argument motion form, whose flags
 default to 0 = loop, which is what a hold wants. The return uses the 3-argument form with flags 2 (play once, hold the
