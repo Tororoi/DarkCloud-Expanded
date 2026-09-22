@@ -54,6 +54,12 @@ namespace Dark_Cloud_Improved_Version
         // ── Operand type/scope qualifiers ─────────────────────────────────
         internal const int TypeInt    = 1; // operandA of OpPush3: int32 literal (operandB = the value)
         internal const int TypeFloat  = 2; // operandA of OpPush3: float literal (operandB = IEEE-754 bits)
+        /// <summary>_SET_MOTION's 3-argument form (argc 4) is (clip, speed, flags): the int goes straight into the render
+        /// object's motion FLAGS word and the float into its SPEED word. Flags 0 LOOPS the clip; 2 plays it once and holds
+        /// the last frame. The speed sentinel -1.0 means "use the clip's own KEY rate" — the handler writes that sentinel
+        /// first and then overwrites it with whatever float is passed, so passing it back gives native speed.</summary>
+        internal const int MotionFlagsLoop = 0, MotionFlagsOnce = 2;
+        internal const uint MotionSpeedKeyBits = 0xBF800000; // -1.0f
         internal const int ScopeLocal = 1; // operandB of OpPush1: scope 1 = local / call argument (as opposed to global)
 
         // ── External command function IDs (as pushed in the STB as funcId to OpExt) ─────────────

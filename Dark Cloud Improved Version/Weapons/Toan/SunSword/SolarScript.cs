@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -33,7 +34,7 @@ namespace Dark_Cloud_Improved_Version
         private const int StaggerFramesMin = 4;        // …shortened to fit a cramped label rather than skipped entirely
         private const int RoomMargin = 0x60;           // bytes left untouched at the end of a label's span — see BelongsToUs
         private const int TypeBoss = 2;
-        private const int SnapshotBytes = StbVm.InstrSize * 9;   // what HoldSeq writes, and what is saved to put back
+        private const int SnapshotBytes = StbVm.InstrSize * 11;  // the LONGER of the two HoldSeq shapes, so either fits back
 
         private sealed class Patched
         {
@@ -149,13 +150,21 @@ namespace Dark_Cloud_Improved_Version
             if (_woken || !Active) return;
             _woken = true;
             int n = 0;
+            var stbs = new HashSet<uint>();
             foreach (var p in _patched)
                 if (p.Return >= 0 && StillOurs(p.CodeAt, p.Written))
                 {
-                    byte[] seq = HoldSeq(p.Return, p.EntryPc);
-                    Memory.WriteByteArray(p.CodeAt, seq); p.Written = seq; n++;
+                    byte[] seq = HoldSeq(p.Return, p.EntryPc, once: true);
+                    Memory.WriteByteArray(p.CodeAt, seq); p.Written = seq; stbs.Add(p.Stb); n++;
                 }
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] blinding ending: {n} scripts lowering their guard");
+            // ⚠ Rewriting the block is not enough. By now each enemy's saved PC is parked in the loop at the TAIL of the
+            // sequence, and the replacement has the same shape — so the PC still lands in that loop and the records that
+            // ISSUE the motion, at the top, are never reached. The guard would simply hold until the restore snapped it
+            // away, which is the abrupt exit. Re-enter the label from the top, exactly as Begin and End do. (Enemies that
+            // happened to be hit during the blinding recovered by accident: their hit reaction returns and re-enters it.)
+            int restarted = RestartScripts(stbs);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[SunSword] blinding ending: {n} scripts lowering their guard, {restarted} enemies re-entered to play it");
         }
 
         /// <summary>Clear the flag and give every script its own AI back.</summary>
@@ -200,22 +209,29 @@ namespace Dark_Cloud_Improved_Version
         /// again each frame instead, which is what actually stops the sliding — a hit landing mid-hold runs the enemy's
         /// reaction script (label 110, untouched) and that sets movement, and here the AI itself takes it straight back.
         /// One argument to _SET_MOTION selects the handler's KEY-rate form, so the clip plays at its own native speed.</summary>
-        private static byte[] HoldSeq(int motion, int entryPc)
+        private static byte[] HoldSeq(int motion, int entryPc, bool once = false)
         {
             const int Cancel = 0, Motion = 2, Loop = 5;                         // record indices, for the jump target
-            var recs = new (uint op, uint a, uint v)[]
+            var recs0 = new (uint op, uint a, uint v)[]
             {
                 ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)StbVm.FnSetMoveCancel),   // 0
                 ((uint)StbVm.OpExt,   1, 0),                                               // 1
                 ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)StbVm.FnSetMotion),       // 2
                 ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)motion),                  // 3
-                ((uint)StbVm.OpExt,   2, 0),                                               // 4  argc counts the command id
+                // A HOLD loops (flags 0, the 2-argument form); the guard-LOWERING clip must play once and stop, so it goes
+                // through the 3-argument form with flags 2 and the -1.0 speed sentinel, which means "the clip's own rate".
+                // Issued with flags 0 it looped over and over until the restore snapped it away.
+                ((uint)StbVm.OpPush3, (uint)StbVm.TypeFloat, once ? StbVm.MotionSpeedKeyBits : 0u),
+                ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt,   (uint)StbVm.MotionFlagsOnce),
+                ((uint)StbVm.OpExt,   (uint)(once ? 4 : 2), 0),                            // argc counts the command id
                 ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)StbVm.FnSetMoveCancel),   // 5  ← loop
                 ((uint)StbVm.OpExt,   1, 0),                                               // 6
                 ((uint)StbVm.OpYield, 0, 0),                                               // 7
-                ((uint)StbVm.OpJmp,   (uint)(entryPc + Loop * StbVm.InstrSize), 0),        // 8  target is CodeBase-relative
+                ((uint)StbVm.OpJmp,   (uint)(entryPc + (once ? Loop + 2 : Loop) * StbVm.InstrSize), 0),   // target is CodeBase-relative
             };
             _ = Cancel; _ = Motion;
+            // …and without `once` the speed/flags pushes are not part of the sequence at all.
+            var recs = once ? recs0 : recs0.Where((r, i) => i != 4 && i != 5).ToArray();
             var blk = new byte[recs.Length * StbVm.InstrSize];
             for (int i = 0; i < recs.Length; i++)
             {

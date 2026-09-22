@@ -134,6 +134,15 @@ rewritten by BossScriptPatcher and two writers on one script would collide; mimi
 is not entirely free either - scripts keep subroutine bodies between label regions - so a margin is left unused and the
 records about to be replaced must decode as real opcodes first.
 
+⚠ The guard HOLD and the guard RETURN are requested differently. A hold uses the 2-argument motion form, whose flags
+default to 0 = loop, which is what a hold wants. The return uses the 3-argument form with flags 2 (play once, hold the
+last frame) and the -1.0 speed sentinel (the clip's own rate) - requested as a hold it simply looped until the restore.
+
+⚠ Every rewrite needs the restart, not just the first. The wind-down swaps the held clip for the species' guard-
+lowering one, but by then the saved PC sits in the loop at the tail of the sequence and the replacement has the same
+shape, so without a restart the PC never reaches the records that issue the motion and the guard simply holds until the
+restore snaps it away. (The clips themselves are fine - Black Dragon's and Witch Hellza's returns are fully keyframed.)
+
 ⚠ Patching a label does not disturb a script already running - its saved PC points into the old code, so the enemy
 finishes its current pass before reaching the new sequence, AND a PC inside the replaced bytes would resume mid-record.
 Clear the slot's saved PC and its ScriptRunning word so Step re-enters the label from the top next frame; do the same on
