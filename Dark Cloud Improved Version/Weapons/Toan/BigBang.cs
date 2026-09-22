@@ -12,10 +12,14 @@ namespace Dark_Cloud_Improved_Version
         private const int    TickMs           = 30;
         private const double ChargeSeconds    = 1.5;    // guard held this long primes the blade (as Solar Flash's)
         private const float  BlastRadius      = 160f;   // the blast reaches this far from the sword
-        private const float  DamageFraction   = 1.0f;   // the blast's base damage, as a fraction of the weapon's attack
+        private const float  DamageFraction   = 2.0f;   // the blast's base damage, as a multiple of the weapon's attack
         private const float  PerEnemyRadius   = 25f;    // each victim gets its OWN sphere, centred on it (see PlantBlast)
         private const int    HitLifeTicks     = 3;      // the planted spheres are withdrawn after this many ticks
-        private const float  KickStrength = 2.0f, KickDecay = 0.3f;   // the blast's shove, sized like Toan's heavier combo hits
+        // The blast's shove — HEAVY. For scale: Toan's own combo hits use strength 1.2 with decay 0.2 (the ELF
+        // constants ToanKey_Play hands SetKickBack), Goro's hammer swing 2.5 with a slow 0.1 that carries further,
+        // and Super Steve's wind clamps at 6 because a flat 40 threw enemies clean off the map. So this is roughly
+        // four times a sword hit, with a slower decay so they travel rather than just flinch.
+        private const float  KickStrength = 5.0f, KickDecay = 0.12f;
         private const int    KickTypeMelee    = 2;      // +0x98: the melee-style reaction (flinch + shove)
         private const double PrimedSeconds    = 10.0;   // a charge left unused this long dissipates
         private const double DissipateSeconds = 0.5;    // …shrinking the glow away
@@ -36,7 +40,7 @@ namespace Dark_Cloud_Improved_Version
         // always spent before any of them can start.
         private const float  Swing1Late       = 827f;
         // The burst is authored as a small thrown-gem puff, so a blast-sized one is scaled up and slowed down.
-        private const float  BurstScale       = 3.0f;
+        private const float  BurstScale       = 6.0f;
         private const float  BurstSpeed       = 0.6f;
         private const int    BurstElement     = MasekiEffect.Fire;   // the ANIMATION only — the damage carries the weapon's element
         // ── the shared effect slot ──────────────────────────────────────────────────────────
@@ -58,7 +62,7 @@ namespace Dark_Cloud_Improved_Version
         private const int    ExplosionTemplate = 16;                 // zibaku_f2: a self-detonation — bursts in place, nothing flies
         private const string ExplosionName     = "explosion";
         private const string WhirlwindName     = "c01_fuusya";       // the config's own name, as dun.bin holds it
-        private const float  ExplosionScale    = 1.0f;               // CObject scale on the sub-shot, not the gem burst's sprite scale
+        private const float  ExplosionScale    = 2.0f;               // CObject scale on the sub-shot, not the gem burst's sprite scale
         private const double VentMaxSeconds    = 3.0;                // backstop: never hold the slot longer than this after a blast
         private static volatile bool _wantExplosion;                 // read by WantedShot on the BorrowedShots thread
 
