@@ -77,7 +77,7 @@ from `WeaponThreads`) drives it with three helpers in `Weapons/Toan/SunSword/`.
 ## Tuning knobs (constants)
 
 `SunSword`: ChargeSeconds 1.5, FlashRadius 300, FlashDamageFraction 0.25, Kick 2.0/0.3, HitLifeTicks 3, FlashPulseSpeed
-90, FlashSe 0 (no sound yet — a resident SE id goes here), the five combo forward frames. `SolarBlade`: WhiteMax 200 (the ambient add), PeakGain 1.60, PeakWash 0.50, WashFrom 150.
+90, FlashSe 0 (no sound yet — a resident SE id goes here), the five combo forward frames. `SolarBlade`: WhiteMax 200 (the ambient add). The peak palette exposure was removed once the glow landed - the glow reads the charge on its own.
 `SunSword.PrimedTint` 45. `SolarLighting`: EaseSeconds = SolarStun.StunSeconds (5 s), FogStart/End 0/1, FogEasePow 2 (the
 fog clears ahead of the light). `SolarGlow`: Scale 1.0, Flags 2, Pull 5, Lift 8. ⚠ Flags 2 is the flickering flame sprite ALONE — 1 adds the steady
 glow pair (18 × 9 at 1.0), which draws as a second much smaller glow beside the first, so 3 shows a tiny duplicate; the
@@ -96,6 +96,43 @@ where a species shares that rate and otherwise cuts a clip short or overruns it;
 which RAM cannot supply since they come from the Japanese names, and as the fallback if a live read looks wrong.
 Playback was always native - the request hands the engine that same table's rate. Arthur: return is clip 7, 10
 frames at 0.2, so ~0.83 s, and the wind-down window is 1.3 s to leave room for it plus a moment of idle.
+
+⚠ The blinding is driven by the enemies' OWN scripts, and takes over TWO labels. Label 100 (AI) gets a guard hold:
+cancel movement, play the guard clip ONCE, then loop cancel+YIELD (re-issuing the motion each frame would rewrite the
+frame cursor and freeze the clip on frame 1). Label 110 (hit reaction) gets the flash's own stagger: cancel, play the
+damage clip, wait N frames, RET - at which point the AI label brings the guard up. Taking 110 over matters because
+CheckDmg runs it DIRECTLY when the flash's hit lands, overriding the AI label for its whole duration and turning the
+enemy back toward the player, which is what made the stun look delayed. Both originals are snapshotted and written back.
+Labels are packed back to back, so a replacement may only use the span before the next label's code: the guard needs
+108 B and fits everywhere checked, while the stagger's wait is SIZED to the room (20 frames where there is space, down
+to a 4-frame minimum; a handful of Dark Genie scripts have only ~104 B and keep their vanilla reaction).
+⚠ Every species is held, not just the ones that can guard. Only 111 of 158 have a guard clip - flyers such as bats
+have none at all - and skipping those left them flying on through the flash, which is what 'bats are unaffected' was.
+A species without a guard holds its IDLE instead: grounded enemies brace, flyers hover, and neither acts. The guard
+LOWERING clip in the wind-down only applies to the ones that actually raised a guard.
+
+⚠ The flash plants ONE SPHERE PER ENEMY, not one big one. A CollisionData entry is CONSUMED by the first victim the
+engine matches it against, so a single 300-unit sphere damaged exactly one enemy - which read as 'one per species',
+since a species tends to be clustered. Each enemy in range gets its own small sphere centred on it, with the kick
+origin left at Toan so everyone is shoved away from him; the pool holds 96 entries against at most 16 enemies.
+⚠ One flash at a time: charging is refused while a flash is still out, including a charge already in flight when the
+last one fired. A charge left unused for 10 s dissipates - the tint bleeds out and the glow shrinks away over 0.5 s -
+and the glow swells from nothing over 0.25 s when it first appears.
+
+⚠ Restoring is guarded, and that guard is the important one. A snapshot is only valid while the script is still the
+one that was patched: five seconds is long enough for a script to be reloaded or freed - a mimic changes state when it
+is opened, a floor can change, a species can leave - and by then the saved address belongs to something else, so writing
+the snapshot back corrupts whatever moved in. That is what ended a run at the memory-card screen, on RESTORE rather than
+on patch. So the bytes are compared against exactly what was written before anything is put back, and a script that no
+longer matches is left alone and its enemies are not force-restarted. Only BOSSES are skipped outright, because their labels are already
+rewritten by BossScriptPatcher and two writers on one script would collide; mimics are patched like anything else. A label's span
+is not entirely free either - scripts keep subroutine bodies between label regions - so a margin is left unused and the
+records about to be replaced must decode as real opcodes first.
+
+⚠ Patching a label does not disturb a script already running - its saved PC points into the old code, so the enemy
+finishes its current pass before reaching the new sequence, AND a PC inside the replaced bytes would resume mid-record.
+Clear the slot's saved PC and its ScriptRunning word so Step re-enters the label from the top next frame; do the same on
+restore so enemies resume their real AI cleanly.
 
 ⚠ The glow anchors on a POSED bone, never the model root. A root carries an unposed transform while the engine poses
 its children, so a glow hung there sits at the world origin - that was the stray sprite, and why lowering the lift made

@@ -24,8 +24,12 @@ namespace Dark_Cloud_Improved_Version
                                               // draws as a second, much smaller glow beside the first — the cat and the Matador both
                                               // use 2 for exactly that reason; 3 (both) is what put a tiny duplicate in the corner.
         private const float  Pull  = 5f;      // toward the camera, as the cat and the Matador use (the torches' 15 is to clear their wall)
-        private const float  Lift  = 8f;      // up from the root (his feet) to his chest — 14 centred it on his head
-        private static bool  _on;
+        private const float  Lift  = 0f;      // AT the anchor bone. It is a spine bone, around chest height, so +8 put the
+                                              // glow on his head and +14 above it; centred on his mid-height is 0.
+        private const double GrowSeconds = 0.25;   // it swells from nothing rather than snapping on
+        private const double FadeSeconds = 0.50;   // …and shrinks away again when a charge is spent unused
+        private static bool  _on, _fading;
+        private static DateTime _shownAt, _fadeAt;
 
         /// <summary>Up, once. Re-arming every tick would re-bind the texture each frame.</summary>
         internal static void Show()
@@ -35,7 +39,7 @@ namespace Dark_Cloud_Improved_Version
             if (root == 0) return;                                       // no posed bone yet: try again next tick
             Reserve();                                                   // …and give the disc a home that is actually uploaded, BEFORE the cave binds it
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, Scale);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, 0f);       // …from nothing; Tick swells it over GrowSeconds
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, Flags);
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, Pull);
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, Lift);
@@ -45,20 +49,49 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowReady, 0);        // bind the disc
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 1);           // armed last
-            _on = true;
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] glow up at Toan's root 0x{root:X} (disc `{Disc}`, scale {Scale:0.00}, lift {Lift:0})");
+            _on = true; _fading = false; _shownAt = GameClock.Now;
+            // Where the anchor really sits, so any residual offset is one measurement rather than another guess: the cave
+            // places the sprite at the node's posed world position (world matrix translation row), and his feet are the
+            // player's own height.
+            float anchorH = Memory.ReadFloat(Memory.ToMmu(root) + CFrameVu1.WorldMatrix + 0x30 + 4);
+            float feetH   = Memory.ReadFloat(Addresses.dunPositionZ);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[SunSword] glow up at bone 0x{root:X} (disc `{Disc}`, scale {Scale:0.00}, lift {Lift:0}); bone sits {anchorH - feetH:0.#} above his feet");
         }
 
         /// <summary>One line describing where the disc actually LIVES: its manager entry, the block it belongs to, its TEX0
         /// page, and that block's uploaded window. A sprite drawn from a page outside its block's base..top samples whatever
         /// else is there — which is what a garbled square instead of a soft disc means. Diagnostic only.</summary>
+        /// <summary>Per tick while it is up: swell in over <see cref="GrowSeconds"/>, or shrink away over
+        /// <see cref="FadeSeconds"/> once <see cref="Fade"/> has been called, taking it down at the end.</summary>
+        internal static void Tick()
+        {
+            if (!_on) return;
+            float k;
+            if (_fading)
+            {
+                double t = (GameClock.Now - _fadeAt).TotalSeconds / FadeSeconds;
+                if (t >= 1.0) { Hide(); return; }
+                k = (float)(1.0 - t);
+            }
+            else k = (float)Math.Min(1.0, (GameClock.Now - _shownAt).TotalSeconds / GrowSeconds);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, Scale * k);
+        }
+
+        /// <summary>Start shrinking it away (a charge going unused), rather than cutting it.</summary>
+        internal static void Fade()
+        {
+            if (!_on || _fading) return;
+            _fading = true; _fadeAt = GameClock.Now;
+        }
+
         /// <summary>Down, and the disc back where it loaded.</summary>
         internal static void Hide()
         {
             if (!_on) return;
             Memory.WriteInt(CodeCaves.Mailbox.CatGlowOn, 0);
             Release();
-            _on = false;
+            _on = false; _fading = false;
         }
 
         /// <summary>Keep the disc in a block that RELOADS, at an address nobody overwrites.

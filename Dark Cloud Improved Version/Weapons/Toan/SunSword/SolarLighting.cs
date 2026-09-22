@@ -17,7 +17,7 @@ namespace Dark_Cloud_Improved_Version
         private static double EaseSeconds => SunSword.BlindSeconds;
         private const float  White       = 255f;
         private const float  FogStart    = 0f,  FogEnd = 1f;   // at the peak: everything past one unit is fog colour (white)
-        private const int    FogEasePow  = 2;      // the fog clears faster than the light dims: its whiteness is k^this
+        private const double FogSeconds  = 1.0;    // the fog lifts in a second; only the LIGHT takes the full blinding
         private const double Decay       = 4.0;    // how sharply the wash falls away; higher puts more of the drop in the first moments
 
         private static bool     _active, _sub;
@@ -49,7 +49,7 @@ namespace Dark_Cloud_Improved_Version
                 return;
             }
             _active = true; _start = GameClock.Now;
-            Write(1f);
+            Write(1f, 1f);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] flash: {Describe()}");
         }
 
@@ -63,7 +63,10 @@ namespace Dark_Cloud_Improved_Version
             // the last of it lingers, which reads as a flash dying away rather than a dimmer being turned down.
             double d = Math.Exp(-Decay * t), d1 = Math.Exp(-Decay);
             float k = (float)((d - d1) / (1.0 - d1));
-            Write(k);
+            double tf = Math.Min(1.0, (GameClock.Now - _start).TotalSeconds / FogSeconds);
+            double df = Math.Exp(-Decay * tf), df1 = Math.Exp(-Decay);
+            float kFog = (float)((df - df1) / (1.0 - df1));
+            Write(k, kFog);
         }
 
         /// <summary>The captured light back in one write (floor change, weapon put away, end of the ease).</summary>
@@ -71,12 +74,11 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!_active) return;
             _active = false;
-            Write(0f);
+            Write(0f, 0f);
         }
 
-        private static void Write(float k)
+        private static void Write(float k, float kf)
         {
-            float kf = k; for (int i = 1; i < FogEasePow; i++) kf *= k;
             var amb = (float[])_amb.Clone();
             for (int c = 0; c < 3; c++) amb[c] = Lerp(_amb[c], White, k);
             var cols = (float[])_cols.Clone();

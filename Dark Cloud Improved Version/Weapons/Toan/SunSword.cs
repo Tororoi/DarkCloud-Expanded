@@ -18,8 +18,11 @@ namespace Dark_Cloud_Improved_Version
         private const float  FlashDamageFraction  = 0.25f;  // the hit's base damage, as a fraction of the weapon's attack
         private const float  KickStrength = 2.0f, KickDecay = 0.3f;   // the hit's shove, sized like Toan's heavier combo hits
         private const int    KickTypeMelee        = 2;      // +0x98: the melee-style reaction (flinch + shove)
-        private const int    HitLifeTicks         = 3;      // the planted sphere is withdrawn after this many ticks
+        private const int    HitLifeTicks         = 3;      // the planted spheres are withdrawn after this many ticks
+        private const float  PerEnemyRadius       = 25f;    // each enemy's own sphere: centred on it, so overlap is certain
         private const float  FlashPulseSpeed      = 90f;    // Toan's own white pulse at the flash (the change effect's rate)
+        private  const double PrimedSeconds       = 10.0;   // a charge left unused this long dissipates
+        private  const double DissipateSeconds    = 0.5;    // …fading the tint and shrinking the glow away
         internal const double BlindSeconds        = 5.0;    // how long the flash holds the floor
         private  const double WakeSeconds         = 1.3;    // …of which this much is the guard coming back down
         private static DateTime _blindUntil;
@@ -27,11 +30,11 @@ namespace Dark_Cloud_Improved_Version
         private const ushort FlashSe              = 0;      // sound effect at the flash (SeSeq id; 0 = none)
         private const float  Combo1Hit = 825f, Combo2Hit = 835f, Combo3Hit = 843f, Combo4Hit = 852f, Combo5Hit = 870f;   // frame cursor at which each combo swing comes forward (docs/character-motion-table.md clips 37-41)
 
-        private enum Phase { Idle, Charging, Primed, Windup }
+        private enum Phase { Idle, Charging, Primed, Windup, Dissipating }
         private sealed class SolarState
         {
             public Phase phase;
-            public DateTime holdStart;
+            public DateTime holdStart, primedAt, dissipateAt;
             public byte floor = 0xFF;
             public readonly List<(int slot, int ticks)> planted = new List<(int, int)>();
         }
@@ -78,20 +81,23 @@ namespace Dark_Cloud_Improved_Version
             switch (st.phase)
             {
                 case Phase.Idle:
+                    // One flash at a time: no re-charging until the one on the floor has run its course.
+                    if (_blindUntil != default) break;
                     if (GuardWatch.IsGuarding()) { st.phase = Phase.Charging; st.holdStart = GameClock.Now; }
                     break;
 
                 case Phase.Charging:
                 {
+                    // One flash at a time, and that includes a charge already in flight when the last one went off.
+                    if (_blindUntil != default) { st.phase = Phase.Idle; SolarBlade.Set(0f); ChargeTint.Clear(); break; }
                     if (!GuardWatch.IsGuarding()) { st.phase = Phase.Idle; SolarBlade.Set(0f); ChargeTint.Clear(); break; }
                     double held = (GameClock.Now - st.holdStart).TotalSeconds;
                     SolarBlade.Set((float)(held / ChargeSeconds));
                     ChargeTint.Ramp(ChargeSeconds - held);
                     if (held >= ChargeSeconds)
                     {
-                        st.phase = Phase.Primed;
+                        st.phase = Phase.Primed; st.primedAt = GameClock.Now;
                         ChargeTint.Clear();                                  // the cyan build-up ends; the white hold below takes over
-                        SolarBlade.PaintPeak(true);                          // the blade's own gold goes near-white, all at once
                         SolarGlow.Show();                                    // …and Toan takes a white glow of his own
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SunSword] Solar Flash primed");
                     }
@@ -100,16 +106,32 @@ namespace Dark_Cloud_Improved_Version
 
                 case Phase.Primed:
                     SolarBlade.Set(1f);                                   // re-asserted each tick: a rebuilt model gets it back
-                    SolarBlade.PaintPeak(true);
-                    SolarGlow.Show();
-                    HoldPrimedTint();
-                    if (IsAttack(action)) st.phase = Phase.Windup;
+                    SolarGlow.Show(); SolarGlow.Tick();
+                    HoldPrimedTint(1f);
+                    if (IsAttack(action)) { st.phase = Phase.Windup; break; }
+                    if ((GameClock.Now - st.primedAt).TotalSeconds >= PrimedSeconds)
+                    {
+                        st.phase = Phase.Dissipating; st.dissipateAt = GameClock.Now;
+                        SolarGlow.Fade();
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SunSword] charge went unused — dissipating");
+                    }
                     break;
+
+                case Phase.Dissipating:
+                {
+                    // The charge lapses: the white bleeds out of Toan as the glow shrinks away.
+                    double t = (GameClock.Now - st.dissipateAt).TotalSeconds / DissipateSeconds;
+                    SolarGlow.Tick();
+                    if (t >= 1.0) { SolarBlade.Clear(); ChargeTint.Clear(); SolarGlow.Hide(); st.phase = Phase.Idle; }
+                    else { SolarBlade.Set((float)(1.0 - t)); HoldPrimedTint((float)(1.0 - t)); }
+                    break;
+                }
 
                 case Phase.Windup:
                 {
                     SolarBlade.Set(1f);
-                    HoldPrimedTint();
+                    SolarGlow.Tick();
+                    HoldPrimedTint(1f);
                     if (!IsAttack(action)) { st.phase = Phase.Primed; break; }     // the swing was cancelled: still primed
                     bool forward = action == PlayerAction.ActionWhirlwind || action == PlayerAction.ActionLunge
                                 || Memory.ReadFloat(PlayerAction.AnimFrameCursor) >= ComboHitFrame(action);
@@ -123,8 +145,8 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The slight white Toan carries while the charge is held: the same ambient-add field the charge ramp uses,
         /// re-asserted each tick so a status tint or a character swap cannot leave it stuck on.</summary>
-        private static void HoldPrimedTint() =>
-            Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint, PrimedTint, PrimedTint, PrimedTint);
+        private static void HoldPrimedTint(float k) =>
+            Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint, PrimedTint * k, PrimedTint * k, PrimedTint * k);
 
         /// <summary>The blinding's clock. The behaviour itself is the enemies' own scripts (SolarScript); this only decides
         /// when they lower their guard and when they get their AI back.</summary>
@@ -164,27 +186,44 @@ namespace Dark_Cloud_Improved_Version
             _blindUntil = GameClock.Now.AddSeconds(BlindSeconds);
         }
 
-        /// <summary>One player-attack sphere at Toan, <see cref="FlashRadius"/> wide (CollisionPool: the same entry CheckDmg
-        /// tests his sword swings against): base = attack × <see cref="FlashDamageFraction"/>, the sword's selected element as
-        /// a pure bit, and a melee kick from his position so every enemy it reaches flinches and is shoved outward.</summary>
+        /// <summary>A player-attack sphere ON EACH ENEMY in range (CollisionPool: the same entries CheckDmg tests his sword
+        /// swings against): base = attack × <see cref="FlashDamageFraction"/>, the sword's selected element as a pure bit, and
+        /// a melee kick originating at Toan so each one is shoved outward from him.
+        ///
+        /// ⚠ NOT one big sphere. An entry is CONSUMED by the first victim the engine matches it against, so a single
+        /// 300-unit sphere damaged exactly one enemy and left the rest untouched — which looked like "one per species"
+        /// because a species tends to be clustered. One small sphere centred on each enemy hits all of them, and the pool
+        /// holds 96 entries against at most 16 enemies.</summary>
         private static void PlantFlashHit(SolarState st, float x, float h, float y)
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
-            int slot = CollisionPool.TakeFreeSlot(pool);
-            if (slot < 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SunSword] no free collision entry — the flash hit is lost"); return; }
             float attack = Memory.ReadShort(WeaponHave.BattleWeaponRecord + 0x04);
             int baseDmg = Math.Max(1, (int)Math.Round(attack * FlashDamageFraction));
             uint elem = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
             uint attr = (elem != 0 && (elem & (elem - 1)) == 0) ? elem : 0u;
-            byte[] e = CollisionPool.PlayerHitEntry(x, h, y, FlashRadius, baseDmg, attr);
-            void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
-            F(0x80, x); F(0x84, h); F(0x88, y);                        // kick origin: Toan
-            F(0x90, KickStrength); F(0x94, KickDecay);
-            BitConverter.GetBytes(KickTypeMelee).CopyTo(e, 0x98);
-            CollisionPool.Plant(pool, slot, e);
-            st.planted.Add((slot, HitLifeTicks));
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] flash hit at ({x:F0},{h:F0},{y:F0}) r={FlashRadius:F0}: base {baseDmg}, attr 0x{attr:X} → entry {slot}");
+            int hit = 0, missed = 0;
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                if (!Enemies.IsLive(s)) continue;
+                float ex = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX));
+                float ey = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationY));
+                float eh = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationZ));
+                if (Math.Sqrt((ex - x) * (ex - x) + (ey - y) * (ey - y)) > FlashRadius) continue;
+                int slot = CollisionPool.TakeFreeSlot(pool);
+                if (slot < 0) { missed++; continue; }
+                byte[] e = CollisionPool.PlayerHitEntry(ex, eh, ey, PerEnemyRadius, baseDmg, attr);
+                void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
+                F(0x80, x); F(0x84, h); F(0x88, y);                    // kick origin stays Toan: everyone is shoved AWAY from him
+                F(0x90, KickStrength); F(0x94, KickDecay);
+                BitConverter.GetBytes(KickTypeMelee).CopyTo(e, 0x98);
+                CollisionPool.Plant(pool, slot, e);
+                st.planted.Add((slot, HitLifeTicks));
+                hit++;
+            }
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[SunSword] flash at ({x:F0},{h:F0},{y:F0}) r={FlashRadius:F0}: {hit} enemies struck for base {baseDmg}, attr 0x{attr:X}"
+                + (missed > 0 ? $" ({missed} missed — pool full)" : ""));
         }
 
         /// <summary>The engine withdraws its own swing spheres when the swing ends; ours is withdrawn here.</summary>
