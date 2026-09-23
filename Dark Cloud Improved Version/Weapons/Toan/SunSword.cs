@@ -29,6 +29,29 @@ namespace Dark_Cloud_Improved_Version
         private const ushort FlashSe              = 0;      // sound effect at the flash (SeSeq id; 0 = none)
         private const float  Combo1Hit = 825f, Combo2Hit = 835f, Combo3Hit = 843f, Combo4Hit = 852f, Combo5Hit = 870f;   // frame cursor at which each combo swing comes forward (docs/character-motion-table.md clips 37-41)
 
+        /// <summary>What differs between the swords that carry Solar Flash. The ability itself — the charge, the
+        /// blinding, the script hold — is identical; each weapon brings its own damage share, glow disc and blade
+        /// frames. Big Bang inherits the ability at twice the Sun Sword's share, as the later sword in the line.</summary>
+        internal sealed class SolarProfile
+        {
+            internal readonly ushort WeaponId;
+            internal readonly float  DamageFraction;
+            internal readonly string Glow, Model, Tag;
+            internal readonly uint   Frame, Unlit;
+            internal SolarProfile(ushort id, float dmg, string glow, string model, uint frame, uint unlit, string tag)
+            { WeaponId = id; DamageFraction = dmg; Glow = glow; Model = model; Frame = frame; Unlit = unlit; Tag = tag; }
+        }
+
+        internal static readonly SolarProfile SunSwordFlash = new SolarProfile(
+            Items.sunsword, 0.25f, ToanGlowBakes.GlowName, SolarBlade.SunSwordModel, 0, 0, "SunSword");
+        internal static readonly SolarProfile BigBangFlash = new SolarProfile(
+            Items.bigbang, 0.50f, ToanGlowBakes.BlueName, SolarBlade.BigBangModel,
+            SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame, "BigBang");
+
+        /// <summary>True while a Solar Flash charge is building, held or going off — Big Bang's own charge-attack tint
+        /// stands aside for it rather than fighting it for the blade.</summary>
+        internal static bool FlashArmed { get; private set; }
+
         private enum Phase { Idle, Charging, Primed, Windup, Dissipating }
         private sealed class SolarState
         {
@@ -49,20 +72,21 @@ namespace Dark_Cloud_Improved_Version
         /// (<see cref="SolarScript"/>). The blade tint is <see cref="SolarBlade"/>. Dungeon only; a sidekick out or a floor
         /// change drops the charge.
         /// </summary>
-        public static void SolarFlashEffect()
+        public static void SolarFlashEffect(SolarProfile p)
         {
             var st = new SolarState();
-            while (Player.Weapon.GetCurrentWeaponId() == Items.sunsword && Player.InDungeonFloor())
+            while (Player.Weapon.GetCurrentWeaponId() == p.WeaponId && Player.InDungeonFloor())
             {
                 Thread.Sleep(TickMs);
-                try { SolarTick(st); }
-                catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SunSword] Solar Flash tick error: " + ex.Message); }
+                try { SolarTick(st, p); }
+                catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[{p.Tag}] Solar Flash tick error: " + ex.Message); }
             }
             SolarReset(st);
         }
 
-        private static void SolarTick(SolarState st)
+        private static void SolarTick(SolarState st, SolarProfile p)
         {
+            FlashArmed = st.phase != Phase.Idle;
             byte floor = Memory.ReadByte(Addresses.checkFloor);
             if (floor != st.floor) { if (st.floor != 0xFF) SolarReset(st); st.floor = floor; }
 
@@ -88,34 +112,34 @@ namespace Dark_Cloud_Improved_Version
                 case Phase.Charging:
                 {
                     // One flash at a time, and that includes a charge already in flight when the last one went off.
-                    if (_blindUntil != default) { st.phase = Phase.Idle; SolarBlade.Set(0f); ChargeTint.Clear(); SolarGlow.Hide(); break; }
+                    if (_blindUntil != default) { st.phase = Phase.Idle; SolarBlade.Set(0f, p.Model, p.Frame, p.Unlit); ChargeTint.Clear(); SolarGlow.Hide(); break; }
                     // Guard released before it primed: the glow goes with it rather than lingering.
-                    if (!GuardWatch.IsGuarding()) { st.phase = Phase.Idle; SolarBlade.Set(0f); ChargeTint.Clear(); SolarGlow.Hide(); break; }
+                    if (!GuardWatch.IsGuarding()) { st.phase = Phase.Idle; SolarBlade.Set(0f, p.Model, p.Frame, p.Unlit); ChargeTint.Clear(); SolarGlow.Hide(); break; }
                     double held = (GameClock.Now - st.holdStart).TotalSeconds;
-                    SolarBlade.Set((float)(held / ChargeSeconds));
+                    SolarBlade.Set((float)(held / ChargeSeconds), p.Model, p.Frame, p.Unlit);
                     ChargeTint.Ramp(ChargeSeconds - held);
                     // The glow LEADS the charge: started a grow-time early, it reaches full size exactly as it primes.
-                    if (held >= ChargeSeconds - SolarGlow.GrowSeconds) { SolarGlow.Show(); SolarGlow.Tick(); }
+                    if (held >= ChargeSeconds - SolarGlow.GrowSeconds) { SolarGlow.Show(p.Glow); SolarGlow.Tick(); }
                     if (held >= ChargeSeconds)
                     {
                         st.phase = Phase.Primed; st.primedAt = GameClock.Now;
                         ChargeTint.Clear();                                  // the cyan build-up ends; the white hold below takes over
-                        SolarGlow.Show();                                    // …and Toan takes a white glow of his own
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SunSword] Solar Flash primed");
+                        SolarGlow.Show(p.Glow);                                    // …and Toan takes a white glow of his own
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[{p.Tag}] Solar Flash primed");
                     }
                     break;
                 }
 
                 case Phase.Primed:
-                    SolarBlade.Set(1f);                                   // re-asserted each tick: a rebuilt model gets it back
-                    SolarGlow.Show(); SolarGlow.Tick();
+                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit);                                   // re-asserted each tick: a rebuilt model gets it back
+                    SolarGlow.Show(p.Glow); SolarGlow.Tick();
                     HoldPrimedTint(1f);
                     if (IsAttack(action)) { st.phase = Phase.Windup; break; }
                     if ((GameClock.Now - st.primedAt).TotalSeconds >= PrimedSeconds)
                     {
                         st.phase = Phase.Dissipating; st.dissipateAt = GameClock.Now;
                         SolarGlow.Fade();
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SunSword] charge went unused — dissipating");
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[{p.Tag}] charge went unused — dissipating");
                     }
                     break;
 
@@ -125,20 +149,20 @@ namespace Dark_Cloud_Improved_Version
                     double t = (GameClock.Now - st.dissipateAt).TotalSeconds / DissipateSeconds;
                     SolarGlow.Tick();
                     if (t >= 1.0) { SolarBlade.Clear(); ChargeTint.Clear(); SolarGlow.Hide(); st.phase = Phase.Idle; }
-                    else { SolarBlade.Set((float)(1.0 - t)); HoldPrimedTint((float)(1.0 - t)); }
+                    else { SolarBlade.Set((float)(1.0 - t), p.Model, p.Frame, p.Unlit); HoldPrimedTint((float)(1.0 - t)); }
                     break;
                 }
 
                 case Phase.Windup:
                 {
-                    SolarBlade.Set(1f);
+                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit);
                     SolarGlow.Tick();
                     HoldPrimedTint(1f);
                     if (!IsAttack(action)) { st.phase = Phase.Primed; break; }     // the swing was cancelled: still primed
                     bool forward = action == PlayerAction.ActionWhirlwind || action == PlayerAction.ActionLunge
                                 || Memory.ReadFloat(PlayerAction.AnimFrameCursor) >= ComboHitFrame(action);
                     if (!forward) break;
-                    Flash(st);
+                    Flash(st, p);
                     st.phase = Phase.Idle;
                     break;
                 }
@@ -180,7 +204,7 @@ namespace Dark_Cloud_Improved_Version
         };
 
         /// <summary>The flash itself: blade back to normal, the light to white, Toan's pulse, the hit, the blinding.</summary>
-        private static void Flash(SolarState st)
+        private static void Flash(SolarState st, SolarProfile p)
         {
             float px = Memory.ReadFloat(Addresses.dunPositionX), ph = Memory.ReadFloat(Addresses.dunPositionZ), py = Memory.ReadFloat(Addresses.dunPositionY);
             SolarBlade.Clear();                                          // tint off, and the blade's own palette back
@@ -189,7 +213,7 @@ namespace Dark_Cloud_Improved_Version
             SolarLighting.Flash();
             Player.FlashActiveCharacter(SolarLighting.FlashColour[0], SolarLighting.FlashColour[1], SolarLighting.FlashColour[2], FlashPulseSpeed, 1);
             if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
-            PlantFlashHit(st, px, ph, py);
+            PlantFlashHit(st, px, ph, py, p);
             SolarScript.Begin();           // the enemies' OWN scripts hold the guard from here
             _blindUntil = GameClock.Now.AddSeconds(BlindSeconds);
         }
@@ -202,12 +226,12 @@ namespace Dark_Cloud_Improved_Version
         /// 300-unit sphere damaged exactly one enemy and left the rest untouched — which looked like "one per species"
         /// because a species tends to be clustered. One small sphere centred on each enemy hits all of them, and the pool
         /// holds 96 entries against at most 16 enemies.</summary>
-        private static void PlantFlashHit(SolarState st, float x, float h, float y)
+        private static void PlantFlashHit(SolarState st, float x, float h, float y, SolarProfile p)
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
             float attack = Memory.ReadShort(WeaponHave.BattleWeaponRecord + 0x04);
-            int baseDmg = Math.Max(1, (int)Math.Round(attack * FlashDamageFraction));
+            int baseDmg = Math.Max(1, (int)Math.Round(attack * p.DamageFraction));
             uint elem = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
             uint attr = (elem != 0 && (elem & (elem - 1)) == 0) ? elem : 0u;
             int hit = 0, missed = 0;
@@ -230,7 +254,7 @@ namespace Dark_Cloud_Improved_Version
                 hit++;
             }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[SunSword] flash at ({x:F0},{h:F0},{y:F0}) r={FlashRadius:F0}: {hit} enemies struck for base {baseDmg}, attr 0x{attr:X}"
+                $"[{p.Tag}] flash at ({x:F0},{h:F0},{y:F0}) r={FlashRadius:F0}: {hit} enemies struck for base {baseDmg}, attr 0x{attr:X}"
                 + (missed > 0 ? $" ({missed} missed — pool full)" : ""));
         }
 
@@ -254,7 +278,7 @@ namespace Dark_Cloud_Improved_Version
             SolarGlow.Hide();
             ChargeTint.Clear();
             SolarLighting.Restore();
-            SolarScript.End(); GuardBreak.Drive(false); _blindUntil = default;
+            SolarScript.End(); GuardBreak.Drive(false); _blindUntil = default; FlashArmed = false;
             long pool = CollisionPool.Resolve();
             foreach (var (slot, _) in st.planted) if (pool != 0) CollisionPool.Deactivate(pool, slot);
             st.planted.Clear();

@@ -157,6 +157,41 @@ namespace Dark_Cloud_Improved_Version
         /// deals damage to a monster (wraps 0-15). Watching it across a swing is the "did that
         /// swing connect?" signal. Guarded hits do NOT advance it.</summary>
         internal const long HitSparkCounter   = 0x202A2C64;
+        /// <summary>ELF global <c>HitPointMark</c> (native 0x01EC4740): 16 entries of 0x20 holding the WORLD POSITION
+        /// of each hit mark — x at +0, height at +4, the ground plane at +8. CheckDmg copies the struck body part's
+        /// position in at index <see cref="HitSparkCounter"/> and only THEN advances the counter, so the hit that just
+        /// landed is at index (hitCnt − 1) &amp; 15.
+        ///
+        /// ⚠ The mark is stamped BEFORE the damage is computed (the element multiplier and the damage floor come
+        /// later in the same function), so it lands on a hit that is fully resisted to zero just as it does on one
+        /// that hurts — a nullified hit merely takes the branch that shows a white 0 instead of a red number. That
+        /// makes this the only "did my swing connect" signal that survives elemental immunity. GUARDED hits are the
+        /// exception: they take an earlier branch that stamps a mark without advancing the counter.</summary>
+        internal const long HitPointMark      = 0x21EC4740;
+        internal const int  HitPointMarkStride = 0x20, HitPointMarkCount = 16;
+        /// <summary>The mark's LIFE countdown within its entry: stamped at 16 and decremented one per frame by
+        /// <c>CHitPointMark::Step</c> (0x1B3710), which clears the entry's active word at zero. Since a GUARDED
+        /// hit re-stamps the CURRENT entry instead of advancing the counter, a life that has gone UP since the
+        /// last look is the only signal a blocked hit leaves behind.</summary>
+        internal const int  HitPointMarkLife  = 0x10;
+        /// <summary>Pointer (DAT_01ea2064) to the ACTIVE character's MOTION FRAME-RANGE table: one 0x10 record per
+        /// motion index, holding that motion's START frame at +0 and its END frame at +4, both ints. Starting a
+        /// motion seeks <see cref="AnimFrameCursor"/> to the start; the overlay's step code then holds the motion
+        /// until the cursor reaches the end (`cursor < end − 2 || end < cursor` keeps it playing, otherwise the
+        /// action is over). BtCheckDamageProc uses records 6 and 4 for the knockdown a player survives and the one
+        /// that kills him.
+        ///
+        /// ⚠ These are FRAMES, not distances. Scaling a start frame parks the cursor past the end of the clip, which
+        /// freezes the character mid-air on the last pose while the action runs on forever — measured. How far a
+        /// reaction carries the player is the clip's own root motion and is not in this table.</summary>
+        internal const long MotionRangeTablePtr = 0x21EA2064;
+        internal const int  MotionRangeStride   = 0x10;   // per motion index
+        internal const int  MotionRangeStart    = 0x00, MotionRangeEnd = 0x04;
+        /// <summary>The player's current blow-reaction action (DAT_01dc4490): 0 = none, 4 = the flinch/fatal
+        /// reaction, 5 = the knockdown. Set by BtCheckDamageProc and cleared by the step code when the motion
+        /// reaches its end frame.</summary>
+        internal const long BlowAction          = 0x21DC4490;
+        internal const int  BlowKnockdownAction = 5;
         // Charge METER (float, DAT_01dc449c): resets to 1.0 at attack start, accumulates each windup frame,
         // caps at 3.0. Thresholds: ≥1.5 → lunge available, ≥2.5 → whirlwind available (if unlocked).
         internal const long ChargeMeter       = 0x21DC449C;

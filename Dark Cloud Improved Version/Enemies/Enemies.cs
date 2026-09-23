@@ -713,32 +713,47 @@ namespace Dark_Cloud_Improved_Version
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
                 if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) <= 0) continue;
-
-                long pos = EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX);   // X, height, Y
-                float ex = Memory.ReadFloat(pos), ey = Memory.ReadFloat(pos + 8);
-                float dx = ex - cx, dy = ey - cy;
-                float dist = (float)Math.Sqrt(dx * dx + dy * dy);
-                if (dist > radius) continue;
-
-                // An enemy standing exactly on the centre has no direction to be thrown in — give it one rather
-                // than dividing by zero.
-                if (dist < 0.001f) { dx = 1f; dy = 0f; }
-                else { dx /= dist; dy /= dist; }
-
-                float need  = radius - dist + clearMargin;
-                float force = (float)Math.Sqrt(2.0 * decay * Math.Max(0f, need)) * forceScale;
-                if (force > maxForce) force = maxForce;
-
-                long slot = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
-                Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingX, dx);
-                Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingY, 0f);   // horizontal launch
-                Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingZ, dy);
-                Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingW, 0f);   // W=0 => a direction, not a point
-                Memory.WriteFloat(slot + EnemySlotOffsets.KnockbackForce, force);
-                Memory.WriteFloat(slot + EnemySlotOffsets.KnockbackDecay, decay);
-                caught++;
+                if (LaunchClear(s, cx, cy, radius, decay, maxForce, clearMargin, forceScale)) caught++;
             }
             return caught;
+        }
+
+        /// <summary>Launch ONE enemy radially outward from (cx, cy) with the force that carries it just clear of
+        /// <paramref name="radius"/> — the per-slot half of <see cref="RadialKnockback"/>, split out so a caller that
+        /// already has its own filtering (a height band, a knockback-resistance skip) can reuse the same launch
+        /// without a second copy of the force inversion. False when the enemy is outside the radius.
+        ///
+        /// <paramref name="multScale"/> scales the force after the inversion: pass the enemy's own
+        /// <see cref="EnemySlotOffsets.KnockbackMult"/> to make the launch honour the species' knockback resistance
+        /// (0.0 = immovable, bosses and rooted plants; 0.5-0.8 = heavies and stone), since writing the force field
+        /// DIRECTLY bypasses the scaling CheckDmg would normally apply.</summary>
+        internal static bool LaunchClear(int s, float cx, float cy, float radius, float decay,
+                                         float maxForce, float clearMargin = 0f, float forceScale = 1f,
+                                         float multScale = 1f)
+        {
+            long pos = EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX);   // X, height, Y
+            float ex = Memory.ReadFloat(pos), ey = Memory.ReadFloat(pos + 8);
+            float dx = ex - cx, dy = ey - cy;
+            float dist = (float)Math.Sqrt(dx * dx + dy * dy);
+            if (dist > radius) return false;
+
+            // An enemy standing exactly on the centre has no direction to be thrown in — give it one rather
+            // than dividing by zero.
+            if (dist < 0.001f) { dx = 1f; dy = 0f; }
+            else { dx /= dist; dy /= dist; }
+
+            float need  = radius - dist + clearMargin;
+            float force = (float)Math.Sqrt(2.0 * decay * Math.Max(0f, need)) * forceScale * multScale;
+            if (force > maxForce) force = maxForce;
+
+            long slot = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+            Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingX, dx);
+            Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingY, 0f);   // horizontal launch
+            Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingZ, dy);
+            Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingW, 0f);   // W=0 => a direction, not a point
+            Memory.WriteFloat(slot + EnemySlotOffsets.KnockbackForce, force);
+            Memory.WriteFloat(slot + EnemySlotOffsets.KnockbackDecay, decay);
+            return true;
         }
     }
 }

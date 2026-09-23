@@ -14,7 +14,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread evilciseThread = new Thread(new ThreadStart(Evilcise.JealousSoulEffect));
         private static Thread maneaterThread = new Thread(new ThreadStart(Maneater.BloodPriceEffect));
         private static Thread sunSwordThread = new Thread(new ThreadStart(SunSword.SolarHarvestEffect));
-        private static Thread solarFlashThread = new Thread(new ThreadStart(SunSword.SolarFlashEffect));
+        private static Thread solarFlashThread = new Thread(() => SunSword.SolarFlashEffect(SunSword.SunSwordFlash));
         private static Thread bigBangThread = new Thread(new ThreadStart(BigBang.DetonateEffect));
         private static Thread crossHinderThread = new Thread(new ThreadStart(CrossHinder.SanctifierEffect));
         private static Thread boneNoRevivalThread = new Thread(new ThreadStart(BoneRapier.GravediggerEffect));
@@ -227,18 +227,23 @@ namespace Dark_Cloud_Improved_Version
                     }
                     if (!solarFlashThread.IsAlive)
                     {
-                        solarFlashThread = new Thread(new ThreadStart(SunSword.SolarFlashEffect));
+                        solarFlashThread = new Thread(() => SunSword.SolarFlashEffect(SunSword.SunSwordFlash));
                         solarFlashThread.Start();
                     }
                     break;
 
-                case Items.bigbang:   // inherits Solar Harvest (Sun Sword lineage) + its own Detonate
+                case Items.bigbang:   // inherits Solar Harvest AND Solar Flash (Sun Sword lineage) + its own Detonate
                     BoneRapier.SkeletonKeyEffect(false);
 
                     if (!sunSwordThread.IsAlive)
                     {
                         sunSwordThread = new Thread(new ThreadStart(SunSword.SolarHarvestEffect));
                         sunSwordThread.Start();
+                    }
+                    if (!solarFlashThread.IsAlive)
+                    {
+                        solarFlashThread = new Thread(() => SunSword.SolarFlashEffect(SunSword.BigBangFlash));
+                        solarFlashThread.Start();
                     }
                     if (!bigBangThread.IsAlive)
                     {

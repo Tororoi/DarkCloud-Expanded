@@ -91,6 +91,23 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The player's collision object.</summary>
         internal const int PlayerColObject  = 0x21DF9DF0;
+
+        /// <summary>The player's horizontal KNOCK-PUSH — x and z of a vec the dungeon overlay's move code
+        /// read-modify-writes every frame, so a value written here decays on its own and carries him through the
+        /// normal movement path, walls included. CONFIRMED in game (Big Bang's Detonate shoves Toan with it).
+        ///
+        /// ⚠ USELESS DURING A HIT REACTION, and that is structural: the overlay's move code ZEROES all three
+        /// components every frame unless the player's action is idle or one of the guard states
+        /// (`if (!idle || …) { x = y = z = 0; }`, run just before BtCheckDamageProc). A knockdown is neither, so a
+        /// push written into a stagger is wiped before anything reads it — which is exactly why vanilla only ever
+        /// writes it from the GUARDING branches (blow direction ÷ 10 blocked-knockdown, (player − attacker) ÷ 2
+        /// blocked-knockback, so its own values run about 0.1 to 3), and why the guard slide decays: the guard
+        /// states multiply it down each frame instead of clearing it.
+        ///
+        /// The player has NO force/decay pair like the enemy kick words (collision entry +0x90/+0x94/+0x98). How far
+        /// a reaction carries him is the clip's own root motion. Moving him further than that means moving him
+        /// directly.</summary>
+        internal const long KnockPushX = 0x21DC2550, KnockPushZ = 0x21DC2558;
     }
 
     /// <summary>

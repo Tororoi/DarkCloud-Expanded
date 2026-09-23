@@ -4,93 +4,75 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Big Bang — Solar Harvest from the Sun Sword line, and a guard-charged blade whose next swing
+    /// <summary>Big Bang — Solar Harvest from the Sun Sword line, and a guard-charged blade whose next landed hit
     /// detonates (Detonate).</summary>
     internal static class BigBang
     {
         // ── Big Bang "Detonate" ────────────────────────────────────────────────────────────
         private const int    TickMs           = 30;
-        private const double ChargeSeconds    = 1.5;    // guard held this long primes the blade (as Solar Flash's)
-        private const float  BlastRadius      = 160f;   // the blast reaches this far from the sword
-        private const float  DamageFraction   = 2.0f;   // the blast's base damage, as a multiple of the weapon's attack
+        private const float  BlastRadius      = 30f;    // the blast reaches this far from the hit point
+        private const float  DamageFraction   = 3.0f;   // the blast's base damage, as a multiple of the weapon's attack
         private const float  PerEnemyRadius   = 25f;    // each victim gets its OWN sphere, centred on it (see PlantBlast)
-        private const int    HitLifeTicks     = 3;      // the planted spheres are withdrawn after this many ticks
-        // The blast's shove — HEAVY. For scale: Toan's own combo hits use strength 1.2 with decay 0.2 (the ELF
-        // constants ToanKey_Play hands SetKickBack), Goro's hammer swing 2.5 with a slow 0.1 that carries further,
-        // and Super Steve's wind clamps at 6 because a flat 40 threw enemies clean off the map. So this is roughly
-        // four times a sword hit, with a slower decay so they travel rather than just flinch.
-        private const float  KickStrength = 5.0f, KickDecay = 0.12f;
-        private const int    KickTypeMelee    = 2;      // +0x98: the melee-style reaction (flinch + shove)
-        private const double PrimedSeconds    = 10.0;   // a charge left unused this long dissipates
-        private const double DissipateSeconds = 0.5;    // …shrinking the glow away
-        // Toan is caught in his own blast: 100 before his defence, and the reaction that launches him.
+        private const int    HitLifeTicks     = 5;      // the planted spheres are withdrawn after this many ticks
+        private const int    MutekiClearMax   = 30;     // belt-and-braces at plant time; a waking mimic (100) or a
+                                                        // dying monster (1000) is never touched
+        // The knockback is the ENGINE'S, driven entirely by data on the collision entry — nothing of ours is written
+        // per tick, so nothing can race the frame the hit resolves on. Kick TYPE 2 (entry +0x98) is the radial one:
+        // CheckDmg takes the kick ORIGIN (+0x80, the blast centre), computes normalize(enemy − origin) into the
+        // enemy's launch direction, and writes force = +0x90 × that enemy's KnockbackMult and decay = +0x94 × the
+        // same — so direction, per-species resistance and the rooted-plant exclusion all come out right for free.
+        // Distance ≈ force²/(2·decay): 3.5 at 0.12 carries a normal enemy ~50 units, clear of a 30-unit blast.
+        private const float  KickStrength     = 3.5f;
+        private const float  KickDecay        = 0.12f;  // vanilla melee is 1.2 at 0.2, roughly 3.6 units
+        private const int    KickTypeRadial   = 2;      // +0x98 = 2: thrown away from the kick origin
+        // Toan is caught in his own blast: 100 before his defence, and the reaction that knocks him down. How far
+        // that carries him is the knockdown clip's own root motion — the engine has no lever on it (see
+        // PlayerCollision.KnockPush and PlayerAction.MotionRangeTablePtr, where both dead ends are recorded).
         private const int    SelfDamage       = 100;    // BtCheckDamageProc subtracts his defence and clamps at 0
         private const int    SelfReaction     = 3;      // knockdown — the reaction Rockanoff's melee carries
-        // WHERE it goes off: one sword-length straight ahead of Toan. His position pushed along HIS FACING by the
-        // weapon's melee reach (WeaponData.Dcol1 — Big Bang's is 11.378), lifted to about blade height so it is not
-        // at his feet. The facing comes from the model root frame's euler, which is the field the engine's own
-        // forward vector is built from (see PlayerFacing) — reading the CObject euler instead put the blast a bind
-        // rotation away from ahead, which looked like it was going off on top of him.
-        private const float  DefaultReach     = 11.4f;  // if the weapon table has no dcol1 for it
-        private const float  BlastLift        = 8f;     // above his origin — roughly where the blade is
-        private const float  PrimedTint       = 45f;    // the slight white Toan keeps while the charge is held, per channel (an ambient ADD)
-        // WHEN it goes off: near the END of the opening swing. That clip runs frames 820-830 and its hit window is
-        // 825-828, so this lets the swing almost finish. Only that swing arms the blast — the later combo swings, the
-        // lunge and the whirlwind are all reached by holding an attack that BEGINS with this one, so the charge is
-        // always spent before any of them can start.
-        private const float  Swing1Late       = 827f;
-        // The burst is authored as a small thrown-gem puff, so a blast-sized one is scaled up and slowed down.
+        // What the detonation costs the blade, in ordinary swings' worth of weapon HP. The engine's own drain for
+        // the charge attack that set it off lands on top of this.
+        private const float  WhpHits          = 5f;
+        // THE BLADE ON A REGULAR CHARGE. Toan's charge meter runs 1.0 → 3.0 (lunge at 1.5, whirlwind at 2.5), and
+        // the blade whitens across it exactly as it does for a guard charge — the same tint, driven by the meter
+        // instead of by held time. It stands aside while SunSword.FlashArmed: Solar Flash owns the blade then, and
+        // two ramps fighting over one mesh would only flicker.
+        private const float  ChargeMeterFloor = 1.0f;
+        // WHAT COUNTS AS A HIT: the engine's own HIT MARK — see HitLanded. The detonation rides the LEVEL-1 CHARGE
+        // ATTACK (the lunge, PlayerAction.ActionLunge), so the blast goes off where that lunge connects.
+        private const float  StruckRange      = 20f;    // a mark further than this from an enemy's centre is not its hit
+        private const float  MarkSanity       = 60f;    // a mark further than this from Toan is not his swing's — ignore it
+        // The explosion is the thrown-gem FIRE burst, spawned at the hit point by plain field writes into the
+        // always-resident Maseki pool. It is authored as a small thrown-gem puff, so it is scaled up hard and
+        // slowed down to stop the animation snapping at that size. Scale is the sub-slot's own CObject scale, not a
+        // radius: it does not change what the blast HITS (that is BlastRadius).
         private const float  BurstScale       = 6.0f;
         private const float  BurstSpeed       = 0.6f;
-        private const int    BurstElement     = MasekiEffect.Fire;   // the ANIMATION only — the damage carries the weapon's element
-        // ── the shared effect slot ──────────────────────────────────────────────────────────
-        // The dead `dun\effect\explosion.chr` — a large one-KEY burst no config in the game's 34-entry shot table
-        // names, so nothing of the game's ever loads it. It already carries its own `explosion.cfg` record, so the
-        // pack's loader takes it as-is (no ISO bake, unlike the underscore balls).
-        //
-        // It can only live in the MAIN-CHARACTER effect instance: the cave's Entry2 passes texture block 0x10 as an
-        // IMMEDIATE, and that is the block that instance uses (a gem-pool slot is block 6, a monster-pack slot 0x26 —
-        // either would need the stub changed and the ISO re-patched). That instance is also where Toan's whirlwind
-        // (`c01_fuusya`) lives, and the swoosh renders from its sub-slots, so the slot is SHARED rather than taken:
-        // the explosion is seeded when a guard charge STARTS, and the whirlwind is put back when that charge is
-        // abandoned, when it lapses unused, and once the blast has finished animating. Restoring is lossless — the
-        // whirlwind's own config already has victim mask 2, flying radius 0 and flags 0x8 (Wind alone), which is
-        // exactly what Seed would force on it.
-        //
-        // Each swap costs a mid-floor disc read, which is why the seed happens as the charge begins rather than at the
-        // swing: it has the charge's length to land. If it has not, the blast falls back to the thrown-gem burst.
-        private const int    ExplosionTemplate = 16;                 // zibaku_f2: a self-detonation — bursts in place, nothing flies
-        private const string ExplosionName     = "explosion";
-        private const string WhirlwindName     = "c01_fuusya";       // the config's own name, as dun.bin holds it
-        private const float  ExplosionScale    = 2.0f;               // CObject scale on the sub-shot, not the gem burst's sprite scale
-        private const double VentMaxSeconds    = 3.0;                // backstop: never hold the slot longer than this after a blast
-        private static volatile bool _wantExplosion;                 // read by WantedShot on the BorrowedShots thread
-
-        private enum Phase { Idle, Charging, Primed, Windup, Venting, Dissipating }
-
+        private const int    BurstElement     = MasekiEffect.Fire;   // the ANIMATION only
         private sealed class BlastState
         {
-            public Phase phase;
-            public DateTime holdStart, primedAt, dissipateAt, ventAt;
             public byte floor = 0xFF;
             public readonly List<(int slot, int ticks)> planted = new List<(int, int)>();
+            public readonly List<(int slot, int hp0)>   victims = new List<(int, int)>();
+            public bool crushing;                       // the guard break is currently driven on
+            public bool tinted;                         // the blade is carrying this ability's charge tint
         }
 
         /// <summary>
         /// Ability Name: Detonate (Big Bang)
-        /// Hold guard and the blade charges over <see cref="ChargeSeconds"/>; at full it is PRIMED and stays so,
-        /// guard or not, marked by the blue glow Toan carries (<see cref="ToanGlowBakes.BlueName"/>, the Divine Beast
-        /// Title cat's ramp), the whitening blade and the slight white he holds. The next SWING spends it: near the
-        /// end of that swing an explosion erupts at the tip of the sword's reach, and every living enemy within
-        /// <see cref="BlastRadius"/> takes the weapon's full attack as base damage through the normal formula, with
-        /// the sword's element and a melee stagger. Toan is caught in it too — <see cref="SelfDamage"/> before his
-        /// defence, and the knockdown reaction that launches him back out. A charge left unused for
-        /// <see cref="PrimedSeconds"/> dissipates. Dungeon only; a sidekick out or a floor change drops it.
+        /// Big Bang's CHARGE ATTACK detonates. Charging the attack whitens the blade as the meter fills, and when the
+        /// level-1 charge — the lunge — lands, a fire burst erupts at the point of contact: every living enemy within
+        /// <see cref="BlastRadius"/> of it, except the one the lunge itself hit, takes <see cref="DamageFraction"/> ×
+        /// the weapon's attack as base damage through the normal formula, carrying NO element so no resistance blunts
+        /// it, through any guard, and with a heavy shove outward. Toan is caught in it too — <see cref="SelfDamage"/>
+        /// before his defence and the knockdown that throws him back. The blade pays <see cref="WhpHits"/> swings'
+        /// worth of weapon HP for it. Dungeon only.
+        ///
+        /// Big Bang's GUARD charge is Solar Flash, inherited from the Sun Sword it grows out of and struck at twice
+        /// that sword's share (SunSword.BigBangFlash) — so the two charges are different abilities on one blade.
         ///
         /// The blast damage is a sphere per victim in the engine's own collision pool — the same entries CheckDmg
-        /// tests Toan's sword swings against — never a direct HP write, which produces a corpse that walks through
-        /// walls. Firing on the SWING rather than on a landed hit is what keeps the charge from surviving into a
-        /// whirlwind. A swing into empty air still detonates, and still costs him.
+        /// tests Toan's swings against — never a direct HP write, which produces a corpse that walks through walls.
         /// </summary>
         public static void DetonateEffect()
         {
@@ -111,177 +93,151 @@ namespace Dark_Cloud_Improved_Version
 
             ExpireHits(st);
             if (Player.CheckDunIsPausedOrMenu()) return;
-            if (Player.CurrentCharacterNum() != Player.ToanId)
+            if (Player.CurrentCharacterNum() != Player.ToanId) { ClearTint(st); return; }
+
+            // Polled EVERY tick, not only during a charge, so the counter baseline never goes stale.
+            bool hit = HitLanded(out float hx, out float hh, out float hy);
+            int   action = Memory.ReadInt(PlayerAction.ChargeActionState);
+
+            if (action == PlayerAction.ActionWindup && !SunSword.FlashArmed)
             {
-                if (st.phase != Phase.Idle) { Disarm(st); }
-                return;
+                float meter = Memory.ReadFloat(PlayerAction.ChargeMeter);
+                float k = (meter - ChargeMeterFloor) / (PlayerAction.ChargeMeterCap - ChargeMeterFloor);
+                SolarBlade.Set(Math.Min(1f, Math.Max(0f, k)), SolarBlade.BigBangModel,
+                               SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame);
+                st.tinted = true;
+            }
+            else if (st.tinted && action != PlayerAction.ActionLunge && action != PlayerAction.ActionWhirlwind)
+            {
+                ClearTint(st);                                       // the charge was spent or dropped
             }
 
-            int action = Memory.ReadInt(PlayerAction.ChargeActionState);
-            switch (st.phase)
-            {
-                case Phase.Idle:
-                    if (GuardWatch.IsGuarding())
-                    {
-                        st.phase = Phase.Charging; st.holdStart = GameClock.Now;
-                        _wantExplosion = true;                           // the swap starts now: it has the charge to land
-                    }
-                    break;
-
-                case Phase.Charging:
-                {
-                    // Guard released before it primed: the glow goes with it, and the whirlwind gets its slot back.
-                    if (!GuardWatch.IsGuarding()) { Disarm(st); break; }
-                    double held = (GameClock.Now - st.holdStart).TotalSeconds;
-                    SolarBlade.Set((float)(held / ChargeSeconds), SolarBlade.BigBangModel, SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame);
-                    ChargeTint.Ramp(ChargeSeconds - held);
-                    // The glow LEADS the charge: started a grow-time early, it is at full size exactly as it primes.
-                    if (held >= ChargeSeconds - SolarGlow.GrowSeconds) { SolarGlow.Show(ToanGlowBakes.BlueName); SolarGlow.Tick(); }
-                    if (held >= ChargeSeconds)
-                    {
-                        st.phase = Phase.Primed; st.primedAt = GameClock.Now;
-                        ChargeTint.Clear();                              // the cyan build-up ends; the white hold takes over
-                        SolarGlow.Show(ToanGlowBakes.BlueName);
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[BigBang] Detonate primed");
-                    }
-                    break;
-                }
-
-                case Phase.Primed:
-                    SolarBlade.Set(1f, SolarBlade.BigBangModel, SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame);          // re-asserted each tick: a rebuilt model gets it back
-                    SolarGlow.Show(ToanGlowBakes.BlueName); SolarGlow.Tick();
-                    HoldPrimedTint(1f);
-                    if (action == PlayerAction.ActionComboFirst) { st.phase = Phase.Windup; break; }
-                    if ((GameClock.Now - st.primedAt).TotalSeconds >= PrimedSeconds)
-                    {
-                        st.phase = Phase.Dissipating; st.dissipateAt = GameClock.Now;
-                        SolarGlow.Fade();
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[BigBang] charge went unused — dissipating");
-                    }
-                    break;
-
-                case Phase.Windup:
-                {
-                    SolarBlade.Set(1f, SolarBlade.BigBangModel, SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame);
-                    SolarGlow.Tick();
-                    HoldPrimedTint(1f);
-                    // Cancelled, or the chain moved on before the poll caught the frame: still primed, and the next
-                    // fresh opening swing arms it again.
-                    if (action != PlayerAction.ActionComboFirst) { st.phase = Phase.Primed; break; }
-                    if (Memory.ReadFloat(PlayerAction.AnimFrameCursor) < Swing1Late) break;   // let the swing almost finish
-                    bool borrowed = Detonate(st);
-                    if (borrowed) { st.phase = Phase.Venting; st.ventAt = GameClock.Now; }
-                    else { _wantExplosion = false; st.phase = Phase.Idle; }                   // the gem burst ran: the slot is free now
-                    break;
-                }
-
-                case Phase.Venting:
-                    // The explosion is still playing out of the shared slot. Restoring the whirlwind re-enters the
-                    // instance, which would cut the burst off mid-animation — so hold the seed until its sub-shots
-                    // go quiet (the engine clears them itself), with a backstop in case one never activated.
-                    if (BurstPlaying() && (GameClock.Now - st.ventAt).TotalSeconds < VentMaxSeconds) break;
-                    _wantExplosion = false;
-                    st.phase = Phase.Idle;
-                    break;
-
-                case Phase.Dissipating:
-                {
-                    // The charge lapses: the white bleeds out of the blade and Toan as the glow shrinks away, and the
-                    // whirlwind takes its slot back.
-                    double t = (GameClock.Now - st.dissipateAt).TotalSeconds / DissipateSeconds;
-                    SolarGlow.Tick();
-                    if (t >= 1.0) { Disarm(st); }
-                    else { SolarBlade.Set((float)(1.0 - t), SolarBlade.BigBangModel, SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame); HoldPrimedTint((float)(1.0 - t)); }
-                    break;
-                }
-            }
+            if (hit && action == PlayerAction.ActionLunge) Detonate(st, hx, hh, hy);
         }
 
-        /// <summary>Everything off and the shared slot handed back: a charge abandoned, lapsed, or dropped because
-        /// Toan is no longer the one out.</summary>
-        private static void Disarm(BlastState st)
+        /// <summary>The charge tint off the blade — but only ours. Solar Flash drives the same mesh from its own
+        /// thread, so a tint it is holding is left alone.</summary>
+        private static void ClearTint(BlastState st)
         {
-            SolarBlade.Clear(); ChargeTint.Clear(); SolarGlow.Hide();
-            _wantExplosion = false;
-            st.phase = Phase.Idle;
+            if (!st.tinted) return;
+            st.tinted = false;
+            if (!SunSword.FlashArmed) SolarBlade.Clear();
+        }
+        private static int _lastMark = -1;   // the hit counter as of the previous tick (−1 = no baseline yet)
+        private static int _lastLife = -1;   // …and the current mark's countdown, which a BLOCKED hit resets
+        /// <summary>The blast carries NO element (entry +0x50 = 0). CheckDmg's element step is wrapped in
+        /// `if (col.attr != 0)`, so an elementless hit skips the whole branch: no element bonus, and — the point —
+        /// no multiply by the monster's resistance percent. A detonation is not fire or ice, and a species that
+        /// shrugs off every element takes it in full, defence being the only thing between it and the damage.</summary>
+        private const uint ElementNone = 0;
+
+        /// <summary>Did a hit just land, and where? Both kinds of landed hit leave the engine's own hit MARK behind,
+        /// and they are told apart by what they do to the counter:
+        ///
+        /// • A hit that DAMAGES stamps the struck body part's position at the counter's index and then advances it, so
+        ///   a counter that moved means the hit is at index (counter − 1). The stamp happens before the damage is
+        ///   computed, so this fires on a hit resisted to nothing exactly as on one that hurts.
+        /// • A hit that is BLOCKED takes an earlier branch that re-stamps the CURRENT index and leaves the counter
+        ///   alone. All it disturbs is that mark's life (<see cref="PlayerAction.HitPointMarkLife"/>), which otherwise
+        ///   only ever counts DOWN — one per frame, from 16 — so a life that has risen since the last look is a
+        ///   blocked hit and nothing else. Catching it is what lets a guarded enemy set the charge off, instead of the
+        ///   blade having to break its guard first.
+        ///
+        /// More than one hit can land between polls; the most recent one is the blast's origin. A mark further than
+        /// <see cref="MarkSanity"/> from Toan is rejected rather than trusted, so a stale or unrelated entry cannot
+        /// throw the detonation across the floor.</summary>
+        private static bool HitLanded(out float x, out float h, out float y)
+        {
+            x = h = y = 0f;
+            int n = PlayerAction.HitPointMarkCount;
+            int now = Memory.ReadInt(PlayerAction.HitSparkCounter);
+            int cur = ((now % n) + n) % n;
+            int life = Memory.ReadInt(PlayerAction.HitPointMark + (long)cur * PlayerAction.HitPointMarkStride
+                                      + PlayerAction.HitPointMarkLife);
+            int was = _lastMark, wasLife = _lastLife;
+            _lastMark = now; _lastLife = life;
+            if (was < 0) return false;                              // no baseline yet
+
+            int idx;
+            if (now != was)       idx = ((now - 1) % n + n) % n;    // damaged: stamped, then the counter moved on
+            else if (life > wasLife) idx = cur;                     // blocked: the current mark was stamped again
+            else return false;
+            long e = PlayerAction.HitPointMark + (long)idx * PlayerAction.HitPointMarkStride;
+            x = Memory.ReadFloat(e); h = Memory.ReadFloat(e + 4); y = Memory.ReadFloat(e + 8);
+
+            float dx = x - Memory.ReadFloat(Addresses.dunPositionX);
+            float dy = y - Memory.ReadFloat(Addresses.dunPositionY);
+            float dh = h - Memory.ReadFloat(Addresses.dunPositionZ);
+            return dx * dx + dy * dy + dh * dh <= MarkSanity * MarkSanity;
         }
 
-        /// <summary>Whether any sub-shot of the shared instance is still live — the explosion still animating.</summary>
-        private static bool BurstPlaying()
+        /// <summary>The blast at the hit point: the fire burst where the struck enemy stands, the damage around it,
+        /// and Toan thrown out of it.</summary>
+        private static void Detonate(BlastState st, float x, float h, float y)
         {
-            long inst = ShotEffectPack.CharaMainEffect;
-            int count = Memory.ReadInt(inst + ShotEffectPack.OffCount);
-            if (count < 1 || count > ShotEffectPack.SubShots) return false;
-            for (int i = 0; i < count; i++)
-                if (Memory.ReadUShort(inst + ShotEffectPack.OffActive + i * 2) != 0) return true;
-            return false;
-        }
-
-        /// <summary>The blast at the sword's tip: the explosion there, the damage around it, and Toan thrown out of it.
-        /// True when the borrowed `explosion` effect carried the visual (so the shared slot must be held until it has
-        /// finished), false when the thrown-gem burst stood in for it.</summary>
-        private static bool Detonate(BlastState st)
-        {
-            float px = Memory.ReadFloat(Addresses.dunPositionX);
-            float ph = Memory.ReadFloat(Addresses.dunPositionZ);    // height
-            float py = Memory.ReadFloat(Addresses.dunPositionY);    // the ground plane with X
-            float yaw = PlayerFacing();
-            float reach = BlastReach();
-            float x = px + (float)Math.Sin(yaw) * reach;
-            float y = py + (float)Math.Cos(yaw) * reach;
-            float h = ph + BlastLift;
             // The blow direction: from the blast back toward Toan, so he is thrown out of it and the spin leaves him
             // facing the way he swung (unitBlowActionRot takes atan2(x, z) − π of this and SETS his facing).
+            float px = Memory.ReadFloat(Addresses.dunPositionX), py = Memory.ReadFloat(Addresses.dunPositionY);
             float bx = px - x, bz = py - y;
             float blen = (float)Math.Sqrt(bx * bx + bz * bz);
-            if (blen < 1e-3f) { bx = -(float)Math.Sin(yaw); bz = -(float)Math.Cos(yaw); blen = 1f; }
+            if (blen < 1e-3f)                                            // standing inside it: fall back to his facing
+            {
+                float yaw = PlayerFacing();
+                bx = -(float)Math.Sin(yaw); bz = -(float)Math.Cos(yaw); blen = 1f;
+            }
             bx /= blen; bz /= blen;
+
+            ushort attack = Player.Weapon.GetCurrentWeaponAttack();
+            if (!SunSword.FlashArmed) SolarBlade.Clear();                // the charge is spent; the blade's colour back
+            st.tinted = false;
+            // Visual only: damage 0 suppresses the burst's own collision sphere outright, so it cannot register hits
+            // of its own and cascade. The blast's damage is planted below.
+            GemBurst.Show(BurstElement, x, h, y, BurstScale, damage: 0, speedMult: BurstSpeed);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[BigBang] blast origin: Toan ({px:F0},{ph:F0},{py:F0}) yaw {yaw:F2} → ({x:F0},{h:F0},{y:F0}), {reach:F1} ahead; blow dir ({bx:F2},{bz:F2})");
-
-            SolarBlade.Clear();                                                       // tint off, and the blade's own colour back
-            ChargeTint.Clear();
-            SolarGlow.Hide();                                                         // the charge is spent
-            // The explosion, visual only — the blast's damage is planted below, so the burst never registers hits of
-            // its own (a 0-damage burst plants no damage entry at all). The dead `explosion` effect when the cave has
-            // it entered; the thrown-gem burst when it has not (a floor too tight to carve its region refuses it, or
-            // the swap had not landed yet).
-            var fx = WantedShot();
-            bool borrowed = fx != null && BorrowedShots.Burst(fx, x, h, y, 0, ExplosionScale);
-            if (!borrowed) GemBurst.Show(BurstElement, x, h, y, BurstScale, damage: 0, speedMult: BurstSpeed);
-            PlantBlast(st, x, h, y);
+                $"[BigBang] detonation at the hit mark ({x:F0},{h:F0},{y:F0}) r={BlastRadius:F0}; blow dir ({bx:F2},{bz:F2})");
+            PlantBlast(st, x, h, y, attack, StruckSlot(x, h, y));
             PlantSelfHit(st, x, h, y, bx, bz);
-            return borrowed;
+            DrainWhp();
         }
 
-        /// <summary>The shot effect the shared slot should hold right now: the dead `explosion` container while a
-        /// charge is building, being held, or still going off; otherwise Toan's own whirlwind, so the regular sword
-        /// charge keeps its swoosh. Null while Toan is not the active character or is not carrying Big Bang, so the
-        /// block clears and Xiao's own borrowed shots have it back. BorrowedShots asks every tick.</summary>
-        internal static BorrowedEffect WantedShot()
+
+        /// <summary>The enemy the blade just hit: the live one nearest the hit mark, which is stamped ON the struck
+        /// body part, so the nearest enemy to it IS that enemy. Returns −1 when nothing is close enough to be it —
+        /// then the blast covers the whole radius as before.</summary>
+        private static int StruckSlot(float x, float h, float y)
         {
-            if (Player.CurrentCharacterNum() != Player.ToanId) return null;
-            byte slot = Memory.ReadByte(WeaponHave.InventoryEquipSlotAddr);
-            if ((uint)slot > 9) return null;
-            if (Memory.ReadUShort(WeaponHave.InventoryWeaponSlot0Id + slot * WeaponHave.InventoryWeaponSlotStride) != Items.bigbang) return null;
-            return _wantExplosion
-                ? BorrowedShots.CustomConfig(ExplosionTemplate, ExplosionName, 0, -1, -1, -1)   // one KEY: a muzzle burst, nothing after
-                : BorrowedShots.DunConfig(ShotEffectPack.WhirlwindCfg, WhirlwindName);
+            int best = -1; float bestD = StruckRange * StruckRange;
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                if (!Enemies.IsLive(s)) continue;
+                float ex = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX));
+                float ey = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationY));
+                float eh = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationZ));
+                float dx = ex - x, dy = ey - y, dh = eh - h;
+                float d = dx * dx + dy * dy + dh * dh;
+                if (d < bestD) { bestD = d; best = s; }
+            }
+            return best;
         }
 
-        /// <summary>The equipped weapon's melee hit-point reach, from the static weapon table.</summary>
-        private static float BlastReach()
+        /// <summary>Is the enemy in slot <paramref name="s"/> inside the blast? A TRUE sphere — height counts, so an
+        /// enemy on a ledge above the hit point is not caught. This matches how the engine tests Toan against the
+        /// self-hit sphere (CheckHitUser compares the distance against the entry's radius, then the vertical bands),
+        /// so both sides of the blast agree on who is in it.</summary>
+        private static bool InBlast(int s, float x, float h, float y)
         {
-            foreach (var w in ToanWeapons.All)
-                if (w.Id == Items.bigbang) return w.Dcol1 ?? DefaultReach;
-            return DefaultReach;
+            float ex = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX));
+            float ey = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationY));
+            float eh = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationZ));
+            float dx = ex - x, dy = ey - y, dh = eh - h;
+            return dx * dx + dy * dy + dh * dh <= BlastRadius * BlastRadius;
         }
 
         /// <summary>Toan's facing, read the way the engine reads it: getCharacterVector (main 0x1D41A0) takes the
         /// MODEL ROOT frame's euler Y and rotates the constant (0,0,1) by it, so forward is (sin yaw, 0, cos yaw).
         /// GetRotation__6CFrame only trusts that cache while <see cref="CFrameVu1.EulerValid"/> is 0, so the CObject
         /// euler at CCharacter+0x64 is the fallback. ⚠ The two are DIFFERENT fields: they differ by the model's bind
-        /// rotation, and using the CObject one put the blast nowhere near ahead of him.</summary>
+        /// rotation.</summary>
         private static float PlayerFacing()
         {
             uint root = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel);
@@ -293,47 +249,60 @@ namespace Dark_Cloud_Improved_Version
             return Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
         }
 
-        /// <summary>The slight white Toan carries while the charge is held: the same ambient-add field the charge ramp
-        /// uses, re-asserted each tick so a status tint or a character swap cannot leave it stuck on.</summary>
-        private static void HoldPrimedTint(float k) =>
-            Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint, PrimedTint * k, PrimedTint * k, PrimedTint * k);
-
-        /// <summary>A player-attack sphere ON EACH ENEMY within <see cref="BlastRadius"/> of the blast: base = the
-        /// weapon's full attack, the sword's selected element as a pure bit, and a melee kick originating at the blast
-        /// so each one is shoved outward from it.
+        /// <summary>A player-attack sphere ON EACH ENEMY within <see cref="BlastRadius"/> of the hit point: base =
+        /// <see cref="DamageFraction"/> × the weapon's attack, no element (<see cref="ElementNone"/>), and a kick
+        /// originating at the blast so each one is shoved outward from it.
         ///
         /// ⚠ NOT one big sphere. A collision entry is CONSUMED by the first victim the engine matches it against, so a
         /// single blast-sized sphere damages exactly one enemy and leaves the rest untouched. One small sphere centred
         /// on each enemy hits all of them, and the pool holds 96 entries against at most 16 enemies.</summary>
-        private static void PlantBlast(BlastState st, float x, float h, float y)
+        private static void PlantBlast(BlastState st, float x, float h, float y, ushort attack, int skip)
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
-            int baseDmg = Math.Max(1, (int)Math.Round(Player.Weapon.GetCurrentWeaponAttack() * DamageFraction));
-            uint elem = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
-            uint attr = (elem != 0 && (elem & (elem - 1)) == 0) ? elem : 0u;
+            int atk = attack > 0 ? attack : Player.Weapon.GetCurrentWeaponAttack();
+            int baseDmg = Math.Max(1, (int)Math.Round(atk * DamageFraction));
             int hit = 0, missed = 0;
+            st.victims.Clear();
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
+                if (s == skip) continue;                               // the blade hit this one; it has its damage already
                 if (!Enemies.IsLive(s)) continue;
+                if (!InBlast(s, x, h, y)) continue;                    // a TRUE sphere: height counts
                 float ex = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX));
                 float ey = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationY));
                 float eh = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationZ));
-                if (Math.Sqrt((ex - x) * (ex - x) + (ey - y) * (ey - y)) > BlastRadius) continue;
                 int slot = CollisionPool.TakeFreeSlot(pool);
                 if (slot < 0) { missed++; continue; }
-                byte[] e = CollisionPool.PlayerHitEntry(ex, eh, ey, PerEnemyRadius, baseDmg, attr);
+                byte[] e = CollisionPool.PlayerHitEntry(ex, eh, ey, PerEnemyRadius, baseDmg, ElementNone);
                 void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
-                F(0x80, x); F(0x84, h); F(0x88, y);                    // kick origin is the blast: everyone is shoved AWAY from it
+                F(0x80, x); F(0x84, h); F(0x88, y);                    // the kick ORIGIN: the blast, so they fly away from it
                 F(0x90, KickStrength); F(0x94, KickDecay);
-                BitConverter.GetBytes(KickTypeMelee).CopyTo(e, 0x98);
+                BitConverter.GetBytes(KickTypeRadial).CopyTo(e, 0x98);
                 CollisionPool.Plant(pool, slot, e);
                 st.planted.Add((slot, HitLifeTicks));
+                st.victims.Add((s, Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp))));
                 hit++;
             }
+            HoldVictimsHittable(st);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[BigBang] detonation at ({x:F0},{h:F0},{y:F0}) r={BlastRadius:F0}: {hit} enemies struck for base {baseDmg}, attr 0x{attr:X}"
+                $"[BigBang] {hit} enemies struck for base {baseDmg}"
                 + (missed > 0 ? $" ({missed} missed — pool full)" : ""));
+        }
+
+        /// <summary>Clear any hit-stun still standing as the spheres go in — a species whose damage label sets a
+        /// longer one than the usual 9 frames would otherwise outlast the delay. ONE SHOT, at plant time only: the
+        /// invincibility each victim is granted by the blast's own hit is what stops a second helping, so nothing
+        /// here may run again afterwards. Anything above <see cref="MutekiClearMax"/> is not a hit's stun and is
+        /// left alone.</summary>
+        private static void HoldVictimsHittable(BlastState st)
+        {
+            foreach (var (slot, _) in st.victims)
+            {
+                long t = EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.HitStunTimer);
+                int stun = Memory.ReadInt(t);
+                if (stun > 0 && stun <= MutekiClearMax) Memory.WriteInt(t, 0);
+            }
         }
 
         /// <summary>Toan's own share of the blast: one sphere that hurts the PLAYER, centred on the explosion, with the
@@ -344,8 +313,7 @@ namespace Dark_Cloud_Improved_Version
         /// ⚠ The direction is the entry's BLOW DIRECTION (<see cref="CollisionPool.BlowDir"/>), NOT the kick words at
         /// +0x80..+0x98. BtCheckDamageProc copies +0x20 into a scratch and hands it to unitBlowActionRot; it never
         /// reads the kick words, which belong to the enemy path. Both builders default that vector to (1,0,0), a
-        /// fixed WORLD bearing — which is why every detonation threw him the same way on the map, and so looked
-        /// random from behind him.</summary>
+        /// fixed WORLD bearing — which is why leaving it threw him the same way on the map every time.</summary>
         private static void PlantSelfHit(BlastState st, float x, float h, float y, float dirX, float dirZ)
         {
             long pool = CollisionPool.Resolve();
@@ -357,9 +325,53 @@ namespace Dark_Cloud_Improved_Version
             st.planted.Add((slot, HitLifeTicks));
         }
 
+        /// <summary>The blade pays for the detonation in weapon HP: <see cref="WhpHits"/> ordinary swings' worth, by
+        /// the engine's own formula — `(1.5 − 0.01 × Endurance) × factor`, halved by Durable and doubled by Fragile
+        /// (BattleSubWeaponDmg 0x1B5D90). Endurance comes from the BATTLE record, where attachments have already been
+        /// folded in; WHP itself lives on the INVENTORY record (+0x10 of the equipped bag slot), which is the copy the
+        /// engine drains and the menu shows.
+        ///
+        /// ⚠ Floored at 1, never 0. Everything that happens at zero WHP — the auto-consumed Repair Powder, the
+        /// warnings, the weapon breaking back to its base form — lives inside that native function, which a write here
+        /// does not call. Leaving 1 keeps the blade whole and lets the next ordinary hit take it to zero through the
+        /// engine's own path, with all of that intact. A weapon at Endurance 150 pays nothing, exactly as its swings
+        /// cost nothing.</summary>
+        private static void DrainWhp()
+        {
+            int bag = Memory.ReadByte(DngStatusData.EquippedSlotAddr(Player.ToanId));
+            if (bag < 0 || bag >= DngStatusData.MaxWeaponSlots) return;
+            long rec = DngStatusData.WeaponRecord(Player.ToanId, bag);
+            if (Memory.ReadUShort(rec) != Items.bigbang) return;             // not the blade we just spent
+
+            float factor = WhpHits;
+            int flags = Memory.ReadUShort(rec + WeaponHave.AbilityFlagsOffset);
+            if ((flags & WeaponHave.DurableFlag) != 0) factor *= 0.5f;
+            if ((flags & WeaponHave.FragileFlag) != 0) factor *= 2f;
+            int endurance = Memory.ReadShort(WeaponHave.BattleWeaponRecord + WeaponHave.EffEnduranceOffset);
+            float drain = (1.5f - 0.01f * endurance) * factor;
+            if (drain <= 0f) return;
+
+            long whpAddr = rec + WeaponHave.InventoryWeaponWhpOffset;
+            float whp = Memory.ReadFloat(whpAddr);
+            float left = Math.Max(1f, whp - drain);
+            Memory.WriteFloat(whpAddr, left);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[BigBang] detonation cost {whp - left:F1} WHP ({whp:F0} → {left:F0})");
+        }
+
         /// <summary>The engine withdraws its own swing spheres when the swing ends; ours are withdrawn here.</summary>
         private static void ExpireHits(BlastState st)
         {
+            // Guards are crushed while the charge is PRIMED and while the blast's spheres are live. Primed, because
+            // a guarding enemy inside the blast is hurt like any other. The charge attack itself does not need it:
+            // a blocked hit still stamps a mark, HitLanded reads that stamp, and the detonation it sets off is where
+            // the damage lives.
+            //
+            // ⚠ It MUST be driven off again — the flags stay zeroed until something restores them, and leaving them
+            // so would disarm every enemy on the floor. Reset restores, and this drops it the tick the last sphere
+            // expires.
+            bool want = st.planted.Count > 0;
+            if (want != st.crushing) { GuardBreak.Drive(want); st.crushing = want; }
             if (st.planted.Count == 0) return;
             long pool = CollisionPool.Resolve();
             for (int i = st.planted.Count - 1; i >= 0; i--)
@@ -369,18 +381,25 @@ namespace Dark_Cloud_Improved_Version
                 if (pool != 0) CollisionPool.Deactivate(pool, slot);
                 st.planted.RemoveAt(i);
             }
+            if (st.planted.Count == 0 && st.victims.Count > 0)
+            {
+                var dealt = new List<string>();
+                foreach (var (slot, hp0) in st.victims)
+                    dealt.Add($"{slot}:{hp0 - Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Hp))}");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    "[BigBang] blast damage by slot — " + string.Join(", ", dealt));
+                st.victims.Clear();
+            }
         }
 
         private static void Reset(BlastState st)
         {
-            SolarBlade.Clear();
-            ChargeTint.Clear();
-            SolarGlow.Hide();
-            _wantExplosion = false;
+            ClearTint(st);
             long pool = CollisionPool.Resolve();
             foreach (var (slot, _) in st.planted) if (pool != 0) CollisionPool.Deactivate(pool, slot);
             st.planted.Clear();
-            st.phase = Phase.Idle;
+            st.victims.Clear();
+            if (st.crushing) { GuardBreak.Drive(false); st.crushing = false; }   // never leave the floor disarmed
         }
     }
 }

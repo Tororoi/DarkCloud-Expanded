@@ -71,6 +71,12 @@ namespace Dark_Cloud_Improved_Version
             F(0x1C, 1f); F(0x20, 1f);
             I(0x34, baseDmg); I(EntryClass, 0); F(Radius, radius);
             I(0x44, 1); I(Mask, 2); I(0x4C, 2); I(Element, (int)attr); I(0x54, 0);
+            // +0x58 reads as the attacking character id — CheckDmg indexes the per-hurtbox percent column with it
+            // (partPct[part][id] @ +0x555D0), halves the monster's defence for Ruby (3), applies the ranged distance
+            // falloff for 1/3/5 and the weapon-HP drain for 0/2/4. Every feature here plants 1, which damages for
+            // every character. The reading that 0 deals ZERO came from a test whose target was inside its
+            // post-hit invincibility window (EnemySlotOffsets.HitStunTimer) and took nothing whatever was in this
+            // field, so it settles nothing: changing this to the live character is untested, not disproven.
             I(Owner, 1); I(0x5C, -1); I(0x60, 0);
             I(0x64, (int)(BattleWeaponStats - 0x20000000)); I(0x68, -1); I(0x6C, Memory.ReadShort(BattleWeaponFlags));
             I(GateA, 0); I(GateB, 0); F(0x8C, 1f);
