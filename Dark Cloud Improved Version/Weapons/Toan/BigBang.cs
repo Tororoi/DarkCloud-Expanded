@@ -133,7 +133,21 @@ namespace Dark_Cloud_Improved_Version
         private const float  BladeLengthFallback = 12f;
         private const float  HoverScale       = 2.0f;
         private const double FadeSeconds      = 0.25;
-        private const double DropSeconds      = 0.25;
+        // THE FALL is gravity: from rest at the hover height, accelerating to land at DropSeconds — h = h0 − ½·g·t²
+        // with g chosen to arrive on time. Placed by its own frame-rate thread (FallLoop), the way the slingshot
+        // prop's orbit thread re-places that copy: the draw re-seeds the root from the slot every frame, so writes
+        // at frame rate are smooth where the 30 ms tick was a staircase. Cosmetic by construction — the landing
+        // itself is still called from the tick, so nothing that matters rides on this thread's timing.
+        private const double DropSeconds      = 0.35;
+        private const int    FallTickMs       = 4;
+        // As the blade falls the floor's light and fog are driven DOWN (SolarLighting.Dim) on an EXPONENTIAL ramp
+        // that peaks at the landing itself: k = (e^(a·u) − 1) / (e^a − 1) over the fall's fraction u, so it barely
+        // moves at first and plunges in the last moments, with the flash then landing from the darkest frame.
+        // DimSharpness is a — higher holds the light longer and drops it later. Driven from the fall thread (the
+        // same curve as the fall) and handed to the flash at the landing.
+        private const double DimSharpness     = 4.0;
+        // …and the flash follows the burst — same tick, but never before it; a head start read as late.
+        private const double FlashDelay       = 0.0;
         private const float  DropWhpFactor    = 10f;    // 1.5 × 10 = 15 weapon HP before Endurance scales it — the engine's own formula
         // THE BLAST FALLS OFF WITH DISTANCE. Concentric shells, one set per live enemy: the engine tests entries from
         // index 0 upward and takes the FIRST an enemy is inside, and TakeFreeSlot hands out slots from the top — so the
@@ -148,11 +162,14 @@ namespace Dark_Cloud_Improved_Version
         private static int    _hoverSlot = -1;                 // the enemy the blade hangs over (−1 = none up)
         private static float  _hoverAlpha;                     // 0..1, the fade
         private static bool   _hoverOut;                       // fading OUT (lock lost) — no re-placement
-        private static int    _lossTicks;                      // consecutive ticks the gate has read down
-        private const int     LockLossTicks = 5;               // ≈150 ms before a lost lock is believed
         private static ushort _nameSaved;                      // the name plate's draw flag as it was, to put back
         private static DateTime _dropStart, _gateLog;
-        private static float  _dropX, _dropH, _dropY;          // where the blade falls to
+        private static float  _dropX, _dropH, _dropY;          // where the BLAST goes off (BlastFront toward Toan)
+        private static float  _bladeX, _bladeY;                // where the BLADE falls to (the target itself)
+        private static volatile bool _fallDone;                // the fall thread has brought it to the ground
+        private static DateTime _landedAt;                     // when the burst went off; the flash waits FlashDelay
+        private static Thread _fallThread;
+        internal static bool LandingPending => _landedAt != default;
         private static float  _hoverHeight = HoverFallback;    // how far above its root the current target's top is, plus the margin
         private static int    _hoverTraceTicks;
 
@@ -514,9 +531,9 @@ namespace Dark_Cloud_Improved_Version
         /// the lock gone: fading out and down; a drop in flight: falling, and landing.</summary>
         private static void JudgementTick()
         {
-            // "Locked on" is what the game draws the target's HP bar for (PlayerAction.LockHeld): the slot word alone
-            // is only the nearest CANDIDATE, kept current whether or not a lock is held — which is why the blade came
-            // up for any enemy close enough to lock, and flapped as the candidate did.
+            // "Locked on" is the lock button's own toggle (PlayerAction.LockOnHeld): the slot word alone is only the
+            // nearest CANDIDATE, re-picked every frame the toggle is down, and the cursor word stays raised over it
+            // after a release — either one alone hung the blade over whichever enemy was nearest.
             // Liveness by HP alone (HasHp): the hover must never depend on anything it changes itself.
             bool locked   = PlayerAction.LockHeld(out int lockSlot)
                             && lockSlot < EnemyAddresses.FloorSlots.Count && HasHp(lockSlot);
@@ -531,23 +548,19 @@ namespace Dark_Cloud_Improved_Version
                     $"[BigBang] hover gates: primed {primed} ({SunSword.LivePhase}), LockOnActive {Memory.ReadInt(PlayerAction.LockOnActive)}, "
                     + $"LockOnTargetSlot {lockSlot}, live {(lockSlot >= 0 && lockSlot < EnemyAddresses.FloorSlots.Count ? Enemies.IsLive(lockSlot).ToString() : "n/a")}"
                     + $", hoverSlot {_hoverSlot}, blade {BladeProp.Active}"
-                    + $" | cursor {Memory.ReadInt(PlayerAction.TargetCursorUp)} bar {Memory.ReadInt(PlayerAction.TargetBarUp)}"
+                    + $" | held {Memory.ReadInt(PlayerAction.LockOnHeld)} cursor {Memory.ReadInt(PlayerAction.TargetCursorUp)}"
                     + $" 9d98 {Memory.ReadInt(0x202A3588)} 9d9c {Memory.ReadInt(0x202A358C)}");
             }
 
             if (Dropping)
             {
-                double t = (GameClock.Now - _dropStart).TotalSeconds / DropSeconds;
-                if (!BladeProp.Maintain() || !HasHp(_hoverSlot)) { AbandonHover(); Dropping = false; return; }
-                float h = _dropH + _hoverHeight * (float)Math.Max(0.0, 1.0 - t);
-                BladeProp.Place(_dropX, h, _dropY, PlayerFacing());
-                if (t >= 1.0) Land();
+                if (!BladeProp.Maintain() || !HasHp(_hoverSlot)) { AbandonHover(); Dropping = false; SolarLighting.EndDim(); return; }
+                if (_fallDone) Land();                                       // FallLoop places it; the tick lands it
                 return;
             }
 
             if (primed && locked && !_hoverOut)
             {
-                _lossTicks = 0;
                 if (_hoverSlot != lockSlot)
                 {
                     if (!BladeProp.Active && !BladeProp.Spawn(HoverScale)) return;
@@ -558,9 +571,12 @@ namespace Dark_Cloud_Improved_Version
                 if (!BladeProp.Maintain()) { AbandonHover(); return; }
                 long a = EnemyAddresses.FloorSlots.SlotAddr(lockSlot, 0);
                 _hoverHeight = HoverHeightFor(lockSlot, Memory.ReadFloat(a + EnemySlotOffsets.LocationZ));
-                BladeProp.Place(Memory.ReadFloat(a + EnemySlotOffsets.LocationX),
-                                Memory.ReadFloat(a + EnemySlotOffsets.LocationZ) + _hoverHeight,
-                                Memory.ReadFloat(a + EnemySlotOffsets.LocationY), PlayerFacing());
+                // PINNED to the target's model root: the engine chains the copy's world through the enemy's every
+                // frame, so it rides a moving enemy with no placement writes at all — no tick, no thread, no jitter.
+                uint enemyRoot = Memory.ReadGuestPtr(EnemyAddresses.CharObjects.CharAddr(lockSlot) + CCharacter.CharModel);
+                if (BladeProp.PinnedTo != enemyRoot) BladeProp.Pin(enemyRoot, _hoverHeight);
+                // Its flat faces the way the fallen blade will (PlayerFacing): the parent's yaw is taken back out.
+                BladeProp.Face(PlayerFacing(), Memory.ReadFloat(EnemyAddresses.CharObjects.CharAddr(lockSlot) + CCharacter.CharRotY));
                 _hoverAlpha = (float)Math.Min(1.0, _hoverAlpha + dt / FadeSeconds);
                 BladeProp.Alpha(_hoverAlpha);
                 SolarGlow.Show(ToanGlowBakes.BlueName, BladeProp.RootGuest);   // the glow rides the blade
@@ -577,14 +593,6 @@ namespace Dark_Cloud_Improved_Version
             _hoverTraceTicks = 0;
             if (_hoverSlot >= 0)                                             // up, but no longer wanted: fade out and down
             {
-                if (!_hoverOut && _lossTicks == 0)                          // DIAGNOSTIC: every dip of the gate while up
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"[BigBang] hover gate dipped: primed {primed}, locked {locked}, slot {lockSlot}, hp>0 {HasHp(lockSlot)}");
-                // Debounced: the gate has to read DOWN LockLossTicks ticks in a row before the blade starts to leave.
-                // A single tick's flap otherwise tore the whole hover down and put it back — blade, glow and name bar
-                // all flickering in step. (An earlier version counted the ticks the gate read UP, which is to say it
-                // never debounced anything.)
-                if (!_hoverOut && ++_lossTicks < LockLossTicks) return;
                 _hoverOut = true;
                 _hoverAlpha = (float)Math.Max(0.0, _hoverAlpha - dt / FadeSeconds);
                 if (BladeProp.Maintain()) BladeProp.Alpha(_hoverAlpha);
@@ -643,29 +651,70 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_hoverSlot < 0 || _hoverOut || !BladeProp.Active || !HasHp(_hoverSlot)) return false;
             long a = EnemyAddresses.FloorSlots.SlotAddr(_hoverSlot, 0);
-            _dropX = Memory.ReadFloat(a + EnemySlotOffsets.LocationX);
-            _dropH = Memory.ReadFloat(a + EnemySlotOffsets.LocationZ);
-            _dropY = Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
-            _dropStart = GameClock.Now; Dropping = true; _landed = false;
+            _bladeX = Memory.ReadFloat(a + EnemySlotOffsets.LocationX);
+            _dropH  = Memory.ReadFloat(a + EnemySlotOffsets.LocationZ);
+            _bladeY = Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
+            _dropX = _bladeX; _dropY = _bladeY;                              // the blast goes off on the target itself
+            BladeProp.Unpin(PlayerFacing());                                 // off the enemy and into the world, where it is, to fall
+            SolarLighting.BeginDim();                                        // the lights go down with it
+            _dropStart = GameClock.Now; Dropping = true; _landed = false; _fallDone = false; _landedAt = default;
+            if (_fallThread == null || !_fallThread.IsAlive)
+            { _fallThread = new Thread(BladeLoop) { IsBackground = true, Name = "BigBangBlade" }; _fallThread.Start(); }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] judgement blade falls on slot {_hoverSlot}");
             return true;
         }
 
-        /// <summary>Solar Flash asks once per tick while it waits: has the blade landed? Consumed on read.</summary>
-        internal static bool TakeDropLanded() { bool l = _landed; _landed = false; return l; }
+        /// <summary>The FALL at frame rate — the slingshot prop's orbit thread, applied here: the copy's height along a
+        /// gravity curve until it reaches the ground, then <see cref="_fallDone"/> for the tick to land on. (The hover
+        /// needs no thread: it is pinned to the enemy and the engine carries it.) A pause freezes a fall in the air by
+        /// shifting the start time, so it resumes where it was.</summary>
+        private static void BladeLoop()
+        {
+            while (true)
+            {
+                try
+                {
+                    if (!Dropping || _fallDone) { Thread.Sleep(20); continue; }
+                    if (Player.CheckDunIsPausedOrMenu()) { _dropStart = _dropStart.AddMilliseconds(FallTickMs); Thread.Sleep(FallTickMs); continue; }
+                    double t = (GameClock.Now - _dropStart).TotalSeconds;
+                    double g = 2.0 * _hoverHeight / (DropSeconds * DropSeconds);
+                    float  h = _dropH + (float)Math.Max(0.0, _hoverHeight - 0.5 * g * t * t);
+                    BladeProp.Place(_bladeX, h, _bladeY, PlayerFacing());
+                    double u = Math.Min(1.0, t / DropSeconds);
+                    SolarLighting.Dim((float)((Math.Exp(DimSharpness * u) - 1.0) / (Math.Exp(DimSharpness) - 1.0)));
+                    if (t >= DropSeconds) _fallDone = true;
+                }
+                catch (Exception e) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[BigBang] fall tick failed: " + e.Message); }
+                Thread.Sleep(FallTickMs);
+            }
+        }
+
+        /// <summary>Solar Flash asks once per tick while it waits: has the blade landed — and has the burst had its
+        /// <see cref="FlashDelay"/> head start? Consumed on read.</summary>
+        internal static bool TakeDropLanded()
+        {
+            if (!_landed || (GameClock.Now - _landedAt).TotalSeconds < FlashDelay) return false;
+            _landed = false; _landedAt = default; return true;
+        }
 
         /// <summary>The blade has hit the ground: the blast, every enemy turned to look, the weapon-HP bill, and the
         /// copy gone — the flash is Solar Flash's to fire now.</summary>
         private static void Land()
         {
-            Dropping = false;
+            // The white-out and the burst on the SAME frame, from here. Solar Flash's own tick runs the rest of the
+            // flash (the light hit, the blinding, the blade and glow) once TakeDropLanded hands it the landing — and
+            // that is after the shells and the turns below, well past a frame — so the lighting write goes out now,
+            // and Solar Flash is told it is lit (a second Flash there restores the floor's light and whites it again).
+            SolarLighting.FogAmount = SunSword.BigBangFlash.Fog;
+            SolarLighting.Flash();
+            GemBurst.Show(BurstElement, _dropX, _dropH, _dropY, BurstScale, damage: 0, speedMult: BurstSpeed);
             PlantFalloff(_dropX, _dropH, _dropY);
             TurnEnemiesToward(_dropX, _dropY);
             DrainWhp(DropWhpFactor);
-            GemBurst.Show(BurstElement, _dropX, _dropH, _dropY, BurstScale, damage: 0, speedMult: BurstSpeed);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] judgement blade lands at ({_dropX:F0},{_dropH:F0},{_dropY:F0})");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] judgement blade lands on ({_bladeX:F0},{_dropH:F0},{_bladeY:F0}); blast at ({_dropX:F0},{_dropY:F0})");
             AbandonHover();
-            _landed = true;
+            _landedAt = GameClock.Now; _landed = true;
+            Dropping = false;
         }
 
         /// <summary>Everything the hover put up, back down: the copy, the target's name bar, the glow's home.</summary>
@@ -877,7 +926,7 @@ namespace Dark_Cloud_Improved_Version
             ClearTint(st);
             RestoreSwing(st);          // stats, kick constants and the charge radii
             RestoreImmunity();         // ⚠ shared ELF data: never leave the explosions inert
-            AbandonHover(); Dropping = false; _landed = false;
+            AbandonHover(); Dropping = false; _landed = false; _fallDone = false; _landedAt = default; SolarLighting.EndDim();
             { long pool = CollisionPool.Resolve(); foreach (var (slot, _) in _shells) if (pool != 0) CollisionPool.Deactivate(pool, slot); _shells.Clear(); }
             if (st.crushing) { GuardBreak.Drive(false); st.crushing = false; }
             st.chargeAction = 0;

@@ -26,6 +26,14 @@ namespace Dark_Cloud_Improved_Version
         private const double FogSeconds  = 1.0;    // the fog lifts in a second; only the LIGHT takes the full blinding
         private const double Decay       = 4.0;    // how sharply the wash falls away; higher puts more of the drop in the first moments
 
+        // THE DIM: the light and fog driven DOWN before a flash, so the flash lands from darkness — an impact, not a
+        // screen effect. Ambient and colour rows toward DimKeep of themselves, the fog closed in to DimFogPull of its
+        // reach and its colour toward black. Same capture as the flash uses, taken once when the dim begins; the
+        // flash then writes white over that ORIGINAL capture and eases back to it, never to the dark.
+        private const float  DimKeep     = 0.15f;  // how much of the floor's light is left at full dim
+        private const float  DimFogPull  = 0.35f;  // the fog's start/end, as a fraction of where they were
+        private static bool     _dimming;
+
         private static bool     _active, _sub;
         private static DateTime _start;
         private static float[]  _amb, _cols, _fog;
@@ -37,11 +45,21 @@ namespace Dark_Cloud_Improved_Version
         private static long FogColor => _sub ? DungeonLighting.SubFogColor : DungeonLighting.MainFogColor;
 
         internal static bool Active => _active;
-
-        /// <summary>Capture the floor's light and go to full white.</summary>
+        /// <summary>Capture the floor's light and go to full white. A dim in progress hands over its capture — the
+        /// floor's real light, taken before the darkening — so the ease returns there.</summary>
         internal static void Flash()
         {
             if (_active) Restore();                         // a flash inside the ease: the floor's own values are the ones to keep
+            if (_dimming) _dimming = false;                 // …but a dim's capture IS the floor's own: keep it
+            else if (!Capture()) return;
+            _active = true; _start = GameClock.Now;
+            Write(1f, 1f);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] flash: {Describe()}");
+        }
+
+        /// <summary>The floor's light set, captured; false (and logged) if it does not look like one.</summary>
+        private static bool Capture()
+        {
             _sub    = Memory.ReadInt(DungeonLighting.Mode) != 0;
             _amb    = Memory.ReadFloatBatch(Ambient, 4);
             _cols   = Memory.ReadFloatBatch(Colors, DungeonLighting.ColorRows * 4);
@@ -51,12 +69,55 @@ namespace Dark_Cloud_Improved_Version
                 || !Plausible(_amb[0]) || !Plausible(_amb[1]) || !Plausible(_amb[2]) || _fog[0] < 0f || _fog[1] < _fog[0])
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[SunSword] lighting globals look wrong ({Describe()}) — the flash keeps the light as it is");
-                return;
+                    $"[SunSword] lighting globals look wrong ({Describe()}) — the light is kept as it is");
+                return false;
             }
-            _active = true; _start = GameClock.Now;
-            Write(1f, 1f);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] flash: {Describe()}");
+            return true;
+        }
+
+        /// <summary>Start a dim: capture the floor's light (unless a flash is easing, whose capture already is the
+        /// floor's). <see cref="Dim"/> then drives it down; <see cref="Flash"/> takes over from it, or
+        /// <see cref="EndDim"/> puts it back if nothing follows.</summary>
+        internal static void BeginDim()
+        {
+            if (_dimming) return;
+            if (_active) { _active = false; }               // an easing flash: keep its capture, drop its ease
+            else if (!Capture()) return;
+            _dimming = true;
+        }
+
+        /// <summary>The scene at darkness <paramref name="k"/> (0 = the floor's own light, 1 = full dim). Writes
+        /// only while a dim is up and no flash has taken over — a late write after the flash would put a dark frame
+        /// on top of the white.</summary>
+        internal static void Dim(float k)
+        {
+            if (!_dimming || _active) return;
+            k = Math.Max(0f, Math.Min(1f, k));
+            var amb = (float[])_amb.Clone();
+            for (int c = 0; c < 3; c++) amb[c] = Lerp(_amb[c], _amb[c] * DimKeep, k);
+            var cols = (float[])_cols.Clone();
+            for (int r = 0; r < DungeonLighting.ColorRows; r++)
+                for (int c = 0; c < 3; c++) cols[r * 4 + c] = Lerp(_cols[r * 4 + c], _cols[r * 4 + c] * DimKeep, k);
+            var fog = (float[])_fog.Clone();
+            if (_fog[1] > _fog[0])
+            {
+                fog[0] = Lerp(_fog[0], _fog[0] * DimFogPull, k);
+                fog[1] = Lerp(_fog[1], _fog[1] * DimFogPull, k);
+            }
+            var rgb = new byte[3];
+            for (int c = 0; c < 3; c++) rgb[c] = (byte)Math.Round(Lerp(_fogRgb[c], 0f, k));
+            Memory.WriteBytesBatch(Ambient, Bytes(amb));
+            Memory.WriteBytesBatch(Colors, Bytes(cols));
+            Memory.WriteBytesBatch(FogRate, Bytes(fog));
+            Memory.WriteBytesBatch(FogColor, rgb);
+        }
+
+        /// <summary>A dim that nothing followed: the floor's light back in one write.</summary>
+        internal static void EndDim()
+        {
+            if (!_dimming) return;
+            _dimming = false;
+            if (!_active) Write(0f, 0f);
         }
 
         /// <summary>The ease, one step; a no-op when no flash is running.</summary>
@@ -78,13 +139,19 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The captured light back in one write (floor change, weapon put away, end of the ease).</summary>
         internal static void Restore()
         {
-            if (!_active) return;
-            _active = false;
+            if (!_active && !_dimming) return;
+            _active = false; _dimming = false;
             Write(0f, 0f);
         }
 
+        /// <summary>HOW MUCH of the fog wash the flash does, 0..1. The wash is the fog's start/end pulled toward 0..1
+        /// (everything past a unit becomes fog colour) and its colour driven white; this scales that pull, so 1 is
+        /// the Sun Sword's full white-out, 0 leaves the fog exactly as it was, and a fraction moves it that far.</summary>
+        internal static float FogAmount = 1f;
+
         private static void Write(float k, float kf)
         {
+            kf *= Math.Max(0f, Math.Min(1f, FogAmount));
             var amb = (float[])_amb.Clone();
             for (int c = 0; c < 3; c++) amb[c] = Lerp(_amb[c], FlashColour[c], k);
             var cols = (float[])_cols.Clone();

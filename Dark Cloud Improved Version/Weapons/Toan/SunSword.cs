@@ -38,15 +38,16 @@ namespace Dark_Cloud_Improved_Version
             internal readonly float  DamageFraction;
             internal readonly string Glow, Model, Tag;
             internal readonly uint   Frame, Unlit;
-            internal SolarProfile(ushort id, float dmg, string glow, string model, uint frame, uint unlit, string tag)
-            { WeaponId = id; DamageFraction = dmg; Glow = glow; Model = model; Frame = frame; Unlit = unlit; Tag = tag; }
+            internal readonly float  Fog;              // how much of the fog wash the flash does (SolarLighting.FogAmount)
+            internal SolarProfile(ushort id, float dmg, string glow, string model, uint frame, uint unlit, string tag, float fog = 1f)
+            { WeaponId = id; DamageFraction = dmg; Glow = glow; Model = model; Frame = frame; Unlit = unlit; Tag = tag; Fog = fog; }
         }
 
         internal static readonly SolarProfile SunSwordFlash = new SolarProfile(
             Items.sunsword, 0.25f, ToanGlowBakes.GlowName, SolarBlade.SunSwordModel, 0, 0, "SunSword");
         internal static readonly SolarProfile BigBangFlash = new SolarProfile(
             Items.bigbang, 0.50f, ToanGlowBakes.BlueName, SolarBlade.BigBangModel,
-            SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame, "BigBang");
+            SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame, "BigBang", fog: 0.8f);
 
         /// <summary>True while a Solar Flash charge is building, held or going off — Big Bang's own charge-attack tint
         /// stands aside for it rather than fighting it for the blade.</summary>
@@ -187,8 +188,10 @@ namespace Dark_Cloud_Improved_Version
                     HoldPrimedTint(1f);
                     SolarGlow.Tick();
                     // The blade has landed (or the drop was abandoned — a lost lock mid-fall): the flash fires either way,
-                    // so a spent charge never sits waiting on a visual.
-                    if (BigBang.TakeDropLanded() || !BigBang.Dropping) { Flash(st, p); st.phase = Phase.Idle; }
+                    // so a spent charge never sits waiting on a visual. A landing has already fired the white-out on
+                    // the burst's own frame; the abandon has not.
+                    if (BigBang.TakeDropLanded())                              { Flash(st, p, lit: true); st.phase = Phase.Idle; }
+                    else if (!BigBang.Dropping && !BigBang.LandingPending)     { Flash(st, p);            st.phase = Phase.Idle; }
                     break;
                 }
             }
@@ -228,14 +231,15 @@ namespace Dark_Cloud_Improved_Version
             _                                 => Combo5Hit,
         };
 
-        /// <summary>The flash itself: blade back to normal, the light to white, Toan's pulse, the hit, the blinding.</summary>
-        private static void Flash(SolarState st, SolarProfile p)
+        /// <summary>The flash itself: blade back to normal, the light to white, Toan's pulse, the hit, the blinding.
+        /// <paramref name="lit"/>: the white-out has already been fired (Big Bang's landing does it with the burst).</summary>
+        private static void Flash(SolarState st, SolarProfile p, bool lit = false)
         {
             float px = Memory.ReadFloat(Addresses.dunPositionX), ph = Memory.ReadFloat(Addresses.dunPositionZ), py = Memory.ReadFloat(Addresses.dunPositionY);
             SolarBlade.Clear();                                          // tint off, and the blade's own palette back
             ChargeTint.Clear();                                          // …and the white Toan was holding
             SolarGlow.Hide();
-            SolarLighting.Flash();
+            if (!lit) { SolarLighting.FogAmount = p.Fog; SolarLighting.Flash(); }
             Player.FlashActiveCharacter(SolarLighting.FlashColour[0], SolarLighting.FlashColour[1], SolarLighting.FlashColour[2], FlashPulseSpeed, 1);
             if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
             PlantFlashHit(st, px, ph, py, p);

@@ -78,6 +78,61 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(s + CCharacter.CharScale + 8, _scale);
         }
 
+        /// <summary>PIN the copy to a node the ENGINE moves: its root is parented to <paramref name="parentGuest"/>,
+        /// and from then on the draw chains its world matrix through the parent's every frame — welded at 60 fps
+        /// with no writes at all, the way the slingshot shield rides Xiao. The slot's position becomes an offset in
+        /// the parent's space: <paramref name="up"/> units straight up, divided by the parent's own scale so a
+        /// grown miniboss does not lift the blade twice.</summary>
+        internal static void Pin(uint parentGuest, float up)
+        {
+            if (!Active || !Memory.IsValidGuest(parentGuest)) return;
+            long r = Memory.ToMmu(_rootGuest), par = Memory.ToMmu(parentGuest);
+            float ps = Memory.ReadFloat(par + 0x214);                  // the parent's local scale Y
+            if (ps < 0.05f || ps > 20f) ps = 1f;
+            Memory.WriteUInt(r + CFrameVu1.Parent, parentGuest);
+            Memory.WriteInt (r + CFrameVu1.WorldCacheA, 0);
+            long s = SlotAddr();
+            Memory.WriteVec3 (s + CCharacter.CharPos, 0f, up / ps, 0f);
+            Memory.WriteFloat(s + CCharacter.CharRot,     0f);
+            Memory.WriteFloat(s + CCharacter.CharRotY,    0f);       // local to the parent; Face turns it
+            _localYaw = 0f;
+            Memory.WriteFloat(s + CCharacter.CharRot + 8, 0f);
+            Memory.WriteFloat(s + CCharacter.CharScale,     _scale / ps);
+            Memory.WriteFloat(s + CCharacter.CharScale + 4, _scale / ps);
+            Memory.WriteFloat(s + CCharacter.CharScale + 8, _scale / ps);
+            _pinned = parentGuest;
+        }
+
+        /// <summary>Back to the world, exactly where it is: the root's posed world translation becomes the slot's
+        /// position, its parent is cleared, and <see cref="Place"/> owns it again.</summary>
+        internal static void Unpin(float yaw)
+        {
+            if (!Active || _pinned == 0) return;
+            long r = Memory.ToMmu(_rootGuest);
+            float x = Memory.ReadFloat(r + CFrameVu1.WorldMatrix + 0x30);
+            float h = Memory.ReadFloat(r + CFrameVu1.WorldMatrix + 0x34);
+            float y = Memory.ReadFloat(r + CFrameVu1.WorldMatrix + 0x38);
+            Memory.WriteUInt(r + CFrameVu1.Parent, 0);
+            Memory.WriteInt (r + CFrameVu1.WorldCacheA, 0);
+            _pinned = 0;
+            Place(x, h, y, yaw);
+        }
+        /// <summary>Which way the PINNED copy's flat faces, in the world: the slot's yaw is local to the parent, so the
+        /// parent's own yaw comes off first. Written only when it has moved, so a still pair costs nothing.</summary>
+        internal static void Face(float worldYaw, float parentYaw)
+        {
+            if (!Active || _pinned == 0) return;
+            float local = worldYaw - parentYaw;
+            while (local >  MathF.PI) local -= 2 * MathF.PI;
+            while (local < -MathF.PI) local += 2 * MathF.PI;
+            if (Math.Abs(local - _localYaw) < 0.005f) return;
+            _localYaw = local;
+            Memory.WriteFloat(SlotAddr() + CCharacter.CharRotY, local);
+        }
+        private static float _localYaw;
+        internal static uint PinnedTo => Active ? _pinned : 0u;
+        private static uint _pinned;
+
         /// <summary>Visibility 0..1 (the slot's NpcOpacity, 0..128).</summary>
         internal static void Alpha(float a)
         {
@@ -124,7 +179,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (s + DungeonCharaDraw.CharaMotionA, 0);
             Memory.WriteFloat(s + CCharacter.NpcOpacity, 0f);
             Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 2);                 // restore vanilla gates
-            Active = false;
+            Active = false; _pinned = 0;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "blade copy down");
         }
 

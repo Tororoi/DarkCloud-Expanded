@@ -134,11 +134,12 @@ namespace Dark_Cloud_Improved_Version
         /// Y can gate on it. For "is the player locked on, and to whom", use <see cref="LockOnTargetSlot"/> alone —
         /// LockOffTargte (dun 0x1DBFCE0) returns it to −1 on release.</summary>
         internal const long LockOnActive     = 0x202A3580;
-        /// <summary>THE HELD LOCK, as the game itself decides it: DrawTargetLife (dun 0x1DBFD10) draws the target's HP
-        /// bar only while BOTH of these are nonzero. setTargetCursor (0x1DC0740) raises <see cref="TargetCursorUp"/>
-        /// when it has a valid target on screen and LockOffTargte clears it; <see cref="TargetBarUp"/> is the bar's
-        /// own gate. <see cref="LockOnTargetSlot"/> alone is only the running CANDIDATE — SetNearLockOnTarget keeps
-        /// it pointed at the nearest lockable enemy whether or not a lock is held.</summary>
+        /// <summary>THE HELD LOCK: the lock button TOGGLES this word (0 ↔ 1) in the player key handler (dun 0x1DB29B4)
+        /// whenever <see cref="LockOnTargetSlot"/> holds a candidate, and every frame setTargetCursor(this) runs — 0 has
+        /// it re-pick the nearest enemy (SetNearLockOnTarget(0,1)), 1 has it validate and draw the reticle on the held
+        /// one, and 32 frames of an invalid target (dead, out of range, off-screen) clear it and the slot together.
+        /// LockOffTargte clears it too. The cycle button only re-picks while this is 1.</summary>
+        internal const long LockOnHeld       = 0x202A3588;   // gp−0x6268
         /// <summary>The lock-on target's NAME plate. SetNearLockOnTarget names a newly acquired target with
         /// MonsterNameMake(id) (0x20ED90), which builds the message window in the ClsMes at
         /// <see cref="CharaNameMes"/> and sets its +0x98 visible; the engine then shows or hides the plate through
@@ -146,15 +147,16 @@ namespace Dark_Cloud_Improved_Version
         /// projects off-screen. Holding it at 0 hides the name and touches nothing on the enemy.</summary>
         internal const long CharaNameDrawFlag = 0x202A2E10;   // ushort, gp−0x69E0
         internal const long CharaNameMes      = 0x202A2E08;   // → ClsMes; +0x98 = the window's own visible flag
+        /// <summary>⚠ Neither is a lock gate. DrawTargetLife draws the HP bar while both are nonzero, but the cursor
+        /// word is only written DOWN when the candidate projects off-screen or the lock is cleared — after a release
+        /// it stays raised over whatever enemy is nearest — and the bar word flaps per frame.</summary>
         internal const long TargetCursorUp   = 0x21E58F30;
         internal const long TargetBarUp      = 0x21E58F34;
-        /// <summary>⚠ Gated on <see cref="TargetCursorUp"/> and the slot ONLY. <see cref="TargetBarUp"/> is rewritten by
-        /// several per-frame routines and a poll sees it either way — reading it here made the lock read down on
-        /// random ticks. The cursor word is written by setTargetCursor and LockOffTargte alone.</summary>
+        /// <summary>Is the player locked on, and to whom: <see cref="LockOnHeld"/> up and the slot a real one.</summary>
         internal static bool LockHeld(out int slot)
         {
             slot = Memory.ReadInt(LockOnTargetSlot);
-            return slot >= 0 && Memory.ReadInt(TargetCursorUp) != 0;
+            return slot >= 0 && Memory.ReadInt(LockOnHeld) != 0;
         }
         // iRam01dc4490: nonzero while a shot is in progress (set at BattleActionOn start, cleared at the
         // shoot-motion end). iRam01dc44c8 (float): the ranged "speed bar" — BattleActionOn starts a shot
