@@ -104,6 +104,16 @@ namespace Dark_Cloud_Improved_Version
         // always-resident Maseki pool. It is authored as a small thrown-gem puff, so it is scaled up hard and
         // slowed down to stop the animation snapping at that size. Scale is the sub-slot's own CObject scale, not a
         // radius: it does not change what the blast HITS (that is BlastRadius).
+        // ── what an auto-guarded explosion feels like ────────────────────────────────────────
+        // The cave (ElfWeaponPatches.PatchAutoGuardMatch) makes the engine forget the hit entirely, which is what
+        // keeps Toan's charge alive — but a hit that is silently dropped feels like a bug. So the cave ticks a
+        // counter and the mod answers it here with the controller shove the engine itself uses on a hit (its own are
+        // motor 1 at 0xE6/22 frames for a knockdown, 0xDC/12 for a lighter one — this sits under both) and the guard
+        // clang. No flinch: the only one available without an action change is a tint pulse, and it read as noise.
+        private const int    GuardRumble      = 0xC0, GuardRumbleFrames = 10;
+        private const ushort GuardSe          = 0xA2;   // the engine's own guard-clang SE
+        private static int   _guardSignal = -1;
+
         private const int    PrimeTicks       = 60;    // ≈1.8 s: a charge that never connects gives its prime up
         private const float  LungeBurstReach  = 12f;   // fallback: the blade's reach in front of Toan
         private const float  MarkSanity       = 60f;   // a mark further than this from Toan is not his swing's
@@ -185,6 +195,7 @@ namespace Dark_Cloud_Improved_Version
 
             if (ExplosionSeeded) MaintainExplosionScale();
             ArmImmunity();
+            AnswerAutoGuard();
             if (!st.patchChecked)
             {
                 st.patchChecked = true;
@@ -453,6 +464,24 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 $"[BigBang] probe: HP {was} → {hp} (−{was - hp}); player-hurting spheres live: "
                 + (seen.Count == 0 ? "NONE — the damage did not come through the collision pool" : string.Join(" | ", seen)));
+        }
+
+        /// <summary>Answer a hit the cave swallowed: rumble and the guard clang. The cave only ticks a counter —
+        /// everything the player actually feels is here, where it can be tuned without touching MIPS.
+        /// The count is compared, never zeroed, so two ticks between polls still read as one answer and nothing is
+        /// lost if the mod starts mid-floor.</summary>
+        private static void AnswerAutoGuard()
+        {
+            int n = Memory.ReadInt(CodeCaves.AutoGuardSignal + CodeCaves.AutoGuardCount);
+            int was = _guardSignal; _guardSignal = n;
+            if (was < 0 || n == was) return;
+
+            GamePad.Rumble(GuardRumble, GuardRumbleFrames);
+            SeSeq.Play(GuardSe, 90);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[BigBang] explosion guarded at ({Memory.ReadFloat(CodeCaves.AutoGuardSignal + CodeCaves.AutoGuardX):F0},"
+                + $"{Memory.ReadFloat(CodeCaves.AutoGuardSignal + CodeCaves.AutoGuardH):F0},"
+                + $"{Memory.ReadFloat(CodeCaves.AutoGuardSignal + CodeCaves.AutoGuardY):F0})");
         }
 
         /// <summary>The effect file a config names (its first field) — the check that we are looking at the record

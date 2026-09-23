@@ -891,7 +891,15 @@ namespace Dark_Cloud_Improved_Version
         internal const uint BombReactionGuest = 0x01FAF838;
         internal const int  BombReactionVanilla = 3;
 
-        // ── FREE: 0x21FAF83C .. 0x21FB0000 (0x7C4 B) ────────────────────────────────────────────────────
+        /// <summary>What the auto-guard cave leaves for the mod: +0x00 a COUNTER it ticks each time it swallows a
+        /// hit, +0x04/+0x08/+0x0C where that hit was. The cave does the part only it can do — make the engine forget
+        /// the hit — and the FEEDBACK is the mod's, because rumble, sound and a flash are one line each in C# and a
+        /// dozen fiddly instructions in a cave.</summary>
+        internal const long AutoGuardSignal      = 0x21FAF840;
+        internal const uint AutoGuardSignalGuest = 0x01FAF840;
+        internal const int  AutoGuardCount = 0x00, AutoGuardX = 0x04, AutoGuardH = 0x08, AutoGuardY = 0x0C;
+
+        // ── FREE: 0x21FAF850 .. 0x21FB0000 (0x7B0 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

@@ -258,8 +258,9 @@ namespace Dark_Cloud_Improved_Version
         ///   0x1DBB0E8  beq  s0,v0 → skip everything
         /// </code>
         /// The cave returns v0 = −1 (what the displaced instruction set) and, for a reaction-5 entry, s0 = −1 as well,
-        /// so the engine's own `beq` takes it straight to the end. It consumes the entry first and stamps the mark the
-        /// guarded path would have, with the same SE and the same 30-frame cooldown.
+        /// so the engine's own `beq` takes it straight to the end. It consumes the entry first and ticks
+        /// <see cref="CodeCaves.AutoGuardSignal"/> with the position, which is how the mod knows to answer with rumble,
+        /// a sound and a flinch — presentation is far easier to tune in C# than in a cave.
         ///
         /// ⚠ It has to intercept HERE rather than at the reaction dispatch. Before the handler looks at a reaction at
         /// all, it zeroes the player's action word (0x1DC4490, read by ToanKey_Play at 0x24146C) — so a hit that did
@@ -270,7 +271,7 @@ namespace Dark_Cloud_Improved_Version
             uint[] words =
             {
                 0x2401FFFF,   // addiu at,zero,-1
-                0x10410027,   // beq   v0,at,done          nothing was hit
+                0x10410018,   // beq   v0,at,done          nothing was hit
                 0x00000000,   // nop
                 0x8F889DF0,   // lw    t0,0x9DF0(gp)       NowColData
                 0x00024880,   // sll   t1,v0,2
@@ -279,38 +280,23 @@ namespace Dark_Cloud_Improved_Version
                 0x01094821,   // addu  t1,t0,t1            the entry
                 0x8D2A004C,   // lw    t2,0x4C(t1)         its reaction
                 0x240B0005,   // addiu t3,zero,5
-                0x154B001E,   // bne   t2,t3,done          not ours: vanilla flow
+                0x154B000F,   // bne   t2,t3,done          not ours: vanilla flow
                 0x00000000,   // nop
                 0x00025080,   // sll   t2,v0,2
                 0x010A5021,   // addu  t2,t0,t2
                 0xAD403C00,   // sw    zero,0x3C00(t2)     consume the entry
-                0x3C0C01EC,   // lui   t4,0x1EC
+                0x3C0C01FB,   // lui   t4,0x1FB            the signal block
+                0x8D8DF840,   // lw    t5,-0x7C0(t4)       its counter
+                0x25AD0001,   // addiu t5,t5,1
+                0xAD8DF840,   // sw    t5,-0x7C0(t4)       …ticked, for the mod to notice
                 0x8D2D0000,   // lw    t5,0x0(t1)
-                0xAD8D4940,   // sw    t5,0x4940(t4)       the guard spark, at the hit point
+                0xAD8DF844,   // sw    t5,-0x7BC(t4)       …and where it happened
                 0x8D2D0004,   // lw    t5,0x4(t1)
-                0xAD8D4944,   // sw    t5,0x4944(t4)
+                0xAD8DF848,   // sw    t5,-0x7B8(t4)
                 0x8D2D0008,   // lw    t5,0x8(t1)
-                0xAD8D4948,   // sw    t5,0x4948(t4)
-                0x240D0010,   // addiu t5,zero,0x10
-                0xAD8D4950,   // sw    t5,0x4950(t4)       life 16
-                0xAD804954,   // sw    zero,0x4954(t4)
-                0x240D0001,   // addiu t5,zero,1
-                0xAD8D4958,   // sw    t5,0x4958(t4)       active
-                0x8F8E9E9C,   // lw    t6,-0x6164(gp)      the clang's own cooldown
-                0x1DC0000B,   // bgtz  t6,quiet
-                0x00000000,   // nop
-                0x27BDFFF0,   // addiu sp,sp,-16
-                0xAFBF0000,   // sw    ra,0(sp)
-                0x240400A2,   // addiu a0,zero,0xA2        the guard clang
-                0x2405FFFF,   // addiu a1,zero,-1
-                0x0C0569AC,   // jal   SndSePlay
-                0x24060000,   // addiu a2,zero,0           (delay slot)
-                0x8FBF0000,   // lw    ra,0(sp)
-                0x27BD0010,   // addiu sp,sp,16
-                0x240E001E,   // addiu t6,zero,30
-                0xAF8E9E9C,   // sw    t6,-0x6164(gp)      …re-armed
-                0x2410FFFF,   // addiu s0,zero,-1     quiet: report that nothing was hit
-                0x03E00008,   // jr    ra             done:
+                0xAD8DF84C,   // sw    t5,-0x7B4(t4)
+                0x2410FFFF,   // addiu s0,zero,-1          report: nothing was hit
+                0x03E00008,   // jr    ra            done:
                 0x2402FFFF,   // addiu v0,zero,-1          what the displaced instruction set
             };
             uint at0 = CodeCaves.DebugInfoCave.AutoGuardMatch;
