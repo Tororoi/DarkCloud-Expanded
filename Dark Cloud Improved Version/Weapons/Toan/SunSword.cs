@@ -52,7 +52,16 @@ namespace Dark_Cloud_Improved_Version
         /// stands aside for it rather than fighting it for the blade.</summary>
         internal static bool FlashArmed { get; private set; }
 
-        private enum Phase { Idle, Charging, Primed, Windup, Dissipating }
+        private enum Phase { Idle, Charging, Primed, Windup, Dropping, Dissipating }
+        private static SolarState   _live;        // the running flash's state, for the questions below
+        private static SolarProfile _liveProfile;
+        /// <summary>Is <paramref name="weaponId"/>'s Solar Flash currently PRIMED (charge held, swing not yet made)? Big
+        /// Bang hangs its judgement blade over the lock-on target during exactly this.</summary>
+        /// <summary>The running flash's phase and weapon, for diagnostics.</summary>
+        internal static string LivePhase => _live == null ? "none" : $"{_live.phase}/{_liveProfile?.WeaponId}";
+        internal static bool PrimedFor(ushort weaponId) =>
+            _live != null && _liveProfile != null && _liveProfile.WeaponId == weaponId
+            && (_live.phase == Phase.Primed || _live.phase == Phase.Windup || _live.phase == Phase.Dropping);
         private sealed class SolarState
         {
             public Phase phase;
@@ -75,6 +84,7 @@ namespace Dark_Cloud_Improved_Version
         public static void SolarFlashEffect(SolarProfile p)
         {
             var st = new SolarState();
+            _live = st; _liveProfile = p;
             while (Player.Weapon.GetCurrentWeaponId() == p.WeaponId && Player.InDungeonFloor())
             {
                 Thread.Sleep(TickMs);
@@ -132,7 +142,8 @@ namespace Dark_Cloud_Improved_Version
 
                 case Phase.Primed:
                     SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit);                                   // re-asserted each tick: a rebuilt model gets it back
-                    SolarGlow.Show(p.Glow); SolarGlow.Tick();
+                    if (!BigBang.GlowOwned) SolarGlow.Show(p.Glow);
+                    SolarGlow.Tick();
                     HoldPrimedTint(1f);
                     if (IsAttack(action)) { st.phase = Phase.Windup; break; }
                     if ((GameClock.Now - st.primedAt).TotalSeconds >= PrimedSeconds)
@@ -162,8 +173,22 @@ namespace Dark_Cloud_Improved_Version
                     bool forward = action == PlayerAction.ActionWhirlwind || action == PlayerAction.ActionLunge
                                 || Memory.ReadFloat(PlayerAction.AnimFrameCursor) >= ComboHitFrame(action);
                     if (!forward) break;
+                    // Big Bang, locked on: the swing does not flash — it lets the judgement blade fall, and the flash
+                    // goes off when it lands (BigBang.BeginDrop → Dropping). Not locked on: the flash, as ever.
+                    if (p.WeaponId == Items.bigbang && BigBang.BeginDrop()) { st.phase = Phase.Dropping; break; }
                     Flash(st, p);
                     st.phase = Phase.Idle;
+                    break;
+                }
+
+                case Phase.Dropping:
+                {
+                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit);
+                    HoldPrimedTint(1f);
+                    SolarGlow.Tick();
+                    // The blade has landed (or the drop was abandoned — a lost lock mid-fall): the flash fires either way,
+                    // so a spent charge never sits waiting on a visual.
+                    if (BigBang.TakeDropLanded() || !BigBang.Dropping) { Flash(st, p); st.phase = Phase.Idle; }
                     break;
                 }
             }

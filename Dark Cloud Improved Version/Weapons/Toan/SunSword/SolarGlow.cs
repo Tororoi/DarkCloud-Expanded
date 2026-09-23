@@ -37,11 +37,24 @@ namespace Dark_Cloud_Improved_Version
         private static DateTime _shownAt, _fadeAt;
 
         /// <summary>Up, once. Re-arming every tick would re-bind the texture each frame.</summary>
-        internal static void Show(string disc = ToanGlowBakes.GlowName)
+        /// <param name="anchor">A GUEST node to hang the disc on instead of Toan (BladeProp.RootGuest for the judgement
+        /// blade); 0 = Toan's own spine. A glow already up is re-hung when the anchor changes — one data write.</param>
+        internal static void Show(string disc = ToanGlowBakes.GlowName, uint anchor = 0)
         {
-            if (_on) { KeepAlive(); return; }
+            if (_on)
+            {
+                uint want = anchor != 0 ? anchor : Anchor();
+                if (want != 0 && want != _anchor)
+                {
+                    Memory.WriteUInt(CodeCaves.Mailbox.CatGlowNodeA, want);
+                    Memory.WriteUInt(CodeCaves.Mailbox.CatGlowNodeB, want);
+                    _anchor = want;
+                }
+                KeepAlive(); return;
+            }
             _disc = disc;
-            uint root = Anchor();
+            uint root = anchor != 0 ? anchor : Anchor();
+            _anchor = root;
             if (root == 0) return;                                       // no posed bone yet: try again next tick
             Reserve();                                                   // …and give the disc a home that is actually uploaded, BEFORE the cave binds it
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 0);
@@ -185,6 +198,7 @@ namespace Dark_Cloud_Improved_Version
         /// sliding down his chest. The live weapon is parented to the wielder's hand bone (CharacterClone reads it the same
         /// way rather than trusting a bone INDEX, since every character's skeleton differs), so that pointer is a posed bone
         /// for free; walking up its parents to just below the root lands on the spine.</summary>
+        private static uint _anchor;
         private static uint Anchor()
         {
             uint modelRoot = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel);

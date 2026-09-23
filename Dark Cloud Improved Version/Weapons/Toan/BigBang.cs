@@ -114,6 +114,48 @@ namespace Dark_Cloud_Improved_Version
         private const ushort GuardSe          = 0xA2;   // the engine's own guard-clang SE
         private static int   _guardSignal = -1;
 
+        // ── the judgement blade ─────────────────────────────────────────────────────────────
+        // While Solar Flash is primed AND Toan is locked on, a copy of the sword (BladeProp) hangs point-down over the
+        // target at HoverScale, fading in over FadeSeconds; the blue glow moves onto it and the target's NAME plate is
+        // hidden (PlayerAction.CharaNameDrawFlag held at 0 — the enemy itself is never touched, so a kill during the
+        // hover still counts for whatever counts kills). Losing the lock fades it out and
+        // the glow returns to Toan. The primed swing then does not flash: the blade FALLS over DropSeconds, and where
+        // it lands it detonates — the flash, the blast below, every enemy on the floor turned to face it, and the
+        // weapon-HP bill. Swinging with no lock is the ordinary flash.
+        // The blade hangs HoverMargin above the target's own top — read live from the engine's body-collision
+        // spheres (BodyCollision: world centre + radius, rebuilt every frame from the bone's SCALED position, so a
+        // grown miniboss's top rises with it and no per-species table is needed). HoverFallback when none is up.
+        private const float  HoverMargin      = 6f;
+        private const float  HoverFallback    = 20f;
+        // The copy hangs point-DOWN from its root (the grip), so the TIP is the blade's length below the placement;
+        // the grip goes up by that much so the tip is what clears the target. The length is the weapon's dcol1 reach
+        // (the offline table Weapons keeps), at the copy's scale.
+        private const float  BladeLengthFallback = 12f;
+        private const float  HoverScale       = 2.0f;
+        private const double FadeSeconds      = 0.25;
+        private const double DropSeconds      = 0.25;
+        private const float  DropWhpFactor    = 10f;    // 1.5 × 10 = 15 weapon HP before Endurance scales it — the engine's own formula
+        // THE BLAST FALLS OFF WITH DISTANCE. Concentric shells, one set per live enemy: the engine tests entries from
+        // index 0 upward and takes the FIRST an enemy is inside, and TakeFreeSlot hands out slots from the top — so the
+        // shells are planted outermost first (highest indices) and innermost last (lowest), and every enemy consumes
+        // the strongest shell it stands in. A unit takes one hit per frame and the shells are gone before its
+        // invincibility ends, so nobody takes two.
+        private static readonly (float radius, float times)[] Falloff = { (50f, 1f), (40f, 2f), (25f, 3f), (10f, 4f) };
+
+        internal static bool GlowOwned { get; private set; }   // the blue glow is on the blade copy, not on Toan
+        internal static bool Dropping  { get; private set; }
+        private static bool   _landed;
+        private static int    _hoverSlot = -1;                 // the enemy the blade hangs over (−1 = none up)
+        private static float  _hoverAlpha;                     // 0..1, the fade
+        private static bool   _hoverOut;                       // fading OUT (lock lost) — no re-placement
+        private static int    _lossTicks;                      // consecutive ticks the gate has read down
+        private const int     LockLossTicks = 5;               // ≈150 ms before a lost lock is believed
+        private static ushort _nameSaved;                      // the name plate's draw flag as it was, to put back
+        private static DateTime _dropStart, _gateLog;
+        private static float  _dropX, _dropH, _dropY;          // where the blade falls to
+        private static float  _hoverHeight = HoverFallback;    // how far above its root the current target's top is, plus the margin
+        private static int    _hoverTraceTicks;
+
         private const int    PrimeTicks       = 60;    // ≈1.8 s: a charge that never connects gives its prime up
         private const float  LungeBurstReach  = 12f;   // fallback: the blade's reach in front of Toan
         private const float  MarkSanity       = 60f;   // a mark further than this from Toan is not his swing's
@@ -189,6 +231,7 @@ namespace Dark_Cloud_Improved_Version
             // Solar Flash is the clearest case: its own hits stamp marks on every enemy it strikes, and the next
             // lunge then burst instantly on the nearest of them.
             bool hit = HitLanded(out float hx, out float hh, out float hy);
+            ExpireShells();
 
             if (Player.CheckDunIsPausedOrMenu()) return;
             if (Player.CurrentCharacterNum() != Player.ToanId) { ClearTint(st); RestoreSwing(st); return; }
@@ -196,6 +239,7 @@ namespace Dark_Cloud_Improved_Version
             if (ExplosionSeeded) MaintainExplosionScale();
             ArmImmunity();
             AnswerAutoGuard();
+            JudgementTick();
             if (!st.patchChecked)
             {
                 st.patchChecked = true;
@@ -466,6 +510,249 @@ namespace Dark_Cloud_Improved_Version
                 + (seen.Count == 0 ? "NONE — the damage did not come through the collision pool" : string.Join(" | ", seen)));
         }
 
+        /// <summary>The hovering blade, every tick Toan is out. Primed and locked: up over the target, fading in;
+        /// the lock gone: fading out and down; a drop in flight: falling, and landing.</summary>
+        private static void JudgementTick()
+        {
+            // "Locked on" is what the game draws the target's HP bar for (PlayerAction.LockHeld): the slot word alone
+            // is only the nearest CANDIDATE, kept current whether or not a lock is held — which is why the blade came
+            // up for any enemy close enough to lock, and flapped as the candidate did.
+            // Liveness by HP alone (HasHp): the hover must never depend on anything it changes itself.
+            bool locked   = PlayerAction.LockHeld(out int lockSlot)
+                            && lockSlot < EnemyAddresses.FloorSlots.Count && HasHp(lockSlot);
+            bool primed   = SunSword.PrimedFor(Items.bigbang);
+            double dt     = TickMs / 1000.0;
+            // DIAGNOSTIC: the gates, once a second while primed — a hover that never appears is one of these reading
+            // something other than what the notes say.
+            if (primed && (GameClock.Now - _gateLog).TotalSeconds >= 1.0)
+            {
+                _gateLog = GameClock.Now;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"[BigBang] hover gates: primed {primed} ({SunSword.LivePhase}), LockOnActive {Memory.ReadInt(PlayerAction.LockOnActive)}, "
+                    + $"LockOnTargetSlot {lockSlot}, live {(lockSlot >= 0 && lockSlot < EnemyAddresses.FloorSlots.Count ? Enemies.IsLive(lockSlot).ToString() : "n/a")}"
+                    + $", hoverSlot {_hoverSlot}, blade {BladeProp.Active}"
+                    + $" | cursor {Memory.ReadInt(PlayerAction.TargetCursorUp)} bar {Memory.ReadInt(PlayerAction.TargetBarUp)}"
+                    + $" 9d98 {Memory.ReadInt(0x202A3588)} 9d9c {Memory.ReadInt(0x202A358C)}");
+            }
+
+            if (Dropping)
+            {
+                double t = (GameClock.Now - _dropStart).TotalSeconds / DropSeconds;
+                if (!BladeProp.Maintain() || !HasHp(_hoverSlot)) { AbandonHover(); Dropping = false; return; }
+                float h = _dropH + _hoverHeight * (float)Math.Max(0.0, 1.0 - t);
+                BladeProp.Place(_dropX, h, _dropY, PlayerFacing());
+                if (t >= 1.0) Land();
+                return;
+            }
+
+            if (primed && locked && !_hoverOut)
+            {
+                _lossTicks = 0;
+                if (_hoverSlot != lockSlot)
+                {
+                    if (!BladeProp.Active && !BladeProp.Spawn(HoverScale)) return;
+                    if (_hoverSlot < 0) _nameSaved = Memory.ReadUShort(PlayerAction.CharaNameDrawFlag);
+                    _hoverSlot = lockSlot;
+                }
+                Memory.WriteUShort(PlayerAction.CharaNameDrawFlag, 0);   // held each tick: acquisition re-raises it
+                if (!BladeProp.Maintain()) { AbandonHover(); return; }
+                long a = EnemyAddresses.FloorSlots.SlotAddr(lockSlot, 0);
+                _hoverHeight = HoverHeightFor(lockSlot, Memory.ReadFloat(a + EnemySlotOffsets.LocationZ));
+                BladeProp.Place(Memory.ReadFloat(a + EnemySlotOffsets.LocationX),
+                                Memory.ReadFloat(a + EnemySlotOffsets.LocationZ) + _hoverHeight,
+                                Memory.ReadFloat(a + EnemySlotOffsets.LocationY), PlayerFacing());
+                _hoverAlpha = (float)Math.Min(1.0, _hoverAlpha + dt / FadeSeconds);
+                BladeProp.Alpha(_hoverAlpha);
+                SolarGlow.Show(ToanGlowBakes.BlueName, BladeProp.RootGuest);   // the glow rides the blade
+                GlowOwned = true;
+                if (_hoverTraceTicks < 12)                                       // DIAGNOSTIC: the first ~third of a second of every hover
+                {
+                    _hoverTraceTicks++;
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[BigBang] hover: " + BladeProp.Where()
+                        + $" | height {_hoverHeight:F1} {SphereTops(lockSlot, Memory.ReadFloat(a + EnemySlotOffsets.LocationZ))}");
+                }
+                return;
+            }
+
+            _hoverTraceTicks = 0;
+            if (_hoverSlot >= 0)                                             // up, but no longer wanted: fade out and down
+            {
+                if (!_hoverOut && _lossTicks == 0)                          // DIAGNOSTIC: every dip of the gate while up
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"[BigBang] hover gate dipped: primed {primed}, locked {locked}, slot {lockSlot}, hp>0 {HasHp(lockSlot)}");
+                // Debounced: the gate has to read DOWN LockLossTicks ticks in a row before the blade starts to leave.
+                // A single tick's flap otherwise tore the whole hover down and put it back — blade, glow and name bar
+                // all flickering in step. (An earlier version counted the ticks the gate read UP, which is to say it
+                // never debounced anything.)
+                if (!_hoverOut && ++_lossTicks < LockLossTicks) return;
+                _hoverOut = true;
+                _hoverAlpha = (float)Math.Max(0.0, _hoverAlpha - dt / FadeSeconds);
+                if (BladeProp.Maintain()) BladeProp.Alpha(_hoverAlpha);
+                if (_hoverAlpha <= 0f) AbandonHover();
+            }
+        }
+
+        /// <summary>Alive enough to hang a blade over: HP above zero.</summary>
+        private static bool HasHp(int slot) =>
+            slot >= 0 && slot < EnemyAddresses.FloorSlots.Count
+            && Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Hp)) > 0;
+
+        /// <summary>How high above <paramref name="slot"/>'s root to hang the blade: the top of its highest live body
+        /// sphere (centre height + radius, from the arrays CheckDmg rebuilds each frame) plus <see cref="HoverMargin"/>,
+        /// relative to <paramref name="rootH"/>. <see cref="HoverFallback"/> if it has no sphere up.</summary>
+        private static float HoverHeightFor(int slot, float rootH)
+        {
+            long b = BodyCollision.SlotBase(slot);
+            float top = float.MinValue;
+            for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
+            {
+                if (Memory.ReadInt(b + BodyCollision.ActiveArray + part * BodyCollision.BodyPartStride) == 0) continue;
+                float h = Memory.ReadFloat(b + BodyCollision.CentreArray + part * BodyCollision.CentreStride + 4)
+                        + Memory.ReadFloat(b + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride);
+                if (h > top) top = h;
+            }
+            float clear = top == float.MinValue ? HoverFallback : Math.Max(HoverMargin, top - rootH + HoverMargin);
+            return clear + BladeLength() * HoverScale;
+        }
+
+        /// <summary>The sword's reach from grip to tip, at 1×: its dcol1 frame's Z from the offline table.</summary>
+        private static float BladeLength()
+        {
+            int wid = Player.Weapon.GetCurrentWeaponId();
+            return ToanWeapons.TryGetValue(wid, out WeaponData wd) && wd.Dcol1.HasValue
+                 ? Math.Abs(wd.Dcol1.Value) : BladeLengthFallback;
+        }
+
+        /// <summary>DIAGNOSTIC: every active body sphere of <paramref name="slot"/> as (h+r), beside its root height.</summary>
+        private static string SphereTops(int slot, float rootH)
+        {
+            long b = BodyCollision.SlotBase(slot);
+            var parts = new List<string>();
+            for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
+            {
+                if (Memory.ReadInt(b + BodyCollision.ActiveArray + part * BodyCollision.BodyPartStride) == 0) continue;
+                long c = b + BodyCollision.CentreArray + part * BodyCollision.CentreStride;
+                parts.Add($"[{part}] c=({Memory.ReadFloat(c):F0},{Memory.ReadFloat(c + 4):F0},{Memory.ReadFloat(c + 8):F0}) r={Memory.ReadFloat(b + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride):F1}");
+            }
+            return $"root h {rootH:F0}; spheres: " + (parts.Count == 0 ? "none active" : string.Join(" ", parts));
+        }
+
+        /// <summary>The swing while primed: if the blade is hanging over a target, let it fall — the flash waits for
+        /// the landing. False when there is nothing to drop, and Solar Flash fires as it always has.</summary>
+        internal static bool BeginDrop()
+        {
+            if (_hoverSlot < 0 || _hoverOut || !BladeProp.Active || !HasHp(_hoverSlot)) return false;
+            long a = EnemyAddresses.FloorSlots.SlotAddr(_hoverSlot, 0);
+            _dropX = Memory.ReadFloat(a + EnemySlotOffsets.LocationX);
+            _dropH = Memory.ReadFloat(a + EnemySlotOffsets.LocationZ);
+            _dropY = Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
+            _dropStart = GameClock.Now; Dropping = true; _landed = false;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] judgement blade falls on slot {_hoverSlot}");
+            return true;
+        }
+
+        /// <summary>Solar Flash asks once per tick while it waits: has the blade landed? Consumed on read.</summary>
+        internal static bool TakeDropLanded() { bool l = _landed; _landed = false; return l; }
+
+        /// <summary>The blade has hit the ground: the blast, every enemy turned to look, the weapon-HP bill, and the
+        /// copy gone — the flash is Solar Flash's to fire now.</summary>
+        private static void Land()
+        {
+            Dropping = false;
+            PlantFalloff(_dropX, _dropH, _dropY);
+            TurnEnemiesToward(_dropX, _dropY);
+            DrainWhp(DropWhpFactor);
+            GemBurst.Show(BurstElement, _dropX, _dropH, _dropY, BurstScale, damage: 0, speedMult: BurstSpeed);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] judgement blade lands at ({_dropX:F0},{_dropH:F0},{_dropY:F0})");
+            AbandonHover();
+            _landed = true;
+        }
+
+        /// <summary>Everything the hover put up, back down: the copy, the target's name bar, the glow's home.</summary>
+        private static void AbandonHover()
+        {
+            if (_hoverSlot >= 0) Memory.WriteUShort(PlayerAction.CharaNameDrawFlag, _nameSaved);   // the name plate back as it was
+            BladeProp.Despawn();
+            _hoverSlot = -1; _hoverAlpha = 0f; _hoverOut = false;
+            if (GlowOwned)
+            {
+                GlowOwned = false;
+                // Back onto Toan while the charge still stands — otherwise OFF. A glow left hanging on the copy's root
+                // after the copy is gone is a sprite drawn every frame at a node in mod memory that nothing maintains;
+                // the one run that left it there ended in the game resetting six seconds later.
+                if (SunSword.PrimedFor(Items.bigbang)) SolarGlow.Show(ToanGlowBakes.BlueName);
+                else SolarGlow.Hide();
+            }
+        }
+
+        /// <summary>The blast that falls with the blade: the shells in <see cref="Falloff"/>, a full set per live
+        /// enemy, planted outermost first so the engine pairs every enemy with the strongest it is inside.</summary>
+        private static void PlantFalloff(float x, float h, float y)
+        {
+            long pool = CollisionPool.Resolve();
+            if (pool == 0) return;
+            int attack = Player.Weapon.GetCurrentWeaponAttack();
+            int live = 0;
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++) if (Enemies.IsLive(s)) live++;
+            // A full floor is 4 shells × 16 = 64 entries, on top of the flash's own 16 and whatever the engine holds;
+            // the pool is 96. Leave it room: never take it below ShellPoolReserve free entries.
+            int planted = 0;
+            foreach (var (radius, times) in Falloff)
+            {
+                int baseDmg = Math.Max(1, (int)Math.Round(attack * times));
+                for (int i = 0; i < live; i++)
+                {
+                    if (CollisionPool.FreeCount(pool) <= ShellPoolReserve) break;
+                    int slot = CollisionPool.TakeFreeSlot(pool);
+                    if (slot < 0) break;
+                    byte[] e = CollisionPool.PlayerHitEntry(x, h, y, radius, baseDmg, 0);
+                    void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
+                    F(0x80, x); F(0x84, h); F(0x88, y);
+                    F(0x90, KickStrength); F(0x94, KickDecay);
+                    BitConverter.GetBytes(2).CopyTo(e, 0x98);                 // kick type 2: thrown away from the blast
+                    CollisionPool.Plant(pool, slot, e);
+                    _shells.Add((slot, ShellLifeTicks));
+                    planted++;
+                }
+            }
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[BigBang] falloff blast: {planted} sphere(s) in {Falloff.Length} shells for {live} live enem" + (live == 1 ? "y" : "ies"));
+        }
+        private const int ShellLifeTicks = 3;   // shorter than a hit's 9-frame invincibility: nobody takes two shells
+        private const int ShellPoolReserve = 16; // free entries the blast always leaves the engine
+        private static readonly List<(int slot, int ticks)> _shells = new List<(int, int)>();
+
+        /// <summary>Withdraw the shells the engine has not consumed.</summary>
+        private static void ExpireShells()
+        {
+            if (_shells.Count == 0) return;
+            long pool = CollisionPool.Resolve();
+            for (int i = _shells.Count - 1; i >= 0; i--)
+            {
+                var (slot, ticks) = _shells[i];
+                if (--ticks > 0) { _shells[i] = (slot, ticks); continue; }
+                if (pool != 0) CollisionPool.Deactivate(pool, slot);
+                _shells.RemoveAt(i);
+            }
+        }
+
+        /// <summary>Every living enemy turned to face the point — its facing vector is the unit it steers by.</summary>
+        private static void TurnEnemiesToward(float x, float y)
+        {
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                if (!Enemies.IsLive(s)) continue;
+                long a = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+                float dx = x - Memory.ReadFloat(a + EnemySlotOffsets.LocationX);
+                float dy = y - Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
+                float len = (float)Math.Sqrt(dx * dx + dy * dy);
+                if (len < 1e-3f) continue;
+                Memory.WriteFloat(a + EnemySlotOffsets.FacingX, dx / len);
+                Memory.WriteFloat(a + EnemySlotOffsets.FacingY, 0f);
+                Memory.WriteFloat(a + EnemySlotOffsets.FacingZ, dy / len);
+            }
+        }
+
         /// <summary>Answer a hit the cave swallowed: rumble and the guard clang. The cave only ticks a counter —
         /// everything the player actually feels is here, where it can be tuned without touching MIPS.
         /// The count is compared, never zeroed, so two ticks between polls still read as one answer and nothing is
@@ -562,14 +849,14 @@ namespace Dark_Cloud_Improved_Version
         /// does not call. Leaving 1 keeps the blade whole and lets the next ordinary hit take it to zero through the
         /// engine's own path, with all of that intact. A weapon at Endurance 150 pays nothing, exactly as its swings
         /// cost nothing.</summary>
-        private static void DrainWhp()
+        private static void DrainWhp(float swings = WhpHits)
         {
             int bag = Memory.ReadByte(DngStatusData.EquippedSlotAddr(Player.ToanId));
             if (bag < 0 || bag >= DngStatusData.MaxWeaponSlots) return;
             long rec = DngStatusData.WeaponRecord(Player.ToanId, bag);
             if (Memory.ReadUShort(rec) != Items.bigbang) return;             // not the blade we just spent
 
-            float factor = WhpHits;
+            float factor = swings;
             int flags = Memory.ReadUShort(rec + WeaponHave.AbilityFlagsOffset);
             if ((flags & WeaponHave.DurableFlag) != 0) factor *= 0.5f;
             if ((flags & WeaponHave.FragileFlag) != 0) factor *= 2f;
@@ -590,6 +877,8 @@ namespace Dark_Cloud_Improved_Version
             ClearTint(st);
             RestoreSwing(st);          // stats, kick constants and the charge radii
             RestoreImmunity();         // ⚠ shared ELF data: never leave the explosions inert
+            AbandonHover(); Dropping = false; _landed = false;
+            { long pool = CollisionPool.Resolve(); foreach (var (slot, _) in _shells) if (pool != 0) CollisionPool.Deactivate(pool, slot); _shells.Clear(); }
             if (st.crushing) { GuardBreak.Drive(false); st.crushing = false; }
             st.chargeAction = 0;
         }

@@ -129,7 +129,33 @@ namespace Dark_Cloud_Improved_Version
         // ── Lock-on (SetNearLockOnTarget dun 0x1DC0160 / LockOffTargte 0x1DBFCE0, gp-relative globals) ──
         // iGpffff9d94 = the locked-on MONSTOR SLOT (0..15; -1 = none), uGpffff9d90 = 1 while a lock is held.
         internal const long LockOnTargetSlot = 0x202A3584;
+        /// <summary>⚠ Not a general "locked on" flag: it reads 0 for TOAN the whole time he holds a lock (measured
+        /// with a live target slot held for seconds). It rises on Xiao's shot path, which is the only reason Dragon's
+        /// Y can gate on it. For "is the player locked on, and to whom", use <see cref="LockOnTargetSlot"/> alone —
+        /// LockOffTargte (dun 0x1DBFCE0) returns it to −1 on release.</summary>
         internal const long LockOnActive     = 0x202A3580;
+        /// <summary>THE HELD LOCK, as the game itself decides it: DrawTargetLife (dun 0x1DBFD10) draws the target's HP
+        /// bar only while BOTH of these are nonzero. setTargetCursor (0x1DC0740) raises <see cref="TargetCursorUp"/>
+        /// when it has a valid target on screen and LockOffTargte clears it; <see cref="TargetBarUp"/> is the bar's
+        /// own gate. <see cref="LockOnTargetSlot"/> alone is only the running CANDIDATE — SetNearLockOnTarget keeps
+        /// it pointed at the nearest lockable enemy whether or not a lock is held.</summary>
+        /// <summary>The lock-on target's NAME plate. SetNearLockOnTarget names a newly acquired target with
+        /// MonsterNameMake(id) (0x20ED90), which builds the message window in the ClsMes at
+        /// <see cref="CharaNameMes"/> and sets its +0x98 visible; the engine then shows or hides the plate through
+        /// this halfword alone — SetMonsterNameDrawFlag (0x20EB60) writes 1 on acquisition and 0 when the target
+        /// projects off-screen. Holding it at 0 hides the name and touches nothing on the enemy.</summary>
+        internal const long CharaNameDrawFlag = 0x202A2E10;   // ushort, gp−0x69E0
+        internal const long CharaNameMes      = 0x202A2E08;   // → ClsMes; +0x98 = the window's own visible flag
+        internal const long TargetCursorUp   = 0x21E58F30;
+        internal const long TargetBarUp      = 0x21E58F34;
+        /// <summary>⚠ Gated on <see cref="TargetCursorUp"/> and the slot ONLY. <see cref="TargetBarUp"/> is rewritten by
+        /// several per-frame routines and a poll sees it either way — reading it here made the lock read down on
+        /// random ticks. The cursor word is written by setTargetCursor and LockOffTargte alone.</summary>
+        internal static bool LockHeld(out int slot)
+        {
+            slot = Memory.ReadInt(LockOnTargetSlot);
+            return slot >= 0 && Memory.ReadInt(TargetCursorUp) != 0;
+        }
         // iRam01dc4490: nonzero while a shot is in progress (set at BattleActionOn start, cleared at the
         // shoot-motion end). iRam01dc44c8 (float): the ranged "speed bar" — BattleActionOn starts a shot
         // only when it reaches 100.0, then resets it to 0; its fill rate is the weapon's speed stat.

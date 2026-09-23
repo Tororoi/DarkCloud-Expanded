@@ -49,6 +49,14 @@ namespace Dark_Cloud_Improved_Version
             return -1;
         }
 
+        /// <summary>How many entries are free right now.</summary>
+        internal static int FreeCount(long pool)
+        {
+            int n = 0;
+            for (int i = 0; i < Entries; i++) if (Memory.ReadInt(pool + ActiveOff + i * 4) == 0) n++;
+            return n;
+        }
+
         internal static bool IsActive(long pool, int slot) => Memory.ReadInt(pool + ActiveOff + slot * 4) != 0;
         internal static void Deactivate(long pool, int slot) => Memory.WriteInt(pool + ActiveOff + slot * 4, 0);
 
