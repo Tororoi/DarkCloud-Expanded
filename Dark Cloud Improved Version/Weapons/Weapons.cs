@@ -4363,6 +4363,10 @@ namespace Dark_Cloud_Improved_Version
             if (Player.CurrentCharacterNum() != Player.ToanId) return;
             int wid = GetEquippedWeaponId();
             if (wid == HeavensCloudReachId) return;   // HC → TyphoonEffect
+            // Big Bang REPLACES the whirl model with explosion.chr (BigBang.WantedShot). This path validates a root
+            // by the fuusya names and would only drop its cache every tick against that model, so it stands down and
+            // BigBang.MaintainExplosionScale holds the scale instead.
+            if (BigBang.ExplosionSeeded) { _whirlRoots = System.Array.Empty<long>(); return; }
 
             if (wid != _whirlWeaponId)
             {
@@ -4380,6 +4384,38 @@ namespace Dark_Cloud_Improved_Version
             }
             if (_weaponDcol1Z == 0f) { if (_whirlDcolBackoff <= 0) LocateWeaponDcol1(); else _whirlDcolBackoff--; }
             if (WhirlVisualScale > 0f) MaintainWhirlScale();
+        }
+
+        /// <summary>The hit radius Toan's combo swings 3, 4 and 5 SHARE (ELF float 0x202A1C70, vanilla 6.2; swings 1
+        /// and 2 have their own at 0x2A1C68 / 0x2A1C6C). Plain ELF data — no patch needed, unlike the charge radii,
+        /// which the game baked into instructions. ⚠ Shared: anything that widens it must snapshot the old value and
+        /// put it back, and must expect to be holding it for swings 3 and 4 as well as 5.</summary>
+        internal static float ComboHitRadius
+        {
+            get => Memory.ReadFloat(ComboHitRadiusAddr);
+            set => Memory.WriteFloat(ComboHitRadiusAddr, value);
+        }
+        internal static void SetComboHitRadius(float r) => ComboHitRadius = r;
+        private const long ComboHitRadiusAddr = 0x202A1C70;
+
+        /// <summary>Put Toan's charge-attack hit radii back to what the game bakes in. The ISO patch
+        /// (ElfWeaponPatches.PatchChargeHitRadius) turned the two immediates into reads of
+        /// CodeCaves.ChargeHitRadius, so these words ARE the radii now: seeded at startup and restored by any
+        /// ability that resized them, because a 0 here is a charge attack that hits nothing.</summary>
+        /// <summary>Item-bomb blasts back to the vanilla knockdown reaction (the ISO patch made it data).</summary>
+        internal static void SeedBombReaction() =>
+            Memory.WriteInt(CodeCaves.BombReaction, CodeCaves.BombReactionVanilla);
+
+        internal static void SeedChargeHitRadii() => SetChargeHitRadii(CodeCaves.LungeRadiusVanilla, CodeCaves.WhirlRadiusVanilla);
+
+        /// <summary>Resize the engine's OWN charge-attack hit spheres. The engine plants the damage from them — its
+        /// victims, its knockback, one plant per frame — so an ability sized by these needs no hit detection of its
+        /// own. ⚠ Always paired with a restore (SeedChargeHitRadii): the words are global and every weapon's charge
+        /// reads them.</summary>
+        internal static void SetChargeHitRadii(float lunge, float whirl)
+        {
+            Memory.WriteFloat(CodeCaves.ChargeHitRadius + CodeCaves.ChargeRadiusLunge, lunge);
+            Memory.WriteFloat(CodeCaves.ChargeHitRadius + CodeCaves.ChargeRadiusWhirl, whirl);
         }
 
         // Locate / maintain the whirlwind effect (c01_fuusya). Only the root "kiru" matrix transforms the

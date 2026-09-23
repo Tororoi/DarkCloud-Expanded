@@ -658,6 +658,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CfgCount   = 34;
         internal const int  CfgSize    = 0x70;
         internal const int  CfgVictimMask = 0x48;   // 1 = hurts the player, 2 = hurts enemies
+        /// <summary>The hit REACTION the shot's entry carries (→ entry +0x4C): 2 guardable knockback, 3 unguardable
+        /// knockdown, 4 light flinch. BtCheckDamageProc dispatches on exactly those three and subtracts the player's
+        /// HP INSIDE each branch, so a value outside {2,3,4} — 1 and 5 are both unused — is inert: the entry is
+        /// consumed and nothing happens to him. CMonstorUnit::CheckDmg never reads this field, so changing it does
+        /// not alter how the same shot damages ENEMIES (a reflected shot still lands normally).</summary>
+        internal const int  CfgReaction   = 0x44;
         internal const int  CfgWait    = 0x38;      // frames of flight before the impact chain
         internal const int  CfgName    = 0x00, CfgNameLen = 0x28;   // the effect's file name: dun/effect/<name>.chr
         // The motion (the .chr's KEY ordinal) each phase plays, shorts; −1 = none: muzzle, flying, impact, expiry burst.

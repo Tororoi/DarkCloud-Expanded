@@ -22,6 +22,11 @@ namespace Dark_Cloud_Improved_Version
 
         private static readonly Word[] Words =
         {
+            // A hit carrying reaction 5 is presented as guarded instead of ignored (see AutoGuardHookAddr above).
+            new(AutoGuardHookAddr, AutoGuardHookOrig, AutoGuardHookNew, "auto-guard: CheckHitUser-return hook"),
+            new(AutoGuardSlotAddr, AutoGuardSlotOrig, AutoGuardSlotNew, "auto-guard: displaced move"),
+            new(AutoGuardOldAddr, AutoGuardOldHook, AutoGuardOldVanilla, "auto-guard: retire the dispatch hook"),
+            new(AutoGuardOldSlotAddr, AutoGuardOldSlotHook, AutoGuardOldSlotVanilla, "auto-guard: retire its displaced load"),
             // Passive HEAL ability (weapon flag 0x800) cadence: heal tick compares its frame counter with
             // `slti v0,v0,0xF0` (240 f = 4 s, dun 0x1DB8234); 0xB4 = 180 f = 3 s for every HEAL weapon.
             // Guardian Grace reads the threshold from this word and floors the counter while Xiao guards.
@@ -162,6 +167,21 @@ namespace Dark_Cloud_Improved_Version
         internal const uint HealCadenceOrig = 0x284200F0;
         internal const uint HealCadenceNew  = 0x284200B4;
         internal const long HealCadenceAddrMmu = 0x20000000L + HealCadenceAddr;
+        // BtCheckDamageProc's CheckHitUser RETURN, hooked so a reaction-5 entry is answered with a guard spark and
+        // then reported as no hit at all (ElfWeaponPatches.PatchAutoGuardMatch holds the cave and the reasoning).
+        // The displaced `move s0,v0` goes into the call's delay slot, where v0 is still the matched index.
+        internal const uint AutoGuardHookAddr  = 0x01DBB0E0, AutoGuardSlotAddr = 0x01DBB0E4;
+        internal const uint AutoGuardHookOrig  = 0x70408628;                               // move s0,v0
+        internal const uint AutoGuardSlotOrig  = 0x2402FFFF;                               // addiu v0,zero,-1
+        internal const uint AutoGuardHookNew   = 0x0C000000u | (CodeCaves.DebugInfoCave.AutoGuardMatch >> 2);
+        internal const uint AutoGuardSlotNew   = AutoGuardHookOrig;                        // the displaced move
+        // …and the earlier attempt, at the reaction dispatch, put back: an ISO patched with that build still carries
+        // it, and it would keep calling a cave this one no longer maintains.
+        internal const uint AutoGuardOldAddr   = 0x01DBBA94, AutoGuardOldSlotAddr = 0x01DBBA98;
+        internal const uint AutoGuardOldHook   = 0x0C000000u | (0x01FB2290u >> 2);   // the retired cave's address
+        internal const uint AutoGuardOldVanilla = 0x8C44004C;                              // lw a0,0x4C(v0)
+        internal const uint AutoGuardOldSlotHook = 0x8C44004C, AutoGuardOldSlotVanilla = 0x24020002;
+
         internal const uint SsIconHookAddr = 0x01DB0364;
         internal const uint SsIconHookOrig = 0x0C06C13C;                                   // jal 0x1B04F0 topStatusInfo
         internal const uint SsIconHookNew  = 0x0C000000u | (CodeCaves.ElfCave.SuperSteveIconDraw >> 2);

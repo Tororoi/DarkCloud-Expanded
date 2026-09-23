@@ -36,11 +36,13 @@ namespace Dark_Cloud_Improved_Version
             GameClock.Start();           // the play clock every dungeon feature times against
             Mirage.Start();   // Ungaga's Mirage: watches for charge-release, drives the decoy via data writes
             XiaoPackWatch.Start();   // Xiao's pack beyond her model: the cat's cape off her cloth list, the character heap logged
-            BorrowedShots.Start(DragonsY.WantedShot, BanditSlingshot.WantedShot);   // shot effects borrowed for Xiao's abilities, entered on every floor; each ability names the one it wants
+            BorrowedShots.Start(DragonsY.WantedShot, BanditSlingshot.WantedShot, BigBang.WantedShot);   // shot effects borrowed for Xiao's abilities, entered on every floor; each ability names the one it wants
             SharedShots.Start();         // the monster shot pack's five slots shared among every config a floor needs (the cave does it; the mod arms and reports)
             AngelGear.Start();   // Xiao's Angel Gear projectile reflect, Stage A (roadmap PR 7)
             CustomFishingSpot.InstallShallowLinePatch();   // COLD: rewrite FishLineStep's bobber anchor to read a data global (before any fishing JITs it)
             CustomFishingSpot.SeedFishCamHeight();   // the ISO-patched fishing SetHeight reads a data word EVERY town — seed it to vanilla 40 before any session
+            Weapons.SeedBombReaction();              // …and the item-bomb reaction word, read by every bomb blast
+            Weapons.SeedChargeHitRadii();            // …and the ISO-patched charge-attack radii, read on every charge swing
         }
 
         public static void CheckEmulatorAndGame()

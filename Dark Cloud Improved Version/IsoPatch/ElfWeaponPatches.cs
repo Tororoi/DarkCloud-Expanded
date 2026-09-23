@@ -174,6 +174,152 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Xiao's build-up tree, baked: the weapon template table's build-up word (WeaponList +0x3C, bit k = the weapon
         /// 299 + k may be built up into) — Hardshooter → Double Impact alone (vanilla: Double Impact or Matador), Double Impact →
         /// Matador alone (vanilla: Divine Beast Title).</summary>
+        /// <summary>Toan's two CHARGE-ATTACK hit radii become data. ToanKey_Play bakes each into its own
+        /// instruction pair before handing it to CCollisionData::Set as the sphere radius:
+        /// <code>
+        ///   0x241AC0  lui v0,0x40C0 ; mtc1 v0,f12   →  6.0, then `li a0,2` — the LUNGE (attack kind 2)
+        ///   0x241B90  lui v0,0x4140 ; mtc1 v0,f12   → 12.0, then `li a0,3` — the WHIRLWIND (attack kind 3)
+        /// </code>
+        /// Each pair is rewritten to load from <see cref="CodeCaves.ChargeHitRadius"/> instead, exactly as
+        /// PatchFishingCameraHeight does for the camera's baked 40.0:
+        /// <code>
+        ///   lui  $2,HI(slot)
+        ///   lwc1 $f12,LO(slot)($2)
+        /// </code>
+        /// What that buys: an ability can resize the ENGINE'S OWN charge hit and let the engine do the rest —
+        /// damage, victims, knockback, one plant per frame — instead of watching for the hit from a mod tick and
+        /// planting its own spheres, which is timing-sensitive and was repeatedly wrong. ⚠ The words are read on
+        /// every charge swing, so the mod seeds both at startup; 0 would be a hit radius of nothing.</summary>
+        internal static void PatchChargeHitRadius(FileStream fs, Func<uint, long> ElfOff)
+        {
+            PatchRadiusSite(fs, ElfOff, 0x00241AC0, 0x3C0240C0,
+                            CodeCaves.ChargeHitRadiusGuest + CodeCaves.ChargeRadiusLunge, "lunge");
+            PatchRadiusSite(fs, ElfOff, 0x00241B90, 0x3C024140,
+                            CodeCaves.ChargeHitRadiusGuest + CodeCaves.ChargeRadiusWhirl, "whirlwind");
+        }
+
+        private static void PatchRadiusSite(FileStream fs, Func<uint, long> ElfOff, uint luiAddr, uint vanillaLui,
+                                            uint slot, string what)
+        {
+            const uint VanillaMtc1 = 0x44826000;                 // mtc1 $2,$f12
+            uint mtc1Addr = luiAddr + 4;
+            uint gotLui = RdU32(fs, ElfOff(luiAddr)), gotMtc1 = RdU32(fs, ElfOff(mtc1Addr));
+            uint hi = slot >> 16, lo = slot & 0xFFFF;
+            if (lo >= 0x8000) hi += 1;                           // lwc1's offset is SIGNED — compensate like the assembler
+            uint wantLui = 0x3C020000u | hi;
+            uint wantLwc1 = 0xC4000000u | (2u << 21) | (12u << 16) | lo;
+            if (gotLui == wantLui && gotMtc1 == wantLwc1) return;                 // idempotent re-run
+            if (gotLui != vanillaLui || gotMtc1 != VanillaMtc1)
+                throw new IOException($"Toan's {what} hit-radius site 0x{luiAddr:X} is not vanilla " +
+                                      $"(got 0x{gotLui:X8}/0x{gotMtc1:X8}) — is this an unmodified Dark Cloud (USA) ISO?");
+            WrU32(fs, ElfOff(luiAddr),  wantLui);
+            WrU32(fs, ElfOff(mtc1Addr), wantLwc1);
+        }
+
+        /// <summary>Item-bomb explosions take their hit REACTION from data. SetBombEffect (0x1D5940) builds its
+        /// collision entry with the reaction baked in as the eighth argument:
+        /// <code>
+        ///   0x1D5A14  li   t1,0x3        ← the unguardable knockdown
+        ///   0x1D5A20  jal  CCollisionData::Set
+        ///   0x1D5A24  nop                ← the call's delay slot, unused
+        /// </code>
+        /// The literal becomes a load of <see cref="CodeCaves.BombReaction"/>, split across the `li` slot and the
+        /// delay slot — which runs BEFORE the call, so t1 is loaded in time and no code has to move:
+        /// <code>
+        ///   lui t1,HI(BombReaction)  /  jal Set  /  lw t1,LO(BombReaction)(t1)
+        /// </code>
+        /// Bombs are the one explosion source that does not read a shot config, so this is what lets an ability
+        /// cover chest traps, thrown bombs and Halloween's pumpkin alongside the self-destructs.</summary>
+        internal static void PatchBombReaction(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint LiAddr = 0x001D5A14, SlotAddr = 0x001D5A24;
+            const uint VanillaLi = 0x24090003, VanillaSlot = 0x00000000;   // li t1,3 ; nop
+            uint slot = CodeCaves.BombReactionGuest;
+            uint hi = slot >> 16, lo = slot & 0xFFFF;
+            if (lo >= 0x8000) hi += 1;                                     // lw's offset is SIGNED
+            uint wantLui = 0x3C090000u | hi;                               // lui t1,hi
+            uint wantLw  = 0x8D290000u | lo;                               // lw  t1,lo(t1)
+            uint gotLi = RdU32(fs, ElfOff(LiAddr)), gotSlot = RdU32(fs, ElfOff(SlotAddr));
+            if (gotLi == wantLui && gotSlot == wantLw) return;             // idempotent re-run
+            if (gotLi != VanillaLi || gotSlot != VanillaSlot)
+                throw new IOException($"Item-bomb reaction site 0x{LiAddr:X} is not vanilla `li t1,3` + nop " +
+                                      $"(got 0x{gotLi:X8}/0x{gotSlot:X8}) — is this an unmodified Dark Cloud (USA) ISO?");
+            WrU32(fs, ElfOff(LiAddr),   wantLui);
+            WrU32(fs, ElfOff(SlotAddr), wantLw);
+        }
+
+        /// <summary>AUTO-GUARD: a hit carrying reaction 5 is answered with a guard spark and otherwise IGNORED — the
+        /// player's damage handler never processes it. The hook is at BtCheckDamageProc's CheckHitUser return, which is
+        /// the only place the whole thing is gated on:
+        /// <code>
+        ///   0x1DBB0D8  jal  CheckHitUser
+        ///   0x1DBB0E0  move s0,v0          →  jal AutoGuardMatch
+        ///   0x1DBB0E4  addiu v0,zero,-1    →  move s0,v0     (the call's delay slot, where v0 is still the index)
+        ///   0x1DBB0E8  beq  s0,v0 → skip everything
+        /// </code>
+        /// The cave returns v0 = −1 (what the displaced instruction set) and, for a reaction-5 entry, s0 = −1 as well,
+        /// so the engine's own `beq` takes it straight to the end. It consumes the entry first and stamps the mark the
+        /// guarded path would have, with the same SE and the same 30-frame cooldown.
+        ///
+        /// ⚠ It has to intercept HERE rather than at the reaction dispatch. Before the handler looks at a reaction at
+        /// all, it zeroes the player's action word (0x1DC4490, read by ToanKey_Play at 0x24146C) — so a hit that did
+        /// nothing still cancelled whatever Toan was doing, which is a charge attack lost to a bomb that cannot hurt
+        /// him. By the dispatch the old value is already gone.</summary>
+        internal static void PatchAutoGuardMatch(FileStream fs, Func<uint, long> ElfOff)
+        {
+            uint[] words =
+            {
+                0x2401FFFF,   // addiu at,zero,-1
+                0x10410027,   // beq   v0,at,done          nothing was hit
+                0x00000000,   // nop
+                0x8F889DF0,   // lw    t0,0x9DF0(gp)       NowColData
+                0x00024880,   // sll   t1,v0,2
+                0x01224821,   // addu  t1,t1,v0
+                0x00094940,   // sll   t1,t1,5             index × 0xA0
+                0x01094821,   // addu  t1,t0,t1            the entry
+                0x8D2A004C,   // lw    t2,0x4C(t1)         its reaction
+                0x240B0005,   // addiu t3,zero,5
+                0x154B001E,   // bne   t2,t3,done          not ours: vanilla flow
+                0x00000000,   // nop
+                0x00025080,   // sll   t2,v0,2
+                0x010A5021,   // addu  t2,t0,t2
+                0xAD403C00,   // sw    zero,0x3C00(t2)     consume the entry
+                0x3C0C01EC,   // lui   t4,0x1EC
+                0x8D2D0000,   // lw    t5,0x0(t1)
+                0xAD8D4940,   // sw    t5,0x4940(t4)       the guard spark, at the hit point
+                0x8D2D0004,   // lw    t5,0x4(t1)
+                0xAD8D4944,   // sw    t5,0x4944(t4)
+                0x8D2D0008,   // lw    t5,0x8(t1)
+                0xAD8D4948,   // sw    t5,0x4948(t4)
+                0x240D0010,   // addiu t5,zero,0x10
+                0xAD8D4950,   // sw    t5,0x4950(t4)       life 16
+                0xAD804954,   // sw    zero,0x4954(t4)
+                0x240D0001,   // addiu t5,zero,1
+                0xAD8D4958,   // sw    t5,0x4958(t4)       active
+                0x8F8E9E9C,   // lw    t6,-0x6164(gp)      the clang's own cooldown
+                0x1DC0000B,   // bgtz  t6,quiet
+                0x00000000,   // nop
+                0x27BDFFF0,   // addiu sp,sp,-16
+                0xAFBF0000,   // sw    ra,0(sp)
+                0x240400A2,   // addiu a0,zero,0xA2        the guard clang
+                0x2405FFFF,   // addiu a1,zero,-1
+                0x0C0569AC,   // jal   SndSePlay
+                0x24060000,   // addiu a2,zero,0           (delay slot)
+                0x8FBF0000,   // lw    ra,0(sp)
+                0x27BD0010,   // addiu sp,sp,16
+                0x240E001E,   // addiu t6,zero,30
+                0xAF8E9E9C,   // sw    t6,-0x6164(gp)      …re-armed
+                0x2410FFFF,   // addiu s0,zero,-1     quiet: report that nothing was hit
+                0x03E00008,   // jr    ra             done:
+                0x2402FFFF,   // addiu v0,zero,-1          what the displaced instruction set
+            };
+            uint at0 = CodeCaves.DebugInfoCave.AutoGuardMatch;
+            if (at0 + words.Length * 4 > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
+                throw new IOException("The auto-guard cave does not fit its host (DebugInfomationDraw).");
+            for (int i = 0; i < words.Length; i++)
+                WrU32(fs, ElfOff(at0 + (uint)(i * 4)), words[i]);
+        }
+
         internal static void PatchXiaoBuildUp(FileStream fs, Func<uint, long> ElfOff)
         {
             foreach (var (item, vanilla, ours, what) in new[]

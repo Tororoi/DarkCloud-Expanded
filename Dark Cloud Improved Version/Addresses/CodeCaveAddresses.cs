@@ -485,6 +485,12 @@ namespace Dark_Cloud_Improved_Version
             internal const uint SteelLevelUp     = Host + 0xB60;  // 0x1B42E0 → 0x1B43E0 at most
             internal const uint SteelLevelUpB = SteelLevelUp, SteelLevelUpC = SteelLevelUp + 0x8, SteelLevelUpD = SteelLevelUp + 0x10,
                                 SteelLevelUpE = SteelLevelUp + 0x18;
+            /// <summary>tools-free, 172 B: AUTO-GUARD, hooked at BtCheckDamageProc's CheckHitUser return. An entry whose
+            /// reaction is 5 is consumed there and reported as NO HIT, after stamping the guard spark and ringing the
+            /// clang — so the handler never runs at all. That matters beyond the damage: on ANY matched hit, before it
+            /// looks at the reaction, the handler zeroes the player's action word (0x1DC4490, which ToanKey_Play reads),
+            /// which knocked Toan out of a charge even when the hit did nothing to him.</summary>
+            internal const uint AutoGuardMatch = Host + 0xC60;   // 0x1B43E0, 172 B → 0x1B448C (the host ends at 0x1B4700)
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -606,7 +612,8 @@ namespace Dark_Cloud_Improved_Version
             /// BODY of <see cref="CatMaskTint"/> (+0x18, past its own two entries), which does the ambient add generically and
             /// calls whatever t9 holds. Written as words by ElfWeaponPatches.PatchSolarBladeTint.</summary>
             internal const uint SolarBladeTint     = 0x01FB2278;   // 24 B → 0x1FB2290
-            // 0x01FB2290..0x1FB22BC (44 B) FREE
+            // 0x01FB2290..0x1FB22BC (44 B) FREE — an auto-guard cave lived here until it moved to
+            // DebugInfoCave.AutoGuardMatch, which had room for the version that intercepts the MATCH.
             internal const uint CatCapeTint        = 0x01FB22C0;   // 176 B → 0x1FB2370: the cape's cloth draws under its own ambient
             internal const uint CatMaskTint        = 0x01FB2370;   // 228 B → 0x1FB2454: the mask's MESH does too, via a private vtable
             internal const uint CatCopyQueue       = 0x01FB2480;   // 584 B → 0x1FB26C8: the cat's mesh copy, done inside the machine; its tail also calls CatPalette
@@ -862,7 +869,29 @@ namespace Dark_Cloud_Improved_Version
         internal const long SolarCarrierNode      = 0x21FAF5C0;
         internal const uint SolarCarrierNodeGuest = 0x01FAF5C0;
 
-        // ── FREE: 0x21FAF830 .. 0x21FB0000 (0x7D0 B) ────────────────────────────────────────────────────
+        /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
+        /// <c>ElfWeaponPatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's
+        /// (vanilla 12.0). ToanKey_Play built both with `lui v0,imm; mtc1 v0,f12` (0x241AC0 / 0x241B90) and hands
+        /// the result to CCollisionData::Set as the sphere radius, so an ability that writes here resizes the
+        /// engine's OWN charge-attack hit — no mod-side hit detection and no planted spheres.
+        /// ⚠ Read every time a charge attack swings, so the mod SEEDS both to their vanilla values at startup:
+        /// a 0 here is a hit radius of nothing and the charge attacks would connect with empty air.</summary>
+        internal const long ChargeHitRadius      = 0x21FAF830;
+        internal const uint ChargeHitRadiusGuest = 0x01FAF830;
+        internal const int  ChargeRadiusLunge = 0x00, ChargeRadiusWhirl = 0x04;
+        internal const float LungeRadiusVanilla = 6.0f, WhirlRadiusVanilla = 12.0f;
+
+        /// <summary>The hit REACTION every item-bomb explosion carries — chest traps and anything thrown, and
+        /// (by the look of it) Halloween's pumpkin. SetBombEffect passed a literal 3 (the unguardable knockdown);
+        /// <c>ElfWeaponPatches.PatchBombReaction</c> makes it read this word instead, so an ability can make bomb
+        /// blasts inert (a reaction outside {2,3,4} is ignored by the player's damage handler) without touching the
+        /// shot configs, which bombs do not use. ⚠ Seeded to the vanilla 3 at startup and restored by anything that
+        /// changes it: 0 here would also be inert, i.e. bombs would stop working for everyone.</summary>
+        internal const long BombReaction      = 0x21FAF838;
+        internal const uint BombReactionGuest = 0x01FAF838;
+        internal const int  BombReactionVanilla = 3;
+
+        // ── FREE: 0x21FAF83C .. 0x21FB0000 (0x7C4 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.
