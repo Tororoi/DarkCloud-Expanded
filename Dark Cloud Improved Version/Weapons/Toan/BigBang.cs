@@ -117,9 +117,9 @@ namespace Dark_Cloud_Improved_Version
         // ── the judgement blade ─────────────────────────────────────────────────────────────
         // While Solar Flash is primed AND Toan is locked on, a copy of the sword (BladeProp) hangs point-down over the
         // target at HoverScale, fading in over FadeSeconds; the blue glow moves onto it and the target's NAME plate is
-        // hidden (PlayerAction.CharaNameDrawFlag held at 0 — the enemy itself is never touched, so a kill during the
-        // hover still counts for whatever counts kills). Losing the lock fades it out and
-        // the glow returns to Toan. The primed swing then does not flash: the blade FALLS over DropSeconds, and where
+        // hidden (CodeCaves.NameHide, the gate the plate's getter ANDs in — the enemy itself is never touched, so a
+        // kill during the hover still counts for whatever counts kills). Losing the lock fades it out and the glow
+        // shrinks off it and swells back up on Toan. The primed swing then does not flash: the blade FALLS over DropSeconds, and where
         // it lands it detonates — the flash, the blast below, every enemy on the floor turned to face it, and the
         // weapon-HP bill. Swinging with no lock is the ordinary flash.
         // The blade hangs HoverMargin above the target's own top — read live from the engine's body-collision
@@ -149,11 +149,10 @@ namespace Dark_Cloud_Improved_Version
         // …and the flash follows the burst — same tick, but never before it; a head start read as late.
         private const double FlashDelay       = 0.0;
         private const float  DropWhpFactor    = 10f;    // 1.5 × 10 = 15 weapon HP before Endurance scales it — the engine's own formula
-        // THE BLAST FALLS OFF WITH DISTANCE. Concentric shells, one set per live enemy: the engine tests entries from
-        // index 0 upward and takes the FIRST an enemy is inside, and TakeFreeSlot hands out slots from the top — so the
-        // shells are planted outermost first (highest indices) and innermost last (lowest), and every enemy consumes
-        // the strongest shell it stands in. A unit takes one hit per frame and the shells are gone before its
-        // invincibility ends, so nobody takes two.
+        // THE BLAST FALLS OFF WITH DISTANCE: the damage step an enemy takes is the innermost radius its distance from the
+        // blast is within (outermost first here; PlantFalloff keeps the last match). One hit entry per enemy, centred
+        // on its own body, carries that step — an entry is consumed by the first enemy it touches, so the sizing is
+        // what makes it that enemy's alone.
         private static readonly (float radius, float times)[] Falloff = { (50f, 1f), (40f, 2f), (25f, 3f), (10f, 4f) };
 
         internal static bool GlowOwned { get; private set; }   // the blue glow is on the blade copy, not on Toan
@@ -162,9 +161,9 @@ namespace Dark_Cloud_Improved_Version
         private static int    _hoverSlot = -1;                 // the enemy the blade hangs over (−1 = none up)
         private static float  _hoverAlpha;                     // 0..1, the fade
         private static bool   _hoverOut;                       // fading OUT (lock lost) — no re-placement
-        private static ushort _nameSaved;                      // the name plate's draw flag as it was, to put back
         private static DateTime _dropStart, _gateLog;
-        private static float  _dropX, _dropH, _dropY;          // where the BLAST goes off (BlastFront toward Toan)
+        private static float  _dropX, _dropH, _dropY;          // where the BLAST goes off: the target's root, on the ground
+        private static float  _fallHeight;                     // how far above _dropH the blade hung when it was let go
         private static float  _bladeX, _bladeY;                // where the BLADE falls to (the target itself)
         private static volatile bool _fallDone;                // the fall thread has brought it to the ground
         private static DateTime _landedAt;                     // when the burst went off; the flash waits FlashDelay
@@ -182,9 +181,9 @@ namespace Dark_Cloud_Improved_Version
         // silently doing nothing.
         private const long   LungeRadiusInsn  = 0x20241AC0;
         private const uint   LungeRadiusPatched = 0x3C0201FB, LungeRadiusVanillaInsn = 0x3C0240C0;
-        private const float  BurstScale       = 6.0f;
+        private const float  BurstScale       = 10.0f;
         private const float  BurstSpeed       = 0.6f;
-        private const int    BurstElement     = MasekiEffect.Fire;   // the ANIMATION only
+        private const int    BurstElement     = MasekiEffect.Ice;    // the ANIMATION only
         private sealed class BlastState
         {
             public byte floor = 0xFF;
@@ -228,6 +227,7 @@ namespace Dark_Cloud_Improved_Version
         public static void DetonateEffect()
         {
             var st = new BlastState();
+            Memory.WriteInt(CodeCaves.NameHide, 0);                // the name-plate gate open, whatever a past run left
             while (Player.Weapon.GetCurrentWeaponId() == Items.bigbang && Player.InDungeonFloor())
             {
                 Thread.Sleep(TickMs);
@@ -555,6 +555,9 @@ namespace Dark_Cloud_Improved_Version
             if (Dropping)
             {
                 if (!BladeProp.Maintain() || !HasHp(_hoverSlot)) { AbandonHover(); Dropping = false; SolarLighting.EndDim(); return; }
+                // A swing right after the lock drops a blade still fading in: finish the fade on the way down.
+                if (_hoverAlpha < 1f) { _hoverAlpha = (float)Math.Min(1.0, _hoverAlpha + dt / FadeSeconds); BladeProp.Alpha(_hoverAlpha); }
+                DriveGlow(true);
                 if (_fallDone) Land();                                       // FallLoop places it; the tick lands it
                 return;
             }
@@ -564,28 +567,31 @@ namespace Dark_Cloud_Improved_Version
                 if (_hoverSlot != lockSlot)
                 {
                     if (!BladeProp.Active && !BladeProp.Spawn(HoverScale)) return;
-                    if (_hoverSlot < 0) _nameSaved = Memory.ReadUShort(PlayerAction.CharaNameDrawFlag);
                     _hoverSlot = lockSlot;
                 }
-                Memory.WriteUShort(PlayerAction.CharaNameDrawFlag, 0);   // held each tick: acquisition re-raises it
+                // The name plate off, through the getter's gate (CodeCaves.NameHide): the flag itself is re-raised by
+                // the engine every frame the target is on screen, so writing it only made the name flicker.
+                Memory.WriteInt(CodeCaves.NameHide, 1);
                 if (!BladeProp.Maintain()) { AbandonHover(); return; }
                 long a = EnemyAddresses.FloorSlots.SlotAddr(lockSlot, 0);
-                _hoverHeight = HoverHeightFor(lockSlot, Memory.ReadFloat(a + EnemySlotOffsets.LocationZ));
                 // PINNED to the target's model root: the engine chains the copy's world through the enemy's every
                 // frame, so it rides a moving enemy with no placement writes at all — no tick, no thread, no jitter.
+                // Heights are measured from that root's own WORLD height — the slot's LocationZ is floor-relative,
+                // and taking it for the root hung the blade a body too low and started the fall a body too high.
                 uint enemyRoot = Memory.ReadGuestPtr(EnemyAddresses.CharObjects.CharAddr(lockSlot) + CCharacter.CharModel);
+                float rootH = RootWorldHeight(enemyRoot, a);
+                _hoverHeight = HoverHeightFor(lockSlot, rootH);
                 if (BladeProp.PinnedTo != enemyRoot) BladeProp.Pin(enemyRoot, _hoverHeight);
                 // Its flat faces the way the fallen blade will (PlayerFacing): the parent's yaw is taken back out.
                 BladeProp.Face(PlayerFacing(), Memory.ReadFloat(EnemyAddresses.CharObjects.CharAddr(lockSlot) + CCharacter.CharRotY));
                 _hoverAlpha = (float)Math.Min(1.0, _hoverAlpha + dt / FadeSeconds);
                 BladeProp.Alpha(_hoverAlpha);
-                SolarGlow.Show(ToanGlowBakes.BlueName, BladeProp.RootGuest);   // the glow rides the blade
-                GlowOwned = true;
+                DriveGlow(true);                                                 // the glow crosses to the blade
                 if (_hoverTraceTicks < 12)                                       // DIAGNOSTIC: the first ~third of a second of every hover
                 {
                     _hoverTraceTicks++;
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[BigBang] hover: " + BladeProp.Where()
-                        + $" | height {_hoverHeight:F1} {SphereTops(lockSlot, Memory.ReadFloat(a + EnemySlotOffsets.LocationZ))}");
+                        + $" | height {_hoverHeight:F1} {SphereTops(lockSlot, rootH)}");
                 }
                 return;
             }
@@ -596,9 +602,38 @@ namespace Dark_Cloud_Improved_Version
                 _hoverOut = true;
                 _hoverAlpha = (float)Math.Max(0.0, _hoverAlpha - dt / FadeSeconds);
                 if (BladeProp.Maintain()) BladeProp.Alpha(_hoverAlpha);
-                if (_hoverAlpha <= 0f) AbandonHover();
+                DriveGlow(false);                                                // …and the glow shrinks off it first
+                if (_hoverAlpha <= 0f && !SolarGlow.OnAnchor(BladeProp.RootGuest)) AbandonHover();
+                return;
             }
+            if (GlowOwned) DriveGlow(false);                                     // the hand-off back to Toan, to its end
         }
+
+        /// <summary>The glow's HAND-OFF between Toan and the blade: it shrinks away where it is, then swells up from
+        /// nothing where it is wanted — never a jump, and paced to the blade's own fade (<see cref="FadeSeconds"/>):
+        /// the shrink takes <see cref="HandoffShrink"/> of it and the swell the rest, so the glow is at full size on
+        /// the blade the moment the blade is fully in, and back to full on Toan the moment the blade is gone. (The
+        /// glow cave draws ONE sprite, so it cannot be in two places at once; this is the crossing.) On the blade it
+        /// hangs at the blade's middle (the copy's root is the grip, and the blade points down its full length below
+        /// it). <see cref="GlowOwned"/> is true from the first step until it is back up on Toan, so Solar Flash's own
+        /// Show stays out of the way meanwhile.</summary>
+        private static void DriveGlow(bool onBlade)
+        {
+            uint want = onBlade ? BladeProp.RootGuest : 0u;
+            if (onBlade && want == 0) return;
+            GlowOwned = true;
+            SolarGlow.Tick();
+            if (SolarGlow.IsUp)
+            {
+                if (SolarGlow.OnAnchor(want)) { if (!onBlade) GlowOwned = false; return; }   // where it should be
+                SolarGlow.Fade(FadeSeconds * HandoffShrink);                                 // shrink off the old place; Tick takes it down
+                return;
+            }
+            if (!SunSword.PrimedFor(Items.bigbang)) { GlowOwned = false; return; }           // nothing to carry any more
+            SolarGlow.Show(ToanGlowBakes.BlueName, want, onBlade ? -BladeLength() * HoverScale / 2f : 0f,
+                           FadeSeconds * (1.0 - HandoffShrink));
+        }
+        private const double HandoffShrink = 0.3;   // the share of the blade's fade the glow spends leaving its old place
 
         /// <summary>Alive enough to hang a blade over: HP above zero.</summary>
         private static bool HasHp(int slot) =>
@@ -652,9 +687,13 @@ namespace Dark_Cloud_Improved_Version
             if (_hoverSlot < 0 || _hoverOut || !BladeProp.Active || !HasHp(_hoverSlot)) return false;
             long a = EnemyAddresses.FloorSlots.SlotAddr(_hoverSlot, 0);
             _bladeX = Memory.ReadFloat(a + EnemySlotOffsets.LocationX);
-            _dropH  = Memory.ReadFloat(a + EnemySlotOffsets.LocationZ);
             _bladeY = Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
+            _dropH  = RootWorldHeight(Memory.ReadGuestPtr(EnemyAddresses.CharObjects.CharAddr(_hoverSlot) + CCharacter.CharModel), a);
             _dropX = _bladeX; _dropY = _bladeY;                              // the blast goes off on the target itself
+            // The fall starts from where the blade HANGS, read off its own world matrix — not from the height it was
+            // pinned with, which the target's pose may have moved on from — so there is no step at the start.
+            float hang = BladeProp.WorldHeight();
+            _fallHeight = float.IsNaN(hang) ? _hoverHeight : Math.Max(1f, hang - _dropH);
             BladeProp.Unpin(PlayerFacing());                                 // off the enemy and into the world, where it is, to fall
             SolarLighting.BeginDim();                                        // the lights go down with it
             _dropStart = GameClock.Now; Dropping = true; _landed = false; _fallDone = false; _landedAt = default;
@@ -677,8 +716,8 @@ namespace Dark_Cloud_Improved_Version
                     if (!Dropping || _fallDone) { Thread.Sleep(20); continue; }
                     if (Player.CheckDunIsPausedOrMenu()) { _dropStart = _dropStart.AddMilliseconds(FallTickMs); Thread.Sleep(FallTickMs); continue; }
                     double t = (GameClock.Now - _dropStart).TotalSeconds;
-                    double g = 2.0 * _hoverHeight / (DropSeconds * DropSeconds);
-                    float  h = _dropH + (float)Math.Max(0.0, _hoverHeight - 0.5 * g * t * t);
+                    double g = 2.0 * _fallHeight / (DropSeconds * DropSeconds);
+                    float  h = _dropH + (float)Math.Max(0.0, _fallHeight - 0.5 * g * t * t);
                     BladeProp.Place(_bladeX, h, _bladeY, PlayerFacing());
                     double u = Math.Min(1.0, t / DropSeconds);
                     SolarLighting.Dim((float)((Math.Exp(DimSharpness * u) - 1.0) / (Math.Exp(DimSharpness) - 1.0)));
@@ -703,9 +742,9 @@ namespace Dark_Cloud_Improved_Version
         {
             // The white-out and the burst on the SAME frame, from here. Solar Flash's own tick runs the rest of the
             // flash (the light hit, the blinding, the blade and glow) once TakeDropLanded hands it the landing — and
-            // that is after the shells and the turns below, well past a frame — so the lighting write goes out now,
+            // that is after the hit entries and the turns below, well past a frame — so the lighting write goes out now,
             // and Solar Flash is told it is lit (a second Flash there restores the floor's light and whites it again).
-            SolarLighting.FogAmount = SunSword.BigBangFlash.Fog;
+            SunSword.BigBangFlash.ArmLighting();
             SolarLighting.Flash();
             GemBurst.Show(BurstElement, _dropX, _dropH, _dropY, BurstScale, damage: 0, speedMult: BurstSpeed);
             PlantFalloff(_dropX, _dropH, _dropY);
@@ -720,58 +759,91 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Everything the hover put up, back down: the copy, the target's name bar, the glow's home.</summary>
         private static void AbandonHover()
         {
-            if (_hoverSlot >= 0) Memory.WriteUShort(PlayerAction.CharaNameDrawFlag, _nameSaved);   // the name plate back as it was
+            Memory.WriteInt(CodeCaves.NameHide, 0);                                 // the name plate back
+            // A glow left hanging on the copy's root after the copy is gone is a sprite drawn every frame at a node in
+            // mod memory that nothing maintains; the one run that left it there ended in the game resetting six
+            // seconds later. The fade-out waits for the glow to shrink off first; every other way here cuts it.
+            if (SolarGlow.OnAnchor(BladeProp.RootGuest)) SolarGlow.Hide();
             BladeProp.Despawn();
             _hoverSlot = -1; _hoverAlpha = 0f; _hoverOut = false;
-            if (GlowOwned)
-            {
-                GlowOwned = false;
-                // Back onto Toan while the charge still stands — otherwise OFF. A glow left hanging on the copy's root
-                // after the copy is gone is a sprite drawn every frame at a node in mod memory that nothing maintains;
-                // the one run that left it there ended in the game resetting six seconds later.
-                if (SunSword.PrimedFor(Items.bigbang)) SolarGlow.Show(ToanGlowBakes.BlueName);
-                else SolarGlow.Hide();
-            }
+            // GlowOwned stays: DriveGlow brings the glow back up on Toan while the charge still stands, then lets go.
         }
 
-        /// <summary>The blast that falls with the blade: the shells in <see cref="Falloff"/>, a full set per live
-        /// enemy, planted outermost first so the engine pairs every enemy with the strongest it is inside.</summary>
+        /// <summary>The blast that falls with the blade: one hit entry per live enemy in reach, its damage the
+        /// <see cref="Falloff"/> step for that enemy's distance, its kick from the blast.</summary>
         private static void PlantFalloff(float x, float h, float y)
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
             int attack = Player.Weapon.GetCurrentWeaponAttack();
-            int live = 0;
-            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++) if (Enemies.IsLive(s)) live++;
-            // A full floor is 4 shells × 16 = 64 entries, on top of the flash's own 16 and whatever the engine holds;
-            // the pool is 96. Leave it room: never take it below ShellPoolReserve free entries.
-            int planted = 0;
-            foreach (var (radius, times) in Falloff)
+            // ONE entry per enemy, centred on its own body and sized to it, so that entry can only be consumed by that
+            // enemy and each takes exactly one hit; its damage is the falloff step its distance from the blast falls in.
+            // (Shells around the blast, one per enemy per step, had every enemy in reach of several entries at once
+            // and the hit invincibility does not outlast a landing's own work — enemies took two and three.)
+            int planted = 0, inRange = 0;
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
-                int baseDmg = Math.Max(1, (int)Math.Round(attack * times));
-                for (int i = 0; i < live; i++)
-                {
-                    if (CollisionPool.FreeCount(pool) <= ShellPoolReserve) break;
-                    int slot = CollisionPool.TakeFreeSlot(pool);
-                    if (slot < 0) break;
-                    byte[] e = CollisionPool.PlayerHitEntry(x, h, y, radius, baseDmg, 0);
-                    void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
-                    F(0x80, x); F(0x84, h); F(0x88, y);
-                    F(0x90, KickStrength); F(0x94, KickDecay);
-                    BitConverter.GetBytes(2).CopyTo(e, 0x98);                 // kick type 2: thrown away from the blast
-                    CollisionPool.Plant(pool, slot, e);
-                    _shells.Add((slot, ShellLifeTicks));
-                    planted++;
-                }
+                if (!Enemies.IsLive(s)) continue;
+                long a = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+                float dx = Memory.ReadFloat(a + EnemySlotOffsets.LocationX) - x;
+                float dy = Memory.ReadFloat(a + EnemySlotOffsets.LocationY) - y;
+                float dist = (float)Math.Sqrt(dx * dx + dy * dy);
+                float times = 0f;
+                foreach (var (radius, t) in Falloff) if (dist <= radius) times = t;   // steps ordered outermost first: the last match is the innermost
+                if (times <= 0f) continue;
+                inRange++;
+                if (CollisionPool.FreeCount(pool) <= ShellPoolReserve) break;
+                int slot = CollisionPool.TakeFreeSlot(pool);
+                if (slot < 0) break;
+                BodyCentre(s, a, out float cx, out float ch, out float cy, out float cr);
+                byte[] e = CollisionPool.PlayerHitEntry(cx, ch, cy, cr, Math.Max(1, (int)Math.Round(attack * times)), 0);
+                void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
+                F(0x80, x); F(0x84, h); F(0x88, y);                        // the kick still comes from the blast
+                F(0x90, KickStrength); F(0x94, KickDecay);
+                BitConverter.GetBytes(2).CopyTo(e, 0x98);                 // kick type 2: thrown away from the blast
+                CollisionPool.Plant(pool, slot, e);
+                _shells.Add((slot, ShellLifeTicks));
+                planted++;
             }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[BigBang] falloff blast: {planted} sphere(s) in {Falloff.Length} shells for {live} live enem" + (live == 1 ? "y" : "ies"));
+                $"[BigBang] falloff blast: {planted} sphere(s) on {inRange} enem" + (inRange == 1 ? "y" : "ies") + $" within {Falloff[0].radius:F0}");
         }
-        private const int ShellLifeTicks = 3;   // shorter than a hit's 9-frame invincibility: nobody takes two shells
+
+        /// <summary>The enemy's largest live body sphere (centre and radius), the surest thing a hit sphere of the same
+        /// size at the same place will touch; its root and a plain radius where none is active.</summary>
+        private static void BodyCentre(int slot, long a, out float cx, out float ch, out float cy, out float cr)
+        {
+            long b = BodyCollision.SlotBase(slot);
+            cx = Memory.ReadFloat(a + EnemySlotOffsets.LocationX); cy = Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
+            ch = RootWorldHeight(Memory.ReadGuestPtr(EnemyAddresses.CharObjects.CharAddr(slot) + CCharacter.CharModel), a) + BodyRadiusFallback;
+            cr = BodyRadiusFallback;
+            float best = 0f;
+            for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
+            {
+                if (Memory.ReadInt(b + BodyCollision.ActiveArray + part * BodyCollision.BodyPartStride) == 0) continue;
+                float r = Memory.ReadFloat(b + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride);
+                if (r <= best) continue;
+                long c = b + BodyCollision.CentreArray + part * BodyCollision.CentreStride;
+                best = r; cr = r;
+                cx = Memory.ReadFloat(c); ch = Memory.ReadFloat(c + 4); cy = Memory.ReadFloat(c + 8);
+            }
+        }
+        private const float BodyRadiusFallback = 10f;
+
+        /// <summary>The enemy's model root in the world: its height is the world matrix's, the same number the body
+        /// spheres and a pinned copy are measured in. (The slot's LocationZ is floor-relative and is not it.) The
+        /// slot's LocationZ stands in only when the root cannot be read.</summary>
+        private static float RootWorldHeight(uint rootGuest, long slotAddr)
+        {
+            if (Memory.IsValidGuest(rootGuest))
+                return Memory.ReadFloat(Memory.ToMmu(rootGuest) + CFrameVu1.WorldMatrix + 0x34);
+            return Memory.ReadFloat(slotAddr + EnemySlotOffsets.LocationZ);
+        }
+        private const int ShellLifeTicks = 3;   // ticks an unconsumed entry (a miss) stays before it is withdrawn
         private const int ShellPoolReserve = 16; // free entries the blast always leaves the engine
         private static readonly List<(int slot, int ticks)> _shells = new List<(int, int)>();
 
-        /// <summary>Withdraw the shells the engine has not consumed.</summary>
+        /// <summary>Withdraw the hit entries the engine has not consumed (an enemy that moved off its own).</summary>
         private static void ExpireShells()
         {
             if (_shells.Count == 0) return;

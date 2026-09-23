@@ -16,12 +16,14 @@ namespace Dark_Cloud_Improved_Version
         // The wash recedes over the whole blinding, so the room brightens back exactly as the enemies recover — tied to that
         // duration rather than restating it, so the two cannot drift apart.
         private static double EaseSeconds => SunSword.BlindSeconds;
-        /// <summary>The colour the LIGHT is driven to — the ambient, the directional rows and Toan's own pulse. A warm
-        /// near-white rather than pure white, so the flash reads as sunlight and sits with the gold glow.</summary>
-        internal static readonly float[] FlashColour = { 255f, 240f, 200f };
-        /// <summary>The fog, though, goes PURE white: it is the haze the light blows out through, and tinting it warm as
-        /// well muddied the wash rather than warming it.</summary>
-        private static readonly float[] FogColour = { 255f, 255f, 255f };
+        /// <summary>The colour the LIGHT is driven to — the ambient, the directional rows and Toan's own pulse — and the
+        /// colour the FOG goes. Each sword sets its own pair before it flashes (SunSword.SolarProfile): the Sun Sword's
+        /// is <see cref="SunLight"/> / <see cref="SunFog"/>, a warm near-white with the fog pure white (tinting the fog
+        /// warm as well muddied the wash rather than warming it).</summary>
+        internal static float[] FlashColour = SunLight;
+        internal static float[] FogColour   = SunFog;
+        internal static readonly float[] SunLight = { 255f, 240f, 200f };
+        internal static readonly float[] SunFog   = { 255f, 255f, 255f };
         private const float  FogStart    = 0f,  FogEnd = 1f;   // at the peak: everything past one unit is fog colour (white)
         private const double FogSeconds  = 1.0;    // the fog lifts in a second; only the LIGHT takes the full blinding
         private const double Decay       = 4.0;    // how sharply the wash falls away; higher puts more of the drop in the first moments

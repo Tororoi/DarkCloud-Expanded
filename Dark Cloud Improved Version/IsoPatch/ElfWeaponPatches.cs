@@ -171,6 +171,52 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>The lock-on NAME PLATE, gated by a mod word. MonsterNameDraw asks GetMonsterNameDrawFlag (0x20EB70,
+        /// the flag's only reader), and setTargetCursor re-raises the flag through its setter every frame the target is
+        /// on screen — so an ability cannot hide the plate by writing the flag; it is back next frame. The getter,
+        /// <code>
+        ///   0x20EB70  lh  v0,-0x69E0(gp)
+        ///   0x20EB74  jr  ra
+        ///   0x20EB78  nop
+        /// </code>
+        /// becomes `j NameDrawGate; nop`, and the cave returns the flag AND NOT <see cref="CodeCaves.NameHide"/>:
+        /// <code>
+        ///   lh  v0,-0x69E0(gp)  /  lui at,HI  /  lw at,LO(at)  /  nor at,zero,at  /  jr ra  /  and v0,v0,at
+        /// </code>
+        /// A zero word — what fresh memory holds — is vanilla, so nothing needs seeding; `at` is the only register
+        /// touched beyond the return value.</summary>
+        internal static void PatchNameDrawGate(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Getter = 0x0020EB70;
+            const uint VanillaLh = 0x87829620u, VanillaJr = 0x03E00008u;            // lh v0,-0x69e0(gp) ; jr ra
+            uint cave = CodeCaves.ElfCave.NameDrawGate, word = CodeCaves.NameHideGuest;
+            uint hi = word >> 16, lo = word & 0xFFFFu; if (lo >= 0x8000) hi += 1;   // lw's offset is signed
+            uint[] words =
+            {
+                VanillaLh,                      // lh  v0,-0x69e0(gp)   the flag, as the getter read it
+                0x3C010000u | hi,               // lui at,HI(NameHide)
+                0x8C210000u | lo,               // lw  at,LO(at)
+                0x00010827u,                    // nor at,zero,at       ~hide
+                VanillaJr,                      // jr  ra
+                0x00411024u,                    // and v0,v0,at         (delay slot)
+            };
+            for (int i = 0; i < words.Length; i++)
+            {
+                uint cur = RdU32(fs, ElfOff(cave + (uint)(i * 4)));
+                if (cur != 0 && cur != words[i])
+                    throw new IOException($"Cave gap 0x{cave + i * 4:X} holds 0x{cur:X8} — not free.");
+                WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+            }
+            uint jump = MipsAsm.J(cave);
+            uint got0 = RdU32(fs, ElfOff(Getter)), got1 = RdU32(fs, ElfOff(Getter + 4));
+            if (got0 == jump && got1 == 0) return;                                  // idempotent re-run
+            if (got0 != VanillaLh || got1 != VanillaJr)
+                throw new IOException($"GetMonsterNameDrawFlag 0x{Getter:X} is not vanilla (got 0x{got0:X8}/0x{got1:X8}) " +
+                                      "— is this an unmodified Dark Cloud (USA) ISO?");
+            WrU32(fs, ElfOff(Getter),     jump);
+            WrU32(fs, ElfOff(Getter + 4), 0);                                       // the jump's delay slot
+        }
+
         /// <summary>Xiao's build-up tree, baked: the weapon template table's build-up word (WeaponList +0x3C, bit k = the weapon
         /// 299 + k may be built up into) — Hardshooter → Double Impact alone (vanilla: Double Impact or Matador), Double Impact →
         /// Matador alone (vanilla: Divine Beast Title).</summary>

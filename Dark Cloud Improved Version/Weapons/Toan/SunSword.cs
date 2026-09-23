@@ -39,15 +39,24 @@ namespace Dark_Cloud_Improved_Version
             internal readonly string Glow, Model, Tag;
             internal readonly uint   Frame, Unlit;
             internal readonly float  Fog;              // how much of the fog wash the flash does (SolarLighting.FogAmount)
-            internal SolarProfile(ushort id, float dmg, string glow, string model, uint frame, uint unlit, string tag, float fog = 1f)
-            { WeaponId = id; DamageFraction = dmg; Glow = glow; Model = model; Frame = frame; Unlit = unlit; Tag = tag; Fog = fog; }
+            internal readonly float[] Light, FogRgb;   // the colours the light and the fog are driven to
+            internal SolarProfile(ushort id, float dmg, string glow, string model, uint frame, uint unlit, string tag,
+                                  float fog = 1f, float[] light = null, float[] fogRgb = null)
+            {
+                WeaponId = id; DamageFraction = dmg; Glow = glow; Model = model; Frame = frame; Unlit = unlit; Tag = tag; Fog = fog;
+                Light = light ?? SolarLighting.SunLight; FogRgb = fogRgb ?? SolarLighting.SunFog;
+            }
+            /// <summary>Hand the lighting this sword's wash: how much fog, and what colour the light and fog go.</summary>
+            internal void ArmLighting()
+            { SolarLighting.FogAmount = Fog; SolarLighting.FlashColour = Light; SolarLighting.FogColour = FogRgb; }
         }
 
         internal static readonly SolarProfile SunSwordFlash = new SolarProfile(
             Items.sunsword, 0.25f, ToanGlowBakes.GlowName, SolarBlade.SunSwordModel, 0, 0, "SunSword");
         internal static readonly SolarProfile BigBangFlash = new SolarProfile(
             Items.bigbang, 0.50f, ToanGlowBakes.BlueName, SolarBlade.BigBangModel,
-            SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame, "BigBang", fog: 0.8f);
+            SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame, "BigBang", fog: 0.8f,
+            light: new[] { 236f, 226f, 255f }, fogRgb: new[] { 242f, 236f, 255f });   // a cool white, toward pale violet
 
         /// <summary>True while a Solar Flash charge is building, held or going off — Big Bang's own charge-attack tint
         /// stands aside for it rather than fighting it for the blade.</summary>
@@ -239,8 +248,8 @@ namespace Dark_Cloud_Improved_Version
             SolarBlade.Clear();                                          // tint off, and the blade's own palette back
             ChargeTint.Clear();                                          // …and the white Toan was holding
             SolarGlow.Hide();
-            if (!lit) { SolarLighting.FogAmount = p.Fog; SolarLighting.Flash(); }
-            Player.FlashActiveCharacter(SolarLighting.FlashColour[0], SolarLighting.FlashColour[1], SolarLighting.FlashColour[2], FlashPulseSpeed, 1);
+            if (!lit) { p.ArmLighting(); SolarLighting.Flash(); }
+            Player.FlashActiveCharacter(p.Light[0], p.Light[1], p.Light[2], FlashPulseSpeed, 1);
             if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
             PlantFlashHit(st, px, ph, py, p);
             SolarScript.Begin();           // the enemies' OWN scripts hold the guard from here

@@ -612,8 +612,10 @@ namespace Dark_Cloud_Improved_Version
             /// BODY of <see cref="CatMaskTint"/> (+0x18, past its own two entries), which does the ambient add generically and
             /// calls whatever t9 holds. Written as words by ElfWeaponPatches.PatchSolarBladeTint.</summary>
             internal const uint SolarBladeTint     = 0x01FB2278;   // 24 B → 0x1FB2290
-            // 0x01FB2290..0x1FB22BC (44 B) FREE — an auto-guard cave lived here until it moved to
-            // DebugInfoCave.AutoGuardMatch, which had room for the version that intercepts the MATCH.
+            /// <summary>The name-plate getter's body with a hide gate (ElfWeaponPatches.PatchNameDrawGate): six words —
+            /// `lh v0,flag(gp); lui/lw at,NameHide; nor at,zero,at; jr ra; and v0,v0,at`.</summary>
+            internal const uint NameDrawGate       = 0x01FB2290;   // 24 B → 0x1FB22A8
+            // 0x01FB22A8..0x1FB22BC (20 B) FREE
             internal const uint CatCapeTint        = 0x01FB22C0;   // 176 B → 0x1FB2370: the cape's cloth draws under its own ambient
             internal const uint CatMaskTint        = 0x01FB2370;   // 228 B → 0x1FB2454: the mask's MESH does too, via a private vtable
             internal const uint CatCopyQueue       = 0x01FB2480;   // 584 B → 0x1FB26C8: the cat's mesh copy, done inside the machine; its tail also calls CatPalette
@@ -899,7 +901,15 @@ namespace Dark_Cloud_Improved_Version
         internal const uint AutoGuardSignalGuest = 0x01FAF840;
         internal const int  AutoGuardCount = 0x00, AutoGuardX = 0x04, AutoGuardH = 0x08, AutoGuardY = 0x0C;
 
-        // ── FREE: 0x21FAF850 .. 0x21FB0000 (0x7B0 B) ────────────────────────────────────────────────────
+        /// <summary>HIDE THE LOCK-ON NAME PLATE while nonzero. The plate's draw asks GetMonsterNameDrawFlag (0x20EB70)
+        /// and setTargetCursor re-raises that flag through its setter EVERY frame the target is on screen, so a mod
+        /// write of 0 loses every other frame (a name flickering over the judgement blade). The getter jumps to
+        /// <see cref="ElfCave.NameDrawGate"/> instead, which ANDs the flag with NOT this word — 0 (fresh memory, no
+        /// seed needed) is vanilla; 1 hides the plate without touching the flag or the enemy.</summary>
+        internal const long NameHide      = 0x21FAF850;
+        internal const uint NameHideGuest = 0x01FAF850;
+
+        // ── FREE: 0x21FAF860 .. 0x21FB0000 (0x7A0 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

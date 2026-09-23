@@ -33,13 +33,16 @@ namespace Dark_Cloud_Improved_Version
         internal const double GrowSeconds = 0.25;  // it swells from nothing rather than snapping on — and the charge starts
                                                    // it this early, so it is at full size the instant the charge is ready
         private const double FadeSeconds = 0.50;   // …and shrinks away again when a charge is spent unused
+        private static double _grow = GrowSeconds, _fade = FadeSeconds;   // this showing's own timings (a hand-off runs faster)
         private static bool  _on, _fading;
         private static DateTime _shownAt, _fadeAt;
 
         /// <summary>Up, once. Re-arming every tick would re-bind the texture each frame.</summary>
         /// <param name="anchor">A GUEST node to hang the disc on instead of Toan (BladeProp.RootGuest for the judgement
         /// blade); 0 = Toan's own spine. A glow already up is re-hung when the anchor changes — one data write.</param>
-        internal static void Show(string disc = ToanGlowBakes.GlowName, uint anchor = 0)
+        /// <param name="lift">Height above the anchor node, world units (negative = below); Toan's spine wants 0.</param>
+        /// <param name="growSeconds">How long it takes to swell to full; <see cref="GrowSeconds"/> unless a hand-off is pacing it.</param>
+        internal static void Show(string disc = ToanGlowBakes.GlowName, uint anchor = 0, float lift = Lift, double growSeconds = GrowSeconds)
         {
             if (_on)
             {
@@ -48,6 +51,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     Memory.WriteUInt(CodeCaves.Mailbox.CatGlowNodeA, want);
                     Memory.WriteUInt(CodeCaves.Mailbox.CatGlowNodeB, want);
+                    Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, lift);
                     _anchor = want;
                 }
                 KeepAlive(); return;
@@ -61,14 +65,14 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, 0f);       // …from nothing; Tick swells it over GrowSeconds
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, Flags);
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, Pull);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, Lift);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, lift);
             Memory.WriteUInt (CodeCaves.Mailbox.CatGlowNodeA, root);
             Memory.WriteUInt (CodeCaves.Mailbox.CatGlowNodeB, root);
             byte[] nm = new byte[16]; System.Text.Encoding.ASCII.GetBytes(_disc).CopyTo(nm, 0);
             Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowReady, 0);        // bind the disc
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 1);           // armed last
-            _on = true; _fading = false; _shownAt = GameClock.Now;
+            _on = true; _fading = false; _shownAt = GameClock.Now; _grow = Math.Max(0.01, growSeconds);
             // Where the anchor really sits, so any residual offset is one measurement rather than another guess: the cave
             // places the sprite at the node's posed world position (world matrix translation row), and his feet are the
             // player's own height.
@@ -89,19 +93,24 @@ namespace Dark_Cloud_Improved_Version
             float k;
             if (_fading)
             {
-                double t = (GameClock.Now - _fadeAt).TotalSeconds / FadeSeconds;
+                double t = (GameClock.Now - _fadeAt).TotalSeconds / _fade;
                 if (t >= 1.0) { Hide(); return; }
                 k = (float)(1.0 - t);
             }
-            else k = (float)Math.Min(1.0, (GameClock.Now - _shownAt).TotalSeconds / GrowSeconds);
+            else k = (float)Math.Min(1.0, (GameClock.Now - _shownAt).TotalSeconds / _grow);
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, Scale * k);
         }
 
+        internal static bool IsUp => _on;
+        /// <summary>Up (and not on its way down) at this node — 0 meaning Toan's own spine.</summary>
+        internal static bool OnAnchor(uint anchor) => _on && !_fading && _anchor == (anchor != 0 ? anchor : Anchor());
+
         /// <summary>Start shrinking it away (a charge going unused), rather than cutting it.</summary>
-        internal static void Fade()
+        /// <param name="seconds">How long the shrink takes; <see cref="FadeSeconds"/> unless a hand-off is pacing it.</param>
+        internal static void Fade(double seconds = FadeSeconds)
         {
             if (!_on || _fading) return;
-            _fading = true; _fadeAt = GameClock.Now;
+            _fading = true; _fadeAt = GameClock.Now; _fade = Math.Max(0.01, seconds);
         }
 
         /// <summary>Down, and the disc back where it loaded.</summary>

@@ -130,6 +130,9 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(SlotAddr() + CCharacter.CharRotY, local);
         }
         private static float _localYaw;
+        /// <summary>The copy's root height in the world as the engine last posed it; NaN when nothing is up.</summary>
+        internal static float WorldHeight() =>
+            Active ? Memory.ReadFloat(Memory.ToMmu(_rootGuest) + CFrameVu1.WorldMatrix + 0x34) : float.NaN;
         internal static uint PinnedTo => Active ? _pinned : 0u;
         private static uint _pinned;
 
