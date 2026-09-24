@@ -30,13 +30,7 @@ namespace Dark_Cloud_Improved_Version
         // sub-shot is the engine's, whose spin step owns that field, so it is held on its root frame's local 3×3 the
         // way the stock whirl and Big Bang's explosion.chr are. ⚠ Writing +0x90 on the engine-fired whirl object
         // reset the game mid-spin.
-        private const float  LightningScale    = 5.0f;
-        // THE FLOOR CARDS — the three `f__czappba` flat squares under the bolt (the spark on the ground) — drawn
-        // larger than the bolt on the WHIRL: their own local 3×3 is held so that, under the root's LightningScale,
-        // they come out at CardScale. (Cards are `ba` full-facing billboards; whether the local scale survives the
-        // per-draw re-facing is what this is testing.)
-        private const float  CardScale         = 5.0f;    // = LightningScale: the cards at the bolt's size (25 was far too big)
-        private const uint   CardWord          = 0x635F5F66;                  // "f__c"
+        private const float  LightningScale    = 3.0f;   // the cutscene draws it at 5; 3 sits better in a dungeon
         private const ushort StrikeSe          = 390;   // the cutscene's thunderclap
         // lightning.mds's root is `null2`. ⚠ Only its FIRST FIVE bytes are the name at runtime: the word after "null"
         // read `2 ??` on the live copy (whatever followed the NUL in the frame's name field), where explosion.chr's
@@ -77,9 +71,56 @@ namespace Dark_Cloud_Improved_Version
             if (!BorrowedShots.Burst(_lightning, x, h, y, 0, LightningScale)) return false;
             _strikeSlot = Memory.ReadInt(ShotEffectPack.CharaMainEffect + ShotEffectPack.OffLastIdx);   // its sub-shot: the root hold leaves it be
             SeSeq.Play(StrikeSe, 90);
+            BeginConvulsion(slot);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] lightning on slot {slot} at ({x:F0},{h:F0},{y:F0})");
             return true;
         }
+
+        // ── the electrocution ────────────────────────────────────────────────────────────
+        // The struck enemy does not brace behind its guard like the rest of the floor: it CONVULSES. Nothing is forced
+        // on it — the flash's own stagger (SolarScript's per-species label: _SET_MOTION(damage) for a few frames, then
+        // the guard) already puts every unit of its species on its damage clip; once THIS unit's render object is
+        // playing that clip, its playing frame is written up and back down a short run inside the clip's window
+        // every tick, so the clip never reaches its end, the queued guard clip never commits, and the body twitches
+        // instead of flinching. The release simply stops writing: the clip runs out and the engine commits the guard
+        // clip by itself, exactly as it does for everyone else. Per-tick writes, deliberately: the jitter IS the look
+        // (research §7a). ⚠ A FORCED commit (+0xF4) here reset the game at the next guard-lowering wave, twice.
+        private const double ConvulseSeconds = 4.0;    // through the stun, ending as the floor starts lowering its guard
+        private const float  ConvulseInto    = 2f;     // frames into the damage clip the run starts
+        private const int    ConvulseFrames  = 3;      // consecutive frames the twitch runs over: 1 2 3 2 1 2 3 2 …
+        private static int _convSlot = -1, _convClip = -1, _convStep; private static float _convA, _convMax; private static DateTime _convUntil;
+        private static bool _convSeen;
+
+        private static void BeginConvulsion(int slot)
+        {
+            _convSlot = -1;                                                     // one at a time: a new strike takes over
+            ushort eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.EnemySpeciesId));
+            if (!EnemySpecies.Defaults.TryGetValue(eid, out var def) || !def.TableIndex.HasValue) return;
+            if (!EnemyGuardMotions.TryGet(def.TableIndex.Value, out var g) || g.Damage < 0) return;   // no damage clip authored: the guard hold stands
+            float lo = g.DamageStart, hi = Math.Max(g.DamageStart, g.DamageEnd);
+            _convA = Math.Min(hi, lo + ConvulseInto); _convMax = hi; _convClip = g.Damage;
+            _convSlot = slot; _convStep = 0; _convSeen = false; _convUntil = GameClock.Now.AddSeconds(ConvulseSeconds);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] slot {slot} convulsing on clip {g.Damage} over frames {_convA:F0}..{Math.Min(_convMax, _convA + ConvulseFrames - 1):F0} once it plays");
+        }
+        /// <summary>Per tick: nothing until the unit is on its damage clip; then the frame walked up and back down the
+        /// run one frame at a time, never skipping one; done when the time is up or the enemy is dead.</summary>
+        private static void ConvulseTick()
+        {
+            if (_convSlot < 0) return;
+            bool alive = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(_convSlot, EnemySlotOffsets.Hp)) > 0 && Enemies.IsLive(_convSlot);
+            if (!alive || GameClock.Now >= _convUntil) { _convSlot = -1; return; }
+            long unit = EnemyAddresses.MainMonstorUnit.Base + (long)_convSlot * ModelScaleOffsets.ModelStride;
+            if (Memory.ReadInt(unit + ModelScaleOffsets.PlayingMotionIdFromUnit) != _convClip)
+            {
+                if (_convSeen) _convSlot = -1;                                  // it left the clip on its own (a kill, a knockback): done
+                return;                                                         // …or the stagger has not reached it yet: wait
+            }
+            _convSeen = true;
+            int period = 2 * (ConvulseFrames - 1);                              // 0 1 2 1 for three frames
+            int k = _convStep++ % period; if (k >= ConvulseFrames) k = period - k;
+            Memory.WriteFloat(unit + ModelScaleOffsets.PlayingMotionFrameFromUnit, Math.Min(_convMax, _convA + k));
+        }
+        private static void EndConvulsion() => _convSlot = -1;
 
         /// <summary>Per tick while the Sword of Zeus is out in a dungeon: the lock-on reach and speed, and the bolt's size.</summary>
         public static void LightningEffect()
@@ -94,9 +135,11 @@ namespace Dark_Cloud_Improved_Version
                     ToanLockOn.DriveSpeed(moving, "[Zeus] ");
                     ToanLockOn.DriveStride(moving, "[Zeus] ");
                     if (LightningSeeded) MaintainScale();
+                    ConvulseTick();
                 }
                 catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] tick error: " + ex.Message); }
             }
+            EndConvulsion();
             ToanLockOn.ReleaseReach(); ToanLockOn.ReleaseSpeed("[Zeus] "); ToanLockOn.DriveStride(false, "[Zeus] ");
         }
 
@@ -122,7 +165,10 @@ namespace Dark_Cloud_Improved_Version
                     continue;
                 }
                 matched = true;
-                if (slot == _strikeSlot) continue;                                           // the strike carries its own scale
+                // The strike's sub-shot carries its size on its own CCharacter scale (Burst's argument); anything the
+                // engine fired is at 1. Told apart by that, not by index — the index is only known after Burst returns,
+                // and a tick in between put the root hold on top of the strike's own scale (25×).
+                if (Math.Abs(Memory.ReadFloat(obj + CCharacter.CharScale) - 1f) > 0.01f) continue;
                 if (!_bindRead)
                 {
                     for (int k = 0; k < 9; k++) _bind[k] = Memory.ReadFloat(root + ShotEffectPool.CFrameLocal3x3[k]);
@@ -133,8 +179,7 @@ namespace Dark_Cloud_Improved_Version
                 for (int k = 0; k < 9; k++)
                     Memory.WriteFloat(root + ShotEffectPool.CFrameLocal3x3[k], _bind[k] * LightningScale);
                 Memory.WriteInt(root + CFrameVu1.WorldCacheA, 0);
-                HoldCards(root);
-                if (!_scaleLogged) { _scaleLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] whirl sub-shot #{slot} held ×{LightningScale:F0} on its root (null2 at 0x{ptr:X}), cards ×{CardScale:F0}"); }
+                if (!_scaleLogged) { _scaleLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] whirl sub-shot #{slot} held ×{LightningScale:F0} on its root (null2 at 0x{ptr:X})"); }
             }
             if (!matched && seen.Count > 0 && !_rootsLogged)
             {   // DIAGNOSTIC, once: the instance holds models but none is the bolt — the whirl's object is not being reached
@@ -146,34 +191,5 @@ namespace Dark_Cloud_Improved_Version
         private static readonly float[] _bind = new float[9];
         private static int _strikeSlot = -1;
 
-        /// <summary>The `f__czappba` cards under <paramref name="root"/>, each held at <see cref="CardScale"/> ÷ the
-        /// root's <see cref="LightningScale"/> on its own local 3×3 (its authored bind read once per node — every
-        /// sub-shot has its own copy of the tree). The tree is walked child-first, sibling-next.</summary>
-        private static void HoldCards(long root)
-        {
-            float extra = CardScale / LightningScale;
-            var stack = new System.Collections.Generic.Stack<long>();
-            uint first = Memory.ReadGuestPtr(root + CFrameVu1.RootChild);
-            if (Memory.IsValidGuest(first)) stack.Push(Memory.ToMmu(first));
-            int guard = 0;
-            while (stack.Count > 0 && guard++ < 64)
-            {
-                long n = stack.Pop();
-                uint sib = Memory.ReadGuestPtr(n + CFrameVu1.RootSibling); if (Memory.IsValidGuest(sib)) stack.Push(Memory.ToMmu(sib));
-                uint kid = Memory.ReadGuestPtr(n + CFrameVu1.RootChild);   if (Memory.IsValidGuest(kid)) stack.Push(Memory.ToMmu(kid));
-                if (Memory.ReadUInt(n + CFrameVu1.Name) != CardWord) continue;
-                if (!_cardBind.TryGetValue(n, out float[] bind))
-                {
-                    bind = new float[9];
-                    for (int k = 0; k < 9; k++) bind[k] = Memory.ReadFloat(n + ShotEffectPool.CFrameLocal3x3[k]);
-                    if (Math.Abs(bind[0]) < 0.05f || Math.Abs(bind[0]) > 4.0f) continue;   // already scaled, or a bad read
-                    _cardBind[n] = bind;
-                }
-                if (Math.Abs(Memory.ReadFloat(n + ShotEffectPool.CFrameLocal3x3[0]) - bind[0] * extra) <= 0.01f) continue;
-                for (int k = 0; k < 9; k++) Memory.WriteFloat(n + ShotEffectPool.CFrameLocal3x3[k], bind[k] * extra);
-                Memory.WriteInt(n + CFrameVu1.WorldCacheA, 0);
-            }
-        }
-        private static readonly System.Collections.Generic.Dictionary<long, float[]> _cardBind = new System.Collections.Generic.Dictionary<long, float[]>();
     }
 }

@@ -101,6 +101,7 @@ namespace Dark_Cloud_Improved_Version
             public Phase phase;
             public DateTime holdStart, primedAt, dissipateAt;
             public byte floor = 0xFF;
+            public int errors;                                  // tick exceptions logged so far (the first few carry a stack)
             public readonly List<(int slot, int ticks)> planted = new List<(int, int)>();
         }
 
@@ -123,7 +124,10 @@ namespace Dark_Cloud_Improved_Version
             {
                 Thread.Sleep(TickMs);
                 try { SolarTick(st, p); }
-                catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[{p.Tag}] Solar Flash tick error: " + ex.Message); }
+                catch (Exception ex)
+                {
+                    if (st.errors++ < 3) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[{p.Tag}] Solar Flash tick error: " + ex.Message + "\n" + ex.StackTrace);
+                }
             }
             SolarReset(st);
         }

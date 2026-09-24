@@ -24,10 +24,13 @@ namespace Dark_Cloud_Improved_Version
         /// colour the FOG goes. Each sword sets its own pair before it flashes (SunSword.SolarProfile): the Sun Sword's
         /// is <see cref="SunLight"/> / <see cref="SunFog"/>, a warm near-white with the fog pure white (tinting the fog
         /// warm as well muddied the wash rather than warming it).</summary>
-        internal static float[] FlashColour = SunLight;
-        internal static float[] FogColour   = SunFog;
+        // ⚠ Declared BEFORE the two fields that default to them: static initialisers run in textual order, and the other
+        // way round both defaults were null until the first flash armed them — a prime dim before any flash threw on
+        // every tick, and a weapon change's EndDim threw outside any try, taking the whole mod down.
         internal static readonly float[] SunLight = { 255f, 240f, 200f };
         internal static readonly float[] SunFog   = { 255f, 255f, 255f };
+        internal static float[] FlashColour = SunLight;
+        internal static float[] FogColour   = SunFog;
         private const float  FogStart    = 0f,  FogEnd = 1f;   // at the peak: everything past one unit is fog colour (white)
         private const double FogSeconds  = 1.0;    // the fog lifts in a second; only the LIGHT takes the full blinding
         private const double Decay       = 4.0;    // how sharply the wash falls away; higher puts more of the drop in the first moments
@@ -167,12 +170,14 @@ namespace Dark_Cloud_Improved_Version
         /// flash's white is blended over THAT — so as the white recedes, it recedes onto the dim, not past it.</summary>
         private static void Write(float k, float kf, float dim)
         {
+            if (_amb == null || _cols == null || _fog == null || _fogRgb == null) return;   // nothing captured: nothing to write
+            float[] light = FlashColour ?? SunLight, fogc = FogColour ?? SunFog;
             kf *= Math.Max(0f, Math.Min(1f, FogAmount));
             var amb = (float[])_amb.Clone();
-            for (int c = 0; c < 3; c++) amb[c] = Lerp(Lerp(_amb[c], _amb[c] * DimKeep, dim), FlashColour[c], k);
+            for (int c = 0; c < 3; c++) amb[c] = Lerp(Lerp(_amb[c], _amb[c] * DimKeep, dim), light[c], k);
             var cols = (float[])_cols.Clone();
             for (int r = 0; r < DungeonLighting.ColorRows; r++)
-                for (int c = 0; c < 3; c++) cols[r * 4 + c] = Lerp(Lerp(_cols[r * 4 + c], _cols[r * 4 + c] * DimKeep, dim), FlashColour[c], k);
+                for (int c = 0; c < 3; c++) cols[r * 4 + c] = Lerp(Lerp(_cols[r * 4 + c], _cols[r * 4 + c] * DimKeep, dim), light[c], k);
             var fog = (float[])_fog.Clone();
             if (_fog[1] > _fog[0])                          // a floor without fog keeps none: the light alone carries the flash there
             {
@@ -180,7 +185,7 @@ namespace Dark_Cloud_Improved_Version
                 fog[1] = Lerp(Lerp(_fog[1], _fog[1] * DimFogPull, dim), FogEnd, kf);
             }
             var rgb = new byte[3];
-            for (int c = 0; c < 3; c++) rgb[c] = (byte)Math.Round(Lerp(Lerp(_fogRgb[c], 0f, dim), FogColour[c], kf));
+            for (int c = 0; c < 3; c++) rgb[c] = (byte)Math.Round(Lerp(Lerp(_fogRgb[c], 0f, dim), fogc[c], kf));
             Memory.WriteBytesBatch(Ambient, Bytes(amb));
             Memory.WriteBytesBatch(Colors, Bytes(cols));
             Memory.WriteBytesBatch(FogRate, Bytes(fog));
