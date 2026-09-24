@@ -16,6 +16,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread sunSwordThread = new Thread(new ThreadStart(SunSword.SolarHarvestEffect));
         private static Thread solarFlashThread = new Thread(() => SunSword.SolarFlashEffect(SunSword.SunSwordFlash));
         private static Thread bigBangThread = new Thread(new ThreadStart(BigBang.DetonateEffect));
+        private static Thread zeusThread = new Thread(new ThreadStart(SwordOfZeus.LightningEffect));
         private static Thread crossHinderThread = new Thread(new ThreadStart(CrossHinder.SanctifierEffect));
         private static Thread boneNoRevivalThread = new Thread(new ThreadStart(BoneRapier.GravediggerEffect));
         private static Thread tsukikageThread = new Thread(new ThreadStart(Tsukikage.MoonlitFocusEffect));
@@ -249,6 +250,26 @@ namespace Dark_Cloud_Improved_Version
                     {
                         bigBangThread = new Thread(new ThreadStart(BigBang.DetonateEffect));
                         bigBangThread.Start();
+                    }
+                    break;
+
+                case Items.swordofzeus:   // inherits Solar Harvest AND Solar Flash (Sun Sword lineage) + its lightning
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    if (!sunSwordThread.IsAlive)
+                    {
+                        sunSwordThread = new Thread(new ThreadStart(SunSword.SolarHarvestEffect));
+                        sunSwordThread.Start();
+                    }
+                    if (!solarFlashThread.IsAlive)
+                    {
+                        solarFlashThread = new Thread(() => SunSword.SolarFlashEffect(SunSword.ZeusFlash));
+                        solarFlashThread.Start();
+                    }
+                    if (!zeusThread.IsAlive)
+                    {
+                        zeusThread = new Thread(new ThreadStart(SwordOfZeus.LightningEffect));
+                        zeusThread.Start();
                     }
                     break;
 

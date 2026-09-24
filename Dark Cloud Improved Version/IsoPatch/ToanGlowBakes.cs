@@ -9,7 +9,8 @@ namespace Dark_Cloud_Improved_Version
     /// the game's own torch routine through the Divine Beast cat's glow cave (ElfCave.CatGlowDraw) — but that cave draws a
     /// texture BY NAME, and the cat's disc lives in XIAO's pack, so nothing of it is resident when Toan is the active
     /// character. This gives him discs of his own: <see cref="GlowName"/> in the Angel Gear cat's GOLD for Sun Sword's
-    /// Solar Flash, and <see cref="BlueName"/> in the Divine Beast Title cat's BLUE for Big Bang.
+    /// Solar Flash, <see cref="BlueName"/> in the Divine Beast Title cat's BLUE for Big Bang, and <see cref="WhiteName"/>
+    /// in the Angel Shooter cat's WHITE for the Sword of Zeus.
     ///
     /// Each is the Gallery of Time's torch glow re-tinted through the same builder the cat's disc uses
     /// (<see cref="CatPackBakes.GlowT8Tim2"/>) with that ramp (<see cref="CatPackBakes.GlowGold"/>,
@@ -26,6 +27,7 @@ namespace Dark_Cloud_Improved_Version
         internal const string Template = "c01d01";           // an 8-bit TIM2 with a 0x30 picture header in that bank — the headers the disc is built on
         internal const string GlowName = "toanglow";    // Sun Sword — the Angel Gear cat's gold
         internal const string BlueName = "toanglowb";   // Big Bang — the Divine Beast Title cat's blue
+        internal const string WhiteName = "toanglowz";  // Sword of Zeus — the Angel Shooter cat's white
 
         internal static void Run(IsoArchive arc, Action<string> log)
         {
@@ -42,6 +44,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 (name: GlowName, ramp: CatPackBakes.GlowGold),
                 (name: BlueName, ramp: CatPackBakes.GlowBlue),
+                (name: WhiteName, ramp: CatPackBakes.GlowWhite),
             };
             var discs = ramps.Select(d => (d.name, bytes: CatPackBakes.GlowT8Tim2(bank.Block(Template), light, d.ramp.core, d.ramp.outer))).ToArray();
             bool Present(string name) => bank.Entries.Any(e => e.name == name);

@@ -116,6 +116,7 @@ namespace Dark_Cloud_Improved_Version
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _seeded.Name + (state == 1
                             ? $" entered in the main-character effect: region {Memory.ReadInt(alloc + 8):N0} of {Memory.ReadInt(alloc + 12):N0} units used (base 0x{Memory.ReadUInt(alloc):X}); monster pool {Memory.ReadInt(DataPools.Monstor + DataPools.Used):N0} of {Memory.ReadInt(DataPools.Monstor + DataPools.Cap):N0}"
                             : state < 0 ? " NOT entered (no room in the monster pool, or the entry failed) — quiet until the next floor" : " (to be entered)"));
+                        if (state == 1) DescribeEntry();                               // DIAGNOSTIC: what the loader was actually given
                         if (state < 0)
                         {   // what the cave saw: the pool it tried to carve from, the region it holds, the instance's config pointer
                             long pool = DataPools.Monstor;
@@ -304,6 +305,36 @@ namespace Dark_Cloud_Improved_Version
             fx = new BorrowedEffect(c, dir + name + ".chr");
             _effects[key] = fx;
             return fx;
+        }
+
+        /// <summary>DIAGNOSTIC: the container the read buffer holds after an entry — its records by name (the pack
+        /// format: name at +0, data offset +0x40, size +0x44, next record +0x48 — GetPackFile walks it by name) — and
+        /// the instance's model root. An entry that carved nothing is either a file that never arrived (the buffer
+        /// still holds the previous container) or a cfg the parser gave up on.</summary>
+        private static void DescribeEntry()
+        {
+            try
+            {
+                uint buf = Memory.ReadGuestPtr(ShotEffectPack.ReadBufferPtr);
+                var names = new System.Collections.Generic.List<string>();
+                if (Memory.IsValidGuest(buf))
+                {
+                    long r = Memory.ToMmu(buf);
+                    for (int i = 0; i < 8; i++)
+                    {
+                        byte[] nm = Memory.ReadBytesBatch(r, 32); if (nm == null || nm[0] == 0) break;
+                        int n = Array.IndexOf(nm, (byte)0); if (n < 0) n = 32;
+                        names.Add($"{Encoding.ASCII.GetString(nm, 0, n)}[{Memory.ReadInt(r + 0x44):N0}]");
+                        int next = Memory.ReadInt(r + 0x48); if (next <= 0 || next > 0x100000) break;
+                        r += next;
+                    }
+                }
+                uint root = Memory.ReadGuestPtr(_seeded.Instance + 0xCC);
+                string rootName = Memory.IsValidGuest(root) ? Encoding.ASCII.GetString(Memory.ReadBytesBatch(Memory.ToMmu(root) + CFrameVu1.Name, 8)).TrimEnd('\0') : "none";
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                    $"read buffer 0x{buf:X} holds: {(names.Count == 0 ? "nothing readable" : string.Join(" ", names))}; instance model root 0x{root:X} `{rootName}`");
+            }
+            catch (Exception e) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "describe failed: " + e.Message); }
         }
 
         /// <summary>The effect file a config names.</summary>

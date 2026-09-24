@@ -4366,7 +4366,7 @@ namespace Dark_Cloud_Improved_Version
             // Big Bang REPLACES the whirl model with explosion.chr (BigBang.WantedShot). This path validates a root
             // by the fuusya names and would only drop its cache every tick against that model, so it stands down and
             // BigBang.MaintainExplosionScale holds the scale instead.
-            if (BigBang.ExplosionSeeded) { _whirlRoots = System.Array.Empty<long>(); return; }
+            if (BigBang.ExplosionSeeded || SwordOfZeus.LightningSeeded) { _whirlRoots = System.Array.Empty<long>(); return; }
 
             if (wid != _whirlWeaponId)
             {

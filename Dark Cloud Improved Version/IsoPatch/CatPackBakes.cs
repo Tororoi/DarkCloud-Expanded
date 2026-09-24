@@ -50,6 +50,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Row 8's ramp — the Angel Gear cat's GOLD: a pale gold core out to a deeper gold edge. Toan's own glow
         /// disc rests on it (ToanGlowBakes).</summary>
         internal static ((int, int, int) core, (int, int, int) outer) GlowGold => GlowLooks[2];
+        internal static ((int, int, int) core, (int, int, int) outer) GlowWhite => GlowLooks[1];
         /// <summary>Row 6's ramp — the Divine Beast Title cat's BLUE: a pale cyan core out to a deep blue edge. Big Bang's
         /// glow disc rests on it (ToanGlowBakes).</summary>
         internal static ((int, int, int) core, (int, int, int) outer) GlowBlue => GlowLooks[0];

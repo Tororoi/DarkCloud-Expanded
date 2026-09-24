@@ -709,9 +709,20 @@ namespace Dark_Cloud_Improved_Version
             private const int special1 = 0x21EA767E;     //01 unknown(default on Chronicle 2) | 02 Big bucks | 04 Poor | 08 Quench | 16 Thirst | 32 Poison | 64 Stop | 128 Steal
             private const int special2 = 0x21EA767F;     //02 Durable | 04 Drain | 08 Heal | 16 Critical | 32 Abs Up
 
+            /// <summary>The weapon Toan holds: the id of his equipped BAG slot's record. The battle record at
+            /// <see cref="id"/> is a copy taken at equip time, and a BUILD-UP rewrites the bag record in place without
+            /// an equip — the copy then still names the old weapon, and every ability keyed on it stayed the old
+            /// weapon's until a re-equip. The copy is the answer only when the bag cannot be (no valid slot, an empty
+            /// record, or Toan monster-transformed, when the bag still lists a weapon he is not holding).</summary>
             public static ushort GetCurrentWeaponId()
-            //Returns the current equipped weapon ID
             {
+                int slot = Memory.ReadByte(DngStatusData.EquippedSlotAddr(Player.ToanId));
+                if (slot < DngStatusData.MaxWeaponSlots
+                    && Memory.ReadInt(DngStatusData.Base + DngStatusData.TransformStateOffset) != DngStatusData.TransformedMonster)
+                {
+                    ushort held = Memory.ReadUShort(DngStatusData.WeaponRecord(Player.ToanId, slot));
+                    if (held != 0) return held;
+                }
                 return Memory.ReadUShort(id);
             }
 

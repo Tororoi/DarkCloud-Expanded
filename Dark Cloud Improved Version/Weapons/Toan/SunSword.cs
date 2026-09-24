@@ -44,15 +44,19 @@ namespace Dark_Cloud_Improved_Version
             internal readonly float[] Light, FogRgb;   // the colours the light and the fog are driven to
             internal readonly float  PrimeDim;         // how far the scene darkens while the charge builds and holds (0 = not at all)
             internal readonly bool   BladeGlowOnly;    // the glow belongs to the judgement blade alone — never on Toan
+            internal readonly double EaseSeconds;      // how long the wash takes to recede (0 = as long as the blinding)
             internal SolarProfile(ushort id, float dmg, string glow, string model, uint frame, uint unlit, string tag,
-                                  float fog = 1f, float[] light = null, float[] fogRgb = null, float primeDim = 0f, bool bladeGlowOnly = false)
+                                  float fog = 1f, float[] light = null, float[] fogRgb = null, float primeDim = 0f, bool bladeGlowOnly = false,
+                                  double easeSeconds = 0)
             {
                 WeaponId = id; DamageFraction = dmg; Glow = glow; Model = model; Frame = frame; Unlit = unlit; Tag = tag; Fog = fog;
                 Light = light ?? SolarLighting.SunLight; FogRgb = fogRgb ?? SolarLighting.SunFog; PrimeDim = primeDim; BladeGlowOnly = bladeGlowOnly;
+                EaseSeconds = easeSeconds > 0 ? easeSeconds : BlindSeconds;
             }
-            /// <summary>Hand the lighting this sword's wash: how much fog, and what colour the light and fog go.</summary>
+            /// <summary>Hand the lighting this sword's wash: how much fog, what colour the light and fog go, and how
+            /// long it takes to recede.</summary>
             internal void ArmLighting()
-            { SolarLighting.FogAmount = Fog; SolarLighting.FlashColour = Light; SolarLighting.FogColour = FogRgb; }
+            { SolarLighting.FogAmount = Fog; SolarLighting.FlashColour = Light; SolarLighting.FogColour = FogRgb; SolarLighting.EaseSeconds = EaseSeconds; }
         }
 
         internal static readonly SolarProfile SunSwordFlash = new SolarProfile(
@@ -63,6 +67,13 @@ namespace Dark_Cloud_Improved_Version
             light: new[] { 236f, 226f, 255f }, fogRgb: new[] { 242f, 236f, 255f },   // a cool white, toward pale violet
             primeDim: 0.35f,                                                         // the room darkens as the blade brightens; the drop takes it the rest of the way
             bladeGlowOnly: true);                                                    // the glow appears with the judgement blade and goes with it
+        /// <summary>The Sword of Zeus: Big Bang's charge look (tint, dim, cool light) on the white disc; the primed
+        /// swing brings the lightning down on the locked target, then flashes.</summary>
+        internal static readonly SolarProfile ZeusFlash = new SolarProfile(
+            Items.swordofzeus, 0.50f, ToanGlowBakes.WhiteName, "c01w39", 0, 0, "Zeus", fog: 0.8f,
+            light: new[] { 228f, 240f, 255f }, fogRgb: new[] { 238f, 246f, 255f },   // an electric white, toward blue
+            primeDim: 0.35f,
+            easeSeconds: 1.0);                                                       // a strike's flash, gone in a second; the stun keeps its 5 s
 
         /// <summary>True while a Solar Flash charge is building, held or going off — Big Bang's own charge-attack tint
         /// stands aside for it rather than fighting it for the blade.</summary>
@@ -195,6 +206,8 @@ namespace Dark_Cloud_Improved_Version
                     // Big Bang, locked on: the swing does not flash — it lets the judgement blade fall, and the flash
                     // goes off when it lands (BigBang.BeginDrop → Dropping). Not locked on: the flash, as ever.
                     if (p.WeaponId == Items.bigbang && BigBang.BeginDrop()) { st.phase = Phase.Dropping; break; }
+                    // The Sword of Zeus, locked on: the bolt comes down on the target as the flash goes off.
+                    if (p.WeaponId == Items.swordofzeus && PlayerAction.LockHeld(out int target)) SwordOfZeus.Strike(target);
                     Flash(st, p);
                     st.phase = Phase.Idle;
                     break;

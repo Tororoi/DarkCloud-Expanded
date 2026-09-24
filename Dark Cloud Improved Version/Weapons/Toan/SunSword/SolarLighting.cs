@@ -15,7 +15,11 @@ namespace Dark_Cloud_Improved_Version
     {
         // The wash recedes over the whole blinding, so the room brightens back exactly as the enemies recover — tied to that
         // duration rather than restating it, so the two cannot drift apart.
-        private static double EaseSeconds => SunSword.BlindSeconds;
+        /// <summary>How long the wash takes to recede. The flash-bang swords tie it to the blinding
+        /// (<see cref="SunSword.BlindSeconds"/>) so the room brightens as the enemies recover; the Sword of Zeus's
+        /// bolt is a strike, not a blaze, and takes its own shorter figure (SunSword.SolarProfile.EaseSeconds,
+        /// set with the colours by ArmLighting). The blinding itself is unchanged by this.</summary>
+        internal static double EaseSeconds = SunSword.BlindSeconds;
         /// <summary>The colour the LIGHT is driven to — the ambient, the directional rows and Toan's own pulse — and the
         /// colour the FOG goes. Each sword sets its own pair before it flashes (SunSword.SolarProfile): the Sun Sword's
         /// is <see cref="SunLight"/> / <see cref="SunFog"/>, a warm near-white with the fog pure white (tinting the fog

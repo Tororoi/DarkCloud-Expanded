@@ -167,7 +167,6 @@ namespace Dark_Cloud_Improved_Version
         private const float  BurstScale       = 10.0f;
         private const float  BurstSpeed       = 0.6f;
         private const int    BurstElement     = MasekiEffect.Ice;    // the ANIMATION only — the fallback when explosion.chr is not entered
-        private const float  ReachFactor      = 2.0f;                // Toan locks on from this many times as far while Big Bang is out
         private const float  BurstMul         = 1.5f;                // the blast's explosion.chr, over the whirl's ExplosionScale
         private sealed class BlastState
         {
@@ -219,7 +218,7 @@ namespace Dark_Cloud_Improved_Version
         {
             byte floor = Memory.ReadByte(Addresses.checkFloor);
             if (floor != st.floor) { if (st.floor != 0xFF) Reset(st); st.floor = floor; _yawConv = -1; }
-            HoldReach();
+            ToanLockOn.HoldReach("[BigBang] ");
             if (_faceHold > 0) { _faceHold--; FaceAll(); }
 
             ExpireShells();
@@ -379,28 +378,6 @@ namespace Dark_Cloud_Improved_Version
         private static bool BurstLive(int slot) =>
             slot == _burstSlot && slot >= 0
             && Memory.ReadUShort(ShotEffectPack.CharaMainEffect + ShotEffectPack.OffActive + slot * 2) != 0;
-
-        // ── lock-on reach ───────────────────────────────────────────────────────────────────
-        // Toan's entry in the lock-on factor table (CodeCaves.LockOnFactorTable, the same data the Flamingo drives for
-        // Xiao) held at ReachFactor × vanilla while Big Bang is out: SetNearLockOnTarget and setTargetCursor multiply
-        // every enemy's own lock-on distance by it. The judgement blade wants the target picked from further off.
-        private static readonly long ToanReachEntry = CodeCaves.LockOnFactorTable + Player.ToanId * 4;
-        private static readonly float ToanReach      = CodeCaves.LockOnFactorVanilla[Player.ToanId] * ReachFactor;
-        private static bool _reachHeld;
-        private static void HoldReach()
-        {
-            if ((uint)Memory.ReadInt(DunPatches.LockOnTableHookAddrMmu) != DunPatches.LockOnTableWord0) return;   // table patch not in this ISO
-            if (Memory.ReadFloat(ToanReachEntry) == ToanReach) return;
-            Memory.WriteInt(CodeCaves.LockOnFactorTable + CodeCaves.LockOnFactorOwner, 1);   // ours: the PNACH stops re-seeding
-            Memory.WriteFloat(ToanReachEntry, ToanReach);
-            if (!_reachHeld) { _reachHeld = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] lock-on reach ×{ReachFactor:F1}"); }
-        }
-        private static void ReleaseReach()
-        {
-            if (!_reachHeld) return;
-            _reachHeld = false;
-            if (Memory.ReadFloat(ToanReachEntry) == ToanReach) Memory.WriteFloat(ToanReachEntry, CodeCaves.LockOnFactorVanilla[Player.ToanId]);
-        }
 
         private static void MaintainExplosionScale()
         {
@@ -775,7 +752,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The enemy's largest live body sphere (centre and radius), the surest thing a hit sphere of the same
         /// size at the same place will touch; its root and a plain radius where none is active.</summary>
-        private static void BodyCentre(int slot, long a, out float cx, out float ch, out float cy, out float cr)
+        internal static void BodyCentre(int slot, long a, out float cx, out float ch, out float cy, out float cr)
         {
             long b = BodyCollision.SlotBase(slot);
             cx = Memory.ReadFloat(a + EnemySlotOffsets.LocationX); cy = Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
@@ -1063,7 +1040,7 @@ namespace Dark_Cloud_Improved_Version
             RestoreSwing(st);          // stats, kick constants and the charge radii
             RestoreImmunity();         // ⚠ shared ELF data: never leave the explosions inert
             AbandonHover(); Dropping = false; _landed = false; _fallDone = false; _landedAt = default; SolarLighting.EndDim();
-            ReleaseReach(); _faceHold = 0; ReleaseRedirect();
+            ToanLockOn.ReleaseReach(); _faceHold = 0; ReleaseRedirect();
             { long pool = CollisionPool.Resolve(); foreach (var (slot, _) in _shells) if (pool != 0) CollisionPool.Deactivate(pool, slot); _shells.Clear(); }
             if (st.crushing) { GuardBreak.Drive(false); st.crushing = false; }
             st.chargeAction = 0;
