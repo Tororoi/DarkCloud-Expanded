@@ -217,6 +217,46 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(Getter + 4), 0);                                       // the jump's delay slot
         }
 
+        /// <summary>TOAN'S STRIDE, scaled without touching his animation. The dungeon walk is not root motion in the
+        /// .mot sense — the clips play in place — the player key handler builds a per-frame move vector from his yaw
+        /// and clip-driven magnitudes and hands it to MoveCheck; at dun 0x1DB0F68 that vector sits in f21 (X) and
+        /// f20 (Z), about to be halved for Goo and zeroed for Freeze:
+        /// <code>
+        ///   0x1DB0F68  li  a0,0x40         →  jal StrideScale cave
+        ///   0x1DB0F6C  jal 0x1B1930        →  li  a0,0x40   (the jal's delay slot: the displaced load)
+        ///   0x1DB0F70  nop                    (the call returns here, as before)
+        /// </code>
+        /// The cave adds <see cref="CodeCaves.StrideScale"/> × the vector back onto it while the current motion is 33
+        /// (the guard walk), then tail-jumps into the status check the hook displaced, which returns to the handler
+        /// with a0 = 0x40 in place. A zero word is vanilla, so nothing needs seeding. Clobbers f0-f2, t0-t2 — all
+        /// temporaries the handler reloads before use.</summary>
+        internal static void PatchStrideScale(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint StatusCheck = 0x001B1930, MotionIdGuest = 0x01EA2988, Motion = 33;
+            uint cave = CodeCaves.DebugInfoCave.StrideScale, word = CodeCaves.StrideScaleGuest;
+            uint hi = word >> 16, lo = word & 0xFFFFu; if (lo >= 0x8000) hi += 1;     // lwc1's offset is signed
+            uint[] words =
+            {
+                0x3C080000u | hi,                                   // lui   t0,HI(StrideScale)
+                0xC5000000u | lo,                                   // lwc1  f0,LO(t0)              the extra fraction
+                0x3C090000u | (MotionIdGuest >> 16),                // lui   t1,HI(MotionId)
+                0x8D290000u | (MotionIdGuest & 0xFFFFu),            // lw    t1,LO(t1)              the current motion
+                0x240A0000u | Motion,                               // addiu t2,zero,33
+                0x152A0005u,                                        // bne   t1,t2,+5 → skip
+                0x00000000u,                                        //   nop
+                0x4600A842u,                                        // mul.s f1,f21,f0
+                0x4600A082u,                                        // mul.s f2,f20,f0
+                0x4601AD40u,                                        // add.s f21,f21,f1             X stride += extra × X
+                0x4602A500u,                                        // add.s f20,f20,f2             Z stride += extra × Z
+                MipsAsm.J(StatusCheck),                             // j     0x1B1930   (skip:)     the displaced call, returning to the handler
+                0x00000000u,                                        //   nop
+            };
+            if (cave + (uint)words.Length * 4 > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
+                throw new IOException("The stride cave does not fit its host (DebugInfomationDraw).");
+            for (int i = 0; i < words.Length; i++)
+                WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+        }
+
         /// <summary>Xiao's build-up tree, baked: the weapon template table's build-up word (WeaponList +0x3C, bit k = the weapon
         /// 299 + k may be built up into) — Hardshooter → Double Impact alone (vanilla: Double Impact or Matador), Double Impact →
         /// Matador alone (vanilla: Divine Beast Title).</summary>

@@ -27,6 +27,10 @@ namespace Dark_Cloud_Improved_Version
             new(AutoGuardSlotAddr, AutoGuardSlotOrig, AutoGuardSlotNew, "auto-guard: displaced move"),
             new(AutoGuardOldAddr, AutoGuardOldHook, AutoGuardOldVanilla, "auto-guard: retire the dispatch hook"),
             new(AutoGuardOldSlotAddr, AutoGuardOldSlotHook, AutoGuardOldSlotVanilla, "auto-guard: retire its displaced load"),
+            // Toan's stride (ElfWeaponPatches.PatchStrideScale): the key handler's `li a0,0x40; jal StatusCheck` becomes
+            // `jal cave; li a0,0x40` — the cave scales the move vector for motion 33 and tail-jumps into the check.
+            new(0x01DB0F68, 0x24040040, 0x0C000000u | (CodeCaves.DebugInfoCave.StrideScale >> 2), "stride: move-vector hook (jal cave)"),
+            new(0x01DB0F6C, 0x0C06C64C, 0x24040040, "stride: the displaced li a0,0x40 in the delay slot"),
             // Passive HEAL ability (weapon flag 0x800) cadence: heal tick compares its frame counter with
             // `slti v0,v0,0xF0` (240 f = 4 s, dun 0x1DB8234); 0xB4 = 180 f = 3 s for every HEAL weapon.
             // Guardian Grace reads the threshold from this word and floors the counter while Xiao guards.

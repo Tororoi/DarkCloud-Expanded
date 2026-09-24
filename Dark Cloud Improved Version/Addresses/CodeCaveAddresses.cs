@@ -491,6 +491,9 @@ namespace Dark_Cloud_Improved_Version
             /// looks at the reaction, the handler zeroes the player's action word (0x1DC4490, which ToanKey_Play reads),
             /// which knocked Toan out of a charge even when the hit did nothing to him.</summary>
             internal const uint AutoGuardMatch = Host + 0xC60;   // 0x1B43E0, 172 B → 0x1B448C (the host ends at 0x1B4700)
+            /// <summary>52 B: the STRIDE cave (ElfWeaponPatches.PatchStrideScale) — scales the player's per-frame move
+            /// vector by CodeCaves.StrideScale while motion 33 plays, then tail-jumps into the status check it displaced.</summary>
+            internal const uint StrideScale    = Host + 0xD10;   // 0x1B4490, 52 B → 0x1B44C4
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -916,7 +919,15 @@ namespace Dark_Cloud_Improved_Version
         internal const long JudgementPos      = 0x21FAF860;
         internal const uint JudgementPosGuest = 0x01FAF860;
 
-        // ── FREE: 0x21FAF870 .. 0x21FB0000 (0x790 B) ────────────────────────────────────────────────────
+        /// <summary>TOAN'S STRIDE on motion 33 (the guard walk), as an EXTRA fraction of the engine's own: the player
+        /// key handler builds his per-frame move vector (X in f21, Z in f20 at dun 0x1DB0F68) and the stride cave
+        /// (ElfWeaponPatches.PatchStrideScale, hooked there by DunPatches) adds this × that vector back onto it while
+        /// the current motion is 33 — the stride grows, the animation plays at its own rate. 0 (fresh memory) is
+        /// vanilla; the Sword of Zeus writes 0.3 while a lock is held and 0 otherwise.</summary>
+        internal const long StrideScale      = 0x21FAF870;
+        internal const uint StrideScaleGuest = 0x01FAF870;
+
+        // ── FREE: 0x21FAF880 .. 0x21FB0000 (0x780 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

@@ -34,12 +34,25 @@ namespace Dark_Cloud_Improved_Version
         // ── speed ─────────────────────────────────────────────────────────────────────────
         // Dragon's Y's buff, Toan's way (DragonsY.LockOnSpeedDrive has the mechanism): the dungeon walk is root motion,
         // so his ground speed while locked on is the play rate of the clip he strafes with — c01d KEYs 19-22, the
-        // attack stances (right / left / forward / back), and 33 — held through the motion-speed override (−1 = the
-        // KEY's own rate), which the game writes back to −1 on every motion change, so it is re-asserted each tick.
-        // The guard clips are NOT sped up: his guard loop is an animation, not a stride, and ran visibly fast at 1.3×.
-        // Toan's held lock is PlayerAction.LockHeld (LockOnActive reads 0 for him).
+        // attack stances (right / left / forward / back) — held through the motion-speed override (−1 = the KEY's
+        // own rate), which the game writes back to −1 on every motion change, so it is re-asserted each tick. The
+        // guard walk (33) is NOT played faster: its stride is scaled instead (StrideExtra, below) so the animation
+        // keeps its own rate. Toan's held lock is PlayerAction.LockHeld (LockOnActive reads 0 for him).
         private const float SpeedRate = 1.3f;
-        private static readonly int[] LockOnMoves = { 19, 20, 21, 22, 33 };
+        private static readonly int[] LockOnMoves = { 19, 20, 21, 22 };
+        // The guard walk's STRIDE while locked on: CodeCaves.StrideScale, read every frame by the stride cave at the
+        // key handler's move-vector build (dun 0x1DB0F68) and applied only while motion 33 plays — the engine does
+        // the per-frame work; this only says how much, when the lock comes and goes.
+        private const float StrideExtra = SpeedRate - 1f;
+        private static bool _strideHeld;
+        internal static void DriveStride(bool active, string tag)
+        {
+            bool want = active && PlayerAction.LockHeld(out _);
+            if (want == _strideHeld) return;
+            _strideHeld = want;
+            Memory.WriteFloat(CodeCaves.StrideScale, want ? StrideExtra : 0f);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + tag + (want ? $"guard-walk stride ×{SpeedRate}" : "guard-walk stride vanilla"));
+        }
         private static bool _speedHeld;
 
         internal static void DriveSpeed(bool active, string tag)

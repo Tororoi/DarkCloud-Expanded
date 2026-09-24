@@ -31,6 +31,12 @@ namespace Dark_Cloud_Improved_Version
         // way the stock whirl and Big Bang's explosion.chr are. ⚠ Writing +0x90 on the engine-fired whirl object
         // reset the game mid-spin.
         private const float  LightningScale    = 5.0f;
+        // THE FLOOR CARDS — the three `f__czappba` flat squares under the bolt (the spark on the ground) — drawn
+        // larger than the bolt on the WHIRL: their own local 3×3 is held so that, under the root's LightningScale,
+        // they come out at CardScale. (Cards are `ba` full-facing billboards; whether the local scale survives the
+        // per-draw re-facing is what this is testing.)
+        private const float  CardScale         = 5.0f;    // = LightningScale: the cards at the bolt's size (25 was far too big)
+        private const uint   CardWord          = 0x635F5F66;                  // "f__c"
         private const ushort StrikeSe          = 390;   // the cutscene's thunderclap
         // lightning.mds's root is `null2`. ⚠ Only its FIRST FIVE bytes are the name at runtime: the word after "null"
         // read `2 ??` on the live copy (whatever followed the NUL in the frame's name field), where explosion.chr's
@@ -84,12 +90,14 @@ namespace Dark_Cloud_Improved_Version
                 try
                 {
                     ToanLockOn.HoldReach("[Zeus] ");                                  // Big Bang's reach, inherited
-                    ToanLockOn.DriveSpeed(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest(), "[Zeus] ");
+                    bool moving = !Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest();
+                    ToanLockOn.DriveSpeed(moving, "[Zeus] ");
+                    ToanLockOn.DriveStride(moving, "[Zeus] ");
                     if (LightningSeeded) MaintainScale();
                 }
                 catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] tick error: " + ex.Message); }
             }
-            ToanLockOn.ReleaseReach(); ToanLockOn.ReleaseSpeed("[Zeus] ");
+            ToanLockOn.ReleaseReach(); ToanLockOn.ReleaseSpeed("[Zeus] "); ToanLockOn.DriveStride(false, "[Zeus] ");
         }
 
         /// <summary>Hold the engine-fired sub-shots that carry lightning.chr at <see cref="LightningScale"/> on their
@@ -125,7 +133,8 @@ namespace Dark_Cloud_Improved_Version
                 for (int k = 0; k < 9; k++)
                     Memory.WriteFloat(root + ShotEffectPool.CFrameLocal3x3[k], _bind[k] * LightningScale);
                 Memory.WriteInt(root + CFrameVu1.WorldCacheA, 0);
-                if (!_scaleLogged) { _scaleLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] whirl sub-shot #{slot} held ×{LightningScale:F0} on its root (null2 at 0x{ptr:X})"); }
+                HoldCards(root);
+                if (!_scaleLogged) { _scaleLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] whirl sub-shot #{slot} held ×{LightningScale:F0} on its root (null2 at 0x{ptr:X}), cards ×{CardScale:F0}"); }
             }
             if (!matched && seen.Count > 0 && !_rootsLogged)
             {   // DIAGNOSTIC, once: the instance holds models but none is the bolt — the whirl's object is not being reached
@@ -136,5 +145,35 @@ namespace Dark_Cloud_Improved_Version
         private static bool _scaleLogged, _rootsLogged, _bindRead;
         private static readonly float[] _bind = new float[9];
         private static int _strikeSlot = -1;
+
+        /// <summary>The `f__czappba` cards under <paramref name="root"/>, each held at <see cref="CardScale"/> ÷ the
+        /// root's <see cref="LightningScale"/> on its own local 3×3 (its authored bind read once per node — every
+        /// sub-shot has its own copy of the tree). The tree is walked child-first, sibling-next.</summary>
+        private static void HoldCards(long root)
+        {
+            float extra = CardScale / LightningScale;
+            var stack = new System.Collections.Generic.Stack<long>();
+            uint first = Memory.ReadGuestPtr(root + CFrameVu1.RootChild);
+            if (Memory.IsValidGuest(first)) stack.Push(Memory.ToMmu(first));
+            int guard = 0;
+            while (stack.Count > 0 && guard++ < 64)
+            {
+                long n = stack.Pop();
+                uint sib = Memory.ReadGuestPtr(n + CFrameVu1.RootSibling); if (Memory.IsValidGuest(sib)) stack.Push(Memory.ToMmu(sib));
+                uint kid = Memory.ReadGuestPtr(n + CFrameVu1.RootChild);   if (Memory.IsValidGuest(kid)) stack.Push(Memory.ToMmu(kid));
+                if (Memory.ReadUInt(n + CFrameVu1.Name) != CardWord) continue;
+                if (!_cardBind.TryGetValue(n, out float[] bind))
+                {
+                    bind = new float[9];
+                    for (int k = 0; k < 9; k++) bind[k] = Memory.ReadFloat(n + ShotEffectPool.CFrameLocal3x3[k]);
+                    if (Math.Abs(bind[0]) < 0.05f || Math.Abs(bind[0]) > 4.0f) continue;   // already scaled, or a bad read
+                    _cardBind[n] = bind;
+                }
+                if (Math.Abs(Memory.ReadFloat(n + ShotEffectPool.CFrameLocal3x3[0]) - bind[0] * extra) <= 0.01f) continue;
+                for (int k = 0; k < 9; k++) Memory.WriteFloat(n + ShotEffectPool.CFrameLocal3x3[k], bind[k] * extra);
+                Memory.WriteInt(n + CFrameVu1.WorldCacheA, 0);
+            }
+        }
+        private static readonly System.Collections.Generic.Dictionary<long, float[]> _cardBind = new System.Collections.Generic.Dictionary<long, float[]>();
     }
 }
