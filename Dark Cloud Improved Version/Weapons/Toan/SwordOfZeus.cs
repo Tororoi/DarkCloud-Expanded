@@ -25,12 +25,12 @@ namespace Dark_Cloud_Improved_Version
         // loaded hidden at _SET_NPC_SCALE(5, 5) holding motion 0, then at the moment — _PLAY_SE(390), _NPC_DRAW(1, 5),
         // _SET_NPC_MOTION(5, 1) played through, _SET_NPC_POS(5, x, 0, y) at the cat's GROUND point, _NPC_DRAW(0, 5).
         // Its cards rise from the origin (nodes at +4.5 and +10 up), so it stands ON the ground under the target,
-        // not centred on the body. Two scale paths, one per owner: the STRIKE's sub-shot is the mod's, so it takes
-        // the size the cutscene's way (the actor's own CCharacter scale, +0x90 — Burst's scale argument); the WHIRL's
-        // sub-shot is the engine's, whose spin step owns that field, so it is held on its root frame's local 3×3 the
-        // way the stock whirl and Big Bang's explosion.chr are. ⚠ Writing +0x90 on the engine-fired whirl object
-        // reset the game mid-spin.
-        private const float  LightningScale    = 3.0f;   // the cutscene draws it at 5; 3 sits better in a dungeon
+        // not centred on the body. ONE scale path for every bolt, strike or whirl: the root frame's local 3×3, held
+        // the way the stock whirl and Big Bang's explosion.chr are (a VERTEX_ANIME mesh is only transformed by its
+        // root's local matrix). ⚠ Writing the CCharacter scale (+0x90) on the engine-fired whirl object reset the
+        // game mid-spin; and telling the strike's object from the whirl's by that field failed too — the engine
+        // re-fires the whirl into whichever sub-shot is free, scale and all.
+        private const float  LightningScale    = 10.0f;   // on the root hold; the cutscene's ×5 on the actor scale read about half this
         private const ushort StrikeSe          = 390;   // the cutscene's thunderclap
         // lightning.mds's root is `null2`. ⚠ Only its FIRST FIVE bytes are the name at runtime: the word after "null"
         // read `2 ??` on the live copy (whatever followed the NUL in the frame's name field), where explosion.chr's
@@ -68,8 +68,8 @@ namespace Dark_Cloud_Improved_Version
             if (!LightningSeeded || slot < 0 || slot >= EnemyAddresses.FloorSlots.Count || !Enemies.IsLive(slot)) return false;
             long pos = EnemyAddresses.CharObjects.PosAddr(slot);                    // the unit's own position: its ground point
             float x = Memory.ReadFloat(pos), h = Memory.ReadFloat(pos + 4), y = Memory.ReadFloat(pos + 8);
-            if (!BorrowedShots.Burst(_lightning, x, h, y, 0, LightningScale)) return false;
-            _strikeSlot = Memory.ReadInt(ShotEffectPack.CharaMainEffect + ShotEffectPack.OffLastIdx);   // its sub-shot: the root hold leaves it be
+            if (!BorrowedShots.Burst(_lightning, x, h, y, 0, 1f)) return false;   // 1×: the root hold sizes every bolt alike
+            MaintainScale();                                                        // …before its first frame
             SeSeq.Play(StrikeSe, 90);
             BeginConvulsion(slot);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] lightning on slot {slot} at ({x:F0},{h:F0},{y:F0})");
@@ -143,15 +143,14 @@ namespace Dark_Cloud_Improved_Version
             ToanLockOn.ReleaseReach(); ToanLockOn.ReleaseSpeed("[Zeus] "); ToanLockOn.DriveStride(false, "[Zeus] ");
         }
 
-        /// <summary>Hold the engine-fired sub-shots that carry lightning.chr at <see cref="LightningScale"/> on their
-        /// root frame's local 3×3 (translation left anchored — a VERTEX_ANIME mesh is only transformed by its root's
-        /// local matrix); the strike's own sub-shot, scaled through its CCharacter, is left alone.</summary>
+        /// <summary>Hold every instance sub-shot that carries lightning.chr at <see cref="LightningScale"/> on its root
+        /// frame's local 3×3 (translation left anchored). The authored bind is read once, from the first root seen at
+        /// its authored size.</summary>
         private static void MaintainScale()
         {
             if (!Player.CheckDunIsWalkingMode()) return;          // models are reallocated in menus and on transitions
-            if (_strikeSlot >= 0 && Memory.ReadUShort(ShotEffectPack.CharaMainEffect + ShotEffectPack.OffActive + _strikeSlot * 2) == 0)
-                _strikeSlot = -1;                                  // the strike has played out: its index is anyone's again
             var seen = new System.Collections.Generic.List<string>(); bool matched = false;
+            var state = new System.Collections.Generic.List<string>();
             for (int slot = 0; slot < ShotEffectPool.EffectSlotCount; slot++)
             {
                 long obj = ShotEffectPool.MainCharaEffectBase + ShotEffectPool.EffectSlotObjectsOff + (long)slot * ShotEffectPool.EffectSlotStride;
@@ -165,31 +164,33 @@ namespace Dark_Cloud_Improved_Version
                     continue;
                 }
                 matched = true;
-                // The strike's sub-shot carries its size on its own CCharacter scale (Burst's argument); anything the
-                // engine fired is at 1. Told apart by that, not by index — the index is only known after Burst returns,
-                // and a tick in between put the root hold on top of the strike's own scale (25×).
-                if (Math.Abs(Memory.ReadFloat(obj + CCharacter.CharScale) - 1f) > 0.01f) continue;
+                float m00 = Memory.ReadFloat(root + ShotEffectPool.CFrameLocal3x3[0]);
                 if (!_bindRead)
                 {
+                    if (Math.Abs(m00) < 0.05f || Math.Abs(m00) > 4.0f) continue;   // a bad read, or a root already held: not the bind
                     for (int k = 0; k < 9; k++) _bind[k] = Memory.ReadFloat(root + ShotEffectPool.CFrameLocal3x3[k]);
-                    if (Math.Abs(_bind[0]) < 0.05f || Math.Abs(_bind[0]) > 4.0f) return;   // already scaled, or a bad read
                     _bindRead = true;
                 }
-                if (Math.Abs(Memory.ReadFloat(root + ShotEffectPool.CFrameLocal3x3[0]) - _bind[0] * LightningScale) <= 0.01f) continue;
+                state.Add($"#{slot}: active {Memory.ReadUShort(ShotEffectPack.CharaMainEffect + ShotEffectPack.OffActive + slot * 2)} charScale {Memory.ReadFloat(obj + CCharacter.CharScale):F2} m00 {m00:F2} root 0x{ptr:X}");
+                if (Math.Abs(m00 - _bind[0] * LightningScale) <= 0.01f) continue;
                 for (int k = 0; k < 9; k++)
                     Memory.WriteFloat(root + ShotEffectPool.CFrameLocal3x3[k], _bind[k] * LightningScale);
                 Memory.WriteInt(root + CFrameVu1.WorldCacheA, 0);
-                if (!_scaleLogged) { _scaleLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] whirl sub-shot #{slot} held ×{LightningScale:F0} on its root (null2 at 0x{ptr:X})"); }
+                if (!_scaleLogged) { _scaleLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] bolt sub-shot #{slot} held ×{LightningScale:F0} on its root (null2 at 0x{ptr:X})"); }
             }
+            // DIAGNOSTIC, once per whirl: every bolt sub-shot's state as the spin starts
+            bool whirl = Memory.ReadInt(PlayerAction.ChargeActionState) == PlayerAction.ActionWhirlwind;
+            if (whirl && !_whirlLogged && state.Count > 0) { _whirlLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] whirl sub-shots: " + string.Join(" | ", state)); }
+            if (!whirl) _whirlLogged = false;
             if (!matched && seen.Count > 0 && !_rootsLogged)
             {   // DIAGNOSTIC, once: the instance holds models but none is the bolt — the whirl's object is not being reached
                 _rootsLogged = true;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] no lightning root among the sub-shots: " + string.Join(" ", seen));
             }
         }
+        private static bool _whirlLogged;
         private static bool _scaleLogged, _rootsLogged, _bindRead;
         private static readonly float[] _bind = new float[9];
-        private static int _strikeSlot = -1;
 
     }
 }
