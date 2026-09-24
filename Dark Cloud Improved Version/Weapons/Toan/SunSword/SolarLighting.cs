@@ -59,7 +59,7 @@ namespace Dark_Cloud_Improved_Version
             if (_dimming) _dimming = false;                 // …but a dim's capture IS the floor's own: keep it
             else if (!Capture()) return;
             _active = true; _start = GameClock.Now;
-            Write(1f, 1f);
+            Write(1f, 1f, RestDim);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] flash: {Describe()}");
         }
 
@@ -107,24 +107,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!_dimming || _active) return;
             _dimK = k;
-            k = Math.Max(0f, Math.Min(1f, k));
-            var amb = (float[])_amb.Clone();
-            for (int c = 0; c < 3; c++) amb[c] = Lerp(_amb[c], _amb[c] * DimKeep, k);
-            var cols = (float[])_cols.Clone();
-            for (int r = 0; r < DungeonLighting.ColorRows; r++)
-                for (int c = 0; c < 3; c++) cols[r * 4 + c] = Lerp(_cols[r * 4 + c], _cols[r * 4 + c] * DimKeep, k);
-            var fog = (float[])_fog.Clone();
-            if (_fog[1] > _fog[0])
-            {
-                fog[0] = Lerp(_fog[0], _fog[0] * DimFogPull, k);
-                fog[1] = Lerp(_fog[1], _fog[1] * DimFogPull, k);
-            }
-            var rgb = new byte[3];
-            for (int c = 0; c < 3; c++) rgb[c] = (byte)Math.Round(Lerp(_fogRgb[c], 0f, k));
-            Memory.WriteBytesBatch(Ambient, Bytes(amb));
-            Memory.WriteBytesBatch(Colors, Bytes(cols));
-            Memory.WriteBytesBatch(FogRate, Bytes(fog));
-            Memory.WriteBytesBatch(FogColor, rgb);
+            Write(0f, 0f, Math.Max(0f, Math.Min(1f, k)));
         }
 
         /// <summary>A dim that nothing followed: the floor's light back in one write.</summary>
@@ -132,23 +115,37 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!_dimming) return;
             _dimming = false;
-            if (!_active) Write(0f, 0f);
+            if (!_active) Write(0f, 0f, 0f);
         }
 
-        /// <summary>The ease, one step; a no-op when no flash is running.</summary>
+        /// <summary>The wash after the flash — how dark the room RESTS once the white has receded (0 = the floor's own
+        /// light, as the flash-bang swords have it), for how long after the flash it rests (<see cref="RestSeconds"/>,
+        /// the whole hold), and over how many of its last seconds it comes back to normal (<see cref="RestRelease"/>).
+        /// Set with the colours by SunSword.SolarProfile.ArmLighting.</summary>
+        internal static float  RestDim = 0f;
+        internal static double RestSeconds = 0, RestRelease = 1.0;
+
+        /// <summary>The ease, one step; a no-op when no flash is running. The white recedes over <see cref="EaseSeconds"/>
+        /// onto the rest level, which holds until the last <see cref="RestRelease"/> of <see cref="RestSeconds"/>, when
+        /// the light and fog ramp back to the floor's own.</summary>
         internal static void Tick()
         {
             if (!_active) return;
-            double t = (GameClock.Now - _start).TotalSeconds / EaseSeconds;
-            if (t >= 1.0) { Restore(); return; }
+            double t  = (GameClock.Now - _start).TotalSeconds;
+            double total = RestDim > 0f ? RestSeconds : EaseSeconds;
+            if (t >= total) { Restore(); return; }
             // Exponential decay, normalised to reach exactly 0 at the end: most of the wash is gone in the first moments and
             // the last of it lingers, which reads as a flash dying away rather than a dimmer being turned down.
-            double d = Math.Exp(-Decay * t), d1 = Math.Exp(-Decay);
-            float k = (float)((d - d1) / (1.0 - d1));
-            double tf = Math.Min(1.0, (GameClock.Now - _start).TotalSeconds / FogSeconds);
-            double df = Math.Exp(-Decay * tf), df1 = Math.Exp(-Decay);
-            float kFog = (float)((df - df1) / (1.0 - df1));
-            Write(k, kFog);
+            double te = Math.Min(1.0, t / EaseSeconds);
+            double d1 = Math.Exp(-Decay);
+            float k    = (float)((Math.Exp(-Decay * te) - d1) / (1.0 - d1));
+            double tf  = Math.Min(1.0, t / FogSeconds);
+            float kFog = (float)((Math.Exp(-Decay * tf) - d1) / (1.0 - d1));
+            float dim  = 0f;
+            if (RestDim > 0f)
+                dim = t < RestSeconds - RestRelease ? RestDim
+                    : RestDim * (float)Math.Max(0.0, (RestSeconds - t) / Math.Max(0.01, RestRelease));
+            Write(k, kFog, dim);
         }
 
         /// <summary>The captured light back in one write (floor change, weapon put away, end of the ease).</summary>
@@ -156,7 +153,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!_active && !_dimming) return;
             _active = false; _dimming = false;
-            Write(0f, 0f);
+            Write(0f, 0f, 0f);
         }
 
         /// <summary>HOW MUCH of the fog wash the flash does, 0..1. The wash is the fog's start/end pulled toward 0..1
@@ -164,22 +161,26 @@ namespace Dark_Cloud_Improved_Version
         /// the Sun Sword's full white-out, 0 leaves the fog exactly as it was, and a fraction moves it that far.</summary>
         internal static float FogAmount = 1f;
 
-        private static void Write(float k, float kf)
+        /// <summary>The scene at white blend <paramref name="k"/> / fog wash <paramref name="kf"/> over a base darkened to
+        /// <paramref name="dim"/>: the floor's captured light is pulled down first (ambient and colour rows toward
+        /// DimKeep of themselves, the fog closed in to DimFogPull of its reach and its colour toward black), and the
+        /// flash's white is blended over THAT — so as the white recedes, it recedes onto the dim, not past it.</summary>
+        private static void Write(float k, float kf, float dim)
         {
             kf *= Math.Max(0f, Math.Min(1f, FogAmount));
             var amb = (float[])_amb.Clone();
-            for (int c = 0; c < 3; c++) amb[c] = Lerp(_amb[c], FlashColour[c], k);
+            for (int c = 0; c < 3; c++) amb[c] = Lerp(Lerp(_amb[c], _amb[c] * DimKeep, dim), FlashColour[c], k);
             var cols = (float[])_cols.Clone();
             for (int r = 0; r < DungeonLighting.ColorRows; r++)
-                for (int c = 0; c < 3; c++) cols[r * 4 + c] = Lerp(_cols[r * 4 + c], FlashColour[c], k);
+                for (int c = 0; c < 3; c++) cols[r * 4 + c] = Lerp(Lerp(_cols[r * 4 + c], _cols[r * 4 + c] * DimKeep, dim), FlashColour[c], k);
             var fog = (float[])_fog.Clone();
             if (_fog[1] > _fog[0])                          // a floor without fog keeps none: the light alone carries the flash there
             {
-                fog[0] = Lerp(_fog[0], FogStart, kf);
-                fog[1] = Lerp(_fog[1], FogEnd, kf);
+                fog[0] = Lerp(Lerp(_fog[0], _fog[0] * DimFogPull, dim), FogStart, kf);
+                fog[1] = Lerp(Lerp(_fog[1], _fog[1] * DimFogPull, dim), FogEnd, kf);
             }
             var rgb = new byte[3];
-            for (int c = 0; c < 3; c++) rgb[c] = (byte)Math.Round(Lerp(_fogRgb[c], FogColour[c], kf));
+            for (int c = 0; c < 3; c++) rgb[c] = (byte)Math.Round(Lerp(Lerp(_fogRgb[c], 0f, dim), FogColour[c], kf));
             Memory.WriteBytesBatch(Ambient, Bytes(amb));
             Memory.WriteBytesBatch(Colors, Bytes(cols));
             Memory.WriteBytesBatch(FogRate, Bytes(fog));

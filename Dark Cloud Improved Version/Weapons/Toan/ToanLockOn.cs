@@ -34,11 +34,12 @@ namespace Dark_Cloud_Improved_Version
         // ── speed ─────────────────────────────────────────────────────────────────────────
         // Dragon's Y's buff, Toan's way (DragonsY.LockOnSpeedDrive has the mechanism): the dungeon walk is root motion,
         // so his ground speed while locked on is the play rate of the clip he strafes with — c01d KEYs 19-22, the
-        // attack stances (right / left / forward / back), and the guard 8-10 with its walk 34 — held through the
-        // motion-speed override (−1 = the KEY's own rate), which the game writes back to −1 on every motion change,
-        // so it is re-asserted each tick. Toan's held lock is PlayerAction.LockHeld (LockOnActive reads 0 for him).
+        // attack stances (right / left / forward / back), and 33 — held through the motion-speed override (−1 = the
+        // KEY's own rate), which the game writes back to −1 on every motion change, so it is re-asserted each tick.
+        // The guard clips are NOT sped up: his guard loop is an animation, not a stride, and ran visibly fast at 1.3×.
+        // Toan's held lock is PlayerAction.LockHeld (LockOnActive reads 0 for him).
         private const float SpeedRate = 1.3f;
-        private static readonly int[] LockOnMoves = { 19, 20, 21, 22, 8, 9, 10, 34 };
+        private static readonly int[] LockOnMoves = { 19, 20, 21, 22, 33 };
         private static bool _speedHeld;
 
         internal static void DriveSpeed(bool active, string tag)

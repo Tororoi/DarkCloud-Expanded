@@ -1040,7 +1040,7 @@ namespace Dark_Cloud_Improved_Version
             RestoreSwing(st);          // stats, kick constants and the charge radii
             RestoreImmunity();         // ⚠ shared ELF data: never leave the explosions inert
             AbandonHover(); Dropping = false; _landed = false; _fallDone = false; _landedAt = default; SolarLighting.EndDim();
-            ToanLockOn.ReleaseReach(); _faceHold = 0; ReleaseRedirect();
+            ToanLockOn.ReleaseReach(); _faceHold = 0; ReleaseRedirect(); GlowOwned = false;
             { long pool = CollisionPool.Resolve(); foreach (var (slot, _) in _shells) if (pool != 0) CollisionPool.Deactivate(pool, slot); _shells.Clear(); }
             if (st.crushing) { GuardBreak.Drive(false); st.crushing = false; }
             st.chargeAction = 0;
