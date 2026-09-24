@@ -102,6 +102,8 @@ namespace Dark_Cloud_Improved_Version
         }
 
         internal static bool IsUp => _on;
+        /// <summary>Up at this node, on its way down or not — what must be cut before that node goes away.</summary>
+        internal static bool AnchoredTo(uint anchor) => _on && anchor != 0 && _anchor == anchor;
         /// <summary>Up (and not on its way down) at this node — 0 meaning Toan's own spine.</summary>
         internal static bool OnAnchor(uint anchor) => _on && !_fading && _anchor == (anchor != 0 ? anchor : Anchor());
 

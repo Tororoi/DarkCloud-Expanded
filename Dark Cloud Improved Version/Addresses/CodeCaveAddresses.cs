@@ -909,7 +909,14 @@ namespace Dark_Cloud_Improved_Version
         internal const long NameHide      = 0x21FAF850;
         internal const uint NameHideGuest = 0x01FAF850;
 
-        // ── FREE: 0x21FAF860 .. 0x21FB0000 (0x7A0 B) ────────────────────────────────────────────────────
+        /// <summary>WHERE THE JUDGEMENT BLADE IS (x, h, y, 1): the position every enemy's `_GET_POSITION(-2)` is
+        /// pointed at through <see cref="PtrTable"/> while the blade falls and the flash holds them, so they turn
+        /// to the danger and stay turned (Mirage's decoy redirect, driven by Big Bang; the fall thread keeps it on
+        /// the blade, the landing leaves it on the blast).</summary>
+        internal const long JudgementPos      = 0x21FAF860;
+        internal const uint JudgementPosGuest = 0x01FAF860;
+
+        // ── FREE: 0x21FAF870 .. 0x21FB0000 (0x790 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

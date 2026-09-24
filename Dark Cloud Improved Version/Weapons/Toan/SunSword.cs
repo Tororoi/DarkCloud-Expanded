@@ -25,6 +25,8 @@ namespace Dark_Cloud_Improved_Version
         private  const double DissipateSeconds    = 0.5;    // …fading the tint and shrinking the glow away
         internal const double BlindSeconds        = 5.0;    // how long the flash holds the floor
         private static DateTime _blindUntil;
+        /// <summary>How much of the flash's hold is left; 0 when none is running.</summary>
+        internal static double BlindSecondsLeft => _blindUntil == default ? 0 : Math.Max(0, (_blindUntil - GameClock.Now).TotalSeconds);
         private const float  PrimedTint           = 45f;    // the slight white Toan keeps while the charge is held, per channel (the tint is an ambient ADD)
         private const ushort FlashSe              = 0;      // sound effect at the flash (SeSeq id; 0 = none)
         private const float  Combo1Hit = 825f, Combo2Hit = 835f, Combo3Hit = 843f, Combo4Hit = 852f, Combo5Hit = 870f;   // frame cursor at which each combo swing comes forward (docs/character-motion-table.md clips 37-41)
@@ -40,11 +42,13 @@ namespace Dark_Cloud_Improved_Version
             internal readonly uint   Frame, Unlit;
             internal readonly float  Fog;              // how much of the fog wash the flash does (SolarLighting.FogAmount)
             internal readonly float[] Light, FogRgb;   // the colours the light and the fog are driven to
+            internal readonly float  PrimeDim;         // how far the scene darkens while the charge builds and holds (0 = not at all)
+            internal readonly bool   BladeGlowOnly;    // the glow belongs to the judgement blade alone — never on Toan
             internal SolarProfile(ushort id, float dmg, string glow, string model, uint frame, uint unlit, string tag,
-                                  float fog = 1f, float[] light = null, float[] fogRgb = null)
+                                  float fog = 1f, float[] light = null, float[] fogRgb = null, float primeDim = 0f, bool bladeGlowOnly = false)
             {
                 WeaponId = id; DamageFraction = dmg; Glow = glow; Model = model; Frame = frame; Unlit = unlit; Tag = tag; Fog = fog;
-                Light = light ?? SolarLighting.SunLight; FogRgb = fogRgb ?? SolarLighting.SunFog;
+                Light = light ?? SolarLighting.SunLight; FogRgb = fogRgb ?? SolarLighting.SunFog; PrimeDim = primeDim; BladeGlowOnly = bladeGlowOnly;
             }
             /// <summary>Hand the lighting this sword's wash: how much fog, and what colour the light and fog go.</summary>
             internal void ArmLighting()
@@ -56,7 +60,9 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly SolarProfile BigBangFlash = new SolarProfile(
             Items.bigbang, 0.50f, ToanGlowBakes.BlueName, SolarBlade.BigBangModel,
             SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame, "BigBang", fog: 0.8f,
-            light: new[] { 236f, 226f, 255f }, fogRgb: new[] { 242f, 236f, 255f });   // a cool white, toward pale violet
+            light: new[] { 236f, 226f, 255f }, fogRgb: new[] { 242f, 236f, 255f },   // a cool white, toward pale violet
+            primeDim: 0.35f,                                                         // the room darkens as the blade brightens; the drop takes it the rest of the way
+            bladeGlowOnly: true);                                                    // the glow appears with the judgement blade and goes with it
 
         /// <summary>True while a Solar Flash charge is building, held or going off — Big Bang's own charge-attack tint
         /// stands aside for it rather than fighting it for the blade.</summary>
@@ -116,7 +122,7 @@ namespace Dark_Cloud_Improved_Version
             if (Player.CheckDunIsPausedOrMenu()) return;
             if (Player.CurrentCharacterNum() != Player.ToanId)
             {
-                if (st.phase != Phase.Idle) { SolarBlade.Clear(); ChargeTint.Clear(); st.phase = Phase.Idle; }
+                if (st.phase != Phase.Idle) { SolarBlade.Clear(); ChargeTint.Clear(); SolarLighting.EndDim(); st.phase = Phase.Idle; }
                 return;
             }
 
@@ -132,19 +138,21 @@ namespace Dark_Cloud_Improved_Version
                 case Phase.Charging:
                 {
                     // One flash at a time, and that includes a charge already in flight when the last one went off.
-                    if (_blindUntil != default) { st.phase = Phase.Idle; SolarBlade.Set(0f, p.Model, p.Frame, p.Unlit); ChargeTint.Clear(); SolarGlow.Hide(); break; }
+                    if (_blindUntil != default) { st.phase = Phase.Idle; SolarBlade.Set(0f, p.Model, p.Frame, p.Unlit); ChargeTint.Clear(); SolarGlow.Hide(); SolarLighting.EndDim(); break; }
                     // Guard released before it primed: the glow goes with it rather than lingering.
-                    if (!GuardWatch.IsGuarding()) { st.phase = Phase.Idle; SolarBlade.Set(0f, p.Model, p.Frame, p.Unlit); ChargeTint.Clear(); SolarGlow.Hide(); break; }
+                    if (!GuardWatch.IsGuarding()) { st.phase = Phase.Idle; SolarBlade.Set(0f, p.Model, p.Frame, p.Unlit); ChargeTint.Clear(); SolarGlow.Hide(); SolarLighting.EndDim(); break; }
                     double held = (GameClock.Now - st.holdStart).TotalSeconds;
                     SolarBlade.Set((float)(held / ChargeSeconds), p.Model, p.Frame, p.Unlit);
+                    // The room darkens as the blade brightens, to PrimeDim at the moment it primes.
+                    if (p.PrimeDim > 0f) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim * (float)Math.Min(1.0, held / ChargeSeconds)); }
                     ChargeTint.Ramp(ChargeSeconds - held);
                     // The glow LEADS the charge: started a grow-time early, it reaches full size exactly as it primes.
-                    if (held >= ChargeSeconds - SolarGlow.GrowSeconds) { SolarGlow.Show(p.Glow); SolarGlow.Tick(); }
+                    if (!p.BladeGlowOnly && held >= ChargeSeconds - SolarGlow.GrowSeconds) { SolarGlow.Show(p.Glow); SolarGlow.Tick(); }
                     if (held >= ChargeSeconds)
                     {
                         st.phase = Phase.Primed; st.primedAt = GameClock.Now;
                         ChargeTint.Clear();                                  // the cyan build-up ends; the white hold below takes over
-                        SolarGlow.Show(p.Glow);                                    // …and Toan takes a white glow of his own
+                        if (!p.BladeGlowOnly) SolarGlow.Show(p.Glow);              // …and Toan takes a white glow of his own
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[{p.Tag}] Solar Flash primed");
                     }
                     break;
@@ -152,7 +160,8 @@ namespace Dark_Cloud_Improved_Version
 
                 case Phase.Primed:
                     SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit);                                   // re-asserted each tick: a rebuilt model gets it back
-                    if (!BigBang.GlowOwned) SolarGlow.Show(p.Glow);
+                    if (p.PrimeDim > 0f) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim); }   // held (one write; a floor change re-captures)
+                    if (!p.BladeGlowOnly && !BigBang.GlowOwned) SolarGlow.Show(p.Glow);
                     SolarGlow.Tick();
                     HoldPrimedTint(1f);
                     if (IsAttack(action)) { st.phase = Phase.Windup; break; }
@@ -169,8 +178,8 @@ namespace Dark_Cloud_Improved_Version
                     // The charge lapses: the white bleeds out of Toan as the glow shrinks away.
                     double t = (GameClock.Now - st.dissipateAt).TotalSeconds / DissipateSeconds;
                     SolarGlow.Tick();
-                    if (t >= 1.0) { SolarBlade.Clear(); ChargeTint.Clear(); SolarGlow.Hide(); st.phase = Phase.Idle; }
-                    else { SolarBlade.Set((float)(1.0 - t), p.Model, p.Frame, p.Unlit); HoldPrimedTint((float)(1.0 - t)); }
+                    if (t >= 1.0) { SolarBlade.Clear(); ChargeTint.Clear(); SolarGlow.Hide(); SolarLighting.EndDim(); st.phase = Phase.Idle; }
+                    else { SolarBlade.Set((float)(1.0 - t), p.Model, p.Frame, p.Unlit); HoldPrimedTint((float)(1.0 - t)); SolarLighting.DimTo(p.PrimeDim * (float)(1.0 - t)); }
                     break;
                 }
 
@@ -244,7 +253,11 @@ namespace Dark_Cloud_Improved_Version
         /// <paramref name="lit"/>: the white-out has already been fired (Big Bang's landing does it with the burst).</summary>
         private static void Flash(SolarState st, SolarProfile p, bool lit = false)
         {
-            float px = Memory.ReadFloat(Addresses.dunPositionX), ph = Memory.ReadFloat(Addresses.dunPositionZ), py = Memory.ReadFloat(Addresses.dunPositionY);
+            // The light hit comes from the flash's own point: Toan, or the judgement blade's blast when that is what
+            // lit the room — so the kick throws everyone from the blast and the hit turns them to it, not to him.
+            float px, ph, py;
+            if (lit) (px, ph, py) = BigBang.LastBlast;
+            else { px = Memory.ReadFloat(Addresses.dunPositionX); ph = Memory.ReadFloat(Addresses.dunPositionZ); py = Memory.ReadFloat(Addresses.dunPositionY); }
             SolarBlade.Clear();                                          // tint off, and the blade's own palette back
             ChargeTint.Clear();                                          // …and the white Toan was holding
             SolarGlow.Hide();

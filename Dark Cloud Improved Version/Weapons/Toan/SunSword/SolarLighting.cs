@@ -85,15 +85,24 @@ namespace Dark_Cloud_Improved_Version
             if (_dimming) return;
             if (_active) { _active = false; }               // an easing flash: keep its capture, drop its ease
             else if (!Capture()) return;
-            _dimming = true;
+            _dimming = true; _dimK = -1f;
         }
 
         /// <summary>The scene at darkness <paramref name="k"/> (0 = the floor's own light, 1 = full dim). Writes
         /// only while a dim is up and no flash has taken over — a late write after the flash would put a dark frame
         /// on top of the white.</summary>
+        /// <summary><see cref="Dim"/>, written only when the level has moved — a held level costs nothing per tick.</summary>
+        internal static void DimTo(float k)
+        {
+            if (!_dimming || _active) return;
+            if (Math.Abs(k - _dimK) < 0.005f) return;
+            Dim(k);
+        }
+        private static float _dimK = -1f;
         internal static void Dim(float k)
         {
             if (!_dimming || _active) return;
+            _dimK = k;
             k = Math.Max(0f, Math.Min(1f, k));
             var amb = (float[])_amb.Clone();
             for (int c = 0; c < 3; c++) amb[c] = Lerp(_amb[c], _amb[c] * DimKeep, k);

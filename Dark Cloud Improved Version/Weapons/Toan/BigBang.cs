@@ -4,15 +4,15 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Big Bang — Solar Harvest from the Sun Sword line, and a guard-charged blade whose next landed hit
-    /// detonates (Detonate).</summary>
+    /// <summary>Big Bang — Solar Harvest from the Sun Sword line, a whirlwind that IS an explosion, and a guard
+    /// charge that hangs a judgement blade over the locked target and drops it (Detonate).</summary>
     internal static class BigBang
     {
         // ── Big Bang "Detonate" ────────────────────────────────────────────────────────────
         private const int    TickMs           = 30;
-        private const float  BlastRadius      = 50f;    // the LEVEL-1 blast, and the combo finisher's
-        // LEVEL 2 — the whirlwind. Charged past the lunge, the spin is the detonation: a bigger blast, centred on
-        // Toan because the whirl is (the lunge's is centred on what it hit), and thrown proportionally harder.
+        // THE WHIRLWIND is the detonation: the spin's own hit sphere, widened to WhirlRadius, at DamageFraction × the
+        // weapon's attack with no element, and everything in it thrown clear. (The lunge and the combo are ordinary
+        // swings; the judgement blade below is the other blast.)
         // Distance ≈ force²/(2·decay), so clearing the radius takes a force that squares past 2·decay·radius.
         private const float  WhirlRadius      = 60f;
         private const float  WhirlKick        = 4.0f;   // force²/(2·decay) ≈ 67 units: still clears the radius
@@ -38,19 +38,15 @@ namespace Dark_Cloud_Improved_Version
         private static readonly float[] _burstBind = new float[9];
         private static bool _burstBindRead;
         private const float  DamageFraction   = 3.0f;   // the blast's base damage, as a multiple of the weapon's attack
-        // ── the blast IS the charge attack's own hit ─────────────────────────────────────
-        // Nothing here detects a hit or plants a sphere. ToanKey_Play built its two charge-attack hit radii as baked
-        // immediates; the ISO patch (ElfWeaponPatches.PatchChargeHitRadius) turned them into the data words
-        // CodeCaves.ChargeHitRadius, so widening those words widens the ENGINE'S OWN sphere — and the engine then
-        // does the whole job: who is inside it (real hurtboxes, height included), one plant per frame so a spin
+        // ── the whirl's blast IS its own hit ─────────────────────────────────────────────
+        // Nothing here detects a hit or plants a sphere for it. ToanKey_Play built its two charge-attack hit radii as
+        // baked immediates; the ISO patch (ElfWeaponPatches.PatchChargeHitRadius) turned them into the data words
+        // CodeCaves.ChargeHitRadius, so widening the whirl's word widens the ENGINE'S OWN sphere — and the engine
+        // then does the whole job: who is inside it (real hurtboxes, height included), one plant per frame so a spin
         // sweeps several enemies, the damage, and the knockback. What the ability contributes is all data written
-        // while the charge is up: the radius, the boosted Attack, the elementless attribute, and the kick.
-        //
-        // This replaced a mod-tick design that watched for the engine's hit mark and planted its own spheres. It was
-        // wrong repeatedly and in both directions — the lunge THROWS Toan at his target, so its hit landed long
-        // after the action id moved on and the detonation never fired; the whirlwind damages every frame it spins,
-        // so the same watch fired over and over.
-        private const float  KickStrength     = 3.5f;   // with KickDecay: distance ≈ force²/(2·decay) ≈ 50 units
+        // while the charge is up: the radius, the boosted Attack, the elementless attribute, and the kick. The
+        // lunge's word is held at its vanilla 6.
+        private const float  KickStrength     = 3.5f;   // the judgement blade's kick; with KickDecay: distance ≈ force²/(2·decay) ≈ 50 units
         private const float  KickDecay        = 0.12f;  // vanilla melee is 1.2 at 0.2, roughly 3.6 units
 
         private const float  WhpHits          = 5f;
@@ -59,25 +55,11 @@ namespace Dark_Cloud_Improved_Version
         // instead of by held time. It stands aside while SunSword.FlashArmed: Solar Flash owns the blade then, and
         // two ramps fighting over one mesh would only flicker.
         private const float  ChargeMeterFloor = 1.0f;
-        private const float  LungeThreshold   = 1.5f;   // the meter at which the charge becomes a lunge
-        // ONE DETONATION PER CHARGE ATTACK, and the window outlives the action. A hit is seen through the engine's
-        // mark, which this loop polls every TickMs — a couple of frames — so the lunge's action id has often moved on
-        // by the time its hit is noticed, and keying the detonation on the id being current missed it every time.
-        // The window opens when a charge attack starts and stays open a few ticks past its end; it is spent by the
-        // first hit inside it. The whirlwind needs the other half of that: it plants its damage EVERY frame it spins,
-        // so without the spend flag one spin detonated over and over.
-        private const float  LungeAttackMult  = 1.5f;   // the engine's own multiplier on a lunge and on the whirlwind
-        // THE COMBO FINISHER detonates too: the fourth swing primes it, the fifth carries it. Its hit radius is the
-        // ELF constant combos 3-5 share (Weapons.SetComboHitRadius) — held only while that fifth swing is out, so the
-        // two hits before it keep their own reach — and the engine puts ×1.8 on a fifth hit, so the Attack boost is
-        // the blast fraction over THAT.
-        private const int    ComboFinisher    = PlayerAction.ActionComboLast;       // action 0x28 — the fifth swing
-        private const int    ComboPrimer      = PlayerAction.ActionComboLast - 1;   // 0x27 — the one before it
-        private const float  ComboAttackMult  = 1.8f;
-        // …and the finisher is written the same ×2.0 Attack boost the lunge gets, which over the engine's own ×1.8
-        // lands at 3.6 × the weapon's attack — the reward for actually landing five swings in sequence.
-        // (DamageFraction × this ÷ 1.8 = the 2.0 written, so this is 1.2.)
-        private const float  ComboDamageBonus = 1.2f;
+        // The whirl's numbers are ARMED from the moment the meter reaches whirlwind range, so they are in place before
+        // the spin's first damage frame — a first hit at the blade's plain attack would also make that enemy
+        // invincible to the boosted frames that follow.
+        private const float  WhirlThreshold   = 2.5f;   // the meter at which the charge becomes a whirlwind
+        private const float  WhirlAttackMult  = 1.5f;   // the engine's own multiplier on the whirlwind
         // ── immunity to explosions ───────────────────────────────────────────────────────
         // The four shot configs that ARE the explosions: Halloween's thrown pumpkin and the three self-destructs
         // (zibaku = 自爆) that Mr. Blare, Bomber Head, Sam and Billy blow themselves up with. Their entries take the
@@ -103,7 +85,7 @@ namespace Dark_Cloud_Improved_Version
         // The explosion is the thrown-gem FIRE burst, spawned at the hit point by plain field writes into the
         // always-resident Maseki pool. It is authored as a small thrown-gem puff, so it is scaled up hard and
         // slowed down to stop the animation snapping at that size. Scale is the sub-slot's own CObject scale, not a
-        // radius: it does not change what the blast HITS (that is BlastRadius).
+        // radius: it does not change what the blast HITS (that is the falloff's hit entries).
         // ── what an auto-guarded explosion feels like ────────────────────────────────────────
         // The cave (ElfWeaponPatches.PatchAutoGuardMatch) makes the engine forget the hit entirely, which is what
         // keeps Toan's charge alive — but a hit that is silently dropped feels like a bug. So the cave ticks a
@@ -119,7 +101,7 @@ namespace Dark_Cloud_Improved_Version
         // target at HoverScale, fading in over FadeSeconds; the blue glow moves onto it and the target's NAME plate is
         // hidden (CodeCaves.NameHide, the gate the plate's getter ANDs in — the enemy itself is never touched, so a
         // kill during the hover still counts for whatever counts kills). Losing the lock fades it out and the glow
-        // shrinks off it and swells back up on Toan. The primed swing then does not flash: the blade FALLS over DropSeconds, and where
+        // shrinks off it and swells back up on Toan. The primed swing then does not flash: the blade FALLS under gravity, and where
         // it lands it detonates — the flash, the blast below, every enemy on the floor turned to face it, and the
         // weapon-HP bill. Swinging with no lock is the ordinary flash.
         // The blade hangs HoverMargin above the target's own top — read live from the engine's body-collision
@@ -133,12 +115,14 @@ namespace Dark_Cloud_Improved_Version
         private const float  BladeLengthFallback = 12f;
         private const float  HoverScale       = 2.0f;
         private const double FadeSeconds      = 0.25;
-        // THE FALL is gravity: from rest at the hover height, accelerating to land at DropSeconds — h = h0 − ½·g·t²
-        // with g chosen to arrive on time. Placed by its own frame-rate thread (FallLoop), the way the slingshot
-        // prop's orbit thread re-places that copy: the draw re-seeds the root from the slot every frame, so writes
-        // at frame rate are smooth where the 30 ms tick was a staircase. Cosmetic by construction — the landing
-        // itself is still called from the tick, so nothing that matters rides on this thread's timing.
-        private const double DropSeconds      = 0.35;
+        // THE FALL is gravity: from rest at the hover height, h = h0 − ½·g·t², so a higher hover takes longer to land,
+        // t = √(2·h0/g). The constant is a judgement's gravity, not the Earth's (9.81 m/s² at ~5.5 units a metre is 54
+        // and made even a short enemy a 0.8 s wait): 500 u/s² lands the tip on a 12 u enemy in ~0.27 s, a 25 u one in
+        // ~0.35 s, a 40 u miniboss in ~0.43 s. Placed by its own frame-rate thread (BladeLoop), the way the slingshot prop's orbit thread
+        // re-places that copy: the draw re-seeds the root from the slot every frame, so writes at frame rate are
+        // smooth where the 30 ms tick was a staircase. Cosmetic by construction — the landing itself is still called
+        // from the tick, so nothing that matters rides on this thread's timing.
+        private const double Gravity          = 500.0;   // units/s²
         private const int    FallTickMs       = 4;
         // As the blade falls the floor's light and fog are driven DOWN (SolarLighting.Dim) on an EXPONENTIAL ramp
         // that peaks at the landing itself: k = (e^(a·u) − 1) / (e^a − 1) over the fall's fraction u, so it barely
@@ -163,7 +147,9 @@ namespace Dark_Cloud_Improved_Version
         private static bool   _hoverOut;                       // fading OUT (lock lost) — no re-placement
         private static DateTime _dropStart, _gateLog;
         private static float  _dropX, _dropH, _dropY;          // where the BLAST goes off: the target's root, on the ground
-        private static float  _fallHeight;                     // how far above _dropH the blade hung when it was let go
+        private static float  _fallHeight;                     // how far above _dropH the grip hung when it was let go
+        private static float  _fallStop;                       // where the grip stops above _dropH: a blade length, the tip at the root
+        private static int    _followSlot = -1;                // the unit the fall thread places the hover over (shared root); −1 = pinned
         private static float  _bladeX, _bladeY;                // where the BLADE falls to (the target itself)
         private static volatile bool _fallDone;                // the fall thread has brought it to the ground
         private static DateTime _landedAt;                     // when the burst went off; the flash waits FlashDelay
@@ -172,9 +158,6 @@ namespace Dark_Cloud_Improved_Version
         private static float  _hoverHeight = HoverFallback;    // how far above its root the current target's top is, plus the margin
         private static int    _hoverTraceTicks;
 
-        private const int    PrimeTicks       = 60;    // ≈1.8 s: a charge that never connects gives its prime up
-        private const float  LungeBurstReach  = 12f;   // fallback: the blade's reach in front of Toan
-        private const float  MarkSanity       = 60f;   // a mark further than this from Toan is not his swing's
         // ⚠ The ISO patch this ability's damage depends on, as the patched instruction reads: `lui $2,0x01FB`
         // (ElfWeaponPatches.PatchChargeHitRadius). Checked once per floor, because without it the radius words are
         // never read and the charge attacks stay their stock 6 and 12 — which looks exactly like the ability
@@ -183,7 +166,9 @@ namespace Dark_Cloud_Improved_Version
         private const uint   LungeRadiusPatched = 0x3C0201FB, LungeRadiusVanillaInsn = 0x3C0240C0;
         private const float  BurstScale       = 10.0f;
         private const float  BurstSpeed       = 0.6f;
-        private const int    BurstElement     = MasekiEffect.Ice;    // the ANIMATION only
+        private const int    BurstElement     = MasekiEffect.Ice;    // the ANIMATION only — the fallback when explosion.chr is not entered
+        private const float  ReachFactor      = 2.0f;                // Toan locks on from this many times as far while Big Bang is out
+        private const float  BurstMul         = 1.5f;                // the blast's explosion.chr, over the whirl's ExplosionScale
         private sealed class BlastState
         {
             public byte floor = 0xFF;
@@ -193,26 +178,19 @@ namespace Dark_Cloud_Improved_Version
             public ushort weaponAttack;                 // …the blade's real Attack, and
             public byte swingElement;                   // …its real element index, and
             public float swingKickS, swingKickD;        // …the melee kick constants it is holding
-            public float comboRadius;                   // …and the combo swings' shared hit radius
             public ushort armedValue;                   // the boosted Attack that was written, to recognise our own
-            public int  chargeAction;                   // the charge attack that has already erupted (0 = none)
-            public bool primed;                         // an attack is up and its detonation is unspent
-            public bool wasPriming;                     // …the priming state last tick, so a prime is set on its EDGE
-            public int  primeTicks;                     // …how long a prime lives without a hit
-            public int  spendTicks;                     // …and how long the swing that may SPEND it stays open
+            public int  chargeAction;                   // the whirlwind that has already been billed (0 = none)
             public bool patchChecked;                   // the radius patch has been verified this floor
             public int  hp = -1;                        // Toan's HP as of the last tick, for the damage probe
         }
 
         /// <summary>
         /// Ability Name: Detonate (Big Bang)
-        /// Big Bang's CHARGE ATTACK detonates. The blade whitens as the meter fills, and the charge attack it becomes
-        /// is the explosion: its hit reaches <see cref="BlastRadius"/> for the level-1 lunge and
-        /// <see cref="WhirlRadius"/> for the level-2 whirlwind, deals <see cref="DamageFraction"/> × the weapon's
-        /// attack through the normal formula, carries NO element so no resistance blunts it, crushes guards, and
-        /// throws what it hits clear. The lunge erupts in a fire burst at the blade's reach; the whirlwind has no
-        /// burst spawned for it because its own model IS explosion.chr. The blade pays <see cref="WhpHits"/> swings'
-        /// worth of weapon HP per charge attack. Dungeon only.
+        /// Big Bang's WHIRLWIND is an explosion. The blade whitens as the meter fills, and the level-2 charge it
+        /// becomes is the blast: its own hit reaches <see cref="WhirlRadius"/>, deals <see cref="DamageFraction"/> ×
+        /// the weapon's attack through the normal formula, carries NO element so no resistance blunts it, crushes
+        /// guards, and throws what it hits clear; its model IS explosion.chr. The blade pays <see cref="WhpHits"/>
+        /// swings' worth of weapon HP per whirlwind. The lunge and the combo are ordinary swings. Dungeon only.
         ///
         /// While the blade is held, explosions cannot hurt Toan: the four shot configs that ARE the explosions are
         /// given a reaction the player's damage handler does not act on (see ExplosionCfgs).
@@ -240,15 +218,12 @@ namespace Dark_Cloud_Improved_Version
         private static void Tick(BlastState st)
         {
             byte floor = Memory.ReadByte(Addresses.checkFloor);
-            if (floor != st.floor) { if (st.floor != 0xFF) Reset(st); st.floor = floor; }
+            if (floor != st.floor) { if (st.floor != 0xFF) Reset(st); st.floor = floor; _yawConv = -1; }
+            HoldReach();
+            if (_faceHold > 0) { _faceHold--; FaceAll(); }
 
-            // POLLED EVERY TICK, ahead of every early return. The mark counter is a running total of hits on
-            // monsters — anyone's, from anything — so a poll that only ran while a charge was primed compared against
-            // a baseline from the LAST one, and read everything stamped in between as a hit that had just landed.
-            // Solar Flash is the clearest case: its own hits stamp marks on every enemy it strikes, and the next
-            // lunge then burst instantly on the nearest of them.
-            bool hit = HitLanded(out float hx, out float hh, out float hy);
             ExpireShells();
+            ReleaseRedirectWhenDue();
 
             if (Player.CheckDunIsPausedOrMenu()) return;
             if (Player.CurrentCharacterNum() != Player.ToanId) { ClearTint(st); RestoreSwing(st); return; }
@@ -276,7 +251,6 @@ namespace Dark_Cloud_Improved_Version
             int   action = Memory.ReadInt(PlayerAction.ChargeActionState);
             float meter  = Memory.ReadFloat(PlayerAction.ChargeMeter);
             bool  whirl  = action == PlayerAction.ActionWhirlwind;
-            bool  swinging = action == PlayerAction.ActionLunge || whirl;
 
             // The blade whitens across the regular charge exactly as it does across a guard charge — the same tint,
             // driven by the meter instead of by held time. It stands aside while Solar Flash owns the blade.
@@ -287,102 +261,30 @@ namespace Dark_Cloud_Improved_Version
                                SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame);
                 st.tinted = true;
             }
-            else if (st.tinted && !swinging) ClearTint(st);
+            else if (st.tinted && !whirl) ClearTint(st);
 
-            // Armed from the moment the meter reaches lunge range, so the numbers are in place before the hit window
-            // opens inside the action. Nothing below depends on WHEN a tick lands: every write is the same value.
-            bool finisher = action == ComboFinisher;
-            if (!SunSword.FlashArmed && (swinging || finisher
-                                         || (action == PlayerAction.ActionWindup && meter >= LungeThreshold)))
-            {
-                ArmSwing(st, whirl ? WhirlKick : KickStrength,
-                         finisher ? ComboAttackMult : LungeAttackMult, finisher);
-            }
+            // Armed from the moment the meter reaches whirlwind range, so the numbers are in place before the spin's
+            // first damage frame. Nothing below depends on WHEN a tick lands: every write is the same value.
+            if (!SunSword.FlashArmed && (whirl || (action == PlayerAction.ActionWindup && meter >= WhirlThreshold)))
+                ArmSwing(st);
             else
                 RestoreSwing(st);
 
-            // Guards are crushed while the charge swings: a blocked charge attack would eat the detonation.
-            bool crush = swinging || finisher;
-            if (crush != st.crushing) { GuardBreak.Drive(crush); st.crushing = crush; }
+            // Guards are crushed while the whirl spins: a blocked spin would eat the detonation.
+            if (whirl != st.crushing) { GuardBreak.Drive(whirl); st.crushing = whirl; }
 
-            // PRIMED BY THE CHARGE, SPENT BY THE HIT. The charge itself is what arms the detonation — a wind-up
-            // held past lunge strength, or the swing it becomes — and it stays armed until a hit lands. Priming on a
-            // state the player HOLDS, rather than catching the swing, is what makes this insensitive to when a tick
-            // falls; the lunge in particular throws Toan at his target, so its hit can land long after the action id
-            // has moved on, and anything keyed to the action being current missed it every time.
-            // …and the combo's fourth swing primes the fifth the same way a wind-up primes the lunge.
-            //
-            // ⚠ On the EDGE of that state, not while it holds. The whirlwind damages every frame it spins, so a prime
-            // re-armed whenever the state was true was spent and re-armed over and over, and the spin ended with the
-            // blade still primed — the next ordinary hit then set off a detonation that belonged to nothing.
-            bool priming = swinging || finisher || action == ComboPrimer
-                        || (action == PlayerAction.ActionWindup && meter >= LungeThreshold);
-            if (priming && !st.wasPriming) { st.primed = true; st.primeTicks = PrimeTicks; }
-            st.wasPriming = priming;
-            if (st.primed && !priming && --st.primeTicks <= 0)
-                st.primed = false;                                   // it came to nothing
-
-            // WHICH swing may spend it: the charge attacks and the combo's fifth, and for a moment after — the lunge
-            // throws Toan at his target, so its hit lands well past the action. The fourth combo swing PRIMES but may
-            // not spend, or its own hit would take the detonation meant for the fifth.
-            if (swinging || finisher) st.spendTicks = PrimeTicks;
-            else if (st.spendTicks > 0) st.spendTicks--;
-
-            // The blade's weapon-HP bill, once per charge attack.
-            if ((swinging || finisher) && action != st.chargeAction)
+            // The blade's weapon-HP bill, once per whirlwind.
+            if (whirl && action != st.chargeAction)
             {
                 st.chargeAction = action; DrainWhp();
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[BigBang] charge attack 0x{action:X}: hit radii {Memory.ReadFloat(CodeCaves.ChargeHitRadius + CodeCaves.ChargeRadiusLunge):F0}"
-                    + $"/{Memory.ReadFloat(CodeCaves.ChargeHitRadius + CodeCaves.ChargeRadiusWhirl):F0}"
+                    $"[BigBang] whirlwind: hit radius {Memory.ReadFloat(CodeCaves.ChargeHitRadius + CodeCaves.ChargeRadiusWhirl):F0}"
                     + $", attack {st.weaponAttack}→{Player.Weapon.GetCurrentWeaponAttack()}, armed {st.swingArmed}, flash {SunSword.FlashArmed}");
             }
-            else if (!swinging && !finisher) st.chargeAction = 0;
-
-            // The BURST goes where the charge connected. ⚠ Cosmetic by construction: the DAMAGE is the engine's own
-            // charge sphere, which lands whether or not this cue is seen, so a burst that arrives late — or not at
-            // all — costs nothing but the picture. The whirlwind needs none: its own model IS explosion.chr.
-            if (st.primed && st.spendTicks > 0 && hit)
-            {
-                st.primed = false;
-                if (whirl || st.chargeAction == PlayerAction.ActionWhirlwind) return;
-                GemBurst.Show(BurstElement, hx, hh, hy, BurstScale, damage: 0, speedMult: BurstSpeed);
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[BigBang] lunge burst at the hit mark ({hx:F0},{hh:F0},{hy:F0})");
-            }
+            else if (!whirl) st.chargeAction = 0;
         }
 
-        private static int _lastMark = -1, _lastLife = -1;
-        /// <summary>Where the engine last stamped a hit on a monster, for the lunge's burst and nothing else. A hit
-        /// that DAMAGES stamps the struck part's position at the counter's index and advances it; a BLOCKED one
-        /// re-stamps the current index and only resets that mark's life, which otherwise counts down from 16. A mark
-        /// further than <see cref="MarkSanity"/> from Toan is not his.</summary>
-        private static bool HitLanded(out float x, out float h, out float y)
-        {
-            x = h = y = 0f;
-            int n = PlayerAction.HitPointMarkCount;
-            int now = Memory.ReadInt(PlayerAction.HitSparkCounter);
-            int cur = ((now % n) + n) % n;
-            int life = Memory.ReadInt(PlayerAction.HitPointMark + (long)cur * PlayerAction.HitPointMarkStride
-                                      + PlayerAction.HitPointMarkLife);
-            int was = _lastMark, wasLife = _lastLife;
-            _lastMark = now; _lastLife = life;
-            if (was < 0) return false;
-
-            int idx;
-            if (now != was)          idx = ((now - 1) % n + n) % n;
-            else if (life > wasLife) idx = cur;
-            else return false;
-            long e = PlayerAction.HitPointMark + (long)idx * PlayerAction.HitPointMarkStride;
-            x = Memory.ReadFloat(e); h = Memory.ReadFloat(e + 4); y = Memory.ReadFloat(e + 8);
-            float dx = x - Memory.ReadFloat(Addresses.dunPositionX);
-            float dy = y - Memory.ReadFloat(Addresses.dunPositionY);
-            float dh = h - Memory.ReadFloat(Addresses.dunPositionZ);
-            return dx * dx + dy * dy + dh * dh <= MarkSanity * MarkSanity;
-        }
-
-
-        private static void ArmSwing(BlastState st, float kick, float moveMult, bool combo)
+        private static void ArmSwing(BlastState st)
         {
             ushort atk = Player.Weapon.GetCurrentWeaponAttack();
             if (!st.swingArmed)
@@ -392,28 +294,24 @@ namespace Dark_Cloud_Improved_Version
                 st.swingElement = Memory.ReadByte(WeaponHave.BattleWeaponRecord + ElementIndexOff);
                 st.swingKickS   = Memory.ReadFloat(SwingKickStrength);
                 st.swingKickD   = Memory.ReadFloat(SwingKickDecay);
-                st.comboRadius  = Weapons.ComboHitRadius;
                 st.swingArmed   = true;
             }
             else if (atk != 0 && atk != st.armedValue)
             {
                 st.weaponAttack = atk;                                   // the record was rebuilt: this is the real one
             }
-            st.armedValue = Boosted(st.weaponAttack, moveMult, combo ? ComboDamageBonus : 1f);
+            st.armedValue = Boosted(st.weaponAttack, WhirlAttackMult);
             Player.Weapon.SetCurrentWeaponAttack(st.armedValue);
             Memory.WriteByte(WeaponHave.BattleWeaponRecord + ElementIndexOff, ElementNoneIndex);
-            Memory.WriteFloat(SwingKickStrength, kick);   // the whirl throws harder than the lunge
+            Memory.WriteFloat(SwingKickStrength, WhirlKick);
             Memory.WriteFloat(SwingKickDecay, KickDecay);
-            if (combo) Weapons.SetComboHitRadius(BlastRadius);     // the fifth swing's own sphere becomes the blast
-            else       Weapons.SetChargeHitRadii(BlastRadius, WhirlRadius);
+            Weapons.SetChargeHitRadii(CodeCaves.LungeRadiusVanilla, WhirlRadius);   // the spin's own sphere becomes the blast
         }
 
-        /// <summary>The Attack that makes a lunge land <see cref="DamageFraction"/> × the blade's own, once the
-        /// engine's ×<see cref="LungeAttackMult"/> is on top of it.</summary>
         /// <summary>The Attack that makes a move landing <paramref name="moveMult"/> × its weapon's attack hit for
-        /// <see cref="DamageFraction"/> × <paramref name="bonus"/> × it instead.</summary>
-        private static ushort Boosted(ushort attack, float moveMult, float bonus) =>
-            (ushort)Math.Min(ushort.MaxValue, Math.Max(1, (int)Math.Round(attack * DamageFraction * bonus / moveMult)));
+        /// <see cref="DamageFraction"/> × it instead.</summary>
+        private static ushort Boosted(ushort attack, float moveMult) =>
+            (ushort)Math.Min(ushort.MaxValue, Math.Max(1, (int)Math.Round(attack * DamageFraction / moveMult)));
 
         /// <summary>The blade's own numbers back, and the shared kick constants with them. ⚠ The weapon fields are
         /// restored only while Big Bang is still in hand and the record still reads what we left — an equip change or
@@ -431,7 +329,6 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(SwingKickStrength, st.swingKickS);
             Memory.WriteFloat(SwingKickDecay, st.swingKickD);
             Weapons.SeedChargeHitRadii();                          // …and the stock 6 / 12 back
-            Weapons.ComboHitRadius = st.comboRadius;               // …and the combo swings' own reach
             st.weaponAttack = 0; st.armedValue = 0; st.swingArmed = false;
         }
 
@@ -464,6 +361,47 @@ namespace Dark_Cloud_Improved_Version
         /// 3x3 at +0x1D0 is scaled and the translation row left anchored — but validated on this model's own root
         /// name. Every pool slot is kept scaled, not just the live one: a spin can activate any of them, and the
         /// idle copies sit at the origin where writing costs nothing.</summary>
+        /// <summary>The blast's VISUAL at a point: explosion.chr — the whirlwind's own container, played where it
+        /// stands at the whirl's <see cref="ExplosionScale"/> with no damage (the blast's damage is the hit entries).
+        /// The ice gem burst stands in until the config is entered on this floor.</summary>
+        private static void Burst(float x, float h, float y)
+        {
+            if (ExplosionSeeded && BorrowedShots.Burst(_explosion, x, h, y, 0, ExplosionScale))
+            {
+                _burstSlot = Memory.ReadInt(ShotEffectPack.CharaMainEffect + ShotEffectPack.OffLastIdx);   // the sub-shot it took
+                MaintainExplosionScale();                                                                  // its size before its first frame
+                return;
+            }
+            GemBurst.Show(BurstElement, x, h, y, BurstScale, damage: 0, speedMult: BurstSpeed);
+        }
+        private static int _burstSlot = -1;
+        /// <summary>The blast's sub-shot is still playing — its model is drawn at <see cref="BurstMul"/> meanwhile.</summary>
+        private static bool BurstLive(int slot) =>
+            slot == _burstSlot && slot >= 0
+            && Memory.ReadUShort(ShotEffectPack.CharaMainEffect + ShotEffectPack.OffActive + slot * 2) != 0;
+
+        // ── lock-on reach ───────────────────────────────────────────────────────────────────
+        // Toan's entry in the lock-on factor table (CodeCaves.LockOnFactorTable, the same data the Flamingo drives for
+        // Xiao) held at ReachFactor × vanilla while Big Bang is out: SetNearLockOnTarget and setTargetCursor multiply
+        // every enemy's own lock-on distance by it. The judgement blade wants the target picked from further off.
+        private static readonly long ToanReachEntry = CodeCaves.LockOnFactorTable + Player.ToanId * 4;
+        private static readonly float ToanReach      = CodeCaves.LockOnFactorVanilla[Player.ToanId] * ReachFactor;
+        private static bool _reachHeld;
+        private static void HoldReach()
+        {
+            if ((uint)Memory.ReadInt(DunPatches.LockOnTableHookAddrMmu) != DunPatches.LockOnTableWord0) return;   // table patch not in this ISO
+            if (Memory.ReadFloat(ToanReachEntry) == ToanReach) return;
+            Memory.WriteInt(CodeCaves.LockOnFactorTable + CodeCaves.LockOnFactorOwner, 1);   // ours: the PNACH stops re-seeding
+            Memory.WriteFloat(ToanReachEntry, ToanReach);
+            if (!_reachHeld) { _reachHeld = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] lock-on reach ×{ReachFactor:F1}"); }
+        }
+        private static void ReleaseReach()
+        {
+            if (!_reachHeld) return;
+            _reachHeld = false;
+            if (Memory.ReadFloat(ToanReachEntry) == ToanReach) Memory.WriteFloat(ToanReachEntry, CodeCaves.LockOnFactorVanilla[Player.ToanId]);
+        }
+
         private static void MaintainExplosionScale()
         {
             if (!Player.CheckDunIsWalkingMode()) return;          // models are reallocated in menus and on transitions
@@ -481,9 +419,10 @@ namespace Dark_Cloud_Improved_Version
                     if (Math.Abs(_burstBind[0]) < 0.05f || Math.Abs(_burstBind[0]) > 4.0f) return;   // already scaled, or a bad read
                     _burstBindRead = true;
                 }
-                if (Math.Abs(Memory.ReadFloat(root + ShotEffectPool.CFrameLocal3x3[0]) - _burstBind[0] * ExplosionScale) <= 0.01f) continue;
+                float scale = ExplosionScale * (BurstLive(slot) ? BurstMul : 1f);   // the whirl's size, or the blast's while it plays
+                if (Math.Abs(Memory.ReadFloat(root + ShotEffectPool.CFrameLocal3x3[0]) - _burstBind[0] * scale) <= 0.01f) continue;
                 for (int k = 0; k < 9; k++)
-                    Memory.WriteFloat(root + ShotEffectPool.CFrameLocal3x3[k], _burstBind[k] * ExplosionScale);
+                    Memory.WriteFloat(root + ShotEffectPool.CFrameLocal3x3[k], _burstBind[k] * scale);
                 Memory.WriteInt(root + CFrameVu1.WorldCacheA, 0);
             }
         }
@@ -578,12 +517,26 @@ namespace Dark_Cloud_Improved_Version
                 // frame, so it rides a moving enemy with no placement writes at all — no tick, no thread, no jitter.
                 // Heights are measured from that root's own WORLD height — the slot's LocationZ is floor-relative,
                 // and taking it for the root hung the blade a body too low and started the fall a body too high.
+                // ⚠ Units of one SPECIES share one model tree: the root above is posed for whichever unit the engine
+                // drew last, so a pin to it follows the wrong enemy whenever another of its kind is on the floor.
+                // The pin is used only when this unit is the root's sole live user; otherwise the fall thread FOLLOWS
+                // the unit's own position (CharObjects.PosAddr — per slot, world height included) at its 4 ms pace.
                 uint enemyRoot = Memory.ReadGuestPtr(EnemyAddresses.CharObjects.CharAddr(lockSlot) + CCharacter.CharModel);
-                float rootH = RootWorldHeight(enemyRoot, a);
+                float rootH = UnitHeight(lockSlot);
                 _hoverHeight = HoverHeightFor(lockSlot, rootH);
-                if (BladeProp.PinnedTo != enemyRoot) BladeProp.Pin(enemyRoot, _hoverHeight);
-                // Its flat faces the way the fallen blade will (PlayerFacing): the parent's yaw is taken back out.
-                BladeProp.Face(PlayerFacing(), Memory.ReadFloat(EnemyAddresses.CharObjects.CharAddr(lockSlot) + CCharacter.CharRotY));
+                if (RootShared(enemyRoot, lockSlot))
+                {
+                    if (BladeProp.PinnedTo != 0) BladeProp.Unpin(PlayerFacing());
+                    _followSlot = lockSlot;                                      // the thread places it from here on
+                    EnsureBladeThread();
+                }
+                else
+                {
+                    _followSlot = -1;
+                    if (BladeProp.PinnedTo != enemyRoot) BladeProp.Pin(enemyRoot, _hoverHeight);
+                    // Its flat faces the way the fallen blade will (PlayerFacing): the parent's yaw is taken back out.
+                    BladeProp.Face(PlayerFacing(), Memory.ReadFloat(EnemyAddresses.CharObjects.CharAddr(lockSlot) + CCharacter.CharRotY));
+                }
                 _hoverAlpha = (float)Math.Min(1.0, _hoverAlpha + dt / FadeSeconds);
                 BladeProp.Alpha(_hoverAlpha);
                 DriveGlow(true);                                                 // the glow crosses to the blade
@@ -602,38 +555,27 @@ namespace Dark_Cloud_Improved_Version
                 _hoverOut = true;
                 _hoverAlpha = (float)Math.Max(0.0, _hoverAlpha - dt / FadeSeconds);
                 if (BladeProp.Maintain()) BladeProp.Alpha(_hoverAlpha);
-                DriveGlow(false);                                                // …and the glow shrinks off it first
-                if (_hoverAlpha <= 0f && !SolarGlow.OnAnchor(BladeProp.RootGuest)) AbandonHover();
-                return;
+                DriveGlow(false);                                                // …and the glow shrinks with it
+                if (_hoverAlpha <= 0f) AbandonHover();
             }
-            if (GlowOwned) DriveGlow(false);                                     // the hand-off back to Toan, to its end
         }
 
-        /// <summary>The glow's HAND-OFF between Toan and the blade: it shrinks away where it is, then swells up from
-        /// nothing where it is wanted — never a jump, and paced to the blade's own fade (<see cref="FadeSeconds"/>):
-        /// the shrink takes <see cref="HandoffShrink"/> of it and the swell the rest, so the glow is at full size on
-        /// the blade the moment the blade is fully in, and back to full on Toan the moment the blade is gone. (The
-        /// glow cave draws ONE sprite, so it cannot be in two places at once; this is the crossing.) On the blade it
-        /// hangs at the blade's middle (the copy's root is the grip, and the blade points down its full length below
-        /// it). <see cref="GlowOwned"/> is true from the first step until it is back up on Toan, so Solar Flash's own
-        /// Show stays out of the way meanwhile.</summary>
+        /// <summary>The glow is the judgement blade's alone (SolarProfile.BladeGlowOnly: Toan never carries it): it
+        /// swells up on the blade over the blade's own fade-in and shrinks with its fade-out, so the two appear and
+        /// go as one thing. It hangs at the blade's middle (the copy's root is the grip, and the blade points down
+        /// its full length below it). The glow cave draws one sprite, so a fade cut short by a fresh lock starts
+        /// again from nothing.</summary>
         private static void DriveGlow(bool onBlade)
         {
-            uint want = onBlade ? BladeProp.RootGuest : 0u;
-            if (onBlade && want == 0) return;
-            GlowOwned = true;
+            GlowOwned = true;                                                   // Solar Flash's own Show stays out
             SolarGlow.Tick();
-            if (SolarGlow.IsUp)
-            {
-                if (SolarGlow.OnAnchor(want)) { if (!onBlade) GlowOwned = false; return; }   // where it should be
-                SolarGlow.Fade(FadeSeconds * HandoffShrink);                                 // shrink off the old place; Tick takes it down
-                return;
-            }
-            if (!SunSword.PrimedFor(Items.bigbang)) { GlowOwned = false; return; }           // nothing to carry any more
-            SolarGlow.Show(ToanGlowBakes.BlueName, want, onBlade ? -BladeLength() * HoverScale / 2f : 0f,
-                           FadeSeconds * (1.0 - HandoffShrink));
+            if (!onBlade) { if (SolarGlow.IsUp) SolarGlow.Fade(FadeSeconds); return; }
+            uint want = BladeProp.RootGuest;
+            if (want == 0 || !SunSword.PrimedFor(Items.bigbang)) return;
+            if (SolarGlow.OnAnchor(want)) return;                               // up, where it should be
+            if (SolarGlow.IsUp) SolarGlow.Hide();                               // fading off it, or on something else
+            SolarGlow.Show(ToanGlowBakes.BlueName, want, -BladeLength() * HoverScale / 2f, FadeSeconds);
         }
-        private const double HandoffShrink = 0.3;   // the share of the blade's fade the glow spends leaving its old place
 
         /// <summary>Alive enough to hang a blade over: HP above zero.</summary>
         private static bool HasHp(int slot) =>
@@ -688,17 +630,21 @@ namespace Dark_Cloud_Improved_Version
             long a = EnemyAddresses.FloorSlots.SlotAddr(_hoverSlot, 0);
             _bladeX = Memory.ReadFloat(a + EnemySlotOffsets.LocationX);
             _bladeY = Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
-            _dropH  = RootWorldHeight(Memory.ReadGuestPtr(EnemyAddresses.CharObjects.CharAddr(_hoverSlot) + CCharacter.CharModel), a);
+            _dropH  = UnitHeight(_hoverSlot);
             _dropX = _bladeX; _dropY = _bladeY;                              // the blast goes off on the target itself
-            // The fall starts from where the blade HANGS, read off its own world matrix — not from the height it was
-            // pinned with, which the target's pose may have moved on from — so there is no step at the start.
-            float hang = BladeProp.WorldHeight();
-            _fallHeight = float.IsNaN(hang) ? _hoverHeight : Math.Max(1f, hang - _dropH);
+            // The fall starts from where the blade HANGS — its own world matrix when pinned, the followed height
+            // otherwise — not from the height it was pinned with, which the target's pose may have moved on from,
+            // so there is no step at the start. It ENDS with the tip at the root's height (the grip a blade length
+            // above it), which is where the blast goes off: the blade in the enemy, not a blade length under the floor.
+            float hang = _followSlot >= 0 ? _dropH + _hoverHeight : BladeProp.WorldHeight();
+            _fallStop   = BladeLength() * HoverScale;
+            _fallHeight = float.IsNaN(hang) ? _hoverHeight : Math.Max(_fallStop + 1f, hang - _dropH);
+            _followSlot = -1;
             BladeProp.Unpin(PlayerFacing());                                 // off the enemy and into the world, where it is, to fall
             SolarLighting.BeginDim();                                        // the lights go down with it
             _dropStart = GameClock.Now; Dropping = true; _landed = false; _fallDone = false; _landedAt = default;
-            if (_fallThread == null || !_fallThread.IsAlive)
-            { _fallThread = new Thread(BladeLoop) { IsBackground = true, Name = "BigBangBlade" }; _fallThread.Start(); }
+            BeginRedirect(_bladeX, _dropH + _fallHeight, _bladeY);
+            EnsureBladeThread();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] judgement blade falls on slot {_hoverSlot}");
             return true;
         }
@@ -707,21 +653,36 @@ namespace Dark_Cloud_Improved_Version
         /// gravity curve until it reaches the ground, then <see cref="_fallDone"/> for the tick to land on. (The hover
         /// needs no thread: it is pinned to the enemy and the engine carries it.) A pause freezes a fall in the air by
         /// shifting the start time, so it resumes where it was.</summary>
+        private static void EnsureBladeThread()
+        {
+            if (_fallThread == null || !_fallThread.IsAlive)
+            { _fallThread = new Thread(BladeLoop) { IsBackground = true, Name = "BigBangBlade" }; _fallThread.Start(); }
+        }
         private static void BladeLoop()
         {
             while (true)
             {
                 try
                 {
+                    if (_followSlot >= 0 && !Dropping && BladeProp.Active)        // the hover, followed: a shared root cannot carry it
+                    {
+                        long p = EnemyAddresses.CharObjects.PosAddr(_followSlot);
+                        BladeProp.Place(Memory.ReadFloat(p), Memory.ReadFloat(p + 4) + _hoverHeight, Memory.ReadFloat(p + 8), PlayerFacing());
+                        Thread.Sleep(FallTickMs); continue;
+                    }
                     if (!Dropping || _fallDone) { Thread.Sleep(20); continue; }
                     if (Player.CheckDunIsPausedOrMenu()) { _dropStart = _dropStart.AddMilliseconds(FallTickMs); Thread.Sleep(FallTickMs); continue; }
                     double t = (GameClock.Now - _dropStart).TotalSeconds;
-                    double g = 2.0 * _fallHeight / (DropSeconds * DropSeconds);
-                    float  h = _dropH + (float)Math.Max(0.0, _fallHeight - 0.5 * g * t * t);
+                    double span = _fallHeight - _fallStop;                       // grip: from where it hung down to a blade length above the root
+                    double T = Math.Sqrt(2.0 * span / Gravity);                  // how long that takes under gravity
+                    float  h = _dropH + _fallStop + (float)Math.Max(0.0, span - 0.5 * Gravity * t * t);
                     BladeProp.Place(_bladeX, h, _bladeY, PlayerFacing());
-                    double u = Math.Min(1.0, t / DropSeconds);
-                    SolarLighting.Dim((float)((Math.Exp(DimSharpness * u) - 1.0) / (Math.Exp(DimSharpness) - 1.0)));
-                    if (t >= DropSeconds) _fallDone = true;
+                    if (_redirecting) Memory.WriteVec3(CodeCaves.JudgementPos, _bladeX, h, _bladeY);   // what every enemy is watching
+                    double u = Math.Min(1.0, t / T);                             // the dim peaks as it lands, however long that is
+                    float  ramp = (float)((Math.Exp(DimSharpness * u) - 1.0) / (Math.Exp(DimSharpness) - 1.0));
+                    float  from = SunSword.BigBangFlash.PrimeDim;                 // on from the primed level, not from the floor's own light
+                    SolarLighting.Dim(from + (1f - from) * ramp);
+                    if (t >= T) _fallDone = true;
                 }
                 catch (Exception e) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[BigBang] fall tick failed: " + e.Message); }
                 Thread.Sleep(FallTickMs);
@@ -746,7 +707,9 @@ namespace Dark_Cloud_Improved_Version
             // and Solar Flash is told it is lit (a second Flash there restores the floor's light and whites it again).
             SunSword.BigBangFlash.ArmLighting();
             SolarLighting.Flash();
-            GemBurst.Show(BurstElement, _dropX, _dropH, _dropY, BurstScale, damage: 0, speedMult: BurstSpeed);
+            LastBlast = (_dropX, _dropH, _dropY);
+            if (_redirecting) Memory.WriteVec3(CodeCaves.JudgementPos, _dropX, _dropH, _dropY);   // …and it stays on the blast
+            Burst(_dropX, _dropH, _dropY);
             PlantFalloff(_dropX, _dropH, _dropY);
             TurnEnemiesToward(_dropX, _dropY);
             DrainWhp(DropWhpFactor);
@@ -763,7 +726,8 @@ namespace Dark_Cloud_Improved_Version
             // A glow left hanging on the copy's root after the copy is gone is a sprite drawn every frame at a node in
             // mod memory that nothing maintains; the one run that left it there ended in the game resetting six
             // seconds later. The fade-out waits for the glow to shrink off first; every other way here cuts it.
-            if (SolarGlow.OnAnchor(BladeProp.RootGuest)) SolarGlow.Hide();
+            if (SolarGlow.AnchoredTo(BladeProp.RootGuest)) SolarGlow.Hide();
+            _followSlot = -1;
             BladeProp.Despawn();
             _hoverSlot = -1; _hoverAlpha = 0f; _hoverOut = false;
             // GlowOwned stays: DriveGlow brings the glow back up on Toan while the charge still stands, then lets go.
@@ -815,7 +779,7 @@ namespace Dark_Cloud_Improved_Version
         {
             long b = BodyCollision.SlotBase(slot);
             cx = Memory.ReadFloat(a + EnemySlotOffsets.LocationX); cy = Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
-            ch = RootWorldHeight(Memory.ReadGuestPtr(EnemyAddresses.CharObjects.CharAddr(slot) + CCharacter.CharModel), a) + BodyRadiusFallback;
+            ch = UnitHeight(slot) + BodyRadiusFallback;
             cr = BodyRadiusFallback;
             float best = 0f;
             for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
@@ -830,14 +794,21 @@ namespace Dark_Cloud_Improved_Version
         }
         private const float BodyRadiusFallback = 10f;
 
-        /// <summary>The enemy's model root in the world: its height is the world matrix's, the same number the body
-        /// spheres and a pinned copy are measured in. (The slot's LocationZ is floor-relative and is not it.) The
-        /// slot's LocationZ stands in only when the root cannot be read.</summary>
-        private static float RootWorldHeight(uint rootGuest, long slotAddr)
+        /// <summary>The unit's own world height: its CCharacter position (per slot — the model root's world matrix is
+        /// the SPECIES' tree, posed for whichever unit drew last, and the slot's LocationZ is floor-relative).</summary>
+        private static float UnitHeight(int slot) => Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(slot) + 4);
+
+        /// <summary>Whether another live unit draws through the same model root as <paramref name="slot"/> — the
+        /// species' tree is one object, so a pin to it can only be trusted when this unit is its sole user.</summary>
+        private static bool RootShared(uint root, int slot)
         {
-            if (Memory.IsValidGuest(rootGuest))
-                return Memory.ReadFloat(Memory.ToMmu(rootGuest) + CFrameVu1.WorldMatrix + 0x34);
-            return Memory.ReadFloat(slotAddr + EnemySlotOffsets.LocationZ);
+            if (!Memory.IsValidGuest(root)) return true;
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                if (s == slot || !Enemies.IsLive(s)) continue;
+                if (Memory.ReadGuestPtr(EnemyAddresses.CharObjects.CharAddr(s) + CCharacter.CharModel) == root) return true;
+            }
+            return false;
         }
         private const int ShellLifeTicks = 3;   // ticks an unconsumed entry (a miss) stays before it is withdrawn
         private const int ShellPoolReserve = 16; // free entries the blast always leaves the engine
@@ -857,21 +828,114 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>Every living enemy turned to face the point — its facing vector is the unit it steers by.</summary>
+        /// <summary>Where the last judgement blade went off — the flash's own point when it is fired for a landing.</summary>
+        internal static (float x, float h, float y) LastBlast { get; private set; }
+
+        // ── every enemy's eyes on the blade ──────────────────────────────────────────────────
+        // Mirage's decoy redirect, borrowed: each enemy's `_GET_POSITION(-2)` ("where is the player") reads through
+        // the per-slot pointer table (CodeCaves.PtrTable), so while the blade falls every live slot is pointed at
+        // CodeCaves.JudgementPos — the blade, then the blast — and their own AI turns them to it before the flash
+        // lands and holds them; the pointers go back to the live player just before the blinding ends, so they
+        // come out of it looking at the danger and then find Toan again. Mirage's table writer only runs for
+        // Ungaga and Angel Gear's for Xiao, so nothing else writes the table while Toan holds this.
+        private const int    RedirectSlots   = 20;    // the entries Mirage and Angel Gear manage too (FloorSlots is 16)
+        private const double RedirectRelease = 0.4;   // seconds before the blinding ends that they get the player back
+        private const double RedirectOrphan  = 2.0;   // a drop that never flashed: let go this long after it began
+        private static bool _redirecting, _redirectBlindSeen; private static DateTime _redirectSince;
+        private static void BeginRedirect(float x, float h, float y)
+        {
+            if (!Mirage.Armed) return;                                           // the caves are armed at the main menu; without them, nothing to point
+            Memory.WriteVec3(CodeCaves.JudgementPos, x, h, y);
+            Memory.WriteFloat(CodeCaves.JudgementPos + 12, 1f);
+            var ptrs = new byte[RedirectSlots * CodeCaves.PtrStride];
+            for (int s = 0; s < RedirectSlots; s++)
+                BitConverter.GetBytes(s < EnemyAddresses.FloorSlots.Count && Enemies.IsLive(s) ? CodeCaves.JudgementPosGuest : StbExternCmd.PlayerPosGuest)
+                            .CopyTo(ptrs, s * CodeCaves.PtrStride);
+            Memory.WriteBytesBatch(CodeCaves.PtrTable, ptrs);
+            _redirecting = true; _redirectBlindSeen = false; _redirectSince = GameClock.Now;
+        }
+        private static void ReleaseRedirectWhenDue()
+        {
+            if (!_redirecting) return;
+            double left = SunSword.BlindSecondsLeft;
+            if (left > 0) _redirectBlindSeen = true;
+            bool due = _redirectBlindSeen ? left <= RedirectRelease
+                     : !Dropping && !LandingPending && (GameClock.Now - _redirectSince).TotalSeconds > RedirectOrphan;
+            if (due) ReleaseRedirect();
+        }
+        private static void ReleaseRedirect()
+        {
+            if (!_redirecting) return;
+            _redirecting = false;
+            var ptrs = new byte[RedirectSlots * CodeCaves.PtrStride];
+            for (int s = 0; s < RedirectSlots; s++) BitConverter.GetBytes(StbExternCmd.PlayerPosGuest).CopyTo(ptrs, s * CodeCaves.PtrStride);
+            Memory.WriteBytesBatch(CodeCaves.PtrTable, ptrs);
+        }
+
+        /// <summary>Every living enemy turned to face the point, and HELD there for <see cref="FaceHoldTicks"/>: the
+        /// facing vector is the unit its AI steers by and the CCharacter yaw is what it is drawn with, and a single
+        /// write of either is undone by the next Step — the AI steering back toward Toan, the flash's own hit
+        /// reaction — before the blinding's script hold takes over.</summary>
         private static void TurnEnemiesToward(float x, float y)
         {
+            _faceX = x; _faceY = y; _faceHold = FaceHoldTicks;
+            FaceAll();
+        }
+        private const int FaceHoldTicks = 12;   // ≈0.36 s: through the flash's stagger, into the script hold
+        private static int _faceHold; private static float _faceX, _faceY;
+        private static void FaceAll()
+        {
+            int conv = YawConvention();
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
                 if (!Enemies.IsLive(s)) continue;
                 long a = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
-                float dx = x - Memory.ReadFloat(a + EnemySlotOffsets.LocationX);
-                float dy = y - Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
+                float dx = _faceX - Memory.ReadFloat(a + EnemySlotOffsets.LocationX);
+                float dy = _faceY - Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
                 float len = (float)Math.Sqrt(dx * dx + dy * dy);
                 if (len < 1e-3f) continue;
-                Memory.WriteFloat(a + EnemySlotOffsets.FacingX, dx / len);
+                float fx = dx / len, fz = dy / len;
+                Memory.WriteFloat(a + EnemySlotOffsets.FacingX, fx);
                 Memory.WriteFloat(a + EnemySlotOffsets.FacingY, 0f);
-                Memory.WriteFloat(a + EnemySlotOffsets.FacingZ, dy / len);
+                Memory.WriteFloat(a + EnemySlotOffsets.FacingZ, fz);
+                if (conv >= 0) Memory.WriteFloat(EnemyAddresses.CharObjects.CharAddr(s) + CCharacter.CharRotY, YawOf(conv, fx, fz));
             }
+        }
+
+        /// <summary>The engine's yaw from a facing vector — which of the four sign/axis conventions the game uses is
+        /// READ OFF LIVE ENEMIES the first time it is needed on a floor (each one's own facing against its own yaw),
+        /// rather than assumed. −1 while no enemy has told us yet (the yaw is then left to the engine).</summary>
+        private static float YawOf(int conv, float fx, float fz) => conv switch
+        {
+            0 => (float)Math.Atan2(fx, fz), 1 => (float)Math.Atan2(-fx, fz),
+            2 => (float)Math.Atan2(fz, fx), _ => (float)Math.Atan2(-fz, fx),
+        };
+        private static int _yawConv = -1;
+        private static int YawConvention()
+        {
+            if (_yawConv >= 0) return _yawConv;
+            var err = new double[4]; int n = 0;
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                if (!Enemies.IsLive(s)) continue;
+                long a = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+                float fx = Memory.ReadFloat(a + EnemySlotOffsets.FacingX), fz = Memory.ReadFloat(a + EnemySlotOffsets.FacingZ);
+                if (fx * fx + fz * fz < 0.5f) continue;
+                float yaw = Memory.ReadFloat(EnemyAddresses.CharObjects.CharAddr(s) + CCharacter.CharRotY);
+                if (float.IsNaN(yaw) || Math.Abs(yaw) > 100f) continue;
+                for (int c = 0; c < 4; c++)
+                {
+                    double d = Math.Abs(YawOf(c, fx, fz) - yaw) % (2 * Math.PI);
+                    err[c] += Math.Min(d, 2 * Math.PI - d);
+                }
+                n++;
+            }
+            if (n == 0) return -1;
+            int best = 0; for (int c = 1; c < 4; c++) if (err[c] < err[best]) best = c;
+            if (err[best] / n > 0.35) return -1;                                   // none of them fits: leave the yaw alone
+            _yawConv = best;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] enemy yaw convention {best} (mean error {err[best] / n:F2} rad over {n})");
+            return best;
         }
 
         /// <summary>Answer a hit the cave swallowed: rumble and the guard clang. The cave only ticks a counter —
@@ -999,6 +1063,7 @@ namespace Dark_Cloud_Improved_Version
             RestoreSwing(st);          // stats, kick constants and the charge radii
             RestoreImmunity();         // ⚠ shared ELF data: never leave the explosions inert
             AbandonHover(); Dropping = false; _landed = false; _fallDone = false; _landedAt = default; SolarLighting.EndDim();
+            ReleaseReach(); _faceHold = 0; ReleaseRedirect();
             { long pool = CollisionPool.Resolve(); foreach (var (slot, _) in _shells) if (pool != 0) CollisionPool.Deactivate(pool, slot); _shells.Clear(); }
             if (st.crushing) { GuardBreak.Drive(false); st.crushing = false; }
             st.chargeAction = 0;
