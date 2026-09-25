@@ -655,6 +655,16 @@ namespace Dark_Cloud_Improved_Version
         internal const long AiStubBase     = 0x21F10100;
         internal const int  AiStubStride   = 0x400;
         internal const int  AiStubMaxSlots = 32;          // 32 × 0x400 = 0x8000 → ends 0x21F18100, clear of PtrTable
+        /// <summary>The TOP stub slot is the Sword of Zeus's electrocution program (SolarScript.Convulse). The seven below
+        /// it are the Solar Flash's blinding programs (SolarScript: one block per held species — its guard hold, its
+        /// guard-lowering clip and its stagger — jumped to from a single instruction at the head of each of the species'
+        /// AI and hit-reaction labels). HarderEnemyAI hands out the 24 below those.</summary>
+        internal const int  AiStubZeusSlot  = AiStubMaxSlots - 1;
+        internal const long AiStubZeus      = AiStubBase + (long)AiStubZeusSlot * AiStubStride;   // 0x21F17D00
+        internal const int  AiStubSolarSlot = 24;
+        internal const long SolarStubBase   = AiStubBase + (long)AiStubSolarSlot * AiStubStride;  // 0x21F16100
+        internal const int  SolarStubBlock  = 0x300;                                                // per species
+        internal const int  SolarStubBlocks = (AiStubZeusSlot - AiStubSolarSlot) * AiStubStride / SolarStubBlock;   // 9, within 0x21F16100..0x21F17D00
 
         // ── Mirage: decoy aggro redirect ─────────────────────────────────────────────────────────────
         // A cave's CAPACITY lives with the cave, deliberately. Divorcing "how big is it" from "how much do we

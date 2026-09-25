@@ -218,7 +218,8 @@ namespace Dark_Cloud_Improved_Version
                     // goes off when it lands (BigBang.BeginDrop → Dropping). Not locked on: the flash, as ever.
                     if (p.WeaponId == Items.bigbang && BigBang.BeginDrop()) { st.phase = Phase.Dropping; break; }
                     // The Sword of Zeus, locked on: the bolt comes down on the target as the flash goes off.
-                    if (p.WeaponId == Items.swordofzeus && PlayerAction.LockHeld(out int target)) SwordOfZeus.Strike(target);
+                    if (p.WeaponId == Items.swordofzeus && PlayerAction.LockHeld(out int target) && SwordOfZeus.Strike(target))
+                    { Flash(st, p, fromBlast: true); st.phase = Phase.Idle; break; }   // the light hit from the bolt, not from him
                     Flash(st, p);
                     st.phase = Phase.Idle;
                     break;
@@ -274,13 +275,15 @@ namespace Dark_Cloud_Improved_Version
         };
 
         /// <summary>The flash itself: blade back to normal, the light to white, Toan's pulse, the hit, the blinding.
-        /// <paramref name="lit"/>: the white-out has already been fired (Big Bang's landing does it with the burst).</summary>
-        private static void Flash(SolarState st, SolarProfile p, bool lit = false)
+        /// <paramref name="lit"/>: the white-out has already been fired (Big Bang's landing does it with the burst).
+        /// <paramref name="fromBlast"/>: the light hit originates at BigBang.LastBlast rather than at Toan.</summary>
+        private static void Flash(SolarState st, SolarProfile p, bool lit = false, bool fromBlast = false)
         {
-            // The light hit comes from the flash's own point: Toan, or the judgement blade's blast when that is what
-            // lit the room — so the kick throws everyone from the blast and the hit turns them to it, not to him.
+            // The light hit comes from the flash's own point: Toan, or the blast — the judgement blade's landing, the
+            // Sword of Zeus's bolt — when that is what struck, so the kick throws everyone from it and the hit turns
+            // them to it, not to him.
             float px, ph, py;
-            if (lit) (px, ph, py) = BigBang.LastBlast;
+            if (lit || fromBlast) (px, ph, py) = BigBang.LastBlast;
             else { px = Memory.ReadFloat(Addresses.dunPositionX); ph = Memory.ReadFloat(Addresses.dunPositionZ); py = Memory.ReadFloat(Addresses.dunPositionY); }
             SolarBlade.Clear();                                          // tint off, and the blade's own palette back
             ChargeTint.Clear();                                          // …and the white Toan was holding

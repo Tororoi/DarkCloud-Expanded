@@ -219,7 +219,7 @@ namespace Dark_Cloud_Improved_Version
             byte floor = Memory.ReadByte(Addresses.checkFloor);
             if (floor != st.floor) { if (st.floor != 0xFF) Reset(st); st.floor = floor; _yawConv = -1; }
             ToanLockOn.HoldReach("[BigBang] ");
-            if (_faceHold > 0) { _faceHold--; FaceAll(); }
+            FaceTick();
 
             ExpireShells();
             ReleaseRedirectWhenDue();
@@ -806,7 +806,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Where the last judgement blade went off — the flash's own point when it is fired for a landing.</summary>
-        internal static (float x, float h, float y) LastBlast { get; private set; }
+        internal static (float x, float h, float y) LastBlast { get; set; }   // the Sword of Zeus sets it to its strike
 
         // ── every enemy's eyes on the blade ──────────────────────────────────────────────────
         // Mirage's decoy redirect, borrowed: each enemy's `_GET_POSITION(-2)` ("where is the player") reads through
@@ -819,7 +819,7 @@ namespace Dark_Cloud_Improved_Version
         private const double RedirectRelease = 0.4;   // seconds before the blinding ends that they get the player back
         private const double RedirectOrphan  = 2.0;   // a drop that never flashed: let go this long after it began
         private static bool _redirecting, _redirectBlindSeen; private static DateTime _redirectSince;
-        private static void BeginRedirect(float x, float h, float y)
+        internal static void BeginRedirect(float x, float h, float y)
         {
             if (!Mirage.Armed) return;                                           // the caves are armed at the main menu; without them, nothing to point
             Memory.WriteVec3(CodeCaves.JudgementPos, x, h, y);
@@ -831,7 +831,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteBytesBatch(CodeCaves.PtrTable, ptrs);
             _redirecting = true; _redirectBlindSeen = false; _redirectSince = GameClock.Now;
         }
-        private static void ReleaseRedirectWhenDue()
+        internal static void ReleaseRedirectWhenDue()
         {
             if (!_redirecting) return;
             double left = SunSword.BlindSecondsLeft;
@@ -840,7 +840,7 @@ namespace Dark_Cloud_Improved_Version
                      : !Dropping && !LandingPending && (GameClock.Now - _redirectSince).TotalSeconds > RedirectOrphan;
             if (due) ReleaseRedirect();
         }
-        private static void ReleaseRedirect()
+        internal static void ReleaseRedirect()
         {
             if (!_redirecting) return;
             _redirecting = false;
@@ -853,13 +853,15 @@ namespace Dark_Cloud_Improved_Version
         /// facing vector is the unit its AI steers by and the CCharacter yaw is what it is drawn with, and a single
         /// write of either is undone by the next Step — the AI steering back toward Toan, the flash's own hit
         /// reaction — before the blinding's script hold takes over.</summary>
-        private static void TurnEnemiesToward(float x, float y)
+        internal static void TurnEnemiesToward(float x, float y)
         {
             _faceX = x; _faceY = y; _faceHold = FaceHoldTicks;
             FaceAll();
         }
         private const int FaceHoldTicks = 12;   // ≈0.36 s: through the flash's stagger, into the script hold
         private static int _faceHold; private static float _faceX, _faceY;
+        /// <summary>The facing hold's tick — whichever blade's loop is running calls it.</summary>
+        internal static void FaceTick() { if (_faceHold > 0) { _faceHold--; FaceAll(); } }
         private static void FaceAll()
         {
             int conv = YawConvention();

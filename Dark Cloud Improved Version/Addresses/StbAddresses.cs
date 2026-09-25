@@ -50,6 +50,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int FnSetMoveCancel = 0x22; // _SET_MOVE_CANSEL() — zeroes the slot's scripted movement, argc 1
         internal const int FnSetMotion     = 200;  // _SET_MOTION(idx, ?, flags) — writes the render object's id/flags/KEY rate, argc 4
         internal const int FnGetGlobalInt  = 221;  // _GET_GLOBAL_INT(i) — pops i, leaves GL_INT[i] on the stack, argc 2
+        internal const int FnSetMotionFrm  = 203;  // _SET_MOTION_FRM(frame) — writes the unit's PLAYING frame float (unit+0x1FFC0), argc 2
 
         // ── Operand type/scope qualifiers ─────────────────────────────────
         internal const int TypeInt    = 1; // operandA of OpPush3: int32 literal (operandB = the value)

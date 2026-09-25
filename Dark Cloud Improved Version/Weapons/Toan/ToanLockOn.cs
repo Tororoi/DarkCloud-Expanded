@@ -44,10 +44,13 @@ namespace Dark_Cloud_Improved_Version
         // key handler's move-vector build (dun 0x1DB0F68) and applied only while motion 33 plays — the engine does
         // the per-frame work; this only says how much, when the lock comes and goes.
         private const float StrideExtra = SpeedRate - 1f;
+        // ⚠ BISECT (temporary): the stride is never armed — the cave stays in the ISO reading 0, i.e. vanilla — to test
+        // whether the game resets seen with the Sword of Zeus follow it. Set true to restore the stride.
+        private const bool  StrideEnabled = false;
         private static bool _strideHeld;
         internal static void DriveStride(bool active, string tag)
         {
-            bool want = active && PlayerAction.LockHeld(out _);
+            bool want = StrideEnabled && active && PlayerAction.LockHeld(out _);
             if (want == _strideHeld) return;
             _strideHeld = want;
             Memory.WriteFloat(CodeCaves.StrideScale, want ? StrideExtra : 0f);

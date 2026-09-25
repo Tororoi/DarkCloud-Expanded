@@ -667,6 +667,15 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
+        /// <summary>One 64-bit store: two adjacent words that must change together (an STB instruction's opcode and
+        /// first operand, say) land in the same host store instead of two round-trips the game can run between.</summary>
+        internal static bool WriteULong(long address, ulong value)
+        {
+            Trips++; TripBytes += 8;
+            SendBatch(BuildWritePacket(OpWrite64, address, BitConverter.GetBytes(value)));
+            return true;
+        }
+
         internal static bool Write(long address, byte[] value)
         {
             for (int i = 0; i < value.Length; i++)

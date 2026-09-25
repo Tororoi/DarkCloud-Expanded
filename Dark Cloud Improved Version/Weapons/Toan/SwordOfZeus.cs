@@ -71,56 +71,80 @@ namespace Dark_Cloud_Improved_Version
             if (!BorrowedShots.Burst(_lightning, x, h, y, 0, 1f)) return false;   // 1×: the root hold sizes every bolt alike
             MaintainScale();                                                        // …before its first frame
             SeSeq.Play(StrikeSe, 90);
+            // Every enemy's eyes on the bolt, the way Big Bang's landing has them: the blast point for the flash's own
+            // light hit, the facing hold, and the pointer-table redirect through the blinding.
+            BigBang.LastBlast = (x, h, y);
+            BigBang.TurnEnemiesToward(x, y);
+            // ⚠ BISECT (temporary): the redirect is not armed on the strike. Every reset so far has landed on the blind's END,
+            // and the redirect's release (0.4 s before it) is the one Zeus-only thing that runs there; Big Bang's copy of it
+            // has never actually been exercised. Restore the BeginRedirect call once cleared.
+            // BigBang.BeginRedirect(x, h, y);
             BeginConvulsion(slot);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] lightning on slot {slot} at ({x:F0},{h:F0},{y:F0})");
             return true;
         }
 
         // ── the electrocution ────────────────────────────────────────────────────────────
-        // The struck enemy does not brace behind its guard like the rest of the floor: it CONVULSES. Nothing is forced
-        // on it — the flash's own stagger (SolarScript's per-species label: _SET_MOTION(damage) for a few frames, then
-        // the guard) already puts every unit of its species on its damage clip; once THIS unit's render object is
-        // playing that clip, its playing frame is written up and back down a short run inside the clip's window
-        // every tick, so the clip never reaches its end, the queued guard clip never commits, and the body twitches
-        // instead of flinching. The release simply stops writing: the clip runs out and the engine commits the guard
-        // clip by itself, exactly as it does for everyone else. Per-tick writes, deliberately: the jitter IS the look
-        // (research §7a). ⚠ A FORCED commit (+0xF4) here reset the game at the next guard-lowering wave, twice.
+        // The struck enemy does not brace behind its guard like the rest of the floor: it CONVULSES. Its own script is
+        // pointed at a program in the mod's reserved AI-stub slot (SolarScript.Convulse) that cancels movement, issues
+        // its damage clip once, and then — one step per engine frame, through the engine's own _SET_MOTION_FRM — walks
+        // the clip's playing frame up and back down ConvulseFrames consecutive frames from the MIDDLE of the clip
+        // (1 2 3 4 5 4 3 2 1 2 …) until it is let go. Nothing is written to the unit per tick and no label needs room for it. The release re-enters the
+        // label at its top — the guard — for the wind-down, like everyone else.
+        // WHEN it is pointed matters: the flash's own hit lands after the strike and runs the hit-reaction label in the
+        // unit's script slot, and when that finishes the AI label is entered from its top — the guard — which threw an
+        // early pointing away (the unit flinched on its damage clip, then braced like the rest). So the program is
+        // pointed once the unit is on its hold clip, and pointed again whenever its PC is found outside the program.
+        // ⚠ Touching the motion REQUEST word (+0xEC), with or without the forced commit (+0xF4), reset the game at the
+        // next guard-lowering wave, three runs out of three; and writing the playing frame from the mod while the
+        // script yielded showed nothing (the motion player put its own frame back each step). Both are gone.
         private const double ConvulseSeconds = 4.0;    // through the stun, ending as the floor starts lowering its guard
-        private const float  ConvulseInto    = 2f;     // frames into the damage clip the run starts
-        private const int    ConvulseFrames  = 3;      // consecutive frames the twitch runs over: 1 2 3 2 1 2 3 2 …
-        private static int _convSlot = -1, _convClip = -1, _convStep; private static float _convA, _convMax; private static DateTime _convUntil;
-        private static bool _convSeen;
+        private const int    ConvulseFrames  = 5;      // consecutive frames the walk covers, centred in the clip: 8 steps up and back
+        private const double ConvulseLatest  = 1.0;    // seconds after the strike by which it is pointed even without seeing the hold clip
+        private static int _convSlot = -1, _convClip = -1, _convHold = -1; private static float _convA, _convB; private static DateTime _convUntil, _convFrom;
+        private static bool _convPointed;
 
         private static void BeginConvulsion(int slot)
         {
-            _convSlot = -1;                                                     // one at a time: a new strike takes over
+            EndConvulsion();                                                    // one at a time: a new strike takes over
             ushort eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.EnemySpeciesId));
             if (!EnemySpecies.Defaults.TryGetValue(eid, out var def) || !def.TableIndex.HasValue) return;
             if (!EnemyGuardMotions.TryGet(def.TableIndex.Value, out var g) || g.Damage < 0) return;   // no damage clip authored: the guard hold stands
             float lo = g.DamageStart, hi = Math.Max(g.DamageStart, g.DamageEnd);
-            _convA = Math.Min(hi, lo + ConvulseInto); _convMax = hi; _convClip = g.Damage;
-            _convSlot = slot; _convStep = 0; _convSeen = false; _convUntil = GameClock.Now.AddSeconds(ConvulseSeconds);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] slot {slot} convulsing on clip {g.Damage} over frames {_convA:F0}..{Math.Min(_convMax, _convA + ConvulseFrames - 1):F0} once it plays");
+            _convA = Math.Max(lo, (float)Math.Round((lo + hi) / 2) - (ConvulseFrames - 1) / 2);
+            _convB = Math.Min(hi, _convA + ConvulseFrames - 1); _convClip = g.Damage;
+            _convHold = g.HasGuard ? g.Loop : g.Idle;                            // what the flash's hold puts it on
+            _convSlot = slot; _convPointed = false; _convFrom = GameClock.Now; _convUntil = _convFrom.AddSeconds(ConvulseSeconds);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] slot {slot} to convulse on clip {g.Damage} over frames {_convA:F0}..{_convB:F0}");
         }
-        /// <summary>Per tick: nothing until the unit is on its damage clip; then the frame walked up and back down the
-        /// run one frame at a time, never skipping one; done when the time is up or the enemy is dead.</summary>
+        /// <summary>Per tick: point the unit at its program once the flash's hold has it on its hold clip (or after
+        /// ConvulseLatest regardless), point it again if its script has been taken elsewhere since, and let go when the
+        /// time is up or the enemy is dead.</summary>
         private static void ConvulseTick()
         {
             if (_convSlot < 0) return;
             bool alive = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(_convSlot, EnemySlotOffsets.Hp)) > 0 && Enemies.IsLive(_convSlot);
-            if (!alive || GameClock.Now >= _convUntil) { _convSlot = -1; return; }
-            long unit = EnemyAddresses.MainMonstorUnit.Base + (long)_convSlot * ModelScaleOffsets.ModelStride;
-            if (Memory.ReadInt(unit + ModelScaleOffsets.PlayingMotionIdFromUnit) != _convClip)
+            if (!alive || GameClock.Now >= _convUntil) { EndConvulsion(); return; }
+            if (!SolarScript.Active) { if (_convPointed) EndConvulsion(); return; }   // the hold comes up a tick after the strike; if it is gone, let go
+            if (_convPointed)
             {
-                if (_convSeen) _convSlot = -1;                                  // it left the clip on its own (a kill, a knockback): done
-                return;                                                         // …or the stagger has not reached it yet: wait
+                if (SolarScript.Convulsing(_convSlot)) return;
+                _convPointed = false;                                           // a hit reaction took its script: wait for the guard, then again
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] slot {_convSlot} left its program — pointing again once it holds");
             }
-            _convSeen = true;
-            int period = 2 * (ConvulseFrames - 1);                              // 0 1 2 1 for three frames
-            int k = _convStep++ % period; if (k >= ConvulseFrames) k = period - k;
-            Memory.WriteFloat(unit + ModelScaleOffsets.PlayingMotionFrameFromUnit, Math.Min(_convMax, _convA + k));
+            long unit = EnemyAddresses.MainMonstorUnit.Base + (long)_convSlot * ModelScaleOffsets.ModelStride;
+            bool onHold = Memory.ReadInt(unit + ModelScaleOffsets.PlayingMotionIdFromUnit) == _convHold;
+            if (!onHold && GameClock.Now < _convFrom.AddSeconds(ConvulseLatest)) return;
+            if (SolarScript.Convulse(_convSlot, _convClip, _convA, _convB))
+            { _convPointed = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] slot {_convSlot} convulsing" + (onHold ? "" : " (hold clip not seen)")); }
+            else { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] slot {_convSlot}: not held by the flash — it braces"); _convSlot = -1; }
         }
-        private static void EndConvulsion() => _convSlot = -1;
+        private static void EndConvulsion()
+        {
+            if (_convSlot < 0) return;
+            if (_convPointed) SolarScript.Unconvulse(_convSlot);       // back to the guard for the wind-down
+            _convSlot = -1;
+        }
 
         /// <summary>Per tick while the Sword of Zeus is out in a dungeon: the lock-on reach and speed, and the bolt's size.</summary>
         public static void LightningEffect()
@@ -136,10 +160,12 @@ namespace Dark_Cloud_Improved_Version
                     ToanLockOn.DriveStride(moving, "[Zeus] ");
                     if (LightningSeeded) MaintainScale();
                     ConvulseTick();
+                    BigBang.FaceTick();
+                    BigBang.ReleaseRedirectWhenDue();
                 }
                 catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] tick error: " + ex.Message); }
             }
-            EndConvulsion();
+            EndConvulsion(); BigBang.ReleaseRedirect();
             ToanLockOn.ReleaseReach(); ToanLockOn.ReleaseSpeed("[Zeus] "); ToanLockOn.DriveStride(false, "[Zeus] ");
         }
 
@@ -166,8 +192,9 @@ namespace Dark_Cloud_Improved_Version
                 matched = true;
                 float m00 = Memory.ReadFloat(root + ShotEffectPool.CFrameLocal3x3[0]);
                 if (!_bindRead)
-                {
-                    if (Math.Abs(m00) < 0.05f || Math.Abs(m00) > 4.0f) continue;   // a bad read, or a root already held: not the bind
+                {   // the authored bind is the identity; anything else is a root a previous hold (this session's or an earlier
+                    // mod run's, PCSX2 running on) left scaled — not the bind
+                    if (Math.Abs(m00 - 1f) > 0.05f) continue;
                     for (int k = 0; k < 9; k++) _bind[k] = Memory.ReadFloat(root + ShotEffectPool.CFrameLocal3x3[k]);
                     _bindRead = true;
                 }

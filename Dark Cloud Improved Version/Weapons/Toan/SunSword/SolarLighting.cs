@@ -37,10 +37,11 @@ namespace Dark_Cloud_Improved_Version
 
         // THE DIM: the light and fog driven DOWN before a flash, so the flash lands from darkness — an impact, not a
         // screen effect. Ambient and colour rows toward DimKeep of themselves, the fog closed in to DimFogPull of its
-        // reach and its colour toward black. Same capture as the flash uses, taken once when the dim begins; the
+        // reach and its colour toward DimFogGrey. Same capture as the flash uses, taken once when the dim begins; the
         // flash then writes white over that ORIGINAL capture and eases back to it, never to the dark.
         private const float  DimKeep     = 0.15f;  // how much of the floor's light is left at full dim
-        private const float  DimFogPull  = 0.35f;  // the fog's start/end, as a fraction of where they were
+        private const float  DimFogPull  = 0.35f;  // the fog's start/end, as a fraction of where they were — closer in = more fog
+        private const float  DimFogGrey  = 0f;     // the fog's colour at full dim (black)
         private static bool     _dimming;
 
         private static bool     _active, _sub;
@@ -185,7 +186,7 @@ namespace Dark_Cloud_Improved_Version
                 fog[1] = Lerp(Lerp(_fog[1], _fog[1] * DimFogPull, dim), FogEnd, kf);
             }
             var rgb = new byte[3];
-            for (int c = 0; c < 3; c++) rgb[c] = (byte)Math.Round(Lerp(Lerp(_fogRgb[c], 0f, dim), fogc[c], kf));
+            for (int c = 0; c < 3; c++) rgb[c] = (byte)Math.Round(Lerp(Lerp(_fogRgb[c], DimFogGrey, dim), fogc[c], kf));
             Memory.WriteBytesBatch(Ambient, Bytes(amb));
             Memory.WriteBytesBatch(Colors, Bytes(cols));
             Memory.WriteBytesBatch(FogRate, Bytes(fog));
