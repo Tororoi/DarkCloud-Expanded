@@ -30,6 +30,7 @@ namespace Dark_Cloud_Improved_Version
         internal static double BlindSecondsLeft => _blindUntil == default ? 0 : Math.Max(0, (_blindUntil - GameClock.Now).TotalSeconds);
         private const float  PrimedTint           = 45f;    // the slight white Toan keeps while the charge is held, per channel (the tint is an ambient ADD)
         private const ushort FlashSe              = 0;      // sound effect at the flash (SeSeq id; 0 = none)
+        internal const float SwingCursorPerFrame = 0.3f;   // the combo clips' KEY step: what the frame cursor moves per engine frame
         private const float  Combo1Hit = 826f, Combo2Hit = 835f, Combo3Hit = 843f, Combo4Hit = 852f, Combo5Hit = 867f;   // frame cursor at which each combo swing comes forward (docs/character-motion-table.md clips 37: 820-830, 38: 830-838, 39: 838-847, 40: 847-857, 41: 856-884)
 
         /// <summary>What differs between the swords that carry Solar Flash. The ability itself — the charge, the
@@ -61,12 +62,11 @@ namespace Dark_Cloud_Improved_Version
                 HoldsPrimedTint = holdsPrimedTint; BladeWhite = bladeWhite ?? SolarBlade.White;
             }
             /// <summary>Hand the lighting this sword's wash: how much fog, what colour the light and fog go, how long
-            /// the white takes to recede, and what it recedes onto for the rest of the blinding — or, with
-            /// <paramref name="rest"/> false, onto the floor's own light (a flash with no blinding behind it).</summary>
-            internal void ArmLighting(bool rest = true)
+            /// the white takes to recede, and what it recedes onto for the rest of the blinding.</summary>
+            internal void ArmLighting()
             {
                 SolarLighting.FogAmount = Fog; SolarLighting.FlashColour = Light; SolarLighting.FogColour = FogRgb;
-                SolarLighting.EaseSeconds = EaseSeconds; SolarLighting.RestDim = rest ? RestDim : 0f;
+                SolarLighting.EaseSeconds = EaseSeconds; SolarLighting.RestDim = RestDim;
                 SolarLighting.RestSeconds = BlindSeconds; SolarLighting.RestRelease = RestRelease;
             }
         }
@@ -230,7 +230,11 @@ namespace Dark_Cloud_Improved_Version
                     { st.phase = Phase.Chain; st.chainAction = action; st.chainFired = true; st.chainDropped = true; break; }
                     bool forward = action == PlayerAction.ActionWhirlwind || action == PlayerAction.ActionLunge
                                 || Memory.ReadFloat(PlayerAction.AnimFrameCursor) >= ComboHitFrame(action);
-                    if (!forward) break;
+                    if (!forward)
+                    {   // the Sword of Zeus: the room plunges to black along the swing, peaking on the bolt
+                        if (p.WeaponId == Items.swordofzeus && action >= PlayerAction.ActionComboFirst && action <= PlayerAction.ActionComboLast) SwingDim(p, action);
+                        break;
+                    }
                     // Big Bang, locked on: the swing does not flash — it lets the judgement blade fall, and the flash
                     // goes off when it lands (BigBang.BeginDrop → Dropping). Not locked on: the flash, as ever.
                     if (p.WeaponId == Items.bigbang && BigBang.BeginDrop()) { st.phase = Phase.Dropping; break; }
@@ -281,10 +285,9 @@ namespace Dark_Cloud_Improved_Version
                     if (action != st.chainAction) { st.chainAction = action; st.chainFired = false; }
                     if (st.chainFired) break;
                     if (Memory.ReadFloat(PlayerAction.AnimFrameCursor) < ComboHitFrame(action))
-                    {   // the wind-up: the darkening before the flash — unless the last flash is still easing onto its
-                        // rest dim, which IS that darkening (a dim begun over it would cut the flash short and, with
-                        // no bolt to follow, stand as a dark room after the blinding)
-                        if (p.PrimeDim > 0f && !SolarLighting.Active) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim); }
+                    {   // the wind-up: the room plunges to black along the swing, peaking on the bolt (taking the last
+                        // flash's ease over; the combo ending with no bolt behind it lifts the dim, above)
+                        SwingDim(p, action);
                         break;
                     }
                     st.chainFired = true;
@@ -335,6 +338,13 @@ namespace Dark_Cloud_Improved_Version
             (action >= PlayerAction.ActionComboFirst && action <= PlayerAction.ActionComboLast)
             || action == PlayerAction.ActionLunge || action == PlayerAction.ActionWhirlwind;
 
+        /// <summary>The darkening before a bolt: the sword's prime dim until the last SolarLighting.RampFrames of the
+        /// swing, then to black along them, peaking at the hit frame (on the swing's frame cursor).</summary>
+        private static void SwingDim(SolarProfile p, int action)
+        {
+            float window = SolarLighting.RampFrames * SwingCursorPerFrame, hit = ComboHitFrame(action);
+            SolarLighting.DimRamp(p.PrimeDim, (Memory.ReadFloat(PlayerAction.AnimFrameCursor) - (hit - window)) / window);
+        }
         private static float ComboHitFrame(int action) => action switch
         {
             PlayerAction.ActionComboFirst     => Combo1Hit,
@@ -361,9 +371,25 @@ namespace Dark_Cloud_Improved_Version
             Player.FlashActiveCharacter(p.Light[0], p.Light[1], p.Light[2], FlashPulseSpeed, 1);
             if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
             if (p.DamageFraction > 0f) PlantFlashHit(st, px, ph, py, p);
+            Blind();
+        }
+        /// <summary>The blinding: every enemy's own script holding its guard for <see cref="BlindSeconds"/> from now — a
+        /// flash inside a blinding sends whoever had begun lowering their guard back to it and restarts the clock.</summary>
+        private static void Blind()
+        {
             SolarScript.Rehold();          // a flash inside a blinding: whoever had begun lowering their guard raises it again
             SolarScript.Begin();           // the enemies' OWN scripts hold the guard from here
             _blindUntil = GameClock.Now.AddSeconds(BlindSeconds);   // …for the full time from THIS flash
+        }
+        /// <summary>A strike's flash outside the Solar Flash phases — the Sword of Zeus's charge attack: the white-out
+        /// onto the sword's rest dim, Toan's pulse, and the blinding, exactly as a primed strike has them. (Its
+        /// profile carries no light hit, so none is planted.)</summary>
+        internal static void StrikeFlash(SolarProfile p)
+        {
+            p.ArmLighting(); SolarLighting.Flash();
+            Player.FlashActiveCharacter(p.Light[0], p.Light[1], p.Light[2], FlashPulseSpeed, 1);
+            if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
+            Blind();
         }
 
         /// <summary>A player-attack sphere ON EACH ENEMY in range (CollisionPool: the same entries CheckDmg tests his sword

@@ -111,17 +111,31 @@ namespace Dark_Cloud_Improved_Version
         // is zeroed for the length of the wind-up (and put back the moment it is over — it is save data), so the game
         // never reaches its own level 2 and every release is the LUNGE. The sword keeps its own level 2 instead: the
         // room darkens with the meter from the moment he starts charging, the way the guard charge darkens it, to the
-        // Zeus profile's prime dim at whirlwind range, where the stock charge-complete flash fires on him and the
-        // release is flagged as a bolt. The lunge runs through five action states (PlayerAction.InLunge); the tick the
+        // Zeus profile's prime dim at whirlwind range, where the stock charge-complete flash fires on him, the release
+        // is flagged as a bolt, and the judgement blade appears ChargeHoverHeight over the spot the bolt will land —
+        // the locked target, or ChargeBoltAhead units ahead of him (moving with him while he holds the charge). The
+        // blade is let go so that it reaches the ground — hilt in — as the lunge's END state comes up, which is when
+        // the bolt comes down where it fell. The lunge is the same length every time: ChargeLungeFrames from its dash
+        // to its end state (measured at ~0.64 s: a 0.45 s fall from the dash start reached the ground 163-212 ms
+        // before the bolt, at 30 ms ticks), so the drop comes ChargeFallFrames before that end, and every charge
+        // looks the same. (The fall state just before the end is only a few frames — too late to drop on.) The log
+        // prints the gap between the hilt reaching the ground and the bolt. The blade whitens across the wind-up the
+        // way the guard charge whitens it, so the copy, made at level 2, carries the charge's tint. The lunge runs through five action states (PlayerAction.InLunge); the tick the
         // END one (ActionLungeEnd: clip 17 from frame 196) comes up, the bolt comes down ChargeBoltAhead units ahead
         // of Toan with the strike's blast, and the flash goes off — the same white and
-        // pulse as every strike, but easing back to the floor's own light, with no blinding behind it. A charge let go
+        // pulse, rest dim and 5 s blinding as every strike. A charge let go
         // early plays whatever it earned and the dim simply lifts. Stands aside while Solar Flash owns the blade.
         private const float  ChargeBoltAhead   = 30f;   // units ahead of Toan the bolt lands
+        private const float  ChargeHoverHeight = 40f;   // the blade's grip this far above the spot ahead of Toan (over a locked target: the lock-on hover's own height)
+        private const int    ChargeLungeFrames = 38;    // the lunge, dash state to end state — the same every time
+        private const int    ChargeFallFrames  = 21;    // the fall, hover to hilt-in-the-ground: the bolt comes ChargeLungeFrames − this after the dash begins
+        private const double ChargeFallSeconds = ChargeFallFrames / 60.0, ChargeDropAfterDash = (ChargeLungeFrames - ChargeFallFrames) / 60.0;
         private const float  ChargeDimFrom     = 1.0f;  // the meter as the charge starts (ToanKey_On resets it to 1.0) …
         private const float  ChargeDimTo       = 2.5f;  // … and at whirlwind range: the dim is full here
-        private static bool  _chargeDimming, _chargeFull, _chargeBoltDue, _chargeBoltFired, _unlockZeroed;
-        private static int   _unlockWas;
+        private static bool  _chargeDimming, _chargeFull, _chargeBoltDue, _chargeBoltFired, _unlockZeroed, _chargeDropped;
+        private static DateTime _chargeDropAt, _chargeDashAt;
+        private static int   _unlockWas, _chargeTarget = -1;
+        private static float _chargeX, _chargeH, _chargeY;   // where the bolt will land (the hover's spot, frozen at the drop)
 
         private static void ChargeTick()
         {
@@ -132,13 +146,15 @@ namespace Dark_Cloud_Improved_Version
                 float meter = Memory.ReadFloat(PlayerAction.ChargeMeter);
                 float k = Math.Max(0f, Math.Min(1f, (meter - ChargeDimFrom) / (ChargeDimTo - ChargeDimFrom)));
                 if (!_chargeDimming) { _chargeDimming = true; _chargeFull = false; _chargeBoltDue = false; ZeroUnlock(); }   // no level 2 for the game this wind-up
+                SolarBlade.Set(k, SunSword.ZeusFlash.Model, 0, 0, SunSword.ZeusFlash.BladeWhite);   // the blade whitens with the meter, as under a guard charge
                 if (!SolarLighting.Active) { SolarLighting.BeginDim(); SolarLighting.DimTo(SunSword.ZeusFlash.PrimeDim * k); }   // a flash still easing keeps its course
                 if (meter >= ChargeDimTo && !_chargeFull)
                 {   // the sword's own level 2: the stock charge-complete flash on him, and the release flagged as a bolt
-                    _chargeFull = true;
+                    _chargeFull = true; _chargeDropped = false;
                     Player.FlashChargeComplete();
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] charge level 2 — the release is a bolt");
                 }
+                if (_chargeFull) ChargeAim();                                    // the blade over where the bolt will land, moving with him
                 return;
             }
             if (_unlockZeroed) RestoreUnlock();                                 // the release has been read: the word goes back at once
@@ -146,27 +162,62 @@ namespace Dark_Cloud_Improved_Version
             if (PlayerAction.InLunge(action))
             {
                 if (!_chargeFull) { ChargeStandDown(); return; }                // a level-1 lunge: nothing more to it
-                if (!_chargeBoltDue) { _chargeBoltDue = true; _chargeBoltFired = false; }
-                if (_chargeBoltFired || action != PlayerAction.ActionLungeEnd) return;
+                if (!_chargeBoltDue) { _chargeBoltDue = true; _chargeBoltFired = false; _chargeDashAt = default; }
+                if (_chargeDashAt == default && action != PlayerAction.ActionLunge) _chargeDashAt = GameClock.Now;   // the dash has begun: the clock starts
+                bool dropDue = _chargeDashAt != default && (GameClock.Now - _chargeDashAt).TotalSeconds >= ChargeDropAfterDash;
+                if (!_chargeDropped && (dropDue || action == PlayerAction.ActionLungeEnd))
+                {   // timed to land as the end state comes up: the blade is let go where it hangs, and that is where the bolt lands
+                    _chargeDropped = true; _chargeDropAt = GameClock.Now;
+                    if (_chargeTarget >= 0 && Enemies.IsLive(_chargeTarget))
+                    { long tp = EnemyAddresses.CharObjects.PosAddr(_chargeTarget); _chargeX = Memory.ReadFloat(tp); _chargeH = Memory.ReadFloat(tp + 4); _chargeY = Memory.ReadFloat(tp + 8); }
+                    BigBang.PointDrop(ChargeFallSeconds);
+                }
+                if (_chargeBoltFired) return;
+                // The room plunges to black from the dash to the bolt: the falling blade drives it (BigBang's fall
+                // thread, the same ramp), or — no blade — the clock does over the same ChargeFallSeconds.
+                if (_chargeDropped && !BigBang.Dropping && action != PlayerAction.ActionLungeEnd)
+                    SolarLighting.DimRamp(SunSword.ZeusFlash.PrimeDim, (float)((GameClock.Now - _chargeDropAt).TotalSeconds / ChargeFallSeconds));
+                if (action != PlayerAction.ActionLungeEnd) return;
                 _chargeBoltFired = true;
                 float cursor = Memory.ReadFloat(PlayerAction.AnimFrameCursor);
-                float yaw = Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
-                float x = Memory.ReadFloat(Addresses.dunPositionX) + ChargeBoltAhead * (float)Math.Sin(yaw);
-                float y = Memory.ReadFloat(Addresses.dunPositionY) + ChargeBoltAhead * (float)Math.Cos(yaw);
-                float h = Memory.ReadFloat(Addresses.dunPositionZ);
-                if (!StrikeAt(x, h, y, -1)) { ChargeStandDown(); return; }
-                var p = SunSword.ZeusFlash;
-                p.ArmLighting(rest: false);                                      // the white, then the floor's own light — no blinding
-                SolarLighting.Flash();
-                Player.FlashActiveCharacter(p.Light[0], p.Light[1], p.Light[2], SunSword.FlashPulseSpeed, 1);
+                if (!_chargeDropped) ChargeAim();                                // no dash seen: aim now
+                float x = _chargeX, h = _chargeH, y = _chargeY;
+                double gap = BigBang.PointLandedAt == default ? double.NaN : (GameClock.Now - BigBang.PointLandedAt).TotalSeconds;
+                BigBang.PointEnd();                                              // still in the air: gone now
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + (double.IsNaN(gap) ? "[Zeus] charge bolt with the blade still falling — ChargeFallSeconds is too long" : $"[Zeus] charge bolt {gap * 1000:F0} ms after the blade reached the ground"));
+                if (!StrikeAt(x, h, y, _chargeTarget)) { ChargeStandDown(); return; }
+                SunSword.StrikeFlash(SunSword.ZeusFlash);                        // the white onto the rest dim, his pulse, and the 5 s blinding — a strike's flash
                 _chargeDimming = false; _chargeFull = false; _chargeBoltDue = false;   // the flash took the dim over
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] charge bolt ahead of Toan (yaw {yaw:F2}, cursor {cursor:F1})");
+                SolarBlade.Clear(); _chargeTarget = -1;                          // …and the charge's white is off the blade
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] charge bolt at ({x:F0},{h:F0},{y:F0}) (cursor {cursor:F1})");
                 return;
             }
             ChargeStandDown();                                                   // the charge went another way, or is over
         }
+        /// <summary>Where the charge's bolt will land, and the blade hung over it: the locked target, followed; else
+        /// the spot ChargeBoltAhead units ahead of Toan, moving with him.</summary>
+        private static void ChargeAim()
+        {
+            if (PlayerAction.LockHeld(out int slot) && slot >= 0 && slot < EnemyAddresses.FloorSlots.Count && Enemies.IsLive(slot))
+            {
+                _chargeTarget = slot;
+                long p = EnemyAddresses.CharObjects.PosAddr(slot);
+                _chargeX = Memory.ReadFloat(p); _chargeH = Memory.ReadFloat(p + 4); _chargeY = Memory.ReadFloat(p + 8);
+            }
+            else
+            {
+                _chargeTarget = -1;
+                float yaw = Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
+                _chargeX = Memory.ReadFloat(Addresses.dunPositionX) + ChargeBoltAhead * (float)Math.Sin(yaw);
+                _chargeY = Memory.ReadFloat(Addresses.dunPositionY) + ChargeBoltAhead * (float)Math.Cos(yaw);
+                _chargeH = Memory.ReadFloat(Addresses.dunPositionZ);
+            }
+            BigBang.PointHover(Judgement, _chargeTarget, _chargeX, _chargeH, _chargeY, ChargeHoverHeight);
+        }
         private static void ChargeStandDown()
         {
+            BigBang.PointEnd(); _chargeDropped = false; _chargeTarget = -1;
+            if (!SunSword.FlashArmed) SolarBlade.Clear();                        // the charge's white off the blade (a primed flash keeps its own)
             if (_unlockZeroed) RestoreUnlock();
             if (_chargeDimming) { SolarLighting.EndDim(); _chargeDimming = false; }
             _chargeFull = false; _chargeBoltDue = false;

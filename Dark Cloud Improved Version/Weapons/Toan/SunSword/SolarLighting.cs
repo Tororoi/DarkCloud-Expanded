@@ -114,6 +114,23 @@ namespace Dark_Cloud_Improved_Version
             Write(0f, 0f, Math.Max(0f, Math.Min(1f, k)));
         }
 
+        /// <summary>The dim run from <paramref name="from"/> to full black along <paramref name="u"/> (0..1) on an
+        /// exponential ramp that barely moves at first and plunges at the end — the darkening before a strike, timed
+        /// to peak on it. Takes a dim over from a flash still easing (its capture is kept), so a swing inside a
+        /// blinding darkens the same way; whoever drives it ends it with a flash or EndDim. A strike's ramp is BRIEF:
+        /// <see cref="RampFrames"/> engine frames before it (<see cref="RampSeconds"/>; for a ramp paced by Toan's
+        /// frame cursor, that many frames of its clip's step).</summary>
+        internal const double RampSharpness = 4.0;
+        internal const int    RampFrames  = 4;
+        internal const double RampSeconds = RampFrames / 60.0;
+        internal static void DimRamp(float from, float u)
+        {
+            BeginDim();
+            u = Math.Max(0f, Math.Min(1f, u));
+            float ramp = (float)((Math.Exp(RampSharpness * u) - 1.0) / (Math.Exp(RampSharpness) - 1.0));
+            DimTo(from + (1f - from) * ramp);
+        }
+
         /// <summary>A dim that nothing followed: the floor's light back in one write.</summary>
         internal static void EndDim()
         {
