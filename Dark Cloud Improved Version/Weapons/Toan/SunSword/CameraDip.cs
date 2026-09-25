@@ -11,7 +11,7 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class CameraDip
     {
-        private const float  DipTo          = -10f;   // the rest height at full charge (vanilla 5.0: the camera goes below its look-at point)
+        private const float  DipTo          = -5f;    // the rest height at full charge (vanilla 5.0: the camera goes below its look-at point)
         private const double ReleaseSeconds = 0.8;    // how long the words take to come back up (the camera follows at ≤0.5 a frame on its own)
         private const float  Step           = 0.05f;  // the smallest change worth a write
         private static float _rest = CodeCaves.CameraRestVanilla;   // the rest last written
@@ -41,9 +41,33 @@ namespace Dark_Cloud_Improved_Version
             float u = (float)(1.0 - Math.Pow(1.0 - t, 2));            // eases out: quick to start, settling at the top
             Apply(_held + (CodeCaves.CameraRestVanilla - _held) * u);
         }
+        /// <summary>HOLD the camera at its world height now (its follow point's height plus its height field), written to
+        /// <see cref="CodeCaves.CameraPin"/> with the flag raised, so the camera-pin cave keeps it there every frame while
+        /// the follow point rises and falls with Toan — until <see cref="Unpin"/>. Distance and angle stay the engine's.</summary>
+        internal static void Pin()
+        {
+            uint p = Memory.ReadGuestPtr(DungeonCamera.NowCamera);
+            if (!Memory.IsValidGuest(p)) return;
+            long cam = Memory.ToMmu(p);
+            float ry = Memory.ReadFloat(cam + FollowCamera.RefY), h = Memory.ReadFloat(cam + FollowCamera.Height);
+            Memory.WriteFloat(CodeCaves.CameraPin + 4, ry + h);
+            Memory.WriteInt(CodeCaves.CameraPin + CodeCaves.CameraPinFlag, 1);
+            _pinned = true;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[CameraDip] camera height pinned at {ry + h:F1} (follow point {ry:F1} + {h:F1})");
+        }
+        /// <summary>Let the camera follow again (its height then eases from where the pin left it).</summary>
+        internal static void Unpin()
+        {
+            if (!_pinned) return;
+            Memory.WriteInt(CodeCaves.CameraPin + CodeCaves.CameraPinFlag, 0);
+            _pinned = false;
+        }
+        private static bool _pinned;
+
         /// <summary>Straight back to vanilla, and the words handed back to the PNACH — a floor left, the sword put away.</summary>
         internal static void Reset()
         {
+            Unpin();
             _releaseAt = default;
             if (!_owned) return;
             Memory.WriteFloat(CodeCaves.CameraRestHeight, CodeCaves.CameraRestVanilla);

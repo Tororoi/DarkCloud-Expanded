@@ -494,6 +494,12 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>52 B: the STRIDE cave (ElfWeaponPatches.PatchStrideScale) — scales the player's per-frame move
             /// vector by CodeCaves.StrideScale while motion 33 plays, then tail-jumps into the status check it displaced.</summary>
             internal const uint StrideScale    = Host + 0xD10;   // 0x1B4490, 52 B → 0x1B44C4
+            /// <summary>44 B: the CAMERA PIN cave (ElfWeaponPatches.PatchCameraPin) — the dungeon camera pass's epilogue
+            /// jumps here (DunPatches, dun 0x1DBF9BC); while CodeCaves.CameraPin's flag is set the camera's height field
+            /// is recomputed every frame so that the camera stays at the pinned WORLD HEIGHT while its follow point rises
+            /// and falls with Toan (the Sword of Zeus's lunge); distance and angle stay the engine's. Falls straight
+            /// through when the flag is clear.</summary>
+            internal const uint CameraPin      = Host + 0xD50;   // 0x1B44D0, 44 B → 0x1B44FC (the host ends at 0x1B4700)
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -948,8 +954,15 @@ namespace Dark_Cloud_Improved_Version
         internal const uint CameraMinHeightGuest  = 0x01FAF884;
         internal const long CameraHeightOwner     = 0x21FAF888;
         internal const float CameraRestVanilla = 5.0f, CameraMinVanilla = 1.6f;
+        /// <summary>THE CAMERA PIN: a world HEIGHT (+4; +0/+8 unused) and a flag (+0xC). While the flag is set the
+        /// camera-pin cave (DebugInfoCave.CameraPin, run at the end of the dungeon camera pass every frame) sets the
+        /// follow camera's height field so that it sits at exactly that world height whatever its follow point does —
+        /// the camera held low while Toan lunges, still around him as the engine places it. 0 (fresh memory) = off.</summary>
+        internal const long CameraPin      = 0x21FAF890;
+        internal const uint CameraPinGuest = 0x01FAF890;
+        internal const int  CameraPinFlag  = 0xC;
 
-        // ── FREE: 0x21FAF890 .. 0x21FB0000 (0x770 B) ────────────────────────────────────────────────────
+        // ── FREE: 0x21FAF8A0 .. 0x21FB0000 (0x760 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

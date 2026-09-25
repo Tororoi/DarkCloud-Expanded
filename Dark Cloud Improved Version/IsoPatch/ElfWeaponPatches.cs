@@ -257,6 +257,39 @@ namespace Dark_Cloud_Improved_Version
                 WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
         }
 
+        /// <summary>The CAMERA PIN cave (see CodeCaves.DebugInfoCave.CameraPin). Entered by `j` from the dungeon camera
+        /// pass's epilogue in place of its `jr ra` (the delay-slot nop and the `addiu sp` before it are the pass's own),
+        /// so it runs after the pass has done everything else to the camera, with ra the pass's return and the stack
+        /// already unwound. While the pin flag is clear it returns at once. Set, it holds the camera's ABSOLUTE HEIGHT:
+        /// its height field is the height above its follow point R (Step renders the camera at R + dist·(sin, cos)(angle),
+        /// up by height), so height = P.y − R.y every frame keeps the camera at the pinned world height P.y while the
+        /// follow point rises and falls with Toan. Distance and angle stay the engine's — the camera keeps its vanilla
+        /// place around him. Caller-saved registers only (t0, t1, a0, f3, f6); no calls, no frame.</summary>
+        internal static void PatchCameraPin(FileStream fs, Func<uint, long> ElfOff)
+        {
+            uint cave = CodeCaves.DebugInfoCave.CameraPin, pin = CodeCaves.CameraPinGuest;
+            uint hi = pin >> 16, lo = pin & 0xFFFFu; if (lo >= 0x8000) hi += 1;      // the loads' offsets are signed
+            uint Lo(int o) => (lo + (uint)o) & 0xFFFFu;
+            uint[] words =
+            {
+                0x3C080000u | hi,                                   //  0 lui   t0,HI(pin)
+                0x8D090000u | Lo(CodeCaves.CameraPinFlag),          //  1 lw    t1,flag(t0)
+                0x11200000u | 6,                                    //  2 beq   t1,zero,ret (+6 → index 9)
+                0x00000000u,                                        //  3   nop
+                0x8F849CA8u,                                        //  4 lw    a0,-0x6358(gp)         the camera (NowCamera)
+                0xC48302C4u,                                        //  5 lwc1  f3,0x2C4(a0)          R.y
+                0xC5060000u | Lo(4),                                //  6 lwc1  f6,P.y(t0)
+                0x46033181u,                                        //  7 sub.s f6,f6,f3              height = P.y − R.y
+                0xE48602D4u,                                        //  8 swc1  f6,0x2D4(a0)
+                0x03E00008u,                                        //  9 ret: jr ra
+                0x00000000u,                                        // 10   nop
+            };
+            if (cave + (uint)words.Length * 4 > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
+                throw new IOException("The camera-pin cave does not fit its host (DebugInfomationDraw).");
+            for (int i = 0; i < words.Length; i++)
+                WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+        }
+
         /// <summary>Xiao's build-up tree, baked: the weapon template table's build-up word (WeaponList +0x3C, bit k = the weapon
         /// 299 + k may be built up into) — Hardshooter → Double Impact alone (vanilla: Double Impact or Matador), Double Impact →
         /// Matador alone (vanilla: Divine Beast Title).</summary>

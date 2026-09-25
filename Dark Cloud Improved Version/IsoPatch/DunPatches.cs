@@ -59,6 +59,9 @@ namespace Dark_Cloud_Improved_Version
             new(0x01DBF420, 0xC78C8434, CameraMinWord1,  "camera min height → data word (lwc1 f12, near branch)"),
             new(0x01DBF450, 0x00000000, CameraMinWord0,  "camera min height → data word (lui in GetHeight's delay slot, far branch)"),
             new(0x01DBF454, 0xC78C8434, CameraMinWord1,  "camera min height → data word (lwc1 f12, far branch)"),
+            // The camera pass's epilogue `jr ra` (its `addiu sp,sp,0x480` before and nop delay slot after are untouched) → `j` the
+            // camera-pin cave (ElfWeaponPatches.PatchCameraPin), which returns through the same ra.
+            new(0x01DBF9BC, 0x03E00008, MipsAsm.J(CodeCaves.DebugInfoCave.CameraPin), "camera pass epilogue → camera-pin cave (j)"),
             // The lock-on reach factor table (six floats by character, dun 0x1DC1B20; SetNearLockOnTarget and setTargetCursor each
             // copy it to the stack with `lui v0,0x1DC; addiu v0,v0,0x1B20; lq/ld`) → the mod's copy in runtime data
             // (CodeCaves.LockOnFactorTable, pnach-seeded vanilla while idle; the Flamingo writes Xiao's 2.8).

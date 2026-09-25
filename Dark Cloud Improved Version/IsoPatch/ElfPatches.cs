@@ -119,6 +119,7 @@ namespace Dark_Cloud_Improved_Version
             PatchChargeHitRadius(fs, ElfOff);            // Toan's lunge/whirl hit radii: baked immediates -> mod-owned data words
             PatchNameDrawGate(fs, ElfOff);               // lock-on name plate: its getter ANDs in NOT CodeCaves.NameHide
             PatchStrideScale(fs, ElfOff);                // Toan's stride on motion 33 × CodeCaves.StrideScale (the dun hook is in DunPatches)
+            PatchCameraPin(fs, ElfOff);                  // the camera held at a world position while CodeCaves.CameraPin is set (the dun hook is in DunPatches)
             PatchSolarBladeTint(fs, ElfOff);              // the Sun Sword's blade too (SolarBlade): the rigid-mesh class's DrawVu1, into the mask cave's body
             PatchCatCopyQueue(fs, ElfOff);                // the cat's mesh copy runs inside the machine instead of over PINE
             PatchPropPelletFollow(fs, ElfOff);            // a chara-slot prop on one of Xiao's pellets — the Matador's charged shot (the hook in DunPatches now lands here)
