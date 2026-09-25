@@ -49,8 +49,9 @@ namespace Dark_Cloud_Improved_Version
         // The command id is pushed FIRST and counts toward argc: `push id; push arg…; ext(argc = 1 + nargs)`.
         internal const int FnSetMoveCancel = 0x22; // _SET_MOVE_CANSEL() — zeroes the slot's scripted movement, argc 1
         internal const int FnSetMotion     = 200;  // _SET_MOTION(idx, ?, flags) — writes the render object's id/flags/KEY rate, argc 4
+        internal const int FnSetMuteki     = 101;  // _STATUS_SET_MUTEKI(frames) — the unit takes no further hit for that many frames, argc 2
+        internal const int FnSetPallet     = 105;  // _STATUS_SET_PALLET(kind, seconds) — the hit flash palette (every vanilla hit reaction: 2, 0.2), argc 3
         internal const int FnGetGlobalInt  = 221;  // _GET_GLOBAL_INT(i) — pops i, leaves GL_INT[i] on the stack, argc 2
-        internal const int FnSetMotionFrm  = 203;  // _SET_MOTION_FRM(frame) — writes the unit's PLAYING frame float (unit+0x1FFC0), argc 2
 
         // ── Operand type/scope qualifiers ─────────────────────────────────
         internal const int TypeInt    = 1; // operandA of OpPush3: int32 literal (operandB = the value)

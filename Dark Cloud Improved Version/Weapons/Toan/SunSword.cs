@@ -24,12 +24,13 @@ namespace Dark_Cloud_Improved_Version
         private  const double PrimedSeconds       = 10.0;   // a charge left unused this long dissipates
         private  const double DissipateSeconds    = 0.5;    // …fading the tint and shrinking the glow away
         internal const double BlindSeconds        = 5.0;    // how long the flash holds the floor
+
         private static DateTime _blindUntil;
         /// <summary>How much of the flash's hold is left; 0 when none is running.</summary>
         internal static double BlindSecondsLeft => _blindUntil == default ? 0 : Math.Max(0, (_blindUntil - GameClock.Now).TotalSeconds);
         private const float  PrimedTint           = 45f;    // the slight white Toan keeps while the charge is held, per channel (the tint is an ambient ADD)
         private const ushort FlashSe              = 0;      // sound effect at the flash (SeSeq id; 0 = none)
-        private const float  Combo1Hit = 825f, Combo2Hit = 835f, Combo3Hit = 843f, Combo4Hit = 852f, Combo5Hit = 870f;   // frame cursor at which each combo swing comes forward (docs/character-motion-table.md clips 37-41)
+        private const float  Combo1Hit = 826f, Combo2Hit = 835f, Combo3Hit = 843f, Combo4Hit = 852f, Combo5Hit = 867f;   // frame cursor at which each combo swing comes forward (docs/character-motion-table.md clips 37: 820-830, 38: 830-838, 39: 838-847, 40: 847-857, 41: 856-884)
 
         /// <summary>What differs between the swords that carry Solar Flash. The ability itself — the charge, the
         /// blinding, the script hold — is identical; each weapon brings its own damage share, glow disc and blade
@@ -47,13 +48,17 @@ namespace Dark_Cloud_Improved_Version
             internal readonly double EaseSeconds;      // how long the wash takes to recede (0 = as long as the blinding)
             internal readonly float  RestDim;          // the dim the flash recedes ONTO and holds through the blinding (0 = none)
             internal readonly double RestRelease;      // over how many of the blinding's last seconds that dim lifts
+            internal readonly bool   HoldsPrimedTint;  // Toan keeps a slight white while the charge is held (the cyan build-up and the flash pulse are every sword's)
+            internal readonly float[] BladeWhite;      // the blade's RGB add at full charge (SolarBlade.White unless a sword asks for its own)
             internal SolarProfile(ushort id, float dmg, string glow, string model, uint frame, uint unlit, string tag,
                                   float fog = 1f, float[] light = null, float[] fogRgb = null, float primeDim = 0f, bool bladeGlowOnly = false,
-                                  double easeSeconds = 0, float restDim = 0f, double restRelease = 1.0)
+                                  double easeSeconds = 0, float restDim = 0f, double restRelease = 1.0, bool holdsPrimedTint = true,
+                                  float[] bladeWhite = null)
             {
                 WeaponId = id; DamageFraction = dmg; Glow = glow; Model = model; Frame = frame; Unlit = unlit; Tag = tag; Fog = fog;
                 Light = light ?? SolarLighting.SunLight; FogRgb = fogRgb ?? SolarLighting.SunFog; PrimeDim = primeDim; BladeGlowOnly = bladeGlowOnly;
                 EaseSeconds = easeSeconds > 0 ? easeSeconds : BlindSeconds; RestDim = restDim; RestRelease = restRelease;
+                HoldsPrimedTint = holdsPrimedTint; BladeWhite = bladeWhite ?? SolarBlade.White;
             }
             /// <summary>Hand the lighting this sword's wash: how much fog, what colour the light and fog go, how long
             /// the white takes to recede, and what it recedes onto for the rest of the blinding.</summary>
@@ -73,20 +78,23 @@ namespace Dark_Cloud_Improved_Version
             light: new[] { 236f, 226f, 255f }, fogRgb: new[] { 242f, 236f, 255f },   // a cool white, toward pale violet
             primeDim: 0.35f,                                                         // the room darkens as the blade brightens; the drop takes it the rest of the way
             bladeGlowOnly: true);                                                    // the glow appears with the judgement blade and goes with it
-        /// <summary>The Sword of Zeus: Big Bang's charge look (tint, dim, cool light) with NO glow disc — the tinted
-        /// blade carries the charge alone; the primed swing brings the lightning down on the locked target, then flashes.</summary>
+        /// <summary>The Sword of Zeus: Big Bang's charge look (dim, cool light) with NO glow disc, a softer blade white
+        /// and no white on Toan while primed (he keeps the cyan build-up and the flash pulse). Its flash does NO damage of
+        /// its own: the bolts and their blasts do (SwordOfZeus.Strike). Locked on, the primed combo brings a bolt down
+        /// on the target with EVERY swing; not locked on, one swing brings a bolt down on each of the nearest enemies.</summary>
         internal static readonly SolarProfile ZeusFlash = new SolarProfile(
-            Items.swordofzeus, 0.50f, null, "c01w39", 0, 0, "Zeus", fog: 0.8f,
+            Items.swordofzeus, 0f, null, "c01w39", 0, 0, "Zeus", fog: 0.8f,
             light: new[] { 228f, 240f, 255f }, fogRgb: new[] { 238f, 246f, 255f },   // an electric white, toward blue
-            primeDim: 0.35f,
+            primeDim: 0.6f,                                                          // darker than Big Bang's 0.35 (k is darkness: 1 = full dim)
             easeSeconds: 1.0,                                                        // a strike's flash, gone in a second…
-            restDim: 0.35f, restRelease: 1.0);                                       // …onto the primed dim, held through the 5 s stun and lifted over its last second
+            restDim: 0.6f, restRelease: 1.0,                                         // …onto the primed dim, held through the stun and lifted over its last second
+            holdsPrimedTint: false);
 
         /// <summary>True while a Solar Flash charge is building, held or going off — Big Bang's own charge-attack tint
         /// stands aside for it rather than fighting it for the blade.</summary>
         internal static bool FlashArmed { get; private set; }
 
-        private enum Phase { Idle, Charging, Primed, Windup, Dropping, Dissipating }
+        private enum Phase { Idle, Charging, Primed, Windup, Dropping, Dissipating, Chain }
         private static SolarState   _live;        // the running flash's state, for the questions below
         private static SolarProfile _liveProfile;
         /// <summary>Is <paramref name="weaponId"/>'s Solar Flash currently PRIMED (charge held, swing not yet made)? Big
@@ -102,6 +110,9 @@ namespace Dark_Cloud_Improved_Version
             public DateTime holdStart, primedAt, dissipateAt;
             public byte floor = 0xFF;
             public int errors;                                  // tick exceptions logged so far (the first few carry a stack)
+            public int  chainAction;                            // the combo swing the chain last struck on …
+            public bool chainFired;                             // … and whether this swing's bolt has gone
+
             public readonly List<(int slot, int ticks)> planted = new List<(int, int)>();
         }
 
@@ -160,11 +171,11 @@ namespace Dark_Cloud_Improved_Version
                 case Phase.Charging:
                 {
                     // One flash at a time, and that includes a charge already in flight when the last one went off.
-                    if (_blindUntil != default) { st.phase = Phase.Idle; SolarBlade.Set(0f, p.Model, p.Frame, p.Unlit); ChargeTint.Clear(); SolarGlow.Hide(); SolarLighting.EndDim(); break; }
+                    if (_blindUntil != default) { st.phase = Phase.Idle; SolarBlade.Set(0f, p.Model, p.Frame, p.Unlit, p.BladeWhite); ChargeTint.Clear(); SolarGlow.Hide(); SolarLighting.EndDim(); break; }
                     // Guard released before it primed: the glow goes with it rather than lingering.
-                    if (!GuardWatch.IsGuarding()) { st.phase = Phase.Idle; SolarBlade.Set(0f, p.Model, p.Frame, p.Unlit); ChargeTint.Clear(); SolarGlow.Hide(); SolarLighting.EndDim(); break; }
+                    if (!GuardWatch.IsGuarding()) { st.phase = Phase.Idle; SolarBlade.Set(0f, p.Model, p.Frame, p.Unlit, p.BladeWhite); ChargeTint.Clear(); SolarGlow.Hide(); SolarLighting.EndDim(); break; }
                     double held = (GameClock.Now - st.holdStart).TotalSeconds;
-                    SolarBlade.Set((float)(held / ChargeSeconds), p.Model, p.Frame, p.Unlit);
+                    SolarBlade.Set((float)(held / ChargeSeconds), p.Model, p.Frame, p.Unlit, p.BladeWhite);
                     // The room darkens as the blade brightens, to PrimeDim at the moment it primes.
                     if (p.PrimeDim > 0f) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim * (float)Math.Min(1.0, held / ChargeSeconds)); }
                     ChargeTint.Ramp(ChargeSeconds - held);
@@ -181,11 +192,11 @@ namespace Dark_Cloud_Improved_Version
                 }
 
                 case Phase.Primed:
-                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit);                                   // re-asserted each tick: a rebuilt model gets it back
+                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);                                   // re-asserted each tick: a rebuilt model gets it back
                     if (p.PrimeDim > 0f) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim); }   // held (one write; a floor change re-captures)
                     if (p.Glow != null && !p.BladeGlowOnly) SolarGlow.Show(p.Glow);   // re-asserted each tick: Show's KeepAlive is what keeps the disc uploaded
                     SolarGlow.Tick();
-                    HoldPrimedTint(1f);
+                    HoldPrimedTint(p, 1f);
                     if (IsAttack(action)) { st.phase = Phase.Windup; break; }
                     if ((GameClock.Now - st.primedAt).TotalSeconds >= PrimedSeconds)
                     {
@@ -201,15 +212,15 @@ namespace Dark_Cloud_Improved_Version
                     double t = (GameClock.Now - st.dissipateAt).TotalSeconds / DissipateSeconds;
                     SolarGlow.Tick();
                     if (t >= 1.0) { SolarBlade.Clear(); ChargeTint.Clear(); SolarGlow.Hide(); SolarLighting.EndDim(); st.phase = Phase.Idle; }
-                    else { SolarBlade.Set((float)(1.0 - t), p.Model, p.Frame, p.Unlit); HoldPrimedTint((float)(1.0 - t)); SolarLighting.DimTo(p.PrimeDim * (float)(1.0 - t)); }
+                    else { SolarBlade.Set((float)(1.0 - t), p.Model, p.Frame, p.Unlit, p.BladeWhite); HoldPrimedTint(p, (float)(1.0 - t)); SolarLighting.DimTo(p.PrimeDim * (float)(1.0 - t)); }
                     break;
                 }
 
                 case Phase.Windup:
                 {
-                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit);
+                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);
                     SolarGlow.Tick();
-                    HoldPrimedTint(1f);
+                    HoldPrimedTint(p, 1f);
                     if (!IsAttack(action)) { st.phase = Phase.Primed; break; }     // the swing was cancelled: still primed
                     bool forward = action == PlayerAction.ActionWhirlwind || action == PlayerAction.ActionLunge
                                 || Memory.ReadFloat(PlayerAction.AnimFrameCursor) >= ComboHitFrame(action);
@@ -217,18 +228,56 @@ namespace Dark_Cloud_Improved_Version
                     // Big Bang, locked on: the swing does not flash — it lets the judgement blade fall, and the flash
                     // goes off when it lands (BigBang.BeginDrop → Dropping). Not locked on: the flash, as ever.
                     if (p.WeaponId == Items.bigbang && BigBang.BeginDrop()) { st.phase = Phase.Dropping; break; }
-                    // The Sword of Zeus, locked on: the bolt comes down on the target as the flash goes off.
-                    if (p.WeaponId == Items.swordofzeus && PlayerAction.LockHeld(out int target) && SwordOfZeus.Strike(target))
-                    { Flash(st, p, fromBlast: true); st.phase = Phase.Idle; break; }   // the light hit from the bolt, not from him
+                    // The Sword of Zeus. Locked on: the bolt comes down on the target as the flash goes off, and the
+                    // combo CHAINS — every further swing brings another (Chain). Not locked on: one bolt on each of
+                    // the nearest enemies in reach, and the charge is spent.
+                    if (p.WeaponId == Items.swordofzeus)
+                    {
+                        if (PlayerAction.LockHeld(out int target) && SwordOfZeus.Strike(target))
+                        { Flash(st, p); st.phase = Phase.Chain; st.chainAction = action; st.chainFired = true; break; }
+                        SwordOfZeus.StrikeNearest();
+                    }
                     Flash(st, p);
                     st.phase = Phase.Idle;
                     break;
                 }
 
+                case Phase.Chain:
+                {
+                    // The primed combo, locked on: each swing darkens the room through its wind-up and brings the bolt
+                    // and the flash down at its hit frame. The combo ending — or the lock let go — spends the charge.
+                    // The engine's own combo state is the action word: hits 1-5 are ActionComboFirst..Last in turn, and
+                    // it chains straight from one to the next, so the combo is over the tick the word is outside that
+                    // range — or the tick it is a hit EARLIER than the one that last struck, or that same hit with its
+                    // clip back before the hit frame: a new combo (a first swing again after stopping), not this one
+                    // carrying on. (The word stays on a hit's value for the rest of that swing, so "the same hit" alone
+                    // is not an ending.)
+                    bool swinging = action >= PlayerAction.ActionComboFirst && action <= PlayerAction.ActionComboLast;
+                    bool restarted = swinging && (action < st.chainAction
+                                     || (action == st.chainAction && st.chainFired && Memory.ReadFloat(PlayerAction.AnimFrameCursor) < ComboHitFrame(action) - 1f));
+                    if (!swinging || restarted || !PlayerAction.LockHeld(out int target))
+                    {
+                        SolarBlade.Clear(); ChargeTint.Clear(); st.phase = Phase.Idle;
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[{p.Tag}] combo over (action 0x{action:X} after hit {st.chainAction - PlayerAction.ActionComboFirst + 1}) — the charge is spent");
+                        break;
+                    }
+                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);      // still primed through the combo
+                    if (action != st.chainAction) { st.chainAction = action; st.chainFired = false; }
+                    if (st.chainFired) break;
+                    if (Memory.ReadFloat(PlayerAction.AnimFrameCursor) < ComboHitFrame(action))
+                    {   // the wind-up: the darkening before the flash
+                        if (p.PrimeDim > 0f) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim); }
+                        break;
+                    }
+                    st.chainFired = true;
+                    if (SwordOfZeus.Strike(target)) Flash(st, p);
+                    break;
+                }
+
                 case Phase.Dropping:
                 {
-                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit);
-                    HoldPrimedTint(1f);
+                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);
+                    HoldPrimedTint(p, 1f);
                     SolarGlow.Tick();
                     // The blade has landed (or the drop was abandoned — a lost lock mid-fall): the flash fires either way,
                     // so a spent charge never sits waiting on a visual. A landing has already fired the white-out on
@@ -241,9 +290,12 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The slight white Toan carries while the charge is held: the same ambient-add field the charge ramp uses,
-        /// re-asserted each tick so a status tint or a character swap cannot leave it stuck on.</summary>
-        private static void HoldPrimedTint(float k) =>
-            Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint, PrimedTint * k, PrimedTint * k, PrimedTint * k);
+        /// re-asserted each tick so a status tint or a character swap cannot leave it stuck on. Not for a sword whose
+        /// profile leaves Toan plain while primed (the Sword of Zeus).</summary>
+        private static void HoldPrimedTint(SolarProfile p, float k)
+        {
+            if (p.HoldsPrimedTint) Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint, PrimedTint * k, PrimedTint * k, PrimedTint * k);
+        }
 
         /// <summary>The blinding's clock. The behaviour itself is the enemies' own scripts (SolarScript); this only decides
         /// when they lower their guard and when they get their AI back.</summary>
@@ -274,16 +326,15 @@ namespace Dark_Cloud_Improved_Version
             _                                 => Combo5Hit,
         };
 
-        /// <summary>The flash itself: blade back to normal, the light to white, Toan's pulse, the hit, the blinding.
-        /// <paramref name="lit"/>: the white-out has already been fired (Big Bang's landing does it with the burst).
-        /// <paramref name="fromBlast"/>: the light hit originates at BigBang.LastBlast rather than at Toan.</summary>
-        private static void Flash(SolarState st, SolarProfile p, bool lit = false, bool fromBlast = false)
+        /// <summary>The flash itself: blade back to normal, the light to white, Toan's pulse, the hit (for a sword whose
+        /// flash carries one), the blinding. <paramref name="lit"/>: the white-out has already been fired (Big Bang's
+        /// landing does it with the burst).</summary>
+        private static void Flash(SolarState st, SolarProfile p, bool lit = false)
         {
-            // The light hit comes from the flash's own point: Toan, or the blast — the judgement blade's landing, the
-            // Sword of Zeus's bolt — when that is what struck, so the kick throws everyone from it and the hit turns
-            // them to it, not to him.
+            // The light hit comes from the flash's own point: Toan, or the blast — the judgement blade's landing — when
+            // that is what struck, so the kick throws everyone from it and the hit turns them to it, not to him.
             float px, ph, py;
-            if (lit || fromBlast) (px, ph, py) = BigBang.LastBlast;
+            if (lit) (px, ph, py) = BigBang.LastBlast;
             else { px = Memory.ReadFloat(Addresses.dunPositionX); ph = Memory.ReadFloat(Addresses.dunPositionZ); py = Memory.ReadFloat(Addresses.dunPositionY); }
             SolarBlade.Clear();                                          // tint off, and the blade's own palette back
             ChargeTint.Clear();                                          // …and the white Toan was holding
@@ -291,9 +342,10 @@ namespace Dark_Cloud_Improved_Version
             if (!lit) { p.ArmLighting(); SolarLighting.Flash(); }
             Player.FlashActiveCharacter(p.Light[0], p.Light[1], p.Light[2], FlashPulseSpeed, 1);
             if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
-            PlantFlashHit(st, px, ph, py, p);
+            if (p.DamageFraction > 0f) PlantFlashHit(st, px, ph, py, p);
+            SolarScript.Rehold();          // a flash inside a blinding: whoever had begun lowering their guard raises it again
             SolarScript.Begin();           // the enemies' OWN scripts hold the guard from here
-            _blindUntil = GameClock.Now.AddSeconds(BlindSeconds);
+            _blindUntil = GameClock.Now.AddSeconds(BlindSeconds);   // …for the full time from THIS flash
         }
 
         /// <summary>A player-attack sphere ON EACH ENEMY in range (CollisionPool: the same entries CheckDmg tests his sword

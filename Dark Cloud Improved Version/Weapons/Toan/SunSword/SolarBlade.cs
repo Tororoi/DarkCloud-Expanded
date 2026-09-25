@@ -37,7 +37,8 @@ namespace Dark_Cloud_Improved_Version
         private static string ModelCode  = SunSwordModel;
         private static uint   FrameWord;                        // 0 = derive from ModelCode (the Sun Sword's root matches "c01w")
         private static uint   UnlitWord;                        // 0 = no unlit mesh on this weapon
-        private const float  WhiteMax    = 200f;        // the ambient add at full charge, per channel on the 0-255 scale
+        internal const float WhiteMax    = 200f;        // the ambient add at full charge, per channel on the 0-255 scale
+        internal static readonly float[] White = { WhiteMax, WhiteMax, WhiteMax };   // …as the RGB add (a profile may ask for its own)
         private const float  UnlitMax    = 255f;        // what the unlit mesh's constant colour reaches at full charge
         private static long   _unlitNode;
         private static int    _unlitWeaponId = -1;
@@ -51,9 +52,10 @@ namespace Dark_Cloud_Improved_Version
         private static bool  _armed, _warned;
         private static float _last = -1f;
 
-        /// <summary>The blade's whiteness, 0 (its own colour) to 1 (full). Arms the private vtable on first use and again
+        /// <summary>The blade's whiteness, 0 (its own colour) to 1 (full — <paramref name="white"/> as the RGB add at
+        /// the peak, the sword's own). Arms the private vtable on first use and again
         /// whenever the weapon model was rebuilt under it.</summary>
-        internal static void Set(float k, string modelCode = SunSwordModel, uint frameWord = 0, uint unlitWord = 0)
+        internal static void Set(float k, string modelCode = SunSwordModel, uint frameWord = 0, uint unlitWord = 0, float[] white = null)
         {
             k = Math.Clamp(k, 0f, 1f);
             if (modelCode != ModelCode || frameWord != FrameWord || unlitWord != UnlitWord)
@@ -63,9 +65,10 @@ namespace Dark_Cloud_Improved_Version
             }
             Unlit(k);                                                         // its own frame and its own lever — independent of the cave
             if (!Arm()) return;
-            float v = k * WhiteMax;
+            white ??= White;
+            float v = k * Math.Max(white[0], Math.Max(white[1], white[2]));
             if (Math.Abs(v - _last) < 0.5f) return;
-            Memory.WriteVec3(CodeCaves.Mailbox.CatCapeTint, v, v, v);
+            Memory.WriteVec3(CodeCaves.Mailbox.CatCapeTint, k * white[0], k * white[1], k * white[2]);
             _last = v;
         }
 

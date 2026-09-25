@@ -171,6 +171,7 @@ namespace Dark_Cloud_Improved_Version
         private sealed class BlastState
         {
             public byte floor = 0xFF;
+            public bool bladeLogged;                    // this floor's blade state has been written to the log once
             public bool crushing;                       // the guard break is currently driven on
             public bool tinted;                         // the blade is carrying this ability's charge tint
             public bool swingArmed;                     // the charge attack's stats and radius are overridden
@@ -214,10 +215,33 @@ namespace Dark_Cloud_Improved_Version
             Reset(st);
         }
 
+        /// <summary>DIAGNOSTIC, once per floor: what the engine has for the sword in his hand — the weapon object, its
+        /// model root, the blade visual and the vtable it draws through, the object's opacity and dim, and whether the
+        /// blade copy's chara slot was left registered. The equipped blade once failed to draw on entering a floor
+        /// (nothing of ours had run yet; it drew again on re-entry); this is what the next occurrence gets compared
+        /// against. False until the weapon object exists.</summary>
+        private static bool LogBlade()
+        {
+            uint obj = Memory.ReadGuestPtr(EquippedWeapon.WeaponObjGlobal);
+            if (!Memory.IsValidGuest(obj)) return false;
+            long o = Memory.ToMmu(obj);
+            uint root = Memory.ReadGuestPtr(o + 0xBC);
+            if (!Memory.IsValidGuest(root)) return false;
+            uint vis = 0, vt = 0;
+            for (uint n = root; Memory.IsValidGuest(n) && vis == 0; n = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.RootChild))
+                vis = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.GeomPtr);
+            if (vis != 0) vt = Memory.ReadGuestPtr(Memory.ToMmu(vis) + CVisualMDT.VisVtable);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] blade: obj 0x{obj:X} root 0x{root:X} visual 0x{vis:X} vtable 0x{vt:X}"
+                + $" opacity {Memory.ReadFloat(o + CCharacter.NpcOpacity):F0} dim {Memory.ReadFloat(o + CCharacter.DimFactor):F2}"
+                + $" | copy slot reg {Memory.ReadInt(DungeonCharaDraw.CharaRegistry + 3 * 4)} active {Memory.ReadInt(DungeonCharaDraw.CharaArray + 3 * DungeonCharaDraw.CharaStride + DungeonCharaDraw.CharaActive)} prop {BladeProp.Active}");
+            return true;
+        }
+
         private static void Tick(BlastState st)
         {
             byte floor = Memory.ReadByte(Addresses.checkFloor);
-            if (floor != st.floor) { if (st.floor != 0xFF) Reset(st); st.floor = floor; _yawConv = -1; }
+            if (floor != st.floor) { if (st.floor != 0xFF) Reset(st); st.floor = floor; st.bladeLogged = false; _yawConv = -1; }
+            if (!st.bladeLogged) st.bladeLogged = LogBlade();
             ToanLockOn.HoldReach("[BigBang] ");
             FaceTick();
 
@@ -711,8 +735,11 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The blast that falls with the blade: one hit entry per live enemy in reach, its damage the
-        /// <see cref="Falloff"/> step for that enemy's distance, its kick from the blast.</summary>
-        private static void PlantFalloff(float x, float h, float y)
+        /// <see cref="Falloff"/> step for that enemy's distance, its kick from the blast. The Sword of Zeus's bolt
+        /// plants the same blast at its strike point; <paramref name="noKickSlot"/> is the enemy it struck directly,
+        /// which takes the hit where it stands (a zero-strength kick: the reaction without the shove), and its steps
+        /// are scaled by <paramref name="damageScale"/> (the bolt's blast is half the blade's).</summary>
+        internal static void PlantFalloff(float x, float h, float y, int noKickSlot = -1, float damageScale = 1f)
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
@@ -737,10 +764,10 @@ namespace Dark_Cloud_Improved_Version
                 int slot = CollisionPool.TakeFreeSlot(pool);
                 if (slot < 0) break;
                 BodyCentre(s, a, out float cx, out float ch, out float cy, out float cr);
-                byte[] e = CollisionPool.PlayerHitEntry(cx, ch, cy, cr, Math.Max(1, (int)Math.Round(attack * times)), 0);
+                byte[] e = CollisionPool.PlayerHitEntry(cx, ch, cy, cr, Math.Max(1, (int)Math.Round(attack * times * damageScale)), 0);
                 void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
                 F(0x80, x); F(0x84, h); F(0x88, y);                        // the kick still comes from the blast
-                F(0x90, KickStrength); F(0x94, KickDecay);
+                F(0x90, s == noKickSlot ? 0f : KickStrength); F(0x94, KickDecay);
                 BitConverter.GetBytes(2).CopyTo(e, 0x98);                 // kick type 2: thrown away from the blast
                 CollisionPool.Plant(pool, slot, e);
                 _shells.Add((slot, ShellLifeTicks));
@@ -792,7 +819,7 @@ namespace Dark_Cloud_Improved_Version
         private static readonly List<(int slot, int ticks)> _shells = new List<(int, int)>();
 
         /// <summary>Withdraw the hit entries the engine has not consumed (an enemy that moved off its own).</summary>
-        private static void ExpireShells()
+        internal static void ExpireShells()
         {
             if (_shells.Count == 0) return;
             long pool = CollisionPool.Resolve();
@@ -1013,28 +1040,9 @@ namespace Dark_Cloud_Improved_Version
         /// does not call. Leaving 1 keeps the blade whole and lets the next ordinary hit take it to zero through the
         /// engine's own path, with all of that intact. A weapon at Endurance 150 pays nothing, exactly as its swings
         /// cost nothing.</summary>
-        private static void DrainWhp(float swings = WhpHits)
-        {
-            int bag = Memory.ReadByte(DngStatusData.EquippedSlotAddr(Player.ToanId));
-            if (bag < 0 || bag >= DngStatusData.MaxWeaponSlots) return;
-            long rec = DngStatusData.WeaponRecord(Player.ToanId, bag);
-            if (Memory.ReadUShort(rec) != Items.bigbang) return;             // not the blade we just spent
-
-            float factor = swings;
-            int flags = Memory.ReadUShort(rec + WeaponHave.AbilityFlagsOffset);
-            if ((flags & WeaponHave.DurableFlag) != 0) factor *= 0.5f;
-            if ((flags & WeaponHave.FragileFlag) != 0) factor *= 2f;
-            int endurance = Memory.ReadShort(WeaponHave.BattleWeaponRecord + WeaponHave.EffEnduranceOffset);
-            float drain = (1.5f - 0.01f * endurance) * factor;
-            if (drain <= 0f) return;
-
-            long whpAddr = rec + WeaponHave.InventoryWeaponWhpOffset;
-            float whp = Memory.ReadFloat(whpAddr);
-            float left = Math.Max(1f, whp - drain);
-            Memory.WriteFloat(whpAddr, left);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[BigBang] detonation cost {whp - left:F1} WHP ({whp:F0} → {left:F0})");
-        }
+        /// <summary>Weapon HP for a detonation: <paramref name="swings"/> swing-equivalents through the engine's own
+        /// Endurance formula (<see cref="WeaponWhp"/>).</summary>
+        private static void DrainWhp(float swings = WhpHits) => WeaponWhp.Drain(Items.bigbang, 1.5f * swings, "[BigBang] detonation ");
 
         private static void Reset(BlastState st)
         {

@@ -18,12 +18,11 @@ namespace Dark_Cloud_Improved_Version
     ///
     ///     hold:    _SET_MOVE_CANSEL();  _SET_MOTION(guard);            loop: _SET_MOVE_CANSEL();  YIELD;  JMP loop
     ///     lower:   _SET_MOVE_CANSEL();  _SET_MOTION(return, -1, once); loop: _SET_MOVE_CANSEL();  YIELD;  JMP loop
-    ///     stagger: _SET_MOVE_CANSEL();  _SET_MOTION(damage);  YIELD × n;  RET
+    ///     stagger: _SET_MOVE_CANSEL();  _STATUS_SET_MUTEKI(8);  _STATUS_SET_PALLET(2, 0.2);  _SET_MOTION(damage);  YIELD × n;  RET
     ///
     /// and the FIRST instruction of its AI label (100) becomes a jump to the hold, the first of its hit-reaction label
     /// (110) a jump to the stagger. Winding down changes the AI label's jump target to the lowering program; ending puts
-    /// the two original instructions back. Every enemy of the species then guards natively, and one enemy of a species
-    /// can be pointed somewhere else by its own script PC (the Sword of Zeus's electrocution, <see cref="Convulse"/>).
+    /// the two original instructions back. Every enemy of the species then guards natively.
     ///
     /// ⚠ WHY the programs live in stub memory and the labels carry ONE instruction each: a script's saved PC sits inside
     /// the bytes it yielded from. Writing a whole sequence over a label while enemies are parked in it — as the hold used
@@ -40,9 +39,12 @@ namespace Dark_Cloud_Improved_Version
         private const int LabelAi = 100, LabelHit = 110;
         private const double IdleBeat = 0.4;           // the pause every enemy gets between lowering its guard and acting
         private const int StaggerFrames = 20;          // the flash's own hit reaction, before the guard comes up (~1/3 s)
+        private const int MutekiFrames  = 8;           // the hit invincibility every vanilla hit reaction opens with (6-8 across species)
+        private const uint PalletKind   = 2;           // …and its hit-flash palette (kind 2 for 0.2 s, likewise vanilla)
+        private const float PalletSeconds = 0.2f;
         private const int TypeBoss = 2;
         // Where the three programs sit in a species' block (see CodeCaves.SolarStubBlock, 0x300): hold 9 cells, lowering
-        // 11 cells, stagger 7 + StaggerFrames cells.
+        // 11 cells, stagger 12 + StaggerFrames cells (384 B of the 512 from StaggerAt).
         private const int HoldAt = 0x000, LowerAt = 0x070, StaggerAt = 0x100;
         private const int HoldLoop = 5, LowerLoop = 7;  // the cell each loop jumps back to
 
@@ -125,73 +127,6 @@ namespace Dark_Cloud_Improved_Version
                 + (noRoom > 0 ? $"; {noRoom} species beyond the {CodeCaves.SolarStubBlocks} stub blocks left to their own AI" : ""));
         }
 
-        /// <summary>ELECTROCUTE one enemy. A program of its own is written into the mod's reserved AI-stub slot
-        /// (<see cref="CodeCaves.AiStubZeus"/>): cancel movement, issue the species' DAMAGE clip once, then every frame set
-        /// the clip's playing frame — through the engine's own _SET_MOTION_FRM — to the next step of an up-and-back walk
-        /// over consecutive frames (lo, lo+1 … hi … lo+1, lo, …), yielding between steps, forever. The unit's own script PC
-        /// is pointed at it (the same per-slot write RestartScripts relies on), so this one unit convulses while its
-        /// species braces; the hold's guard is what it goes back to. Jump operands are relative to the unit's own script
-        /// (stbBase + CodeBase), so the program is built per strike. False when the blinding is not up, the species is not
-        /// one it holds, or the program would not fit the slot.</summary>
-        internal static bool Convulse(int slot, int damageClip, float frameLo, float frameHi)
-        {
-            if (!Active || !Enemies.IsLive(slot) || damageClip < 0) return false;
-            uint stb = Memory.ReadGuestPtr(CRunScript.StbPtrAddr(slot));
-            if (!_patched.Exists(p => p.Stb == stb && !p.Woken)) return false;
-            long b = Memory.ToMmu(stb);
-            uint origin = stb + (uint)Memory.ReadInt(b + StbVm.CodeSectionOff);                // op16 operands are relative to this
-            uint stubGuest = (uint)(CodeCaves.AiStubZeus - 0x20000000L);
-            var recs = new List<(uint op, uint a, uint v)>
-            {
-                ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)StbVm.FnSetMoveCancel), ((uint)StbVm.OpExt, 1, 0),
-                ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)StbVm.FnSetMotion), ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)damageClip), ((uint)StbVm.OpExt, 2, 0),
-                ((uint)StbVm.OpYield, 0, 0),                                                    // the clip is up next frame
-            };
-            int loopAt = recs.Count;
-            int n = Math.Max(2, (int)Math.Round(frameHi - frameLo) + 1);
-            var sweep = new List<float>();
-            for (int k = 0; k < n; k++) sweep.Add(frameLo + k);                                 // up …
-            for (int k = n - 2; k >= 1; k--) sweep.Add(frameLo + k);                            // … and back down, ends not repeated
-            foreach (float f in sweep)
-            {
-                recs.Add(((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)StbVm.FnSetMotionFrm));
-                recs.Add(((uint)StbVm.OpPush3, (uint)StbVm.TypeFloat, BitConverter.SingleToUInt32Bits(f)));
-                recs.Add(((uint)StbVm.OpExt, 2, 0));
-                recs.Add(((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)StbVm.FnSetMoveCancel));
-                recs.Add(((uint)StbVm.OpExt, 1, 0));
-                recs.Add(((uint)StbVm.OpYield, 0, 0));
-            }
-            recs.Add(((uint)StbVm.OpJmp, stubGuest + (uint)(loopAt * StbVm.InstrSize) - origin, 0));
-            if (recs.Count * StbVm.InstrSize > CodeCaves.AiStubStride)
-            {
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] electrocution program of {recs.Count} cells does not fit the stub slot — not run");
-                return false;
-            }
-            byte[] blk = Pack(recs);
-            Memory.WriteBytesBatch(CodeCaves.AiStubZeus, blk);
-            _convulseEnd = stubGuest + (uint)blk.Length;
-            Memory.WriteInt(CRunScript.SlotAddr(slot, CRunScript.Pc), (int)stubGuest);           // resume HERE …
-            Memory.WriteInt(EnemyAddresses.MainMonstorUnit.ScriptRunningAddr(slot), 1);           // … rather than calling the label afresh
-            return true;
-        }
-        private static uint _convulseEnd;
-        /// <summary>Is the unit's script still inside the electrocution program? A hit reaction (CheckDmg runs label 110
-        /// in the unit's own script slot) or a restart takes the PC elsewhere, after which the AI label is entered from
-        /// its top — the guard — and the program has to be pointed at again.</summary>
-        internal static bool Convulsing(int slot)
-        {
-            uint stubGuest = (uint)(CodeCaves.AiStubZeus - 0x20000000L);
-            uint pc = (uint)Memory.ReadInt(CRunScript.SlotAddr(slot, CRunScript.Pc));
-            return pc >= stubGuest && pc < _convulseEnd && Memory.ReadInt(EnemyAddresses.MainMonstorUnit.ScriptRunningAddr(slot)) != 0;
-        }
-        /// <summary>…and back to the label's top — the guard hold — from where the wind-down takes it like everyone else.</summary>
-        internal static void Unconvulse(int slot)
-        {
-            if (slot < 0 || !Enemies.IsLive(slot)) return;
-            Memory.WriteInt(CRunScript.SlotAddr(slot, CRunScript.Pc), 0);
-            Memory.WriteInt(EnemyAddresses.MainMonstorUnit.ScriptRunningAddr(slot), 0);
-        }
-
         /// <summary>Is the code at <paramref name="at"/> still exactly what we wrote there? The only safe basis for undoing
         /// a patch: if a script was reloaded, freed or replaced in the meantime, the address now belongs to something else and
         /// writing a saved snapshot into it corrupts whatever moved in.</summary>
@@ -254,6 +189,29 @@ namespace Dark_Cloud_Improved_Version
             int restarted = RestartScripts(stbs);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 $"[SunSword] {n} script(s) lowering their guard ({secondsLeft:0.00}s left), {restarted} enemies re-entered to play it");
+        }
+
+        /// <summary>The blinding extended: every species that had started lowering its guard is sent back to its hold
+        /// (the label's jump retargeted, the species re-entered), so a fresh strike stuns the floor for its full time
+        /// again. Nothing to do for a species still holding.</summary>
+        internal static void Rehold()
+        {
+            if (!Active) return;
+            var stbs = new HashSet<uint>();
+            foreach (var p in _patched)
+            {
+                if (!p.Woken) continue;
+                p.Woken = false;
+                if (!StillOurs(p.CodeAt, p.Written)) continue;
+                uint origin = p.Stb + (uint)Memory.ReadInt(Memory.ToMmu(p.Stb) + StbVm.CodeSectionOff);
+                uint target = (uint)(p.Block - 0x20000000L) + HoldAt - origin;
+                Memory.WriteUInt(p.CodeAt + StbVm.OperandA, target);
+                BitConverter.GetBytes(target).CopyTo(p.Written, StbVm.OperandA);
+                stbs.Add(p.Stb);
+            }
+            if (stbs.Count == 0) return;
+            int restarted = RestartScripts(stbs);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] blinding renewed: {stbs.Count} species back on guard, {restarted} enemies re-entered");
         }
 
         /// <summary>How long a clip runs, from the model's OWN motion table — its frame range at its own KEY rate — falling
@@ -367,15 +325,24 @@ namespace Dark_Cloud_Improved_Version
             return Pack(recs);
         }
 
-        /// <summary>The flash's own hit reaction: stop, play the species' damage clip, wait out its stagger, then return —
-        /// whereupon the AI label brings the guard up. Plain YIELDs rather than a timer, because the script is the clock
-        /// here: one per engine frame.</summary>
+        /// <summary>The flash's own hit reaction: stop, open the hit invincibility and the hit-flash palette the way every
+        /// vanilla reaction does (without the MUTEKI a single sword swing landed on a held enemy several times over —
+        /// nothing else closes the unit to the swing's later frames), play the species' damage clip, wait out its
+        /// stagger, then return — whereupon the AI label brings the guard up. Plain YIELDs rather than a timer, because
+        /// the script is the clock here: one per engine frame.</summary>
         private static byte[] StaggerSeq(int motion, int frames)
         {
             var recs = new List<(uint op, uint a, uint v)>
             {
                 ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)StbVm.FnSetMoveCancel),
                 ((uint)StbVm.OpExt,   1, 0),
+                ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)StbVm.FnSetMuteki),
+                ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)MutekiFrames),
+                ((uint)StbVm.OpExt,   2, 0),
+                ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)StbVm.FnSetPallet),
+                ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, PalletKind),
+                ((uint)StbVm.OpPush3, (uint)StbVm.TypeFloat, BitConverter.SingleToUInt32Bits(PalletSeconds)),
+                ((uint)StbVm.OpExt,   3, 0),
                 ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)StbVm.FnSetMotion),
                 ((uint)StbVm.OpPush3, (uint)StbVm.TypeInt, (uint)motion),
                 ((uint)StbVm.OpExt,   2, 0),

@@ -55,7 +55,7 @@ namespace Dark_Cloud_Improved_Version
         // stub mid-floor and crashed the VM to the BIOS browser), and the real gaps there are <0x140 bytes.
         private const long StubBase   = CodeCaves.AiStubBase;
         private const int  StubStride = CodeCaves.AiStubStride;   // up to 85 cells (roll + MUTEKI + motion run + 2 wait clusters)
-        private const int  MaxStubs   = CodeCaves.AiStubSolarSlot; // 24 — one stub per SPLICED SPECIES on a floor (the slots above are the Solar Flash's and the Sword of Zeus's),
+        private const int  MaxStubs   = CodeCaves.AiStubSolarSlot; // 24 — one stub per SPLICED SPECIES on a floor (the slots above are the Solar Flash's),
                                                                   // not per enemy; a floor has a handful. Capped so
                                                                   // this can't grow into the clone caves that follow.
 
