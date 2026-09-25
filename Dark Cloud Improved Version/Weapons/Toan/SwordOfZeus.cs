@@ -132,7 +132,10 @@ namespace Dark_Cloud_Improved_Version
         private const double ChargeFallSeconds = ChargeFallFrames / 60.0, ChargeDropAfterDash = (ChargeLungeFrames - ChargeFallFrames) / 60.0;
         private const float  ChargeDimFrom     = 1.0f;  // the meter as the charge starts (ToanKey_On resets it to 1.0) …
         private const float  ChargeDimTo       = 2.5f;  // … and at whirlwind range: the dim is full here
+        private const float  ChargeBladeFrom   = 1.5f;  // the blade appears from level 1 (the meter here) …
+        private const float  ChargeBladeTo     = 2.5f;  // … fading in to full at level 2, its glow growing with it
         private static bool  _chargeDimming, _chargeFull, _chargeBoltDue, _chargeBoltFired, _unlockZeroed, _chargeDropped;
+        private static float _chargeDimFloor;                // the dim a blinding already had on when the charge began: never lifted while charging
         private static DateTime _chargeDropAt, _chargeDashAt;
         private static int   _unlockWas, _chargeTarget = -1;
         private static float _chargeX, _chargeH, _chargeY;   // where the bolt will land (the hover's spot, frozen at the drop)
@@ -145,16 +148,28 @@ namespace Dark_Cloud_Improved_Version
             {
                 float meter = Memory.ReadFloat(PlayerAction.ChargeMeter);
                 float k = Math.Max(0f, Math.Min(1f, (meter - ChargeDimFrom) / (ChargeDimTo - ChargeDimFrom)));
-                if (!_chargeDimming) { _chargeDimming = true; _chargeFull = false; _chargeBoltDue = false; ZeroUnlock(); }   // no level 2 for the game this wind-up
+                if (!_chargeDimming)
+                {
+                    _chargeDimming = true; _chargeFull = false; _chargeBoltDue = false; ZeroUnlock();   // no level 2 for the game this wind-up
+                    _chargeDimFloor = SolarLighting.Active ? SolarLighting.LastDim : 0f;   // a blinding's dim stays on under the charge rather than lifting and snapping back
+                }
                 SolarBlade.Set(k, SunSword.ZeusFlash.Model, 0, 0, SunSword.ZeusFlash.BladeWhite);   // the blade whitens with the meter, as under a guard charge
-                if (!SolarLighting.Active) { SolarLighting.BeginDim(); SolarLighting.DimTo(SunSword.ZeusFlash.PrimeDim * k); }   // a flash still easing keeps its course
+                CameraDip.Drive(k);                                              // …and the camera comes down a little with it
+                SolarLighting.BeginDim();                                        // takes an easing flash over (its capture kept)
+                SolarLighting.DimTo(Math.Max(_chargeDimFloor, SunSword.ZeusFlash.PrimeDim * k));
                 if (meter >= ChargeDimTo && !_chargeFull)
                 {   // the sword's own level 2: the stock charge-complete flash on him, and the release flagged as a bolt
                     _chargeFull = true; _chargeDropped = false;
                     Player.FlashChargeComplete();
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] charge level 2 — the release is a bolt");
                 }
-                if (_chargeFull) ChargeAim();                                    // the blade over where the bolt will land, moving with him
+                // From level 1 the blade hangs over where the bolt will land, moving with him, fading in with the meter
+                // to full at level 2 — its glow growing at the same rate.
+                if (meter >= ChargeBladeFrom)
+                {
+                    ChargeAim();
+                    BigBang.PointAlpha((meter - ChargeBladeFrom) / (ChargeBladeTo - ChargeBladeFrom));
+                }
                 return;
             }
             if (_unlockZeroed) RestoreUnlock();                                 // the release has been read: the word goes back at once
@@ -187,6 +202,7 @@ namespace Dark_Cloud_Improved_Version
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + (double.IsNaN(gap) ? "[Zeus] charge bolt with the blade still falling — ChargeFallSeconds is too long" : $"[Zeus] charge bolt {gap * 1000:F0} ms after the blade reached the ground"));
                 if (!StrikeAt(x, h, y, _chargeTarget)) { ChargeStandDown(); return; }
                 SunSword.StrikeFlash(SunSword.ZeusFlash);                        // the white onto the rest dim, his pulse, and the 5 s blinding — a strike's flash
+                CameraDip.Release();                                             // the camera eases back up
                 _chargeDimming = false; _chargeFull = false; _chargeBoltDue = false;   // the flash took the dim over
                 SolarBlade.Clear(); _chargeTarget = -1;                          // …and the charge's white is off the blade
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] charge bolt at ({x:F0},{h:F0},{y:F0}) (cursor {cursor:F1})");
@@ -216,7 +232,8 @@ namespace Dark_Cloud_Improved_Version
         }
         private static void ChargeStandDown()
         {
-            BigBang.PointEnd(); _chargeDropped = false; _chargeTarget = -1;
+            CameraDip.Release();                                                 // broken or spent: the camera eases back up
+            BigBang.PointFade(); _chargeDropped = false; _chargeTarget = -1;     // a blade not yet let go fades out; one in the air is gone
             if (!SunSword.FlashArmed) SolarBlade.Clear();                        // the charge's white off the blade (a primed flash keeps its own)
             if (_unlockZeroed) RestoreUnlock();
             if (_chargeDimming) { SolarLighting.EndDim(); _chargeDimming = false; }
@@ -272,19 +289,19 @@ namespace Dark_Cloud_Improved_Version
                 try
                 {
                     byte f = Memory.ReadByte(Addresses.checkFloor);
-                    if (f != floor) { if (floor != 0xFF) BigBang.ReleaseJudgement(); floor = f; }
+                    if (f != floor) { if (floor != 0xFF) { BigBang.ReleaseJudgement(); CameraDip.Reset(); } floor = f; }
                     ToanLockOn.HoldReach("[Zeus] ");                                  // Big Bang's reach, inherited
                     bool moving = !Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest();
                     ToanLockOn.DriveSpeed(moving, "[Zeus] ");
                     ToanLockOn.DriveStride(moving, "[Zeus] ");
                     if (LightningSeeded) MaintainScale();
-                    if (!Player.CheckDunIsPausedOrMenu()) { ChargeTick(); if (Player.CurrentCharacterNum() == Player.ToanId) BigBang.JudgementTick(Judgement); }
+                    if (!Player.CheckDunIsPausedOrMenu()) { ChargeTick(); CameraDip.Tick(); if (Player.CurrentCharacterNum() == Player.ToanId) BigBang.JudgementTick(Judgement); }
                     BigBang.ExpireShells();                                            // the bolt's blast entries, once spent
                     BigBang.ReleaseRedirectWhenDue();
                 }
                 catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] tick error: " + ex.Message); }
             }
-            ChargeStandDown(); BigBang.ReleaseJudgement(); BigBang.ReleaseRedirect();
+            ChargeStandDown(); CameraDip.Reset(); BigBang.ReleaseJudgement(); BigBang.ReleaseRedirect();
             ToanLockOn.ReleaseReach(); ToanLockOn.ReleaseSpeed("[Zeus] "); ToanLockOn.DriveStride(false, "[Zeus] ");
         }
 

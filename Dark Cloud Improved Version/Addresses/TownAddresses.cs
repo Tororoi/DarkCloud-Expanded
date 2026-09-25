@@ -396,6 +396,14 @@ namespace Dark_Cloud_Improved_Version
     /// resolves to <see cref="EditLoop.MainCamera"/> while walking/fishing. One home for the
     /// pointer and the Step-consumed field offsets (previously re-declared per feature file).
     /// </summary>
+    /// <summary>The dungeon's camera pointer (ELF <c>NowCamera</c>, gp-0x6358): the CCameraFollow the dungeon driver
+    /// (MoveChara, OpC_MotionProcess, CameraAutoMove) moves — a dungeon-side object (0x21DC45E0 in play), not the town's
+    /// MainCamera. 0 in town.</summary>
+    internal static class DungeonCamera
+    {
+        internal const long NowCamera = 0x202A3498;
+    }
+
     internal static class FollowCamera
     {
         /// <summary>Pointer to the active CCameraFollow.</summary>

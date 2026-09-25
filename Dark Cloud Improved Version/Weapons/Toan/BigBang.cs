@@ -182,7 +182,7 @@ namespace Dark_Cloud_Improved_Version
         private static double _fallSeconds;                    // …or a fall over a FIXED time (0 = not this)
         // A POINT HOVER: a blade the owner hangs itself — over a spot on the ground, or over a unit at a fixed height — and
         // lets go on its own cue (the Sword of Zeus's charge attack), outside the lock-on hover's gates below.
-        private static bool   _pointHover;
+        private static bool   _pointHover, _pointDriven, _pointFading;   // driven: its fade-in is set by hand (PointAlpha); fading: on its way out
         private static float  _pointX, _pointY;                // the spot (when not over a unit)
         internal static DateTime PointLandedAt { get; private set; }   // when a point hover's blade last reached the ground (default = none)
         private static DateTime _landedAt;                     // when the burst went off; the flash waits FlashDelay
@@ -802,7 +802,7 @@ namespace Dark_Cloud_Improved_Version
             if (SolarGlow.AnchoredTo(BladeProp.RootGuest)) SolarGlow.Hide();
             _followSlot = -1;
             BladeProp.Despawn();
-            _hoverSlot = -1; _heightSlot = -1; _hoverAlpha = 0f; _hoverOut = false; _pointHover = false;
+            _hoverSlot = -1; _heightSlot = -1; _hoverAlpha = 0f; _hoverOut = false; _pointHover = false; _pointDriven = false; _pointFading = false;
             // GlowOwned stays: DriveGlow brings the glow back up on Toan while the charge still stands, then lets go.
         }
 
@@ -818,7 +818,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (_hoverSlot >= 0 || BladeProp.Active) return;                  // the lock-on hover has the copy
                 if (!BladeProp.Spawn(HoverScale)) return;
-                _owner = owner; _pointHover = true; _hoverAlpha = 0f; _hoverOut = false; PointLandedAt = default;
+                _owner = owner; _pointHover = true; _pointDriven = false; _pointFading = false; _hoverAlpha = 0f; _hoverOut = false; PointLandedAt = default;
                 _hoverHeight = height; _groundH = h; _heightSlot = -1;
                 EnsureBladeThread();
             }
@@ -829,6 +829,24 @@ namespace Dark_Cloud_Improved_Version
                 if (_heightSlot != slot) { _heightSlot = slot; _groundH = UnitHeight(slot); _hoverHeight = HoverHeightFor(slot, _groundH); }   // measured once, at rest
                 Memory.WriteInt(CodeCaves.NameHide, 1);                           // the target's name plate off, as under the lock-on hover
             }
+        }
+        /// <summary>The point hover's fade-in set by hand: the blade at <paramref name="alpha"/> (0..1) and its glow the
+        /// same size — a charge's progress, rather than the fade's own clock.</summary>
+        internal static void PointAlpha(float alpha)
+        {
+            if (!_pointHover || _pointFading || Dropping) return;
+            _pointDriven = true;
+            _hoverAlpha = Math.Max(0f, Math.Min(1f, alpha));
+        }
+        /// <summary>The point hover's blade fading out over the fade, its glow shrinking with it, then gone — a charge
+        /// let go or broken before it was spent.</summary>
+        internal static void PointFade()
+        {
+            if (!_pointHover || _pointFading) return;
+            if (Dropping) { PointEnd(); return; }
+            if (_followSlot >= 0)                                                 // it fades where it hangs, no longer following
+            { long p = EnemyAddresses.CharObjects.PosAddr(_followSlot); _pointX = Memory.ReadFloat(p); _pointY = Memory.ReadFloat(p + 8); }
+            _pointFading = true; _pointDriven = false; _followSlot = -1;
         }
         /// <summary>Let the point hover's blade go: down from where it hangs to the owner's stop over
         /// <paramref name="seconds"/>, on the fall's curve; the time it reaches the ground is <see cref="PointLandedAt"/>.</summary>
@@ -858,6 +876,15 @@ namespace Dark_Cloud_Improved_Version
         private static void PointTick(double dt)
         {
             if (!BladeProp.Maintain()) { PointEnd(); return; }
+            if (_pointFading)
+            {
+                _hoverAlpha = (float)Math.Max(0.0, _hoverAlpha - dt / FadeSeconds);
+                BladeProp.Alpha(_hoverAlpha);
+                DriveGlow(false);
+                if (_hoverAlpha <= 0f) PointEnd();
+                return;
+            }
+            if (_pointDriven) { BladeProp.Alpha(_hoverAlpha); DriveGlow(true); SolarGlow.Drive(_hoverAlpha); if (Dropping && _fallDone) Land(); return; }
             if (_hoverAlpha < 1f) { _hoverAlpha = (float)Math.Min(1.0, _hoverAlpha + dt / FadeSeconds); BladeProp.Alpha(_hoverAlpha); }
             if (_followSlot >= 0)
             {

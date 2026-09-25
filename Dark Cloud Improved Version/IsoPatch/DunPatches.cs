@@ -46,6 +46,19 @@ namespace Dark_Cloud_Improved_Version
             new(XiaoShotWhpSiteA + 4, 0x44826000, XiaoShotWhpPatchedWord1, "Xiao shot WHP factor → mailbox word (lwc1 f12, path A)"),
             new(XiaoShotWhpSiteB,     0x3C023F80, XiaoShotWhpPatchedWord0, "Xiao shot WHP factor → mailbox word (lui, path B)"),
             new(XiaoShotWhpSiteB + 4, 0x44826000, XiaoShotWhpPatchedWord1, "Xiao shot WHP factor → mailbox word (lwc1 f12, path B)"),
+            // The dungeon camera's resting height and floor (OpC_MotionProcess — see CodeCaves.CameraRestHeight). The rest is
+            // `lui v0,0x40a0; mtc1 v0,f1` (5.0) at two sites → `lui v0,HI; lwc1 f1,LO(v0)` of CameraRestHeight; the floor is
+            // `lwc1 f12,-0x7bcc(gp)` (the 1.6 global) at two sites, each right after `jal GetHeight` whose delay slot is a
+            // nop → the nop becomes `lui v0,HI` (GetHeight leaves v0 alone: it returns in f0) and the load `lwc1 f12,LO(v0)`
+            // of CameraMinHeight. PNACH-seeded vanilla while nobody owns them.
+            new(0x01DBF480, 0x3C0240A0, CameraRestWord0, "camera rest height → data word (lui, near-decay site)"),
+            new(0x01DBF484, 0x44820800, CameraRestWord1, "camera rest height → data word (lwc1 f1, near-decay site)"),
+            new(0x01DBF4A8, 0x3C0240A0, CameraRestWord0, "camera rest height → data word (lui, decay-rate site)"),
+            new(0x01DBF4AC, 0x44820800, CameraRestWord1, "camera rest height → data word (lwc1 f1, decay-rate site)"),
+            new(0x01DBF41C, 0x00000000, CameraMinWord0,  "camera min height → data word (lui in GetHeight's delay slot, near branch)"),
+            new(0x01DBF420, 0xC78C8434, CameraMinWord1,  "camera min height → data word (lwc1 f12, near branch)"),
+            new(0x01DBF450, 0x00000000, CameraMinWord0,  "camera min height → data word (lui in GetHeight's delay slot, far branch)"),
+            new(0x01DBF454, 0xC78C8434, CameraMinWord1,  "camera min height → data word (lwc1 f12, far branch)"),
             // The lock-on reach factor table (six floats by character, dun 0x1DC1B20; SetNearLockOnTarget and setTargetCursor each
             // copy it to the stack with `lui v0,0x1DC; addiu v0,v0,0x1B20; lq/ld`) → the mod's copy in runtime data
             // (CodeCaves.LockOnFactorTable, pnach-seeded vanilla while idle; the Flamingo writes Xiao's 2.8).
@@ -149,6 +162,12 @@ namespace Dark_Cloud_Improved_Version
         internal const uint LockOnTableWord0 = 0x3C020000u | ((CodeCaves.LockOnFactorTableGuest + 0x8000u) >> 16);
         internal const uint LockOnTableWord1 = 0x24420000u | (CodeCaves.LockOnFactorTableGuest & 0xFFFFu);
         internal const long LockOnTableHookAddrMmu = 0x20000000L + 0x01DC01A0;
+        // ⚠ lwc1's offset is SIGNED: these words sit at ...F880/F884, so the lui takes the address rounded UP (+0x8000)
+        // — 0x01FB — and the load's -0x780 lands on them. A plain HI (0x01FA) read 0x01F9F880 instead: nothing.
+        private const uint CameraRestWord0 = 0x3C020000u | ((CodeCaves.CameraRestHeightGuest + 0x8000u) >> 16);   // lui v0,HI(+)
+        private const uint CameraRestWord1 = 0xC4410000u | (CodeCaves.CameraRestHeightGuest & 0xFFFF);            // lwc1 f1,LO(v0)
+        private const uint CameraMinWord0  = 0x3C020000u | ((CodeCaves.CameraMinHeightGuest + 0x8000u) >> 16);    // lui v0,HI(+)
+        private const uint CameraMinWord1  = 0xC44C0000u | (CodeCaves.CameraMinHeightGuest & 0xFFFF);             // lwc1 f12,LO(v0)
         internal const uint XiaoShotWhpPatchedWord0 = 0x3C020000u | (uint)((CodeCaves.Mailbox.XiaoShotWhpFactor - 0x20000000) >> 16);
         internal const uint XiaoShotWhpPatchedWord1 = 0xC44C0000u | (uint)((CodeCaves.Mailbox.XiaoShotWhpFactor - 0x20000000) & 0xFFFF);
         internal const long XiaoShotWhpPatchAddrMmu = 0x20000000L + XiaoShotWhpSiteA;

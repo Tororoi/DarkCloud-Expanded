@@ -204,9 +204,12 @@ namespace Dark_Cloud_Improved_Version
         /// <paramref name="dim"/>: the floor's captured light is pulled down first (ambient and colour rows toward
         /// DimKeep of themselves, the fog closed in to DimFogPull of its reach and its colour toward black), and the
         /// flash's white is blended over THAT — so as the white recedes, it recedes onto the dim, not past it.</summary>
+        /// <summary>The darkness last written (0 = the floor's own light): what a charge begun inside a blinding keeps.</summary>
+        internal static float LastDim { get; private set; }
         private static void Write(float k, float kf, float dim)
         {
             if (_amb == null || _cols == null || _fog == null || _fogRgb == null) return;   // nothing captured: nothing to write
+            LastDim = dim;
             TintEnemies(dim);
             float[] light = FlashColour ?? SunLight, fogc = FogColour ?? SunFog;
             kf *= Math.Max(0f, Math.Min(1f, FogAmount));

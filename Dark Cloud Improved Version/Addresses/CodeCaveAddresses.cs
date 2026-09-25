@@ -934,7 +934,22 @@ namespace Dark_Cloud_Improved_Version
         internal const long StrideScale      = 0x21FAF870;
         internal const uint StrideScaleGuest = 0x01FAF870;
 
-        // ── FREE: 0x21FAF880 .. 0x21FB0000 (0x780 B) ────────────────────────────────────────────────────
+        /// <summary>THE DUNGEON CAMERA'S RESTING HEIGHT and its FLOOR, as data. The dungeon camera pass
+        /// (OpC_MotionProcess, dun 0x1DBF300) regulates the follow camera's height above its look-at point every
+        /// frame: nearer than 60 to Toan it climbs 0.5 a frame (to 30); farther, it decays toward a REST of 5.0 at
+        /// 0.05 × the excess per frame (0.15..0.5), and never below a MIN of 1.6. The rest is an immediate at two
+        /// sites and the min a gp-relative global read at two; DunPatches makes all four read these words
+        /// (<see cref="CameraRestHeight"/>, <see cref="CameraMinHeight"/>). While <see cref="CameraHeightOwner"/> is
+        /// 0 the PNACH re-seeds 5.0 / 1.6 every frame — vanilla with the app closed; a sword's charge takes the owner
+        /// and drives both down together (CameraDip), and the engine's own per-frame ease carries the camera there.</summary>
+        internal const long CameraRestHeight      = 0x21FAF880;
+        internal const uint CameraRestHeightGuest = 0x01FAF880;
+        internal const long CameraMinHeight       = 0x21FAF884;
+        internal const uint CameraMinHeightGuest  = 0x01FAF884;
+        internal const long CameraHeightOwner     = 0x21FAF888;
+        internal const float CameraRestVanilla = 5.0f, CameraMinVanilla = 1.6f;
+
+        // ── FREE: 0x21FAF890 .. 0x21FB0000 (0x770 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

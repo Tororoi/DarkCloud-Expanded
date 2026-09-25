@@ -34,7 +34,8 @@ namespace Dark_Cloud_Improved_Version
                                                    // it this early, so it is at full size the instant the charge is ready
         private const double FadeSeconds = 0.50;   // …and shrinks away again when a charge is spent unused
         private static double _grow = GrowSeconds, _fade = FadeSeconds;   // this showing's own timings (a hand-off runs faster)
-        private static bool  _on, _fading;
+        private static bool  _on, _fading, _driven;   // driven: its size is set by hand (Drive) rather than swelling on its own clock
+        private static float _k;                      // the size it was last written at, 0..1 — what a fade shrinks from
         private static DateTime _shownAt, _fadeAt;
 
         /// <summary>Up, once. Re-arming every tick would re-bind the texture each frame.</summary>
@@ -72,7 +73,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowReady, 0);        // bind the disc
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 1);           // armed last
-            _on = true; _fading = false; _shownAt = GameClock.Now; _grow = Math.Max(0.01, growSeconds);
+            _on = true; _fading = false; _driven = false; _k = 0f; _shownAt = GameClock.Now; _grow = Math.Max(0.01, growSeconds);
             // Where the anchor really sits, so any residual offset is one measurement rather than another guess: the cave
             // places the sprite at the node's posed world position (world matrix translation row), and his feet are the
             // player's own height.
@@ -95,11 +96,25 @@ namespace Dark_Cloud_Improved_Version
             {
                 double t = (GameClock.Now - _fadeAt).TotalSeconds / _fade;
                 if (t >= 1.0) { Hide(); return; }
-                k = (float)(1.0 - t);
+                k = _fadeFrom * (float)(1.0 - t);                       // from wherever it was, not from full
             }
+            else if (_driven) return;                                    // Drive holds its size
             else k = (float)Math.Min(1.0, (GameClock.Now - _shownAt).TotalSeconds / _grow);
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, Scale * k);
+            _k = k;
         }
+        /// <summary>Its size set by hand, 0..1 — a glow growing with something else's own progress (the charge
+        /// blade's fade-in) rather than on a clock. Holds until a fade or hide.</summary>
+        internal static void Drive(float k)
+        {
+            if (!_on || _fading) return;
+            _driven = true;
+            k = Math.Max(0f, Math.Min(1f, k));
+            if (Math.Abs(k - _k) < 0.01f) return;
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, Scale * k);
+            _k = k;
+        }
+        private static float _fadeFrom = 1f;
 
         internal static bool IsUp => _on;
         /// <summary>Up at this node, on its way down or not — what must be cut before that node goes away.</summary>
@@ -112,7 +127,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void Fade(double seconds = FadeSeconds)
         {
             if (!_on || _fading) return;
-            _fading = true; _fadeAt = GameClock.Now; _fade = Math.Max(0.01, seconds);
+            _fading = true; _driven = false; _fadeAt = GameClock.Now; _fade = Math.Max(0.01, seconds); _fadeFrom = _k;
         }
 
         /// <summary>Down, and the disc back where it loaded.</summary>
