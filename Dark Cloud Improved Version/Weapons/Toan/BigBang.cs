@@ -139,6 +139,29 @@ namespace Dark_Cloud_Improved_Version
         // what makes it that enemy's alone.
         private static readonly (float radius, float times)[] Falloff = { (50f, 1f), (40f, 2f), (25f, 3f), (10f, 4f) };
 
+        /// <summary>Who the judgement blade is hanging for. Big Bang's own, or the Sword of Zeus's (SwordOfZeus.Judgement):
+        /// the weapon whose primed state hangs it, the glow disc it carries, the profile whose prime dim the fall darkens
+        /// from, whether every enemy is turned to watch it fall, and what happens where it lands.</summary>
+        internal sealed class JudgementOwner
+        {
+            internal ushort WeaponId;
+            internal string Glow;
+            internal SunSword.SolarProfile Profile;
+            internal bool   Redirect;
+            internal bool   ToTheHilt;                        // the fall ends with the GRIP at the ground — the whole blade in it — rather than the tip
+            internal Action<int, float, float, float> Land;   // (target slot, x, h, y)
+        }
+        private static readonly JudgementOwner BigBangOwner = new JudgementOwner
+        { WeaponId = Items.bigbang, Glow = ToanGlowBakes.BlueName, Profile = SunSword.BigBangFlash, Redirect = true, Land = LandBigBang };
+        private static JudgementOwner _owner = BigBangOwner;
+        /// <summary>The hover and the fall, ticked for another sword: the same copy, fade, glow and gravity as Big Bang's.</summary>
+        internal static void JudgementTick(JudgementOwner owner) { _owner = owner; JudgementTick(); }
+        /// <summary>Everything the judgement blade put up, down (a sword put away, a floor left).</summary>
+        internal static void ReleaseJudgement()
+        {
+            AbandonHover(); Dropping = false; _landed = false; _fallDone = false; _landedAt = default; SolarLighting.EndDim(); GlowOwned = false;
+        }
+
         internal static bool GlowOwned { get; private set; }   // the blue glow is on the blade copy, not on Toan
         internal static bool Dropping  { get; private set; }
         private static bool   _landed;
@@ -152,6 +175,7 @@ namespace Dark_Cloud_Improved_Version
         private static int    _followSlot = -1;                // the unit the fall thread places the hover over (shared root); −1 = pinned
         private static float  _bladeX, _bladeY;                // where the BLADE falls to (the target itself)
         private static volatile bool _fallDone;                // the fall thread has brought it to the ground
+        private static float  _paceFrom, _paceTo;              // a fall PACED by Toan's swing: the frame cursor from…to (0 = gravity's own time)
         private static DateTime _landedAt;                     // when the burst went off; the flash waits FlashDelay
         private static Thread _fallThread;
         internal static bool LandingPending => _landedAt != default;
@@ -254,7 +278,7 @@ namespace Dark_Cloud_Improved_Version
             if (ExplosionSeeded) MaintainExplosionScale();
             ArmImmunity();
             AnswerAutoGuard();
-            JudgementTick();
+            JudgementTick(BigBangOwner);
             if (!st.patchChecked)
             {
                 st.patchChecked = true;
@@ -477,7 +501,7 @@ namespace Dark_Cloud_Improved_Version
             // Liveness by HP alone (HasHp): the hover must never depend on anything it changes itself.
             bool locked   = PlayerAction.LockHeld(out int lockSlot)
                             && lockSlot < EnemyAddresses.FloorSlots.Count && HasHp(lockSlot);
-            bool primed   = SunSword.PrimedFor(Items.bigbang);
+            bool primed   = SunSword.PrimedFor(_owner.WeaponId);
             double dt     = TickMs / 1000.0;
             // DIAGNOSTIC: the gates, once a second while primed — a hover that never appears is one of these reading
             // something other than what the notes say.
@@ -494,7 +518,10 @@ namespace Dark_Cloud_Improved_Version
 
             if (Dropping)
             {
-                if (!BladeProp.Maintain() || !HasHp(_hoverSlot)) { AbandonHover(); Dropping = false; SolarLighting.EndDim(); return; }
+                // A paced fall whose swing is gone (interrupted, or the combo left) has nothing to land on: down it comes.
+                int act = Memory.ReadInt(PlayerAction.ChargeActionState);
+                bool swingLost = _paceTo > 0f && (act < PlayerAction.ActionComboFirst || act > PlayerAction.ActionComboLast);
+                if (!BladeProp.Maintain() || !HasHp(_hoverSlot) || swingLost) { AbandonHover(); Dropping = false; SolarLighting.EndDim(); return; }
                 // A swing right after the lock drops a blade still fading in: finish the fade on the way down.
                 if (_hoverAlpha < 1f) { _hoverAlpha = (float)Math.Min(1.0, _hoverAlpha + dt / FadeSeconds); BladeProp.Alpha(_hoverAlpha); }
                 DriveGlow(true);
@@ -572,10 +599,10 @@ namespace Dark_Cloud_Improved_Version
             SolarGlow.Tick();
             if (!onBlade) { if (SolarGlow.IsUp) SolarGlow.Fade(FadeSeconds); return; }
             uint want = BladeProp.RootGuest;
-            if (want == 0 || !SunSword.PrimedFor(Items.bigbang)) return;
+            if (want == 0 || !SunSword.PrimedFor(_owner.WeaponId)) return;
             if (SolarGlow.OnAnchor(want)) return;                               // up, where it should be
             if (SolarGlow.IsUp) SolarGlow.Hide();                               // fading off it, or on something else
-            SolarGlow.Show(ToanGlowBakes.BlueName, want, -BladeLength() * HoverScale / 2f, FadeSeconds);
+            SolarGlow.Show(_owner.Glow, want, -BladeLength() * HoverScale / 2f, FadeSeconds);
         }
 
         /// <summary>Alive enough to hang a blade over: HP above zero.</summary>
@@ -624,10 +651,14 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The swing while primed: if the blade is hanging over a target, let it fall — the flash waits for
-        /// the landing. False when there is nothing to drop, and Solar Flash fires as it always has.</summary>
-        internal static bool BeginDrop()
+        /// the landing. False when there is nothing to drop, and Solar Flash fires as it always has. With
+        /// <paramref name="paceFrom"/>/<paramref name="paceTo"/> the fall is PACED by Toan's swing instead of by
+        /// gravity's clock: the frame cursor running from the one to the other carries the blade down the same
+        /// curve, so the tip is in the enemy exactly at <paramref name="paceTo"/> (the Sword of Zeus's first swing).</summary>
+        internal static bool BeginDrop(float paceFrom = 0f, float paceTo = 0f)
         {
             if (_hoverSlot < 0 || _hoverOut || !BladeProp.Active || !HasHp(_hoverSlot)) return false;
+            _paceFrom = paceFrom; _paceTo = paceTo > paceFrom ? paceTo : 0f;
             long a = EnemyAddresses.FloorSlots.SlotAddr(_hoverSlot, 0);
             _bladeX = Memory.ReadFloat(a + EnemySlotOffsets.LocationX);
             _bladeY = Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
@@ -638,15 +669,15 @@ namespace Dark_Cloud_Improved_Version
             // so there is no step at the start. It ENDS with the tip at the root's height (the grip a blade length
             // above it), which is where the blast goes off: the blade in the enemy, not a blade length under the floor.
             float hang = _followSlot >= 0 ? _dropH + _hoverHeight : BladeProp.WorldHeight();
-            _fallStop   = BladeLength() * HoverScale;
+            _fallStop   = _owner.ToTheHilt ? 0f : BladeLength() * HoverScale;   // the grip's height above the root at the end: the tip in the enemy, or the hilt
             _fallHeight = float.IsNaN(hang) ? _hoverHeight : Math.Max(_fallStop + 1f, hang - _dropH);
             _followSlot = -1;
             BladeProp.Unpin(PlayerFacing());                                 // off the enemy and into the world, where it is, to fall
             SolarLighting.BeginDim();                                        // the lights go down with it
             _dropStart = GameClock.Now; Dropping = true; _landed = false; _fallDone = false; _landedAt = default;
-            BeginRedirect(_bladeX, _dropH + _fallHeight, _bladeY);
+            if (_owner.Redirect) BeginRedirect(_bladeX, _dropH + _fallHeight, _bladeY);
             EnsureBladeThread();
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] judgement blade falls on slot {_hoverSlot}");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] judgement blade falls on slot {_hoverSlot} for weapon {_owner.WeaponId}");
             return true;
         }
 
@@ -676,14 +707,18 @@ namespace Dark_Cloud_Improved_Version
                     double t = (GameClock.Now - _dropStart).TotalSeconds;
                     double span = _fallHeight - _fallStop;                       // grip: from where it hung down to a blade length above the root
                     double T = Math.Sqrt(2.0 * span / Gravity);                  // how long that takes under gravity
-                    float  h = _dropH + _fallStop + (float)Math.Max(0.0, span - 0.5 * Gravity * t * t);
+                    // The fall's fraction: gravity's clock, or — paced — the swing's frame cursor between its two marks,
+                    // on the same curve (the height falls with the square of it).
+                    double u = _paceTo > 0f
+                        ? Math.Max(0.0, Math.Min(1.0, (Memory.ReadFloat(PlayerAction.AnimFrameCursor) - _paceFrom) / (_paceTo - _paceFrom)))
+                        : Math.Min(1.0, t / T);
+                    float  h = _dropH + _fallStop + (float)(span * (1.0 - u * u));
                     BladeProp.Place(_bladeX, h, _bladeY, PlayerFacing());
                     if (_redirecting) Memory.WriteVec3(CodeCaves.JudgementPos, _bladeX, h, _bladeY);   // what every enemy is watching
-                    double u = Math.Min(1.0, t / T);                             // the dim peaks as it lands, however long that is
                     float  ramp = (float)((Math.Exp(DimSharpness * u) - 1.0) / (Math.Exp(DimSharpness) - 1.0));
-                    float  from = SunSword.BigBangFlash.PrimeDim;                 // on from the primed level, not from the floor's own light
+                    float  from = _owner.Profile.PrimeDim;                        // on from the primed level, not from the floor's own light
                     SolarLighting.Dim(from + (1f - from) * ramp);
-                    if (t >= T) _fallDone = true;
+                    if (u >= 1.0) _fallDone = true;
                 }
                 catch (Exception e) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[BigBang] fall tick failed: " + e.Message); }
                 Thread.Sleep(FallTickMs);
@@ -698,26 +733,31 @@ namespace Dark_Cloud_Improved_Version
             _landed = false; _landedAt = default; return true;
         }
 
-        /// <summary>The blade has hit the ground: the blast, every enemy turned to look, the weapon-HP bill, and the
-        /// copy gone — the flash is Solar Flash's to fire now.</summary>
+        /// <summary>The blade has hit the ground: the owner's landing where it fell, and the copy gone — the flash is
+        /// Solar Flash's to fire now.</summary>
         private static void Land()
         {
-            // The white-out and the burst on the SAME frame, from here. Solar Flash's own tick runs the rest of the
-            // flash (the light hit, the blinding, the blade and glow) once TakeDropLanded hands it the landing — and
-            // that is after the hit entries and the turns below, well past a frame — so the lighting write goes out now,
-            // and Solar Flash is told it is lit (a second Flash there restores the floor's light and whites it again).
-            SunSword.BigBangFlash.ArmLighting();
-            SolarLighting.Flash();
             LastBlast = (_dropX, _dropH, _dropY);
             if (_redirecting) Memory.WriteVec3(CodeCaves.JudgementPos, _dropX, _dropH, _dropY);   // …and it stays on the blast
-            Burst(_dropX, _dropH, _dropY);
-            PlantFalloff(_dropX, _dropH, _dropY);
-            TurnEnemiesToward(_dropX, _dropY);
-            DrainWhp(DropWhpFactor);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] judgement blade lands on ({_bladeX:F0},{_dropH:F0},{_bladeY:F0}); blast at ({_dropX:F0},{_dropY:F0})");
+            _owner.Land(_hoverSlot, _dropX, _dropH, _dropY);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] judgement blade lands on ({_bladeX:F0},{_dropH:F0},{_bladeY:F0}) for weapon {_owner.WeaponId}");
             AbandonHover();
             _landedAt = GameClock.Now; _landed = true;
             Dropping = false;
+        }
+        /// <summary>Big Bang's landing: the blast, every enemy turned to look, the weapon-HP bill. The white-out and the
+        /// burst on the SAME frame, from here: Solar Flash's own tick runs the rest of the flash (the light hit, the
+        /// blinding, the blade and glow) once TakeDropLanded hands it the landing — and that is after the hit entries
+        /// and the turns below, well past a frame — so the lighting write goes out now, and Solar Flash is told it is
+        /// lit (a second Flash there restores the floor's light and whites it again).</summary>
+        private static void LandBigBang(int slot, float x, float h, float y)
+        {
+            SunSword.BigBangFlash.ArmLighting();
+            SolarLighting.Flash();
+            Burst(x, h, y);
+            PlantFalloff(x, h, y);
+            TurnEnemiesToward(x, y);
+            DrainWhp(DropWhpFactor);
         }
 
         /// <summary>Everything the hover put up, back down: the copy, the target's name bar, the glow's home.</summary>
@@ -1049,8 +1089,8 @@ namespace Dark_Cloud_Improved_Version
             ClearTint(st);
             RestoreSwing(st);          // stats, kick constants and the charge radii
             RestoreImmunity();         // ⚠ shared ELF data: never leave the explosions inert
-            AbandonHover(); Dropping = false; _landed = false; _fallDone = false; _landedAt = default; SolarLighting.EndDim();
-            ToanLockOn.ReleaseReach(); _faceHold = 0; ReleaseRedirect(); GlowOwned = false;
+            ReleaseJudgement();
+            ToanLockOn.ReleaseReach(); _faceHold = 0; ReleaseRedirect();
             { long pool = CollisionPool.Resolve(); foreach (var (slot, _) in _shells) if (pool != 0) CollisionPool.Deactivate(pool, slot); _shells.Clear(); }
             if (st.crushing) { GuardBreak.Drive(false); st.crushing = false; }
             st.chargeAction = 0;

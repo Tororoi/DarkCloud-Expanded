@@ -111,7 +111,17 @@ namespace Dark_Cloud_Improved_Version
         // Weapons.IsChargingWhirlwind / IsWhirlwindActive and the toan-charge-states memory.
         internal const long ChargeActionState = 0x21DC4494; // DAT_01dc4494 action id (values below)
         internal const int  ActionWindup      = 0xE;        // charge wind-up (meter accumulates; lunge OR whirlwind)
-        internal const int  ActionLunge       = 0xF;        // charge lunge executing
+        internal const int  ActionLunge       = 0xF;        // charge lunge executing: the wind-up clip (15)…
+        // …then, in ToanKey_Play's order: the DASH (0x10, until the flight distance is spent), the loop clip (3, id 3 =
+        // 溜め攻撃loop2), the FALL (0x19, id 25 = loop3, one held frame, until the height is under 2.0) and the END clip
+        // (0x11, id 17 = 溜め攻撃end from frame 196), after which the attack is over. The CCharacter motion-id word reads
+        // 0 throughout; the action word is what tells the phases apart.
+        internal const int  ActionLungeDash   = 0x10;
+        internal const int  ActionLungeLoop   = 0x3;
+        internal const int  ActionLungeFall   = 0x19;
+        internal const int  ActionLungeEnd    = 0x11;
+        internal static bool InLunge(int action) =>
+            action == ActionLunge || action == ActionLungeDash || action == ActionLungeLoop || action == ActionLungeFall || action == ActionLungeEnd;
         internal const int  ActionWhirlwind   = 0x18;       // whirlwind executing
         internal const int  ActionComboFirst  = 0x24;       // combo swing states 0x24-0x28 = melee hits 1-5
         internal const int  ActionComboLast   = 0x28;       //   (each combo hit is its own action state)
@@ -238,6 +248,12 @@ namespace Dark_Cloud_Improved_Version
         // ≠ 0 (the ability learned). Documented for completeness; the level-2 check already folds it in, so code
         // reads ChargeLevel==2 rather than this directly (UserStatus base not needed).
         internal const int  WhirlwindUnlockOffset = 0x4324;
+        /// <summary>The whirlwind-unlock word itself: the "UserStatus" ToanKey_Play reads (through gp-0x6388) is the
+        /// CDngStatusData block (DngStatusData.Base), and the word is the first of six special-skill flags at +0x4324
+        /// (one per character, set to 1 by the event command _SSKILL_GET, cleared only by Initialize__14CDngStatusData).
+        /// ToanKey_Play reads it at the level-2 transition AND at the release — zero there, a full meter releases the
+        /// LUNGE (level 1); it is read nowhere else. Save data: never leave it changed.</summary>
+        internal const long WhirlwindUnlock = DngStatusData.Base + WhirlwindUnlockOffset;   // 0x21CDD870
         // Charge-active flag (DAT_01dc44f0): 1 while a lunge/whirlwind hit is live; cleared to 0 INSIDE the 0x18
         // block on the whirlwind's final frame — so (action 0x18 && flag 1) is the true "whirlwind executing"
         // window, and the flag dropping is the earliest, cleanest "attack finished" signal (the action state

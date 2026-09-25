@@ -8,7 +8,9 @@ namespace Dark_Cloud_Improved_Version
     /// the cat with), and the primed flash brings that bolt down on enemies — on the locked target with every swing
     /// of the combo while locked on, or on each of the nearest <see cref="MaxStrikes"/> within <see cref="StrikeReach"/>
     /// when not. A bolt's damage is Big Bang's falloff blast at its foot at half its steps (the bolt itself touches nothing); the flash
-    /// carries no hit of its own (SunSword.ZeusFlash) and stuns the floor the way the Sun Sword's does.</summary>
+    /// carries no hit of its own (SunSword.ZeusFlash) and stuns the floor the way the Sun Sword's does. A full CHARGE
+    /// attack is a bolt as well (<see cref="ChargeTick"/>): the room darkens as the meter fills, the level-2 release
+    /// plays the LUNGE, and the bolt comes down ahead of Toan as its clip ends its dash.</summary>
     internal static class SwordOfZeus
     {
         private const int    TickMs = 30;
@@ -46,6 +48,16 @@ namespace Dark_Cloud_Improved_Version
             Memory.ReadUInt(root + CFrameVu1.Name) == RootWord && Memory.ReadByte(root + CFrameVu1.Name + 4) == RootDigit;
         private static BorrowedEffect _lightning;
 
+        /// <summary>The judgement blade, for this sword: hung over the locked target while primed (BigBang.JudgementTick),
+        /// with the red ring for its glow, the fall darkening from this sword's dim, no enemy turned to watch it. Let go
+        /// as the primed combo's FIRST swing begins, paced by the swing so it is in the ground to the HILT at the
+        /// swing's hit frame; there it is gone at once and the bolt comes down on the target.</summary>
+        internal static readonly BigBang.JudgementOwner Judgement = new BigBang.JudgementOwner
+        {
+            WeaponId = Items.swordofzeus, Glow = ToanGlowBakes.ZeusName, Profile = SunSword.ZeusFlash, Redirect = false, ToTheHilt = true,
+            Land = (slot, x, h, y) => { if (!StrikeAt(x, h, y, slot)) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] the blade landed but no bolt was free"); },
+        };
+
         /// <summary>What BorrowedShots seeds the instance with while Toan carries the Sword of Zeus: the bolt.</summary>
         internal static BorrowedEffect WantedShot()
         {
@@ -66,28 +78,109 @@ namespace Dark_Cloud_Improved_Version
         /// (the model it validates, "kiru" + "fkiri", is not the one loaded).</summary>
         internal static bool LightningSeeded => _lightning != null && BorrowedShots.Entered(_lightning);
 
-        /// <summary>The bolt on the locked target: a sub-shot of the instance played once where the enemy's body is,
-        /// no damage. False when the bolt is not entered on this floor or every sub-shot is busy.</summary>
+        /// <summary>The bolt on one enemy: the strike played at its ground point, its blast, its cost. False when the
+        /// bolt is not entered on this floor or every sub-shot is busy.</summary>
         internal static bool Strike(int slot)
         {
-            if (!LightningSeeded || slot < 0 || slot >= EnemyAddresses.FloorSlots.Count || !Enemies.IsLive(slot)) return false;
+            if (slot < 0 || slot >= EnemyAddresses.FloorSlots.Count || !Enemies.IsLive(slot)) return false;
             long pos = EnemyAddresses.CharObjects.PosAddr(slot);                    // the unit's own position: its ground point
-            float x = Memory.ReadFloat(pos), h = Memory.ReadFloat(pos + 4), y = Memory.ReadFloat(pos + 8);
+            if (!StrikeAt(Memory.ReadFloat(pos), Memory.ReadFloat(pos + 4), Memory.ReadFloat(pos + 8), slot)) return false;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] lightning on slot {slot}");
+            return true;
+        }
+
+        /// <summary>The bolt at a point: a sub-shot of the instance played once there (no damage of its own), Big
+        /// Bang's falloff blast at the point, and the bolt's weapon-HP cost. <paramref name="noKickSlot"/> is the enemy
+        /// under it, which takes the blast where it stands — no shove; nobody is turned to face the bolt, they are
+        /// stunned facing wherever they were, and the struck enemy braces behind its guard like the rest of the floor.</summary>
+        private static bool StrikeAt(float x, float h, float y, int noKickSlot)
+        {
+            if (!LightningSeeded) return false;
             if (!BorrowedShots.Burst(_lightning, x, h, y, 0, 1f)) return false;   // 1×: the root hold sizes every bolt alike
             MaintainScale();                                                        // …before its first frame
             SeSeq.Play(StrikeSe, 90);
-            // The bolt hits like the judgement blade's landing: Big Bang's falloff blast at the strike point. The enemy
-            // struck directly takes it where it stands — no shove; nobody is turned to face the bolt, they are stunned
-            // facing wherever they were, and the struck enemy braces behind its guard like the rest of the floor.
             BigBang.LastBlast = (x, h, y);
-            BigBang.PlantFalloff(x, h, y, noKickSlot: slot, damageScale: BlastScale);
+            BigBang.PlantFalloff(x, h, y, noKickSlot: noKickSlot, damageScale: BlastScale);
             WeaponWhp.Drain(Items.swordofzeus, StrikeWhp, "[Zeus] bolt ");
-            // ⚠ BISECT (temporary): the redirect is not armed on the strike. Every reset so far has landed on the blind's END,
-            // and the redirect's release (0.4 s before it) is the one Zeus-only thing that runs there; Big Bang's copy of it
-            // has never actually been exercised. Restore the BeginRedirect call once cleared.
-            // BigBang.BeginRedirect(x, h, y);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] lightning on slot {slot} at ({x:F0},{h:F0},{y:F0})");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] lightning at ({x:F0},{h:F0},{y:F0})");
             return true;
+        }
+
+        // ── the charge attack ───────────────────────────────────────────────────────────
+        // Charge level 2 is DISABLED while Toan charges with this sword: the whirlwind-unlock word ToanKey_Play reads
+        // is zeroed for the length of the wind-up (and put back the moment it is over — it is save data), so the game
+        // never reaches its own level 2 and every release is the LUNGE. The sword keeps its own level 2 instead: the
+        // room darkens with the meter from the moment he starts charging, the way the guard charge darkens it, to the
+        // Zeus profile's prime dim at whirlwind range, where the stock charge-complete flash fires on him and the
+        // release is flagged as a bolt. The lunge runs through five action states (PlayerAction.InLunge); the tick the
+        // END one (ActionLungeEnd: clip 17 from frame 196) comes up, the bolt comes down ChargeBoltAhead units ahead
+        // of Toan with the strike's blast, and the flash goes off — the same white and
+        // pulse as every strike, but easing back to the floor's own light, with no blinding behind it. A charge let go
+        // early plays whatever it earned and the dim simply lifts. Stands aside while Solar Flash owns the blade.
+        private const float  ChargeBoltAhead   = 30f;   // units ahead of Toan the bolt lands
+        private const float  ChargeDimFrom     = 1.0f;  // the meter as the charge starts (ToanKey_On resets it to 1.0) …
+        private const float  ChargeDimTo       = 2.5f;  // … and at whirlwind range: the dim is full here
+        private static bool  _chargeDimming, _chargeFull, _chargeBoltDue, _chargeBoltFired, _unlockZeroed;
+        private static int   _unlockWas;
+
+        private static void ChargeTick()
+        {
+            int action = Memory.ReadInt(PlayerAction.ChargeActionState);
+            if (SunSword.FlashArmed) { ChargeStandDown(); return; }
+            if (action == PlayerAction.ActionWindup)
+            {
+                float meter = Memory.ReadFloat(PlayerAction.ChargeMeter);
+                float k = Math.Max(0f, Math.Min(1f, (meter - ChargeDimFrom) / (ChargeDimTo - ChargeDimFrom)));
+                if (!_chargeDimming) { _chargeDimming = true; _chargeFull = false; _chargeBoltDue = false; ZeroUnlock(); }   // no level 2 for the game this wind-up
+                if (!SolarLighting.Active) { SolarLighting.BeginDim(); SolarLighting.DimTo(SunSword.ZeusFlash.PrimeDim * k); }   // a flash still easing keeps its course
+                if (meter >= ChargeDimTo && !_chargeFull)
+                {   // the sword's own level 2: the stock charge-complete flash on him, and the release flagged as a bolt
+                    _chargeFull = true;
+                    Player.FlashChargeComplete();
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] charge level 2 — the release is a bolt");
+                }
+                return;
+            }
+            if (_unlockZeroed) RestoreUnlock();                                 // the release has been read: the word goes back at once
+            if (!_chargeDimming) return;
+            if (PlayerAction.InLunge(action))
+            {
+                if (!_chargeFull) { ChargeStandDown(); return; }                // a level-1 lunge: nothing more to it
+                if (!_chargeBoltDue) { _chargeBoltDue = true; _chargeBoltFired = false; }
+                if (_chargeBoltFired || action != PlayerAction.ActionLungeEnd) return;
+                _chargeBoltFired = true;
+                float cursor = Memory.ReadFloat(PlayerAction.AnimFrameCursor);
+                float yaw = Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
+                float x = Memory.ReadFloat(Addresses.dunPositionX) + ChargeBoltAhead * (float)Math.Sin(yaw);
+                float y = Memory.ReadFloat(Addresses.dunPositionY) + ChargeBoltAhead * (float)Math.Cos(yaw);
+                float h = Memory.ReadFloat(Addresses.dunPositionZ);
+                if (!StrikeAt(x, h, y, -1)) { ChargeStandDown(); return; }
+                var p = SunSword.ZeusFlash;
+                p.ArmLighting(rest: false);                                      // the white, then the floor's own light — no blinding
+                SolarLighting.Flash();
+                Player.FlashActiveCharacter(p.Light[0], p.Light[1], p.Light[2], SunSword.FlashPulseSpeed, 1);
+                _chargeDimming = false; _chargeFull = false; _chargeBoltDue = false;   // the flash took the dim over
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] charge bolt ahead of Toan (yaw {yaw:F2}, cursor {cursor:F1})");
+                return;
+            }
+            ChargeStandDown();                                                   // the charge went another way, or is over
+        }
+        private static void ChargeStandDown()
+        {
+            if (_unlockZeroed) RestoreUnlock();
+            if (_chargeDimming) { SolarLighting.EndDim(); _chargeDimming = false; }
+            _chargeFull = false; _chargeBoltDue = false;
+        }
+        private static void ZeroUnlock()
+        {
+            _unlockWas = Memory.ReadInt(PlayerAction.WhirlwindUnlock);
+            if (_unlockWas == 0) return;                                         // no whirlwind to take away: the release is a lunge anyway
+            Memory.WriteInt(PlayerAction.WhirlwindUnlock, 0); _unlockZeroed = true;
+        }
+        private static void RestoreUnlock()
+        {
+            Memory.WriteInt(PlayerAction.WhirlwindUnlock, _unlockWas);
+            _unlockZeroed = false;
         }
 
         /// <summary>Not locked on: a bolt on each of the nearest <see cref="MaxStrikes"/> live enemies within
@@ -120,22 +213,27 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Per tick while the Sword of Zeus is out in a dungeon: the lock-on reach and speed, and the bolt's size.</summary>
         public static void LightningEffect()
         {
+            byte floor = 0xFF;
+            Memory.WriteInt(CodeCaves.NameHide, 0);                                       // the name-plate gate open, whatever a past run left
             while (Player.Weapon.GetCurrentWeaponId() == Items.swordofzeus && Player.InDungeonFloor())
             {
                 Thread.Sleep(TickMs);
                 try
                 {
+                    byte f = Memory.ReadByte(Addresses.checkFloor);
+                    if (f != floor) { if (floor != 0xFF) BigBang.ReleaseJudgement(); floor = f; }
                     ToanLockOn.HoldReach("[Zeus] ");                                  // Big Bang's reach, inherited
                     bool moving = !Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest();
                     ToanLockOn.DriveSpeed(moving, "[Zeus] ");
                     ToanLockOn.DriveStride(moving, "[Zeus] ");
                     if (LightningSeeded) MaintainScale();
+                    if (!Player.CheckDunIsPausedOrMenu()) { ChargeTick(); if (Player.CurrentCharacterNum() == Player.ToanId) BigBang.JudgementTick(Judgement); }
                     BigBang.ExpireShells();                                            // the bolt's blast entries, once spent
                     BigBang.ReleaseRedirectWhenDue();
                 }
                 catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] tick error: " + ex.Message); }
             }
-            BigBang.ReleaseRedirect();
+            ChargeStandDown(); BigBang.ReleaseJudgement(); BigBang.ReleaseRedirect();
             ToanLockOn.ReleaseReach(); ToanLockOn.ReleaseSpeed("[Zeus] "); ToanLockOn.DriveStride(false, "[Zeus] ");
         }
 

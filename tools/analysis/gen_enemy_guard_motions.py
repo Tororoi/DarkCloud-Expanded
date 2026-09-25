@@ -16,28 +16,31 @@ DOC = "docs/enemy-motion-table.md"
 OUT = "Dark Cloud Improved Version/GameData/EnemyGuardMotions.cs"
 
 ENTER = {"guard (enter)", "guard(enter)", "guard((enter))"}
-LOOP  = {"guard (loop)", "guardﾙｰﾌﾟ", "guard"}          # a lone "guard" row is a one-clip guard: enter and hold
+LOOP  = {"guard (loop)", "guardﾙｰﾌﾟ"}
+LONE  = {"guard"}                                       # a plain "guard" row: the RAISE where a loop row follows it (Auntie Medu:
+                                                        # 5 guard, 6 guard-loop, 7 guard-return), else a one-clip guard — enter and hold
 RET   = {"guard (return)"}                              # the clip that LOWERS the guard, back to idle
 IDLE  = {"idle", "stand", "standing"}
 def is_damage(m): return m.startswith("damage") and "(big)" not in m
 
 head = re.compile(r"^### (\d+) — (.+?) `(\w+)`")
-row  = re.compile(r"^\| (\d+) \| (\d+)–(\d+) \| ([\d.]+) \| [^|]* \| ([^|]+) \|$")
+row  = re.compile(r"^\| (\d+) \| (\d+)(?:–(\d+))? \| ([\d.]+) \| [^|]* \| ([^|]+) \|$")   # a one-frame row has no range (Statue Dog's guard loop: "100")
 
 species = {}          # tableIndex -> dict(name, code, enter=(idx,s,e,spd), loop=(idx,s,e,spd))
 cur = None
 for line in open(DOC, encoding="utf-8"):
     m = head.match(line)
     if m:
-        cur = {"name": m.group(2).strip(), "code": m.group(3), "enter": None, "loop": None, "ret": None, "idle": None, "damage": None}
+        cur = {"name": m.group(2).strip(), "code": m.group(3), "enter": None, "loop": None, "ret": None, "idle": None, "damage": None, "lone": None}
         species[int(m.group(1))] = cur
         continue
     if cur is None: continue
     m = row.match(line.rstrip("\n"))
     if not m: continue
-    idx, s, e, spd, meaning = int(m.group(1)), int(m.group(2)), int(m.group(3)), float(m.group(4)), m.group(5).strip()
+    idx, s, e, spd, meaning = int(m.group(1)), int(m.group(2)), int(m.group(3) or m.group(2)), float(m.group(4)), m.group(5).strip()
     if meaning in ENTER and cur["enter"] is None: cur["enter"] = (idx, s, e, spd)
     elif meaning in LOOP and cur["loop"] is None: cur["loop"] = (idx, s, e, spd)
+    elif meaning in LONE and cur["lone"] is None: cur["lone"] = (idx, s, e, spd)
     elif meaning in RET and cur["ret"] is None: cur["ret"] = (idx, s, e, spd)
     elif meaning in IDLE and cur["idle"] is None: cur["idle"] = (idx, s, e, spd)
     elif is_damage(meaning) and cur["damage"] is None: cur["damage"] = (idx, s, e, spd)
@@ -47,8 +50,9 @@ guarded = 0
 for ti in sorted(species):
     sp = species[ti]
     enter, loop, idle, dmg, back = sp["enter"], sp["loop"], sp["idle"], sp["damage"], sp["ret"]
-    if enter is None: enter = loop           # one clip serves as both
-    if loop is None:  loop = enter
+    lone = sp["lone"]
+    if enter is None: enter = lone or loop   # a plain "guard" raises it; failing that one clip serves as both
+    if loop is None:  loop = lone or enter
     if enter is not None: guarded += 1
     ei, es, ee = (enter[0], enter[1], enter[2]) if enter else (-1, 0, 0)
     li, ls, le, lspd = (loop[0], loop[1], loop[2], loop[3]) if loop else (-1, 0, 0, 0.0)

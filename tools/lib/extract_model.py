@@ -69,6 +69,7 @@ CHAR_ORDER = [n for _, n in CHAR_MAP]
 EXTRA_MOTION_PACKS = [
     ('Goro', 'dun\\d02\\stair_mos\\c06d02s.chr', 1),   # borrows c06b rig (60 nodes; mot max w0 57)
     ('Xiao', 'dun\\d02\\stair_mos\\c04d02s.chr', 1),   # borrows c04b rig (79 nodes; mot max w0 78)
+    ('Toan', 'gedit\\s97\\chara\\e117_1.chr', 2),      # the snake fight's second motion file (no .mds; mot max w0 66)
 ]
 
 # ---- e02 Matataki event-cast models (NOT the six allies: villagers / elder / object model). Own an
@@ -85,6 +86,11 @@ GROUP_ORDER = CHAR_ORDER + [E02_GROUP]
 GORO_EXTRA = [('e101', 'gedit\\s01\\chara'), ('e101eb', 'gedit\\s01\\chara'),
               ('e102', 'gedit\\s01\\chara'), ('e103', 'gedit\\s01\\chara'),
               ('e105', 'gedit\\s01\\chara'), ('e130', 'gedit\\s03\\chara')]
+
+# ---- Toan's Wise Owl Forest interlude (s97, the Killer Snake fight): bundles Toan + the snake meshes with a cfg per
+#      character; the `c01` cfg is forced so TOAN's body/motion is shown. e117_1 is a motion-only continuation
+#      (no `.mds`), listed through EXTRA_MOTION_PACKS below. (stem, folder). ----
+TOAN_EXTRA = [('e116', 'gedit\\s97\\chara'), ('e117_0', 'gedit\\s97\\chara')]
 
 
 def _stem(hedname):
@@ -193,6 +199,9 @@ def enumerate_models(dc_dir=None):
     for st, folder in GORO_EXTRA:
         order.append({'char': 'Goro', 'stem': st, 'folder': folder, 'sub': f'{folder}\\{st}.chr',
                       'size': 0, 'dups': [], 'rank': 2, 'cfg_prefer': 'c06'})
+    for st, folder in TOAN_EXTRA:
+        order.append({'char': 'Toan', 'stem': st, 'folder': folder, 'sub': f'{folder}\\{st}.chr',
+                      'size': 0, 'dups': [], 'rank': 2, 'cfg_prefer': 'c01'})
 
     # e02 Matataki cast -> a trailing group of their own (build_model skips the two motion-only ones)
     for st in E02_STEMS:

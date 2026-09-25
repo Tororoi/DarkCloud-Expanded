@@ -160,6 +160,24 @@ namespace Dark_Cloud_Improved_Version
             Write(0f, 0f, 0f);
         }
 
+        // THE ENEMIES STAND OUT OF THE DARK: as the room dims, every live enemy takes a slight white (its ambient add,
+        // the field a status tint uses), up to EnemyTintMax per channel at a dim of EnemyTintFullDim — the primed
+        // level — and back to nothing with the light. Written per enemy only when its value has moved a whole unit.
+        private const float EnemyTintMax = 30f, EnemyTintFullDim = 0.5f;
+        private static readonly float[] _enemyTint = new float[EnemyAddresses.FloorSlots.Count];
+        private static void TintEnemies(float dim)
+        {
+            float v = EnemyTintMax * Math.Max(0f, Math.Min(1f, dim / EnemyTintFullDim));
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                bool live = Enemies.IsLive(s);
+                float want = live ? v : 0f;
+                if (Math.Abs(want - _enemyTint[s]) < 1f && !(want == 0f && _enemyTint[s] != 0f)) continue;
+                if (live || _enemyTint[s] != 0f) Memory.WriteVec3(EnemyAddresses.CharObjects.CharAddr(s) + CCharacter.CharaTint, want, want, want);
+                _enemyTint[s] = want;
+            }
+        }
+
         /// <summary>HOW MUCH of the fog wash the flash does, 0..1. The wash is the fog's start/end pulled toward 0..1
         /// (everything past a unit becomes fog colour) and its colour driven white; this scales that pull, so 1 is
         /// the Sun Sword's full white-out, 0 leaves the fog exactly as it was, and a fraction moves it that far.</summary>
@@ -172,6 +190,7 @@ namespace Dark_Cloud_Improved_Version
         private static void Write(float k, float kf, float dim)
         {
             if (_amb == null || _cols == null || _fog == null || _fogRgb == null) return;   // nothing captured: nothing to write
+            TintEnemies(dim);
             float[] light = FlashColour ?? SunLight, fogc = FogColour ?? SunFog;
             kf *= Math.Max(0f, Math.Min(1f, FogAmount));
             var amb = (float[])_amb.Clone();

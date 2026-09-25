@@ -20,7 +20,7 @@ namespace Dark_Cloud_Improved_Version
         private const int    KickTypeMelee        = 2;      // +0x98: the melee-style reaction (flinch + shove)
         private const int    HitLifeTicks         = 3;      // the planted spheres are withdrawn after this many ticks
         private const float  PerEnemyRadius       = 25f;    // each enemy's own sphere: centred on it, so overlap is certain
-        private const float  FlashPulseSpeed      = 90f;    // Toan's own white pulse at the flash (the change effect's rate)
+        internal const float FlashPulseSpeed      = 90f;    // Toan's own white pulse at the flash (the change effect's rate)
         private  const double PrimedSeconds       = 10.0;   // a charge left unused this long dissipates
         private  const double DissipateSeconds    = 0.5;    // …fading the tint and shrinking the glow away
         internal const double BlindSeconds        = 5.0;    // how long the flash holds the floor
@@ -61,11 +61,12 @@ namespace Dark_Cloud_Improved_Version
                 HoldsPrimedTint = holdsPrimedTint; BladeWhite = bladeWhite ?? SolarBlade.White;
             }
             /// <summary>Hand the lighting this sword's wash: how much fog, what colour the light and fog go, how long
-            /// the white takes to recede, and what it recedes onto for the rest of the blinding.</summary>
-            internal void ArmLighting()
+            /// the white takes to recede, and what it recedes onto for the rest of the blinding — or, with
+            /// <paramref name="rest"/> false, onto the floor's own light (a flash with no blinding behind it).</summary>
+            internal void ArmLighting(bool rest = true)
             {
                 SolarLighting.FogAmount = Fog; SolarLighting.FlashColour = Light; SolarLighting.FogColour = FogRgb;
-                SolarLighting.EaseSeconds = EaseSeconds; SolarLighting.RestDim = RestDim;
+                SolarLighting.EaseSeconds = EaseSeconds; SolarLighting.RestDim = rest ? RestDim : 0f;
                 SolarLighting.RestSeconds = BlindSeconds; SolarLighting.RestRelease = RestRelease;
             }
         }
@@ -85,9 +86,9 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly SolarProfile ZeusFlash = new SolarProfile(
             Items.swordofzeus, 0f, null, "c01w39", 0, 0, "Zeus", fog: 0.8f,
             light: new[] { 228f, 240f, 255f }, fogRgb: new[] { 238f, 246f, 255f },   // an electric white, toward blue
-            primeDim: 0.6f,                                                          // darker than Big Bang's 0.35 (k is darkness: 1 = full dim)
+            primeDim: 0.5f,                                                          // darker than Big Bang's 0.35 (k is darkness: 1 = full dim)
             easeSeconds: 1.0,                                                        // a strike's flash, gone in a second…
-            restDim: 0.6f, restRelease: 1.0,                                         // …onto the primed dim, held through the stun and lifted over its last second
+            restDim: 0.5f, restRelease: 1.0,                                         // …onto the primed dim, held through the stun and lifted over its last second
             holdsPrimedTint: false);
 
         /// <summary>True while a Solar Flash charge is building, held or going off — Big Bang's own charge-attack tint
@@ -103,7 +104,8 @@ namespace Dark_Cloud_Improved_Version
         internal static string LivePhase => _live == null ? "none" : $"{_live.phase}/{_liveProfile?.WeaponId}";
         internal static bool PrimedFor(ushort weaponId) =>
             _live != null && _liveProfile != null && _liveProfile.WeaponId == weaponId
-            && (_live.phase == Phase.Primed || _live.phase == Phase.Windup || _live.phase == Phase.Dropping);
+            && (_live.phase == Phase.Primed || _live.phase == Phase.Windup || _live.phase == Phase.Dropping
+                || (_live.phase == Phase.Chain && !_live.chainDropped));   // a chain whose blade has fallen hangs no second one
         private sealed class SolarState
         {
             public Phase phase;
@@ -112,6 +114,7 @@ namespace Dark_Cloud_Improved_Version
             public int errors;                                  // tick exceptions logged so far (the first few carry a stack)
             public int  chainAction;                            // the combo swing the chain last struck on …
             public bool chainFired;                             // … and whether this swing's bolt has gone
+            public bool chainDropped;                           // the judgement blade was let go on the last swing: its landing is the bolt
 
             public readonly List<(int slot, int ticks)> planted = new List<(int, int)>();
         }
@@ -222,19 +225,24 @@ namespace Dark_Cloud_Improved_Version
                     SolarGlow.Tick();
                     HoldPrimedTint(p, 1f);
                     if (!IsAttack(action)) { st.phase = Phase.Primed; break; }     // the swing was cancelled: still primed
+                    if (p.WeaponId == Items.swordofzeus && action == PlayerAction.ActionComboFirst && PlayerAction.LockHeld(out _)
+                        && BigBang.BeginDrop(Memory.ReadFloat(PlayerAction.AnimFrameCursor), ComboHitFrame(action)))
+                    { st.phase = Phase.Chain; st.chainAction = action; st.chainFired = true; st.chainDropped = true; break; }
                     bool forward = action == PlayerAction.ActionWhirlwind || action == PlayerAction.ActionLunge
                                 || Memory.ReadFloat(PlayerAction.AnimFrameCursor) >= ComboHitFrame(action);
                     if (!forward) break;
                     // Big Bang, locked on: the swing does not flash — it lets the judgement blade fall, and the flash
                     // goes off when it lands (BigBang.BeginDrop → Dropping). Not locked on: the flash, as ever.
                     if (p.WeaponId == Items.bigbang && BigBang.BeginDrop()) { st.phase = Phase.Dropping; break; }
-                    // The Sword of Zeus. Locked on: the bolt comes down on the target as the flash goes off, and the
-                    // combo CHAINS — every further swing brings another (Chain). Not locked on: one bolt on each of
+                    // The Sword of Zeus. Locked on with the judgement blade hanging: the blade is let go as the FIRST
+                    // swing begins (above, before the swing comes forward), paced by the swing so it lands at the
+                    // swing's hit frame — the landing is the bolt, and the combo CHAINS from there (Chain). Locked on
+                    // without a blade: the bolt at the hit frame, and the chain. Not locked on: one bolt on each of
                     // the nearest enemies in reach, and the charge is spent.
                     if (p.WeaponId == Items.swordofzeus)
                     {
                         if (PlayerAction.LockHeld(out int target) && SwordOfZeus.Strike(target))
-                        { Flash(st, p); st.phase = Phase.Chain; st.chainAction = action; st.chainFired = true; break; }
+                        { Flash(st, p); st.phase = Phase.Chain; st.chainAction = action; st.chainFired = true; st.chainDropped = false; break; }
                         SwordOfZeus.StrikeNearest();
                     }
                     Flash(st, p);
@@ -252,25 +260,35 @@ namespace Dark_Cloud_Improved_Version
                     // clip back before the hit frame: a new combo (a first swing again after stopping), not this one
                     // carrying on. (The word stays on a hit's value for the rest of that swing, so "the same hit" alone
                     // is not an ending.)
+                    // The judgement blade let go on the first swing (Windup) is in the air here until its landing —
+                    // the tip in the enemy at the swing's hit frame — which is the first bolt (the owner's landing),
+                    // the flash following from here. The combo cannot end while it is in the air.
+                    bool falling = BigBang.Dropping || BigBang.LandingPending;
+                    if (st.chainDropped && BigBang.TakeDropLanded()) { Flash(st, p); break; }
                     bool swinging = action >= PlayerAction.ActionComboFirst && action <= PlayerAction.ActionComboLast;
                     bool restarted = swinging && (action < st.chainAction
                                      || (action == st.chainAction && st.chainFired && Memory.ReadFloat(PlayerAction.AnimFrameCursor) < ComboHitFrame(action) - 1f));
-                    if (!swinging || restarted || !PlayerAction.LockHeld(out int target))
+                    if (!falling && (!swinging || restarted || !PlayerAction.LockHeld(out _)))
                     {
-                        SolarBlade.Clear(); ChargeTint.Clear(); st.phase = Phase.Idle;
+                        // A wind-up's dim with no bolt behind it would otherwise stay: EndDim lifts it (and leaves a
+                        // flash that is still easing or resting to run its own course).
+                        SolarBlade.Clear(); ChargeTint.Clear(); SolarLighting.EndDim(); st.phase = Phase.Idle;
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[{p.Tag}] combo over (action 0x{action:X} after hit {st.chainAction - PlayerAction.ActionComboFirst + 1}) — the charge is spent");
                         break;
                     }
                     SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);      // still primed through the combo
+                    if (!swinging) break;
                     if (action != st.chainAction) { st.chainAction = action; st.chainFired = false; }
                     if (st.chainFired) break;
                     if (Memory.ReadFloat(PlayerAction.AnimFrameCursor) < ComboHitFrame(action))
-                    {   // the wind-up: the darkening before the flash
-                        if (p.PrimeDim > 0f) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim); }
+                    {   // the wind-up: the darkening before the flash — unless the last flash is still easing onto its
+                        // rest dim, which IS that darkening (a dim begun over it would cut the flash short and, with
+                        // no bolt to follow, stand as a dark room after the blinding)
+                        if (p.PrimeDim > 0f && !SolarLighting.Active) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim); }
                         break;
                     }
                     st.chainFired = true;
-                    if (SwordOfZeus.Strike(target)) Flash(st, p);
+                    if (PlayerAction.LockHeld(out int target) && SwordOfZeus.Strike(target)) Flash(st, p);
                     break;
                 }
 

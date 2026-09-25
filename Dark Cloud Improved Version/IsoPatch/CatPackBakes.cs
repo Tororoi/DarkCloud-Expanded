@@ -50,7 +50,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Row 8's ramp — the Angel Gear cat's GOLD: a pale gold core out to a deeper gold edge. Toan's own glow
         /// disc rests on it (ToanGlowBakes).</summary>
         internal static ((int, int, int) core, (int, int, int) outer) GlowGold => GlowLooks[2];
-        internal static ((int, int, int) core, (int, int, int) outer) GlowWhite => GlowLooks[1];
+        /// <summary>The Sword of Zeus's ring: a BLACK core (nothing, drawn additively) out to a deep red edge, so the disc reads
+        /// as a ring around the judgement blade. Not a cave row — Toan's disc alone rests on it (ToanGlowBakes).</summary>
+        internal static readonly ((int, int, int) core, (int, int, int) outer) GlowZeus = ((0, 0, 0), (200, 4, 0));
         /// <summary>Row 6's ramp — the Divine Beast Title cat's BLUE: a pale cyan core out to a deep blue edge. Big Bang's
         /// glow disc rests on it (ToanGlowBakes).</summary>
         internal static ((int, int, int) core, (int, int, int) outer) GlowBlue => GlowLooks[0];
