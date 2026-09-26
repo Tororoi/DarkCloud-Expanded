@@ -500,6 +500,18 @@ namespace Dark_Cloud_Improved_Version
             /// and falls with Toan (the Sword of Zeus's lunge); distance and angle stay the engine's. Falls straight
             /// through when the flag is clear.</summary>
             internal const uint CameraPin      = Host + 0xD50;   // 0x1B44D0, 44 B → 0x1B44FC (the host ends at 0x1B4700)
+            /// <summary>2 × 24 B: the LUNGE GRAVITY caves (ElfWeaponPatches.PatchLungeGravity). Toan's charge lunge is a
+            /// parabola: ToanKey_Play seeds its vertical speed from the shared 0.1 gravity (ParabolicInitialVector, 40
+            /// frames) and the dungeon key process takes 0.1 off it every frame. Both sites go through a cave that scales
+            /// that gravity by (1 + CodeCaves.LungeGravityExtra): the flight's height scales with it, its length does
+            /// not — the Sword of Zeus's level-2 lunge jumps higher in the same frames. 0 = vanilla.</summary>
+            internal const uint LungeGravitySeed = Host + 0xD80;   // 0x1B4500 → main hook (the parabola's seed)
+            internal const uint LungeGravityStep = Host + 0xDA0;   // 0x1B4520 → dun hook (the per-frame gravity)
+            /// <summary>92 B: the BLADE FALL cave (ElfWeaponPatches.PatchBladeFall), chained after the camera-pin cave so it
+            /// runs once a frame at the end of the dungeon camera pass. While CodeCaves.BladeFall's flag is 1 it steps the
+            /// judgement blade's fall — vy += g, y −= vy, stopped at the floor, where the flag becomes 2 — and writes the
+            /// copy's slot height: the fall is the engine's own frame, not a mod thread racing it.</summary>
+            internal const uint BladeFall      = Host + 0xDC0;   // 0x1B4540, 168 B → 0x1B45E8 (the host ends at 0x1B4700)
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -940,20 +952,10 @@ namespace Dark_Cloud_Improved_Version
         internal const long StrideScale      = 0x21FAF870;
         internal const uint StrideScaleGuest = 0x01FAF870;
 
-        /// <summary>THE DUNGEON CAMERA'S RESTING HEIGHT and its FLOOR, as data. The dungeon camera pass
-        /// (OpC_MotionProcess, dun 0x1DBF300) regulates the follow camera's height above its look-at point every
-        /// frame: nearer than 60 to Toan it climbs 0.5 a frame (to 30); farther, it decays toward a REST of 5.0 at
-        /// 0.05 × the excess per frame (0.15..0.5), and never below a MIN of 1.6. The rest is an immediate at two
-        /// sites and the min a gp-relative global read at two; DunPatches makes all four read these words
-        /// (<see cref="CameraRestHeight"/>, <see cref="CameraMinHeight"/>). While <see cref="CameraHeightOwner"/> is
-        /// 0 the PNACH re-seeds 5.0 / 1.6 every frame — vanilla with the app closed; a sword's charge takes the owner
-        /// and drives both down together (CameraDip), and the engine's own per-frame ease carries the camera there.</summary>
-        internal const long CameraRestHeight      = 0x21FAF880;
-        internal const uint CameraRestHeightGuest = 0x01FAF880;
-        internal const long CameraMinHeight       = 0x21FAF884;
-        internal const uint CameraMinHeightGuest  = 0x01FAF884;
-        internal const long CameraHeightOwner     = 0x21FAF888;
-        internal const float CameraRestVanilla = 5.0f, CameraMinVanilla = 1.6f;
+        /// <summary>THE DUNGEON CAMERA'S HEIGHT is regulated every frame by the camera pass (OpC_MotionProcess, dun
+        /// 0x1DBF300): nearer than 60 to Toan it climbs 0.5 a frame; farther, it decays toward a rest of 5.0 at 0.05 ×
+        /// the excess per frame (0.15..0.5), never below a floor of 1.6. A write to the height field is undone within
+        /// frames; a hold needs the cave below.</summary>
         /// <summary>THE CAMERA PIN: a world HEIGHT (+4; +0/+8 unused) and a flag (+0xC). While the flag is set the
         /// camera-pin cave (DebugInfoCave.CameraPin, run at the end of the dungeon camera pass every frame) sets the
         /// follow camera's height field so that it sits at exactly that world height whatever its follow point does —
@@ -961,8 +963,26 @@ namespace Dark_Cloud_Improved_Version
         internal const long CameraPin      = 0x21FAF890;
         internal const uint CameraPinGuest = 0x01FAF890;
         internal const int  CameraPinFlag  = 0xC;
+        /// <summary>The charge lunge's EXTRA GRAVITY, as a fraction of the vanilla 0.1 (see DebugInfoCave.LungeGravitySeed):
+        /// the parabola's launch speed and its per-frame gravity are both × (1 + this), so the jump is (1 + this) times
+        /// as high over the same frames. 0 (fresh memory) = vanilla; the Sword of Zeus writes 0.5 for its level-2 lunge.</summary>
+        internal const long LungeGravityExtra      = 0x21FAF8A0;
+        internal const uint LungeGravityExtraGuest = 0x01FAF8A0;
+        /// <summary>THE BLADE, MOVED BY THE ENGINE (DebugInfoCave.BladeFall, once a frame): +0 flag — 1 = FALLING (vy += g,
+        /// y −= vy, stopped at +0x10 where the flag becomes 2), 3 = FOLLOWING (x and z copied from the unit position at
+        /// the guest address in +0x14 plus the x/z offsets at +0x18/+0x1C, height = the unit's + the y word), 0 = off;
+        /// +4 the grip's world height y (falling) or its height OVER the unit (following), +8 its speed vy, +0xC the
+        /// gravity g per frame², +0x10 the height a fall stops at, +0x14 the followed unit's position (CharObjects.PosAddr
+        /// or Toan's own position words, guest), +0x18/+0x1C the x/z offset from it (0 over an enemy; the spot ahead of
+        /// Toan for the Zeus charge blade). The cave writes the blade copy's chara slot position (BladeProp.Slot) each
+        /// frame. For a fall, g = 2·span/N² lands it in exactly N frames.</summary>
+        internal const long BladeFall      = 0x21FAF8B0;
+        internal const uint BladeFallGuest = 0x01FAF8B0;
+        internal const int  BladeFallFlag = 0x0, BladeFallY = 0x4, BladeFallVy = 0x8, BladeFallG = 0xC, BladeFallStop = 0x10, BladeFallUnit = 0x14;
+        internal const int  BladeFallOffX = 0x18, BladeFallOffZ = 0x1C;   // following: an x/z offset from the unit (the charge blade ahead of Toan: the unit is HIM)
+        internal const int  BladeFallOff = 0, BladeFalling = 1, BladeLanded = 2, BladeFollowing = 3;
 
-        // ── FREE: 0x21FAF8A0 .. 0x21FB0000 (0x760 B) ────────────────────────────────────────────────────
+        // ── FREE: 0x21FAF8D0 .. 0x21FB0000 (0x730 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

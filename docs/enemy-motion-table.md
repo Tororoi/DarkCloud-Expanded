@@ -2324,7 +2324,7 @@ Regenerate via `tools/analysis/augment_motion_table.py`.
 | 19 | 260–295 | 0.2 | 死亡 | death ← collapse |
 | 20 | 292–295 | 0.2 | 死亡ループ | death loop |
 
-### 85 — Dark Genie (form 2) `c17b`
+### 85 — Dark Genie Right Hand `c17b`
 
 *Motions: c17b.chr info.cfg @ data.dat 0x1b0d8800 — only 2 (no death anim; defeat is scripted).*
 
@@ -2335,7 +2335,7 @@ Regenerate via `tools/analysis/augment_motion_table.py`.
 | 0 | 9–10 | 0.2 | 攻撃のかまえ | attack stance |
 | 1 | 20–30 | 0.2 | ダメージ | damage |
 
-### 86 — Right Hand `c17c`
+### 86 — Dark Genie Left Hand `c17c`
 
 *Dark Genie hands. Motions: c17c.chr info.cfg @ data.dat 0x1b160800 — only 2 (no death anim).*
 
@@ -2344,7 +2344,7 @@ Regenerate via `tools/analysis/augment_motion_table.py`.
 | 0 | 9–10 | 0.2 | 攻撃のかまえ | attack stance |
 | 1 | 20–30 | 0.2 | ダメージ | damage |
 
-### 87 — Left Hand `c17_`
+### 87 — (DG effect c17_) `c17_`
 
 *Motions: ModelCode "c17_" has no own .chr (shares the hand model); see Right Hand (c17c) above.*
 

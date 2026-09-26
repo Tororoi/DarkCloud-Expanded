@@ -49,7 +49,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  KickStrength     = 3.5f;   // the judgement blade's kick; with KickDecay: distance ≈ force²/(2·decay) ≈ 50 units
         private const float  KickDecay        = 0.12f;  // vanilla melee is 1.2 at 0.2, roughly 3.6 units
 
-        private const float  WhpHits          = 5f;
+        private const float  BlastWhp         = 20f;    // weapon HP a blast costs — the whirlwind's or the dropped blade's — before Endurance scales it
         // THE BLADE ON A REGULAR CHARGE. Toan's charge meter runs 1.0 → 3.0 (lunge at 1.5, whirlwind at 2.5), and
         // the blade whitens across it exactly as it does for a guard charge — the same tint, driven by the meter
         // instead of by held time. It stands aside while SunSword.FlashArmed: Solar Flash owns the blade then, and
@@ -104,9 +104,10 @@ namespace Dark_Cloud_Improved_Version
         // shrinks off it and swells back up on Toan. The primed swing then does not flash: the blade FALLS under gravity, and where
         // it lands it detonates — the flash, the blast below, every enemy on the floor turned to face it, and the
         // weapon-HP bill. Swinging with no lock is the ordinary flash.
-        // The blade hangs HoverMargin above the target's own top — read live from the engine's body-collision
-        // spheres (BodyCollision: world centre + radius, rebuilt every frame from the bone's SCALED position, so a
-        // grown miniboss's top rises with it and no per-species table is needed). HoverFallback when none is up.
+        // The blade hangs with its tip just above the enemy's HP gauge (HoverHeightFor: the game's own lock-on point,
+        // so a species whose script declares a lock-on frame gets a dev-authored body point, the rest the origin).
+        // THE HOVER HEIGHT: the blade's tip HoverMargin above the species' AUTHORED height (EnemyDefaults.HeightFromRoot, scaled
+        // with a grown miniboss) — nothing is measured at runtime. HoverFallback for a species with no record.
         private const float  HoverMargin      = 6f;
         private const float  HoverFallback    = 20f;
         // The copy hangs point-DOWN from its root (the grip), so the TIP is the blade's length below the placement;
@@ -123,7 +124,8 @@ namespace Dark_Cloud_Improved_Version
         // smooth where the 30 ms tick was a staircase. Cosmetic by construction — the landing itself is still called
         // from the tick, so nothing that matters rides on this thread's timing.
         private const double Gravity          = 500.0;   // units/s²
-        private const int    FallTickMs       = 4;
+        private const int    FallTickMs       = 2;      // the placement cadence: a frame is ~16.7 ms, and the phase between a placement and the frame that
+                                                          // samples it is what reads as jitter — the shorter the period, the smaller that phase error
         // As the blade falls the floor's light and fog are driven DOWN (SolarLighting.Dim) on an EXPONENTIAL ramp
         // that peaks at the landing itself: k = (e^(a·u) − 1) / (e^a − 1) over the fall's fraction u, so it barely
         // moves at first and plunges in the last moments, with the flash then landing from the darkest frame.
@@ -131,7 +133,6 @@ namespace Dark_Cloud_Improved_Version
         // the fall thread (the same curve as the fall) and handed to the flash at the landing.
         // …and the flash follows the burst — same tick, but never before it; a head start read as late.
         private const double FlashDelay       = 0.0;
-        private const float  DropWhpFactor    = 10f;    // 1.5 × 10 = 15 weapon HP before Endurance scales it — the engine's own formula
         // THE BLAST FALLS OFF WITH DISTANCE: the damage step an enemy takes is the innermost radius its distance from the
         // blast is within (outermost first here; PlantFalloff keeps the last match). One hit entry per enemy, centred
         // on its own body, carries that step — an entry is consumed by the first enemy it touches, so the sizing is
@@ -173,22 +174,23 @@ namespace Dark_Cloud_Improved_Version
         private static float  _fallHeight;                     // how far above _dropH the grip hung when it was let go
         private static float  _fallStop;                       // where the grip stops above _dropH: a blade length, the tip at the root
         private static int    _followSlot = -1;                // the unit the fall thread places the hover over (shared root); −1 = pinned
-        private static float  _groundH;                        // the target's GROUND height: the lowest its unit height has been lately (the fall's floor, whatever jump it is in)
-        private const float   GroundRise = 20f;                // …and how fast that latch may climb, units/s, when it walks up onto something
+        private static float  _spotH;                          // a point hover's ground height (a spot on the floor, not a unit)
         private static int    _heightSlot = -1;                // the target the hover height was measured for
         private static float  _bladeX, _bladeY;                // where the BLADE falls to (the target itself)
         private static volatile bool _fallDone;                // the fall thread has brought it to the ground
         private static float  _paceFrom, _paceTo;              // a fall PACED by Toan's swing: the frame cursor from…to (0 = gravity's own time)
         private static double _fallSeconds;                    // …or a fall over a FIXED time (0 = not this)
+        private static float  _fallStart;                      // the grip's world height as the fall began (the engine steps it from here)
         // A POINT HOVER: a blade the owner hangs itself — over a spot on the ground, or over a unit at a fixed height — and
         // lets go on its own cue (the Sword of Zeus's charge attack), outside the lock-on hover's gates below.
         private static bool   _pointHover, _pointDriven, _pointFading;   // driven: its fade-in is set by hand (PointAlpha); fading: on its way out
+        private static bool   _pointRides;                     // the point hover rides TOAN through the cave (a spot ahead of him), not the mod thread
         private static float  _pointX, _pointY;                // the spot (when not over a unit)
         internal static DateTime PointLandedAt { get; private set; }   // when a point hover's blade last reached the ground (default = none)
         private static DateTime _landedAt;                     // when the burst went off; the flash waits FlashDelay
         private static Thread _fallThread;
         internal static bool LandingPending => _landedAt != default;
-        private static float  _hoverHeight = HoverFallback;    // how far above its root the target's top was when the hover began, plus the margin — read ONCE per target, at rest
+        private static float  _hoverHeight = 20f;              // the grip's height above the target's root, read ONCE per target at rest (HoverHeightFor)
         private static int    _hoverTraceTicks;
 
         // ⚠ The ISO patch this ability's damage depends on, as the patched instruction reads: `lui $2,0x01FB`
@@ -222,8 +224,8 @@ namespace Dark_Cloud_Improved_Version
         /// Big Bang's WHIRLWIND is an explosion. The blade whitens as the meter fills, and the level-2 charge it
         /// becomes is the blast: its own hit reaches <see cref="WhirlRadius"/>, deals <see cref="DamageFraction"/> ×
         /// the weapon's attack through the normal formula, carries NO element so no resistance blunts it, crushes
-        /// guards, and throws what it hits clear; its model IS explosion.chr. The blade pays <see cref="WhpHits"/>
-        /// swings' worth of weapon HP per whirlwind. The lunge and the combo are ordinary swings. Dungeon only.
+        /// guards, and throws what it hits clear; its model IS explosion.chr. The blade pays <see cref="BlastWhp"/> weapon HP per blast (whirlwind or drop) — the
+        /// flash alone SunSword.FlashWhp. The lunge and the combo are ordinary swings. Dungeon only.
         ///
         /// While the blade is held, explosions cannot hurt Toan: the four shot configs that ARE the explosions are
         /// given a reaction the player's damage handler does not act on (see ExplosionCfgs).
@@ -558,18 +560,18 @@ namespace Dark_Cloud_Improved_Version
                 // body too low and started the fall a body too high.
                 // ⚠ Units of one SPECIES share one model tree: the root above is posed for whichever unit the engine
                 // drew last, so a pin to it follows the wrong enemy whenever another of its kind is on the floor.
-                // The pin is used only when this unit is the root's sole live user; otherwise the fall thread FOLLOWS
-                // the unit's own position (CharObjects.PosAddr — per slot) at its 4 ms pace, at the same height above
-                // its ground — the lowest its unit height has been lately, which a jump never moves.
+                // The pin is used only when this unit is the root's sole live user; otherwise the blade cave FOLLOWS
+                // the unit's own position (CharObjects.PosAddr — per slot, height included: a flyer takes it up) every
+                // frame, at the same height over it.
                 uint enemyRoot = Memory.ReadGuestPtr(EnemyAddresses.CharObjects.CharAddr(lockSlot) + CCharacter.CharModel);
                 float unitH = UnitHeight(lockSlot);
-                if (_heightSlot != lockSlot) { _heightSlot = lockSlot; _groundH = unitH; _hoverHeight = HoverHeightFor(lockSlot, unitH); }
-                else _groundH = unitH < _groundH ? unitH : Math.Min(unitH, _groundH + GroundRise * (float)dt);
+                if (_heightSlot != lockSlot) { _heightSlot = lockSlot; _hoverHeight = HoverHeightFor(lockSlot, unitH); }
                 if (RootShared(enemyRoot, lockSlot))
                 {
                     if (BladeProp.PinnedTo != 0) BladeProp.Unpin(PlayerFacing());
-                    _followSlot = lockSlot;                                      // the thread places it from here on
-                    EnsureBladeThread();
+                    _followSlot = lockSlot;
+                    EngineFollow(lockSlot, _hoverHeight);                          // the cave places it from here on, every frame
+                    BladeProp.Orient(PlayerFacing());                            // its flat the way the fallen blade will face
                 }
                 else
                 {
@@ -585,7 +587,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     _hoverTraceTicks++;
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[BigBang] hover: " + BladeProp.Where()
-                        + $" | height {_hoverHeight:F1} ground {_groundH:F1} {SphereTops(lockSlot, unitH)}");
+                        + $" | height {_hoverHeight:F1}");
                 }
                 return;
             }
@@ -623,21 +625,16 @@ namespace Dark_Cloud_Improved_Version
             slot >= 0 && slot < EnemyAddresses.FloorSlots.Count
             && Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Hp)) > 0;
 
-        /// <summary>How high above <paramref name="slot"/>'s root to hang the blade: the top of its highest live body
-        /// sphere (centre height + radius, from the arrays CheckDmg rebuilds each frame) plus <see cref="HoverMargin"/>,
-        /// relative to <paramref name="rootH"/>. <see cref="HoverFallback"/> if it has no sphere up.</summary>
+        /// <summary>How high above <paramref name="slot"/>'s root to hang the blade's GRIP: the species' authored height
+        /// (scaled with the unit) plus <see cref="HoverMargin"/> for the tip, plus the blade's length at the copy's scale.</summary>
         private static float HoverHeightFor(int slot, float rootH)
         {
-            long b = BodyCollision.SlotBase(slot);
-            float top = float.MinValue;
-            for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
-            {
-                if (Memory.ReadInt(b + BodyCollision.ActiveArray + part * BodyCollision.BodyPartStride) == 0) continue;
-                float h = Memory.ReadFloat(b + BodyCollision.CentreArray + part * BodyCollision.CentreStride + 4)
-                        + Memory.ReadFloat(b + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride);
-                if (h > top) top = h;
-            }
-            float clear = top == float.MinValue ? HoverFallback : Math.Max(HoverMargin, top - rootH + HoverMargin);
+            ushort eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.EnemySpeciesId));
+            float height = EnemySpecies.Defaults.TryGetValue(eid, out var def) && def.HeightFromRoot.HasValue ? def.HeightFromRoot.Value : HoverFallback;
+            float scale = Memory.ReadFloat(EnemyAddresses.CharObjects.CharAddr(slot) + CCharacter.CharScale + 4);
+            if (!(scale > 0.05f) || scale > 20f) scale = 1f;                                       // a grown miniboss
+            float clear = height * scale + HoverMargin;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] hover over slot {slot} (species {eid}): height {height:F1} × scale {scale:F2} + {HoverMargin:F0} — tip {clear:F1} above the root");
             return clear + BladeLength() * HoverScale;
         }
 
@@ -647,20 +644,6 @@ namespace Dark_Cloud_Improved_Version
             int wid = Player.Weapon.GetCurrentWeaponId();
             return ToanWeapons.TryGetValue(wid, out WeaponData wd) && wd.Dcol1.HasValue
                  ? Math.Abs(wd.Dcol1.Value) : BladeLengthFallback;
-        }
-
-        /// <summary>DIAGNOSTIC: every active body sphere of <paramref name="slot"/> as (h+r), beside its root height.</summary>
-        private static string SphereTops(int slot, float rootH)
-        {
-            long b = BodyCollision.SlotBase(slot);
-            var parts = new List<string>();
-            for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
-            {
-                if (Memory.ReadInt(b + BodyCollision.ActiveArray + part * BodyCollision.BodyPartStride) == 0) continue;
-                long c = b + BodyCollision.CentreArray + part * BodyCollision.CentreStride;
-                parts.Add($"[{part}] c=({Memory.ReadFloat(c):F0},{Memory.ReadFloat(c + 4):F0},{Memory.ReadFloat(c + 8):F0}) r={Memory.ReadFloat(b + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride):F1}");
-            }
-            return $"root h {rootH:F0}; spheres: " + (parts.Count == 0 ? "none active" : string.Join(" ", parts));
         }
 
         /// <summary>The swing while primed: if the blade is hanging over a target, let it fall — the flash waits for
@@ -675,19 +658,23 @@ namespace Dark_Cloud_Improved_Version
             long a = EnemyAddresses.FloorSlots.SlotAddr(_hoverSlot, 0);
             _bladeX = Memory.ReadFloat(a + EnemySlotOffsets.LocationX);
             _bladeY = Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
-            _dropH  = _groundH;                                              // the target's ground, not a jump it may be in
+            _dropH  = UnitHeight(_hoverSlot);                                // the target's root, wherever it is (a flyer's is up)
             _dropX = _bladeX; _dropY = _bladeY;                              // the blast goes off on the target itself
             // The fall starts from where the blade HANGS — its own world matrix when pinned, the followed height
-            // otherwise — so there is no step at the start. It ENDS with the tip at the ground (the grip a blade
-            // length above it) — the blade in the enemy, not a blade length under the floor — or, for an owner that
-            // wants it, the hilt.
-            float hang = _followSlot >= 0 ? _groundH + _hoverHeight : BladeProp.WorldHeight();
+            // otherwise — so there is no step at the start. It ENDS with the tip at the root (the grip a blade length
+            // above it) — the blade in the enemy, not a blade length under the floor — or, for an owner that wants
+            // it, the hilt.
+            float hang = _followSlot >= 0 ? _dropH + _hoverHeight : BladeProp.WorldHeight();
             _fallStop   = _owner.ToTheHilt ? 0f : BladeLength() * HoverScale;   // the grip's height above the root at the end: the tip in the enemy, or the hilt
             _fallHeight = float.IsNaN(hang) ? _hoverHeight : Math.Max(_fallStop + 1f, hang - _dropH);
             _followSlot = -1;
             BladeProp.Unpin(PlayerFacing());                                 // off the enemy and into the world, where it is, to fall
             SolarLighting.BeginDim();                                        // the lights go down with it
-            _dropStart = GameClock.Now; Dropping = true; _landed = false; _fallDone = false; _landedAt = default;
+            lock (_bladeLock)
+            {
+                _dropStart = GameClock.Now; Dropping = true; _landed = false; _fallDone = false; _landedAt = default;
+                StartEngineFall();
+            }
             if (_owner.Redirect) BeginRedirect(_bladeX, _dropH + _fallHeight, _bladeY);
             EnsureBladeThread();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] judgement blade falls on slot {_hoverSlot} for weapon {_owner.WeaponId}");
@@ -709,44 +696,112 @@ namespace Dark_Cloud_Improved_Version
             {
                 try
                 {
-                    if (_followSlot >= 0 && !Dropping && BladeProp.Active)        // the hover: over the unit, at the latched height
+                    if (_pointHover && _followSlot < 0 && !_pointRides && !Dropping && BladeProp.Active)   // the point hover over a SPOT: placed from here (a followed unit, or Toan, is the cave's)
                     {
-                        long p = EnemyAddresses.CharObjects.PosAddr(_followSlot);
-                        BladeProp.Place(Memory.ReadFloat(p), _groundH + _hoverHeight, Memory.ReadFloat(p + 8), PlayerFacing());
-                        Thread.Sleep(FallTickMs); continue;
-                    }
-                    if (_pointHover && !Dropping && BladeProp.Active)             // the point hover: over its spot
-                    {
-                        BladeProp.Place(_pointX, _groundH + _hoverHeight, _pointY, PlayerFacing());
+                        BladeProp.Place(_pointX, _spotH + _hoverHeight, _pointY, PlayerFacing());
                         Thread.Sleep(FallTickMs); continue;
                     }
                     if (!Dropping || _fallDone) { Thread.Sleep(20); continue; }
-                    if (Player.CheckDunIsPausedOrMenu()) { _dropStart = _dropStart.AddMilliseconds(FallTickMs); Thread.Sleep(FallTickMs); continue; }
-                    double t = (GameClock.Now - _dropStart).TotalSeconds;
-                    double span = _fallHeight - _fallStop;                       // grip: from where it hung down to a blade length above the root
-                    double T = Math.Sqrt(2.0 * span / Gravity);                  // how long that takes under gravity
-                    // The fall's fraction: gravity's clock, or — paced — the swing's frame cursor between its two marks,
-                    // on the same curve (the height falls with the square of it).
-                    double u = _paceTo > 0f
-                        ? Math.Max(0.0, Math.Min(1.0, (Memory.ReadFloat(PlayerAction.AnimFrameCursor) - _paceFrom) / (_paceTo - _paceFrom)))
-                        : _fallSeconds > 0 ? Math.Min(1.0, t / _fallSeconds)
-                        : Math.Min(1.0, t / T);
-                    float  h = _dropH + _fallStop + (float)(span * (1.0 - u * u));
-                    BladeProp.Place(_bladeX, h, _bladeY, PlayerFacing());
+                    // THE ENGINE STEPS THE FALL (the blade-fall cave, once a frame): this thread only watches where it
+                    // has got to, for the dim and the landing. No placement writes race the frame any more.
+                    float  h = Memory.ReadFloat(CodeCaves.BladeFall + CodeCaves.BladeFallY);
+                    int    flag = Memory.ReadInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag);
+                    if (flag != CodeCaves.BladeFalling && flag != CodeCaves.BladeLanded)
+                    {   // something else took the words mid-fall: the fall re-armed from where it is, and said so
+                        lock (_bladeLock) { if (Dropping) Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFalling); }
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] engine fall found flag {flag} mid-fall — re-armed");
+                    }
+                    // DIAGNOSTIC: where the engine has the blade at a few points of the fall, and when it lands
+                    double since = (GameClock.Now - _dropStart).TotalSeconds;
+                    if (_fallLogged < 4 && since >= _fallLogged * 0.1)
+                    { _fallLogged++; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] engine fall at {since * 1000:F0} ms: y {h:F1} vy {Memory.ReadFloat(CodeCaves.BladeFall + CodeCaves.BladeFallVy):F2} flag {flag}"); }
+                    if (flag == 2 && _fallLogged < 9) { _fallLogged = 9; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] engine fall landed at {since * 1000:F0} ms"); }
+                    double span = Math.Max(0.01, _fallStart - (_dropH + _fallStop));
+                    double u = Math.Sqrt(Math.Max(0.0, Math.Min(1.0, (_fallStart - h) / span)));   // the fall's fraction in FRAMES (y falls with the square of it)
                     if (_redirecting) Memory.WriteVec3(CodeCaves.JudgementPos, _bladeX, h, _bladeY);   // what every enemy is watching
-                    // The dim peaks as it lands: along the whole fall, or only its last RampFrames (a strike's brief
-                    // plunge) — that many frames of the swing's cursor step when paced, of the clock otherwise.
-                    double rampSpan = _owner.RampWholeFall ? 1.0
-                        : _paceTo > 0f ? SolarLighting.RampFrames * SunSword.SwingCursorPerFrame / (_paceTo - _paceFrom)
-                        : SolarLighting.RampSeconds / (_fallSeconds > 0 ? _fallSeconds : T);
+                    // The dim peaks as it lands: along the whole fall, or only its last RampFrames (a strike's brief plunge).
+                    double rampSpan = _owner.RampWholeFall ? 1.0 : Math.Min(1.0, SolarLighting.RampFrames / Math.Max(1.0, _fallFrames));
                     double w = Math.Max(0.0, Math.Min(1.0, (u - (1.0 - rampSpan)) / Math.Max(1e-3, rampSpan)));
                     float  ramp = (float)((Math.Exp(SolarLighting.RampSharpness * w) - 1.0) / (Math.Exp(SolarLighting.RampSharpness) - 1.0));
                     float  from = _owner.Profile.PrimeDim;                        // on from the primed level, not from the floor's own light
                     SolarLighting.Dim(from + (1f - from) * ramp);
-                    if (u >= 1.0) _fallDone = true;
+                    if (flag == 2) _fallDone = true;
                 }
                 catch (Exception e) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[BigBang] fall tick failed: " + e.Message); }
                 Thread.Sleep(FallTickMs);
+            }
+        }
+
+        private static double _fallFrames;                     // how many frames the current fall takes (what the cave's gravity was set for)
+        /// <summary>Hand the fall to the engine: from the grip's height now down to the stop in exactly N frames — the
+        /// swing's remaining cursor at its clip's step when paced, the fixed time otherwise, gravity's own time else —
+        /// as g = 2·span/N² into the blade-fall words, the copy placed once at its x/z, and the flag raised. The
+        /// blade-fall cave takes it from here, one step per frame.</summary>
+        private static void StartEngineFall()
+        {
+            float stop = _dropH + _fallStop;
+            _fallStart = _dropH + _fallHeight;
+            double span = Math.Max(0.01, _fallStart - stop);
+            // Paced: the frames left to the hit mark from where the swing's cursor is — if it is inside the clip already
+            // (a tick can land a frame or two in); a cursor still outside it is the previous clip's, and the clip is
+            // taken as just begun.
+            float cursor = Memory.ReadFloat(PlayerAction.AnimFrameCursor);
+            if (cursor < _paceFrom || cursor > _paceTo) cursor = _paceFrom;
+            _fallFrames = _paceTo > 0f
+                ? Math.Max(1.0, (_paceTo - cursor) / SunSword.SwingCursorPerFrame)
+                : _fallSeconds > 0 ? Math.Max(1.0, _fallSeconds * 60.0)
+                : Math.Max(1.0, Math.Sqrt(2.0 * span / Gravity) * 60.0);
+            float g = (float)(2.0 * span / (_fallFrames * _fallFrames));
+            BladeProp.Place(_bladeX, _fallStart, _bladeY, PlayerFacing());       // x/z and facing once; the cave carries y
+            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallY, _fallStart);
+            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallVy, 0f);
+            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallG, g);
+            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallStop, stop);
+            Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, 1);
+            _fallLogged = 0;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] engine fall: {_fallStart:F1} → {stop:F1} over {_fallFrames:F0} frames (g {g:F4}/frame²; paced {_paceTo > 0f}, timed {_fallSeconds:F2}s)");
+        }
+        private static int _fallLogged;
+        private static void StopEngineFall() => Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
+        /// <summary>The hover riding a unit through the cave: its position pointer and the height OVER it into the blade
+        /// words, the flag at FOLLOWING (written only on a change). The cave adds the unit's own height each frame.</summary>
+        private static int _engineFollowSlot = -1; private static float _engineFollowY = float.NaN;
+        // ⚠ The hover's tick and the drop (Solar Flash's tick) are different threads: the hover branch once re-wrote the
+        // follow mode over a fall that had just been set up, and the blade hung there for good (the fall never landed,
+        // Solar Flash waited on it, the lock no longer faded it). The blade words are written under one lock, and a
+        // follow is never written once a drop is on.
+        private static readonly object _bladeLock = new object();
+        private static void EngineFollow(int slot, float overUnit)
+        {
+            lock (_bladeLock)
+            {
+                if (Dropping) return;
+                if (_engineFollowSlot == slot && Math.Abs(overUnit - _engineFollowY) < 0.05f
+                    && Memory.ReadInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag) == CodeCaves.BladeFollowing) return;
+                Memory.WriteUInt(CodeCaves.BladeFall + CodeCaves.BladeFallUnit, (uint)(EnemyAddresses.CharObjects.PosAddr(slot) - 0x20000000L));
+                Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallY, overUnit);
+                Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallOffX, 0f);
+                Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallOffZ, 0f);
+                Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFollowing);
+                _engineFollowSlot = slot; _engineFollowY = overUnit;
+            }
+        }
+        /// <summary>The hover riding a POSITION WORD (Toan's) through the cave, at an x/z offset from it: the offset and
+        /// the height over it into the blade words, the flag at FOLLOWING (written only on a change).</summary>
+        private static float _engineOffX = float.NaN, _engineOffZ = float.NaN;
+        private static void EngineFollowPoint(uint posGuest, float offX, float offZ, float overUnit)
+        {
+            lock (_bladeLock)
+            {
+                if (Dropping) return;
+                bool same = _engineFollowSlot == -2 && Math.Abs(overUnit - _engineFollowY) < 0.05f && Math.Abs(offX - _engineOffX) < 0.05f && Math.Abs(offZ - _engineOffZ) < 0.05f;
+                if (same && Memory.ReadInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag) == CodeCaves.BladeFollowing) return;
+                Memory.WriteUInt(CodeCaves.BladeFall + CodeCaves.BladeFallUnit, posGuest);
+                Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallY, overUnit);
+                Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallOffX, offX);
+                Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallOffZ, offZ);
+                Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFollowing);
+                _engineFollowSlot = -2; _engineFollowY = overUnit; _engineOffX = offX; _engineOffZ = offZ;
             }
         }
 
@@ -789,12 +844,13 @@ namespace Dark_Cloud_Improved_Version
             Burst(x, h, y);
             PlantFalloff(x, h, y);
             TurnEnemiesToward(x, y);
-            DrainWhp(DropWhpFactor);
+            DrainWhp();
         }
 
         /// <summary>Everything the hover put up, back down: the copy, the target's name bar, the glow's home.</summary>
         private static void AbandonHover()
         {
+            StopEngineFall(); _engineFollowSlot = -1; _engineFollowY = float.NaN; _engineOffX = _engineOffZ = float.NaN;
             Memory.WriteInt(CodeCaves.NameHide, 0);                                 // the name plate back
             // A glow left hanging on the copy's root after the copy is gone is a sprite drawn every frame at a node in
             // mod memory that nothing maintains; the one run that left it there ended in the game resetting six
@@ -802,7 +858,7 @@ namespace Dark_Cloud_Improved_Version
             if (SolarGlow.AnchoredTo(BladeProp.RootGuest)) SolarGlow.Hide();
             _followSlot = -1;
             BladeProp.Despawn();
-            _hoverSlot = -1; _heightSlot = -1; _hoverAlpha = 0f; _hoverOut = false; _pointHover = false; _pointDriven = false; _pointFading = false;
+            _hoverSlot = -1; _heightSlot = -1; _hoverAlpha = 0f; _hoverOut = false; _pointHover = false; _pointDriven = false; _pointFading = false; _pointRides = false;
             // GlowOwned stays: DriveGlow brings the glow back up on Toan while the charge still stands, then lets go.
         }
 
@@ -811,7 +867,7 @@ namespace Dark_Cloud_Improved_Version
         /// the lock-on hover's own height over it — its top at rest plus the margin — and its name plate hidden) or at a
         /// fixed <paramref name="height"/> over the spot (x, h, y); called again to move the spot. Fades in like the
         /// lock-on hover, with the owner's glow. Nothing while a lock-on hover or a drop is up.</summary>
-        internal static void PointHover(JudgementOwner owner, int slot, float x, float h, float y, float height)
+        internal static void PointHover(JudgementOwner owner, int slot, float x, float h, float y, float height, bool ridesPlayer = false)
         {
             if (Dropping) return;
             if (!_pointHover)
@@ -819,15 +875,25 @@ namespace Dark_Cloud_Improved_Version
                 if (_hoverSlot >= 0 || BladeProp.Active) return;                  // the lock-on hover has the copy
                 if (!BladeProp.Spawn(HoverScale)) return;
                 _owner = owner; _pointHover = true; _pointDriven = false; _pointFading = false; _hoverAlpha = 0f; _hoverOut = false; PointLandedAt = default;
-                _hoverHeight = height; _groundH = h; _heightSlot = -1;
+                _hoverHeight = height; _spotH = h; _heightSlot = -1;
                 EnsureBladeThread();
             }
             _followSlot = slot >= 0 && HasHp(slot) ? slot : -1;
-            if (_followSlot < 0) { _pointX = x; _pointY = y; _groundH = h; _hoverHeight = height; _heightSlot = -1; Memory.WriteInt(CodeCaves.NameHide, 0); }
+            _pointRides = _followSlot < 0 && ridesPlayer;
+            if (_followSlot < 0 && ridesPlayer)
+            {   // a spot AHEAD OF TOAN: the cave places it from his own position every frame (smooth as he walks), the
+                // mod only refreshing the offset ahead of him as he turns
+                _pointX = x; _pointY = y; _spotH = h; _hoverHeight = height; _heightSlot = -1; Memory.WriteInt(CodeCaves.NameHide, 0);
+                EngineFollowPoint((uint)(Addresses.dunPositionX - 0x20000000L), x - Memory.ReadFloat(Addresses.dunPositionX), y - Memory.ReadFloat(Addresses.dunPositionY), height);
+                BladeProp.Orient(PlayerFacing());
+            }
+            else if (_followSlot < 0) { _pointX = x; _pointY = y; _spotH = h; _hoverHeight = height; _heightSlot = -1; Memory.WriteInt(CodeCaves.NameHide, 0); StopEngineFall(); }
             else
             {
-                if (_heightSlot != slot) { _heightSlot = slot; _groundH = UnitHeight(slot); _hoverHeight = HoverHeightFor(slot, _groundH); }   // measured once, at rest
+                if (_heightSlot != slot) { _heightSlot = slot; _hoverHeight = HoverHeightFor(slot, UnitHeight(slot)); }   // measured once, at rest
                 Memory.WriteInt(CodeCaves.NameHide, 1);                           // the target's name plate off, as under the lock-on hover
+                EngineFollow(slot, _hoverHeight);                                 // the cave places it over the unit every frame
+                BladeProp.Orient(PlayerFacing());
             }
         }
         /// <summary>The point hover's fade-in set by hand: the blade at <paramref name="alpha"/> (0..1) and its glow the
@@ -846,24 +912,44 @@ namespace Dark_Cloud_Improved_Version
             if (Dropping) { PointEnd(); return; }
             if (_followSlot >= 0)                                                 // it fades where it hangs, no longer following
             { long p = EnemyAddresses.CharObjects.PosAddr(_followSlot); _pointX = Memory.ReadFloat(p); _pointY = Memory.ReadFloat(p + 8); }
+            PointFreeze();
             _pointFading = true; _pointDriven = false; _followSlot = -1;
+        }
+        /// <summary>A blade riding Toan stops where it is: the spot taken from where the cave has it, the cave let go
+        /// (a still spot is placed from here), so it no longer moves with him (the lunge, or a fade).
+        /// Returns the spot under it (x, ground h, y) — where a bolt aimed at it lands.</summary>
+        internal static (float x, float h, float y) PointFreeze()
+        {
+            if (_pointHover && _pointRides && BladeProp.Active)
+            {
+                long s = DungeonCharaDraw.CharaArray + (long)BladeProp.Slot * DungeonCharaDraw.CharaStride + CCharacter.CharPos;
+                _pointX = Memory.ReadFloat(s); _pointY = Memory.ReadFloat(s + 8); _spotH = Memory.ReadFloat(s + 4) - _hoverHeight;
+                _pointRides = false;
+                lock (_bladeLock) { StopEngineFall(); _engineFollowSlot = -1; _engineOffX = _engineOffZ = float.NaN; }
+            }
+            return (_pointX, _spotH, _pointY);
         }
         /// <summary>Let the point hover's blade go: down from where it hangs to the owner's stop over
         /// <paramref name="seconds"/>, on the fall's curve; the time it reaches the ground is <see cref="PointLandedAt"/>.</summary>
         internal static void PointDrop(double seconds)
         {
             if (!_pointHover || Dropping || !BladeProp.Active) return;
+            float dropH = _spotH;
             if (_followSlot >= 0)
             {
                 long p = EnemyAddresses.CharObjects.PosAddr(_followSlot);
-                _pointX = Memory.ReadFloat(p); _pointY = Memory.ReadFloat(p + 8);
+                _pointX = Memory.ReadFloat(p); _pointY = Memory.ReadFloat(p + 8); dropH = Memory.ReadFloat(p + 4);
             }
-            _bladeX = _dropX = _pointX; _bladeY = _dropY = _pointY; _dropH = _groundH;
+            _bladeX = _dropX = _pointX; _bladeY = _dropY = _pointY; _dropH = dropH;
             _fallStop   = _owner.ToTheHilt ? 0f : BladeLength() * HoverScale;
             _fallHeight = Math.Max(_fallStop + 1f, _hoverHeight);
             _followSlot = -1; _paceTo = 0f; _fallSeconds = Math.Max(0.05, seconds);
             SolarLighting.BeginDim();                                             // the lights go down with it (a dim already up keeps its capture)
-            _dropStart = GameClock.Now; Dropping = true; _landed = false; _fallDone = false; _landedAt = default;
+            lock (_bladeLock)
+            {
+                _dropStart = GameClock.Now; Dropping = true; _landed = false; _fallDone = false; _landedAt = default;
+                StartEngineFall();
+            }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] point hover blade falls at ({_bladeX:F0},{_bladeY:F0}) over {_fallSeconds:F2}s for weapon {_owner.WeaponId}");
         }
         /// <summary>The point hover's blade gone at once, wherever it is.</summary>
@@ -886,12 +972,7 @@ namespace Dark_Cloud_Improved_Version
             }
             if (_pointDriven) { BladeProp.Alpha(_hoverAlpha); DriveGlow(true); SolarGlow.Drive(_hoverAlpha); if (Dropping && _fallDone) Land(); return; }
             if (_hoverAlpha < 1f) { _hoverAlpha = (float)Math.Min(1.0, _hoverAlpha + dt / FadeSeconds); BladeProp.Alpha(_hoverAlpha); }
-            if (_followSlot >= 0)
-            {
-                if (!HasHp(_followSlot)) { PointEnd(); return; }
-                float unitH = UnitHeight(_followSlot);
-                _groundH = unitH < _groundH ? unitH : Math.Min(unitH, _groundH + GroundRise * (float)dt);
-            }
+            if (_followSlot >= 0 && !HasHp(_followSlot)) { PointEnd(); return; }
             DriveGlow(true);
             if (Dropping && _fallDone) Land();
         }
@@ -1058,6 +1139,9 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (!Enemies.IsLive(s)) continue;
                 long a = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+                // An enemy the blast cannot move (knockback 0: bosses, rooted plants) is not turned either — with no
+                // shove to settle it, the turn fought its own AI and it never held a direction.
+                if (Memory.ReadFloat(a + EnemySlotOffsets.KnockbackMult) <= 0f) continue;
                 float dx = _faceX - Memory.ReadFloat(a + EnemySlotOffsets.LocationX);
                 float dy = _faceY - Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
                 float len = (float)Math.Sqrt(dx * dx + dy * dy);
@@ -1191,20 +1275,9 @@ namespace Dark_Cloud_Improved_Version
             return Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
         }
 
-        /// <summary>The blade pays for the detonation in weapon HP: <see cref="WhpHits"/> ordinary swings' worth, by
-        /// the engine's own formula — `(1.5 − 0.01 × Endurance) × factor`, halved by Durable and doubled by Fragile
-        /// (BattleSubWeaponDmg 0x1B5D90). Endurance comes from the BATTLE record, where attachments have already been
-        /// folded in; WHP itself lives on the INVENTORY record (+0x10 of the equipped bag slot), which is the copy the
-        /// engine drains and the menu shows.
-        ///
-        /// ⚠ Floored at 1, never 0. Everything that happens at zero WHP — the auto-consumed Repair Powder, the
-        /// warnings, the weapon breaking back to its base form — lives inside that native function, which a write here
-        /// does not call. Leaving 1 keeps the blade whole and lets the next ordinary hit take it to zero through the
-        /// engine's own path, with all of that intact. A weapon at Endurance 150 pays nothing, exactly as its swings
-        /// cost nothing.</summary>
-        /// <summary>Weapon HP for a detonation: <paramref name="swings"/> swing-equivalents through the engine's own
-        /// Endurance formula (<see cref="WeaponWhp"/>).</summary>
-        private static void DrainWhp(float swings = WhpHits) => WeaponWhp.Drain(Items.bigbang, 1.5f * swings, "[BigBang] detonation ");
+        /// <summary>Weapon HP for a blast: <see cref="BlastWhp"/> through the engine's own Endurance formula
+        /// (<see cref="WeaponWhp"/>), down to 0 — where the next swing breaks the blade the engine's way.</summary>
+        private static void DrainWhp() => WeaponWhp.Drain(Items.bigbang, BlastWhp, "[BigBang] detonation ");
 
         private static void Reset(BlastState st)
         {

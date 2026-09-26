@@ -17,6 +17,8 @@ namespace Dark_Cloud_Improved_Version
         private const double WindowSeconds = 0.5;    // the ramp runs over the last half second before a level, however long the hold
         private static bool  _on;
         private static float _last = -1f;
+        /// <summary>The ramp is showing on him now (the last half second before a level): other tints keep off.</summary>
+        internal static bool Active => _on && _last > 0f;
 
         /// <summary>Seconds left to the next charge level (≤ 0 = it has fired; anything past the window or none to come = nothing shown).</summary>
         internal static void Ramp(double secondsToLevel)

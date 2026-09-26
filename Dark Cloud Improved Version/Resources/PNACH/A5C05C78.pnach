@@ -405,12 +405,6 @@ patch=1,EE,21F100E8,extended,3F800000 //  WHP factor = 1.0
 patch=1,EE,E1010000,extended,01F100FC //if nobody owns the word (apply next 1)
 patch=1,EE,21F100F8,extended,40000000 //  flame spacing = 2.0
 
-//Dungeon camera resting height and floor. The ISO's dun.bin patch makes the camera pass read its rest (5.0) and floor (1.6)
-//from data words 0x01FAF880 / 0x01FAF884 instead of its immediates. While 0x01FAF888 == 0 (the app is not driving them)
-//PCSX2 re-seeds both every frame; the app sets 0x01FAF888 = 1 and drives both down while a sword charges (CameraDip).
-patch=1,EE,E1020000,extended,01FAF888 //if nobody owns the words (apply next 2)
-patch=1,EE,21FAF880,extended,40A00000 //  rest height 5.0
-patch=1,EE,21FAF884,extended,3FCCCCCD //  min height 1.6
 //Lock-on reach factor table — one float per character (the enemy's lock-on distance × this = how far the player can lock on).
 //The ISO's dun.bin patch makes SetNearLockOnTarget and setTargetCursor read the table from 0x01FAF480 instead of dun.bin.
 //While 0x01FAF4A0 == 0 (the app is not driving it) PCSX2 re-seeds the vanilla six every frame; the app sets 0x01FAF4A0 = 1

@@ -281,13 +281,119 @@ namespace Dark_Cloud_Improved_Version
                 0xC5060000u | Lo(4),                                //  6 lwc1  f6,P.y(t0)
                 0x46033181u,                                        //  7 sub.s f6,f6,f3              height = P.y − R.y
                 0xE48602D4u,                                        //  8 swc1  f6,0x2D4(a0)
-                0x03E00008u,                                        //  9 ret: jr ra
+                MipsAsm.J(CodeCaves.DebugInfoCave.BladeFall),       //  9 ret: j BladeFall (which returns through ra)
                 0x00000000u,                                        // 10   nop
             };
             if (cave + (uint)words.Length * 4 > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
                 throw new IOException("The camera-pin cave does not fit its host (DebugInfomationDraw).");
             for (int i = 0; i < words.Length; i++)
                 WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+        }
+
+        /// <summary>The BLADE cave (see CodeCaves.DebugInfoCave.BladeFall): the tail of the camera-pin chain, once a frame.
+        /// Flag 1, FALLING: vy += g; y −= vy; if y ≤ stop then y = stop and the flag becomes 2; y and vy stored back, and y
+        /// written to the blade copy's slot height. Flag 3, FOLLOWING: the unit position at the guest pointer in the words
+        /// gives the copy's x and z, and its height plus the y word (a height OVER the unit) the copy's height — the hover
+        /// riding an enemy the engine moves, up and down as well, at the engine's own frame. Caller-saved registers only
+        /// (t0..t3, f0..f3); no calls.</summary>
+        internal static void PatchBladeFall(FileStream fs, Func<uint, long> ElfOff)
+        {
+            uint cave = CodeCaves.DebugInfoCave.BladeFall, w = CodeCaves.BladeFallGuest;
+            uint hi = w >> 16, lo = w & 0xFFFFu; if (lo >= 0x8000) hi += 1;          // signed offsets
+            uint Lo(int o) => (lo + (uint)o) & 0xFFFFu;
+            uint slotPos = (uint)(DungeonCharaDraw.CharaArray - 0x20000000L) + (uint)(BladeProp.Slot * DungeonCharaDraw.CharaStride) + (uint)CCharacter.CharPos;
+            uint shi = (slotPos + 0x8000u) >> 16; uint SLo(int o) => (slotPos + (uint)o) & 0xFFFFu;   // x +0, y +4, z +8 (all past the sign bit alike)
+            uint[] words =
+            {
+                0x3C080000u | hi,                                   //  0 lui   t0,HI(fall)
+                0x8D090000u | Lo(CodeCaves.BladeFallFlag),          //  1 lw    t1,flag(t0)
+                0x240A0001u,                                        //  2 li    t2,1
+                0x152A0000u | 19,                                   //  3 bne   t1,t2,follow (+19 → index 23)
+                0x00000000u,                                        //  4   nop
+                0xC5000000u | Lo(CodeCaves.BladeFallY),             //  5 lwc1  f0,y(t0)
+                0xC5010000u | Lo(CodeCaves.BladeFallVy),            //  6 lwc1  f1,vy(t0)
+                0xC5020000u | Lo(CodeCaves.BladeFallG),             //  7 lwc1  f2,g(t0)
+                0xC5030000u | Lo(CodeCaves.BladeFallStop),          //  8 lwc1  f3,stop(t0)
+                0x46020840u,                                        //  9 add.s f1,f1,f2               vy += g
+                0x46010001u,                                        // 10 sub.s f0,f0,f1               y −= vy
+                0x46030036u,                                        // 11 c.le.s f0,f3                 y ≤ stop ?  (⚠ EE cond code 0x36 — the MIPS 0x3E "LE" is not one the R5900 FPU has, and read as a coin toss)
+                0x00000000u,                                        // 12 nop
+                0x45000000u | 3,                                    // 13 bc1f  store (+3 → index 17)
+                0x240A0002u,                                        // 14   li  t2,2                   (both paths; only stored below)
+                0x46001806u,                                        // 15 mov.s f0,f3                  y = stop
+                0xAD0A0000u | Lo(CodeCaves.BladeFallFlag),          // 16 sw    t2,flag(t0)            landed
+                0xE5000000u | Lo(CodeCaves.BladeFallY),             // 17 store: swc1 f0,y(t0)
+                0xE5010000u | Lo(CodeCaves.BladeFallVy),            // 18 swc1  f1,vy(t0)
+                0x3C0B0000u | shi,                                  // 19 lui   t3,HI(slot pos)
+                0xE5600000u | SLo(4),                               // 20 swc1  f0,y(t3)               the copy's height, this frame
+                0x03E00008u,                                        // 21 jr    ra
+                0x00000000u,                                        // 22   nop
+                0x240A0003u,                                        // 23 follow: li t2,3
+                0x152A0000u | 15,                                   // 24 bne   t1,t2,ret (+15 → index 40)
+                0x00000000u,                                        // 25   nop
+                0x8D0A0000u | Lo(CodeCaves.BladeFallUnit),          // 26 lw    t2,unit(t0)            the followed unit's position (guest)
+                0xC5400000u,                                        // 27 lwc1  f0,0x0(t2)             its x
+                0xC5410008u,                                        // 28 lwc1  f1,0x8(t2)             its z
+                0xC5020000u | Lo(CodeCaves.BladeFallY),             // 29 lwc1  f2,y(t0)               the height OVER the unit
+                0xC5430004u,                                        // 30 lwc1  f3,0x4(t2)             the unit's own height (a flyer's rises)
+                0x46031080u,                                        // 31 add.s f2,f2,f3
+                0xC5030000u | Lo(CodeCaves.BladeFallOffX),          // 32 lwc1  f3,offx(t0)            an x/z offset from the unit (0 over an enemy;
+                0x46030000u,                                        // 33 add.s f0,f0,f3                ahead of Toan for the charge blade)
+                0xC5030000u | Lo(CodeCaves.BladeFallOffZ),          // 34 lwc1  f3,offz(t0)
+                0x46030840u,                                        // 35 add.s f1,f1,f3
+                0x3C0B0000u | shi,                                  // 36 lui   t3,HI(slot pos)
+                0xE5600000u | SLo(0),                               // 37 swc1  f0,x(t3)
+                0xE5620000u | SLo(4),                               // 38 swc1  f2,y(t3)
+                0xE5610000u | SLo(8),                               // 39 swc1  f1,z(t3)
+                0x03E00008u,                                        // 40 ret: jr ra
+                0x00000000u,                                        // 41   nop
+            };
+            if (cave + (uint)words.Length * 4 > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
+                throw new IOException("The blade-fall cave does not fit its host (DebugInfomationDraw).");
+            for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+        }
+
+        /// <summary>The LUNGE GRAVITY caves (see CodeCaves.DebugInfoCave.LungeGravitySeed) and the main-ELF hook. The charge
+        /// lunge's parabola is seeded in ToanKey_Play — `lwc1 f12,-0x7f80(gp)` (the shared 0.1) then `jal
+        /// ParabolicInitialVector` (0x242E00) — and its vertical speed loses that same 0.1 every frame in the dungeon key
+        /// process (dun 0x1DB3638: `lwc1 f0,-0x7f80(gp); sub.s f0,f2,f0`, hooked by DunPatches). Each cave loads the 0.1
+        /// itself, scales it by (1 + CodeCaves.LungeGravityExtra) and hands the result on: the seed cave tail-jumps into
+        /// ParabolicInitialVector with f12 = g (the `jal` is retargeted to the cave, so the callee returns to the key
+        /// handler as before); the step cave returns with the displaced subtraction in its delay slot. f1 is a dead
+        /// temporary at both sites; at is the assembler's.</summary>
+        internal static void PatchLungeGravity(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Parabolic = 0x001D4080, SeedHook = 0x00242E00;
+            uint word = CodeCaves.LungeGravityExtraGuest;
+            uint hi = word >> 16, lo = word & 0xFFFFu; if (lo >= 0x8000) hi += 1;    // lwc1's offset is signed
+            uint[] seed =
+            {
+                0x3C010000u | hi,                                   // lui   at,HI(extra)
+                0xC4210000u | lo,                                   // lwc1  f1,LO(at)
+                0xC78C8080u,                                        // lwc1  f12,-0x7f80(gp)        the shared 0.1
+                0x460C0842u,                                        // mul.s f1,f1,f12              0.1 × extra
+                MipsAsm.J(Parabolic),                               // j     ParabolicInitialVector
+                0x46016300u,                                        //   add.s f12,f12,f1           g = 0.1 × (1 + extra)
+            };
+            uint[] step =
+            {
+                0x3C010000u | hi,                                   // lui   at,HI(extra)
+                0xC4210000u | lo,                                   // lwc1  f1,LO(at)
+                0xC7808080u,                                        // lwc1  f0,-0x7f80(gp)         the shared 0.1
+                0x46000842u,                                        // mul.s f1,f1,f0               0.1 × extra
+                0x46010000u,                                        // add.s f0,f0,f1               g = 0.1 × (1 + extra)
+                0x03E00008u,                                        // jr    ra
+                0x46001001u,                                        //   sub.s f0,f2,f0             vy −= g (the displaced op)
+            };
+            uint seedAt = CodeCaves.DebugInfoCave.LungeGravitySeed, stepAt = CodeCaves.DebugInfoCave.LungeGravityStep;
+            if (stepAt + (uint)step.Length * 4 > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
+                throw new IOException("The lunge-gravity caves do not fit their host (DebugInfomationDraw).");
+            for (int i = 0; i < seed.Length; i++) WrU32(fs, ElfOff(seedAt + (uint)(i * 4)), seed[i]);
+            for (int i = 0; i < step.Length; i++) WrU32(fs, ElfOff(stepAt + (uint)(i * 4)), step[i]);
+            uint was = RdU32(fs, ElfOff(SeedHook));
+            if (was != MipsAsm.Jal(Parabolic) && was != MipsAsm.Jal(seedAt))
+                throw new IOException($"ToanKey_Play's parabola call is not where expected (0x{was:X8} at 0x{SeedHook:X})");
+            WrU32(fs, ElfOff(SeedHook), MipsAsm.Jal(seedAt));
         }
 
         /// <summary>Xiao's build-up tree, baked: the weapon template table's build-up word (WeaponList +0x3C, bit k = the weapon

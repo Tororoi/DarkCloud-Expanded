@@ -40,7 +40,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         private const string Tag      = "[BladeProp] ";
-        private const int    Slot     = 3;               // the clone-weapon chara slot (texgroup 0x1D)
+        internal const int   Slot     = 3;               // the clone-weapon chara slot (texgroup 0x1D)
         private const int    CharCopy = 0xD60;           // the draw-relevant part of a CCharacter (CharacterClone's safe cut)
         private const int    MaxNodes = 8;               // WeaponCave: 0x1400 / 0x270
 
@@ -69,14 +69,20 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!Active) return;
             long s = SlotAddr();
-            Memory.WriteVec3 (s + CCharacter.CharPos, x, h, y);
-            Memory.WriteFloat(s + CCharacter.CharRot,     0f);
-            Memory.WriteFloat(s + CCharacter.CharRotY,    yaw);
-            Memory.WriteFloat(s + CCharacter.CharRot + 8, 0f);
-            Memory.WriteFloat(s + CCharacter.CharScale,     _scale);
-            Memory.WriteFloat(s + CCharacter.CharScale + 4, _scale);
-            Memory.WriteFloat(s + CCharacter.CharScale + 8, _scale);
+            Memory.WriteVec3 (s + CCharacter.CharPos, x, h, y);                  // one packet: the position lands whole
+            Orient(yaw);
         }
+        /// <summary>The copy's yaw and scale (world-rooted), written only when they have changed — the position is
+        /// somebody else's (a fall or a follow the engine's blade cave places every frame, or <see cref="Place"/>).</summary>
+        internal static void Orient(float yaw)
+        {
+            if (!Active || (_placedYaw == yaw && _placedScale == _scale)) return;
+            long s = SlotAddr();
+            Memory.WriteVec3(s + CCharacter.CharRot, 0f, yaw, 0f);
+            Memory.WriteVec3(s + CCharacter.CharScale, _scale, _scale, _scale);
+            _placedYaw = yaw; _placedScale = _scale;
+        }
+        private static float _placedYaw = float.NaN, _placedScale = float.NaN;
 
         /// <summary>PIN the copy to a node the ENGINE moves: its root is parented to <paramref name="parentGuest"/>,
         /// and from then on the draw chains its world matrix through the parent's every frame — welded at 60 fps
@@ -173,6 +179,11 @@ namespace Dark_Cloud_Improved_Version
         }
 
         internal static void Despawn()
+        {
+            _placedYaw = float.NaN; _placedScale = float.NaN;
+            DespawnCore();
+        }
+        private static void DespawnCore()
         {
             if (!Active) return;
             long s = SlotAddr();

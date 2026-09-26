@@ -259,6 +259,10 @@ namespace Dark_Cloud_Improved_Version
         // window, and the flag dropping is the earliest, cleanest "attack finished" signal (the action state
         // itself lingers at 0x18 for a frame until ToanKey_On resets it).
         internal const long ChargeActiveFlag  = 0x21DC44F0;
+        /// <summary>The LOCK-ON AIM POINT (vec4, world): setTargetCursor writes it every frame a lock is held — the target's
+        /// lock-on frame position when its script declared one, else its origin raised 8 — before raising it 10 more and
+        /// projecting that for the name plate and HP gauge. Xiao's pellets fly at it; the judgement blade hangs off it.</summary>
+        internal const long LockOnAimPoint    = 0x21DC4500;
     }
 
     /// <summary>

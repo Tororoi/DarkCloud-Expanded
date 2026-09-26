@@ -182,9 +182,16 @@ namespace Dark_Cloud_Improved_Version
         // level — and back to nothing with the light. Written per enemy only when its value has moved a whole unit.
         private const float EnemyTintMax = 30f, EnemyTintFullDim = 0.5f;
         private static readonly float[] _enemyTint = new float[EnemyAddresses.FloorSlots.Count];
+        /// <summary>Toan's own tint is somebody else's for now (a primed white held on him): the dark's white keeps off him.</summary>
+        internal static bool ToanTintOwned;
+        private static float _toanTint;
         private static void TintEnemies(float dim)
         {
             float v = EnemyTintMax * Math.Max(0f, Math.Min(1f, dim / EnemyTintFullDim));
+            // …and Toan, the same white, unless a charge's own tint is on him (the cyan ramp, the primed white)
+            if (ToanTintOwned || ChargeTint.Active) _toanTint = float.NaN;
+            else if (float.IsNaN(_toanTint) || Math.Abs(v - _toanTint) >= 1f || (v == 0f && _toanTint != 0f))
+            { Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint, v, v, v); _toanTint = v; }
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
                 bool live = Enemies.IsLive(s);
