@@ -265,7 +265,40 @@ WHP -= (1.5 − 0.01 × Endurance) × factor  +  0.1 × monster.whpCost   // +0x
   ten bag slots equipped. With neither in the bag nothing happens: the weapon stays equipped at 0 WHP. A mod write
   that leaves WHP at 0 therefore breaks on the next DRAIN (a landed hit, or a charge attack's start), not at once.
 
-## 10. Thrown items (for completeness)
+## 10. Magic circles
+
+`SetupTrapCircle` (0x1C7AB0) spawns up to three per floor, each with an effect rolled 0–9 (`rand`, clamped 9) in
+its map entry (+0x14; state at +0x10: 1 armed, 2 fired). Stepping in (`CheckTrapCircle` 0x1C79F0) runs dun.bin's
+`Run_TrapCircle` (0x1DBFA70) once. A starter weapon in hand — the character's default or its broken form, table
+dun 0x1DC1B00 (257/299/314/331/347/363) — is always dealt effect 0.
+
+| # | Effect | Vanilla figure | SE |
+|---|---|---|---|
+| 0 | Attack ×2 (`BtSetStatusErr(8)`, `StatusErrCheck(8)` doubles the latched attack) | 0x708 = 1800 frames | good |
+| 1 | Gilda += trunc(gilda × 1.2) + 10, capped 65535 (the 1.2 is the shared kick word `0x2A1AF8`) | | good |
+| 2 | ABS to max (`WeaponDataChangeByRGate` kind 0 → `GetWeaponMaxExp`) | | good |
+| 3 | Max WHP += 3 + rand % 3, cap 99 (kind 2) | | good |
+| 4 | WHP to max (kind 4) | | good |
+| 5 | Every enemy slot's rage timer (+0x10 of the 400-byte block) = 300 (`AllBin2`) | | bad |
+| 6 | Gilda −= gilda × 0.2 (the shared `0x2A1C50`), floor 0 | | bad |
+| 7 | One of attack/endurance/speed/magic −= 2 + rand % 3 (attack floors 1), plus `LocalWeaponDataChange` on one byte of each element/anti group: +0x17×5 (2 + rand % 3), +0x1C×3, +0x1F×3, +0x22×4 (2 + rand % 2) (kind 1) | | bad |
+| 8 | Max WHP −= 3 + rand % 3; WHP clamped down to it; max floors 1 (kind 3) | | bad |
+| 9 | WHP ÷ 4, floor 1 (kind 5) | | bad |
+
+Kinds 1–5 end in `SetWeaponAttachStatus` (the battle record rebuilt). Nothing here is a table: every figure is an
+immediate in one of four routines.
+
+- Mod: `Run_TrapCircle` jumps to the CIRCLE CAVE (`tools/stubs/circle_effects.s`, over the dead `DebugInfomationIF`
+  0x1B47C0 — `ElfWeaponPatches.PatchCircleEffects`, hook in `DunPatches`), which applies the same ten effects with
+  every figure read from `CodeCaves.CircleTable` (0x01FAF900; pnach-seeded vanilla while its owner word is 0). The
+  two "to max" circles can also drop RewardCount items into the bag while there is room. `MagicCircles` writes a set;
+  `CircleBoost` (ownership passive: Crysknife or Magical Hammer owned ×2, both ×3, `MagicCircles.Boosted(m)`) writes
+  the boosted one. The table's FAVOUR word (the Secret Armlet owned, `SecretArmlet`) has the cave deal the bad circles
+  as good ones: 6 → 1, 8 → 3, 9 → 4, 7's losses become gains of the
+  same roll (capped 99), and 5 slows every enemy (gooey timer, +0x14 of the slot block, = SlowFrames) instead of
+  enraging them. New circle effects are added to the cave's chain.
+
+## 11. Thrown items (for completeness)
 
 `CMainItemModel::Step` (0x1D4E20 region) special-cases throwables on landing:
 elemental gems (items 161–165) and items 152/159 deal **30 × (selectMapNo + 1)**

@@ -482,6 +482,37 @@ namespace Dark_Cloud_Improved_Version
             PatchF12Site(fs, ElfOff, 0x00241BD4, 0x3C024040, w + (uint)CodeCaves.MeleeKickWhirl, "whirlwind kick");
         }
 
+        /// <summary>THE MAGIC CIRCLES as data (tools/stubs/circle_effects.s, CodeCaves.CircleTable): the cave takes over the body
+        /// of DebugInfomationIF (CodeCaves.DebugIfCave) — its first two words become `jr ra; li v0,0`, so the debug key's one
+        /// call reads "nothing pressed" — and dun.bin's Run_TrapCircle jumps to it (DunPatches). Every circle magnitude is then
+        /// a word the mod may set.</summary>
+        internal static void PatchCircleEffects(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Host = CodeCaves.DebugIfCave.Host, Cave = CodeCaves.DebugIfCave.CircleEffects;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.circleEffects.bin")
+                ?? throw new IOException("Embedded EE function missing: circleEffects.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: the engine's own frame, and the calls it makes — BtSetStatusErr, WeaponDataChangeByRGate, SetWeaponAttachStatus, rand, GetItem, SndSePlay.
+            bool statusErr = false, rgate = false, attach = false, rnd = false, getItem = false, se = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4)
+            {
+                uint w = U32(b, i);
+                if (w == Jal(0x001B1BB0)) statusErr = true; if (w == Jal(0x0020FCE0)) rgate = true; if (w == Jal(0x00225AA0)) attach = true;
+                if (w == Jal(0x001046F8)) rnd = true;       if (w == Jal(0x001BE060)) getItem = true; if (w == Jal(0x0015A6B0)) se = true;
+            }
+            if (b.Length % 4 != 0 || b.Length < 0x200 || U32(b, 0) != 0x27BDFF70u || !statusErr || !rgate || !attach || !rnd || !getItem || !se)
+                throw new IOException($"circleEffects.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (Cave + (uint)b.Length > Host + CodeCaves.DebugIfCave.HostSpan)
+                throw new IOException("circleEffects.bin overruns DebugInfomationIF's span.");
+            uint w0 = RdU32(fs, ElfOff(Host));
+            if (w0 != CodeCaves.DebugIfCave.VanillaWord0 && w0 != 0x03E00008u)
+                throw new IOException($"DebugInfomationIF at 0x{Host:X} is not vanilla (`addiu sp,sp,-0x20`) — unmodified Dark Cloud (USA) ISO expected.");
+            WrU32(fs, ElfOff(Host),     0x03E00008u);                            // jr   ra
+            WrU32(fs, ElfOff(Host + 4), 0x24020000u);                            //   addiu v0,zero,0 — "nothing pressed" to the debug key's caller
+            for (int i = 0; i < b.Length; i += 4) WrU32(fs, ElfOff(Cave + (uint)i), U32(b, i));
+        }
+
         /// <summary>An immediate float handed over in f12 (`lui v0,IMM; mtc1 v0,f12`, v0 dead after) becomes a load of
         /// the data word at <paramref name="slot"/> (`lui v0,HI; lwc1 f12,LO(v0)`).</summary>
         private static void PatchF12Site(FileStream fs, Func<uint, long> ElfOff, uint luiAddr, uint vanillaLui,

@@ -460,6 +460,18 @@ namespace Dark_Cloud_Improved_Version
             internal const uint CatGuardBypassSpan = 0x14C;
         }
 
+        /// <summary>A cave INSIDE a second dead main-ELF function: the body of DebugInfomationIF (0x1B47C0, 3,712 B), the
+        /// developers' debug overlay INPUT handler, reached only from the overlay's debug key (dun 0x1DB5150, mode 0xDD).
+        /// ElfWeaponPatches.PatchCircleEffects turns its first two words into `jr ra; li v0,0` — that caller reads "nothing
+        /// pressed" — and writes the cave from +8.</summary>
+        internal static class DebugIfCave
+        {
+            internal const uint Host = 0x001B47C0, HostSpan = 3712, VanillaWord0 = 0x27BDFFE0;   // `addiu sp,sp,-0x20`
+            /// <summary>tools/stubs/circle_effects.s: the magic circles, every magnitude from CodeCaves.CircleTable; dun.bin's
+            /// Run_TrapCircle (0x1DBFA70) jumps here (DunPatches).</summary>
+            internal const uint CircleEffects = Host + 0x8;
+        }
+
         /// <summary>A cave INSIDE a dead main-ELF function: the body of DebugInfomationDraw (0x1B3780, 3,952 B), the developers'
         /// on-screen debug overlay. ElfWeaponPatches.PatchSharedShots turns its first word into `jr ra` — its one caller (dun.bin's
         /// DrawProcess, behind a debug flag) returns at once — and writes the cave from +8. The band (<see cref="ElfCave"/>) is
@@ -1002,7 +1014,22 @@ namespace Dark_Cloud_Improved_Version
         internal const uint MeleeKickWordsGuest = 0x01FAF8E0;
         internal const int  MeleeKickHit3 = 0x0, MeleeKickHit4 = 0x4, MeleeKickHit5 = 0x8, MeleeKickLunge = 0xC, MeleeKickWhirl = 0x10, MeleeKickOwner = 0x14;
 
-        // ── FREE: 0x21FAF900 .. 0x21FB0000 (0x700 B) ────────────────────────────────────────────────────
+        /// <summary>THE MAGIC CIRCLE TABLE (tools/stubs/circle_effects.s, DebugIfCave.CircleEffects — the cave dun.bin's
+        /// Run_TrapCircle jumps to): every magnitude a circle applies, as words the cave reads. +0x00 owner (the pnach re-seeds
+        /// the vanilla figures every frame while 0; a sword that changes the circles sets 1 — Weapons.MagicCircles), then
+        /// AttackFrames, GildaUpMult (f), GildaUpAdd, GildaDownFrac (f), MaxWhpUpMin, MaxWhpUpRange, StatDownMin, StatDownRange,
+        /// MaxWhpDownMin, MaxWhpDownRange, WhpDivisor (f), RageFrames, AbsFullItem, WhpCureItem, ElemDownMult, Favour (the Secret
+        /// Armlet: the bad circles dealt as good ones), SlowFrames, RewardCount — the .s says what each does. Ranges must stay ≥ 1.</summary>
+        internal const long CircleTable      = 0x21FAF900;
+        internal const uint CircleTableGuest = 0x01FAF900;
+        internal const int  CircleOwner = 0x00, CircleAttackFrames = 0x04, CircleGildaUpMult = 0x08, CircleGildaUpAdd = 0x0C,
+                            CircleGildaDownFrac = 0x10, CircleMaxWhpUpMin = 0x14, CircleMaxWhpUpRange = 0x18, CircleStatDownMin = 0x1C,
+                            CircleStatDownRange = 0x20, CircleMaxWhpDownMin = 0x24, CircleMaxWhpDownRange = 0x28, CircleWhpDivisor = 0x2C,
+                            CircleRageFrames = 0x30, CircleAbsFullItem = 0x34, CircleWhpCureItem = 0x38, CircleElemDownMult = 0x3C,
+                            CircleFavour = 0x40, CircleSlowFrames = 0x44, CircleRewardCount = 0x48;
+        internal const int  CircleTableBytes = 0x4C;
+
+        // ── FREE: 0x21FAF950 .. 0x21FB0000 (0x6B0 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

@@ -19,9 +19,15 @@ namespace Dark_Cloud_Improved_Version
         internal const uint LoadBase = 0x01DABD00;
 
         private sealed record Word(uint Addr, uint Orig, uint New, string What);
+        // Run_TrapCircle's first two words: the magic-circle cave (ElfWeaponPatches.PatchCircleEffects) takes the call whole,
+        // with the circle in a0 as before, and returns through ra to Run_TrapCircle's caller.
+        internal const uint CircleHookAddr = 0x01DBFA70, CircleHookOrig = 0x27BDFF80, CircleHookSlotOrig = 0x7FBF0070;   // addiu sp,sp,-0x80 ; sq ra,0x70(sp)
 
         private static readonly Word[] Words =
         {
+            // Run_TrapCircle → the magic-circle cave (the vanilla body behind it is never entered again).
+            new(CircleHookAddr,     CircleHookOrig,     MipsAsm.J(CodeCaves.DebugIfCave.CircleEffects), "magic circles: Run_TrapCircle → the circle cave (j)"),
+            new(CircleHookAddr + 4, CircleHookSlotOrig, 0x00000000u,                                     "magic circles: its delay slot (nop)"),
             // A hit carrying reaction 5 is presented as guarded instead of ignored (see AutoGuardHookAddr above).
             new(AutoGuardHookAddr, AutoGuardHookOrig, AutoGuardHookNew, "auto-guard: CheckHitUser-return hook"),
             new(AutoGuardSlotAddr, AutoGuardSlotOrig, AutoGuardSlotNew, "auto-guard: displaced move"),

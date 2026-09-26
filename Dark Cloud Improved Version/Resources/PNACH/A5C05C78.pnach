@@ -408,6 +408,29 @@ patch=1,EE,21FAF8E4,extended,40000000 //  combo hit 4 = 2.0
 patch=1,EE,21FAF8E8,extended,40400000 //  combo hit 5 = 3.0
 patch=1,EE,21FAF8EC,extended,40400000 //  lunge = 3.0
 patch=1,EE,21FAF8F0,extended,40400000 //  whirlwind = 3.0
+//Magic circles — every magnitude the ISO's circle cave applies (it replaces dun.bin's Run_TrapCircle) is read from the table at
+//0x01FAF904..3C (tools/stubs/circle_effects.s names each word). While 0x01FAF900 == 0 (no sword is changing the circles) PCSX2
+//re-seeds the vanilla figures every frame; the app sets 0x01FAF900 = 1 and writes its own (the Crysknife / Magical Hammer
+//boost, the Secret Armlet's favour).
+patch=1,EE,E1120000,extended,01FAF900 //if nobody owns the table (apply next 18)
+patch=1,EE,21FAF904,extended,00000708 //  attack ×2 frames = 1800
+patch=1,EE,21FAF908,extended,3F99999A //  gilda up: × 1.2 …
+patch=1,EE,21FAF90C,extended,0000000A //  … + 10
+patch=1,EE,21FAF910,extended,3E4CCCCD //  gilda down: 0.2 of it
+patch=1,EE,21FAF914,extended,00000003 //  max WHP up: 3 …
+patch=1,EE,21FAF918,extended,00000003 //  … + rand % 3
+patch=1,EE,21FAF91C,extended,00000002 //  stat down: 2 …
+patch=1,EE,21FAF920,extended,00000003 //  … + rand % 3
+patch=1,EE,21FAF924,extended,00000003 //  max WHP down: 3 …
+patch=1,EE,21FAF928,extended,00000003 //  … + rand % 3
+patch=1,EE,21FAF92C,extended,40800000 //  WHP divided by 4.0
+patch=1,EE,21FAF930,extended,0000012C //  rage frames = 300
+patch=1,EE,21FAF934,extended,00000000 //  ABS-full reward item = none
+patch=1,EE,21FAF938,extended,00000000 //  WHP-cure reward item = none
+patch=1,EE,21FAF93C,extended,00000001 //  element loss × 1
+patch=1,EE,21FAF940,extended,00000000 //  favour (bad circles dealt as good) off
+patch=1,EE,21FAF944,extended,0000012C //  favoured slow frames = 300
+patch=1,EE,21FAF948,extended,00000001 //  reward items given = 1
 
 //Osmond's flamethrower — the spacing of its 24 flame particles along the aim (the reach is 23 × this). The ISO's ELF patch
 //makes CSHOT_FIREBAR's Set and Init read 0x01F100F8 instead of their immediate 2.0. While 0x01F100FC == 0 (the app is not

@@ -94,7 +94,6 @@ namespace Dark_Cloud_Improved_Version
 
         private static void Toan()
         {
-            if(Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
             switch (Player.Weapon.GetCurrentWeaponId())
             {
@@ -348,7 +347,6 @@ namespace Dark_Cloud_Improved_Version
         {
             // Super Steve manages the bone-door bypass itself (via an attached Bone Rapier / Bone Slingshot sphere); the Bone Slingshot has it below.
             if (Player.Weapon.GetCurrentWeaponId() != Items.supersteve && Player.Weapon.GetCurrentWeaponId() != Items.boneslingshot) BoneRapier.SkeletonKeyEffect(false);
-            if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
             // The lock-on movement buff: Dragon's Y's, and the three weapons that inherit it (Super Steve's own loop drives its sphere's).
             if (DragonsY.LockOnSpeedGrants(Player.Weapon.GetCurrentWeaponId()) && !lockOnSpeedThread.IsAlive)
@@ -476,7 +474,6 @@ namespace Dark_Cloud_Improved_Version
         private static void Goro()
         {
             BoneRapier.SkeletonKeyEffect(false);
-            if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
             switch (Player.Weapon.GetCurrentWeaponId())
             {
@@ -514,7 +511,6 @@ namespace Dark_Cloud_Improved_Version
             switch (Player.Weapon.GetCurrentWeaponId())
             {
                 case Items.mobiusring:
-                    if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
                     if (!mobiusRingThread.IsAlive)
                     {
@@ -523,7 +519,6 @@ namespace Dark_Cloud_Improved_Version
                     }
                     break;
                 case Items.banditsring:
-                    if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
                     if (!banditsRingThread.IsAlive)
                     {
@@ -531,14 +526,7 @@ namespace Dark_Cloud_Improved_Version
                         banditsRingThread.Start();
                     }
                     break;
-                case Items.secretarmlet:
-                    if (!Dungeon.magicCircleChanged) {
-                        bool executed = CustomRubyEffects.SecretArmletEnable();
-                        if(executed) Dungeon.magicCircleChanged = true;
-                    }
-                    break;
                 default:
-                    if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
                     break;
             }
         }
@@ -546,7 +534,6 @@ namespace Dark_Cloud_Improved_Version
         private static void Ungaga()
         {
             BoneRapier.SkeletonKeyEffect(false);
-            if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
 
             switch (Player.Weapon.GetCurrentWeaponId())
@@ -582,7 +569,6 @@ namespace Dark_Cloud_Improved_Version
         private static void Osmond()
         {
             BoneRapier.SkeletonKeyEffect(false);
-            if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
             switch (Player.Weapon.GetCurrentWeaponId())
             {

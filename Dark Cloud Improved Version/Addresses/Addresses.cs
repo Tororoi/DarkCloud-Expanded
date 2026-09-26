@@ -129,39 +129,6 @@ namespace Dark_Cloud_Improved_Version
         ///</summary>
         public const int dungeonMode = 0x202A355C;
 
-        /// <summary>
-        ///     0 = Null
-        /// <br>1 = Spawned</br>
-        /// <br>2 = Destroy animation</br>
-        /// </summary>
-        public const int circleSpawn1 = 0x21DD56A0;
-
-        /// <summary>
-        ///     0 = Player stamina
-        /// <br>1 = Funds Increased</br>
-        /// <br>2 = Abs full</br>
-        /// <br>3 = Max Whp increased</br>
-        /// <br>4 = Whp recover</br>
-        /// <br>5 = Monster stamina</br>
-        /// <br>6 = Funds Decreased</br>
-        /// <br>7 = Status changed</br>
-        /// <br>8 = Max Whp decreased</br>
-        /// <br>9 = Whp decrease</br>
-        /// <br>10 = Unused effect (item "melted" into blank)</br>
-        /// </summary>
-        public const int circleEffect1 = 0x21DD56A4;
-        public const int circleSpawn2 = 0x21DD56C0;
-        public const int circleEffect2 = 0x21DD56C4;
-        public const int circleSpawn3 = 0x21DD56E0;
-        public const int circleEffect3 = 0x21DD56E4;
-
-        public const int backfloorcircleSpawn1 = 0x21DE61B0;
-        public const int backfloorcircleEffect1 = 0x21DE61B4;
-        public const int backfloorcircleSpawn2 = 0x21DE61D0;
-        public const int backfloorcircleEffect2 = 0x21DE61D4;
-        public const int backfloorcircleSpawn3 = 0x21DE61F0;
-        public const int backfloorcircleEffect3 = 0x21DE61F4;
-
         public const int dunBackFloorFlag = 0x202A34B4;
 
         //Menu Stuff

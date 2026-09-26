@@ -131,6 +131,7 @@ namespace Dark_Cloud_Improved_Version
             PatchSharedShots(fs, ElfOff);                 // the monster shot pack's five slots shared among every config a floor needs (the step hook in DunPatches)
             PatchPelletSprite(fs, ElfOff);                // a player pellet drawn as the sprite of the item id the mod names (Super Steve with a slingshot's sphere)
             PatchSteelLevelUp(fs, ElfOff);                // the Steel Slingshot's level-ups: endurance and max WHP grow twice as much
+            PatchCircleEffects(fs, ElfOff);               // the magic circles, every magnitude from CodeCaves.CircleTable (the cave over DebugInfomationIF; the dun hook is in DunPatches)
             PatchFlameSpacing(fs, ElfOff);                // Osmond's flamethrower reach from a mailbox word (the Skunk doubles it)
             PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
             PatchCatGlowPalettes(fs, ElfOff);             // the six glow ramps (data) …

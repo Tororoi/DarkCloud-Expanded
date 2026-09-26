@@ -42,7 +42,6 @@ namespace Dark_Cloud_Improved_Version
         static List<MiniBoss.MiniBossSnapshot> backfloorSnapshot = null;
         public static bool enemiesSpawn = false;
         public static bool doorIsOpen = false;
-        public static bool magicCircleChanged = false;
         public static List<byte> excludeFloors;
 
 //THREADS
@@ -166,7 +165,6 @@ namespace Dark_Cloud_Improved_Version
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has entered a new floor!");
 
                             doorIsOpen = false;
-                            magicCircleChanged = false;
                             dunUsedActiveEscape = false;
                             dunUsedEscapeCheck = false;
                             hasClearMessageShown = false;
