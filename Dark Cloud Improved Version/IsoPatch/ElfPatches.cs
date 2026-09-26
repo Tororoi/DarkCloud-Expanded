@@ -117,6 +117,7 @@ namespace Dark_Cloud_Improved_Version
             PatchAutoGuardMatch(fs, ElfOff);             // reaction 5: guard spark, then ignored outright (with DunPatches' hook)
             PatchBombReaction(fs, ElfOff);               // item-bomb blasts: hardcoded reaction 3 -> a mod-owned data word
             PatchChargeHitRadius(fs, ElfOff);            // Toan's lunge/whirl hit radii: baked immediates -> mod-owned data words
+            PatchMeleeKickStrength(fs, ElfOff);          // Toan's combo-3/4/5, lunge and whirl kick strengths: baked immediates -> mod-owned data words (pnach-seeded vanilla)
             PatchNameDrawGate(fs, ElfOff);               // lock-on name plate: its getter ANDs in NOT CodeCaves.NameHide
             PatchStrideScale(fs, ElfOff);                // Toan's stride on motion 33 × CodeCaves.StrideScale (the dun hook is in DunPatches)
             PatchCameraPin(fs, ElfOff);                  // the camera held at a world height while CodeCaves.CameraPin is set (the dun hook is in DunPatches)

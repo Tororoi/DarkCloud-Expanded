@@ -993,7 +993,16 @@ namespace Dark_Cloud_Improved_Version
         internal const int  WhpBillFactor = 0x0, WhpBillMagic = 0x4;
         internal const uint WhpBillMagicValue = 0x4C494257;   // "WBIL"
 
-        // ── FREE: 0x21FAF8E0 .. 0x21FB0000 (0x720 B) ────────────────────────────────────────────────────
+        /// <summary>TOAN'S MELEE KICK STRENGTHS as data (ElfWeaponPatches.PatchMeleeKickStrength). ToanKey_Play hands
+        /// SetKickBack an immediate strength for five of its seven hits — combo hit 3 (1.5), hit 4 (2.0), hit 5, the
+        /// lunge and the whirlwind (3.0 each); hits 1 and 2 read the shared 1.2 word (MeleeKick.Strength12) — so those
+        /// five become words here: +0x0 hit 3, +0x4 hit 4, +0x8 hit 5, +0xC lunge, +0x10 whirlwind, +0x14 owner (the
+        /// pnach re-seeds the vanilla five every frame while 0; the mod sets 1 and writes its own — MeleeKick).</summary>
+        internal const long MeleeKickWords      = 0x21FAF8E0;
+        internal const uint MeleeKickWordsGuest = 0x01FAF8E0;
+        internal const int  MeleeKickHit3 = 0x0, MeleeKickHit4 = 0x4, MeleeKickHit5 = 0x8, MeleeKickLunge = 0xC, MeleeKickWhirl = 0x10, MeleeKickOwner = 0x14;
+
+        // ── FREE: 0x21FAF900 .. 0x21FB0000 (0x700 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

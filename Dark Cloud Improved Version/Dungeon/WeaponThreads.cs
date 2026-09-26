@@ -23,6 +23,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread smallSwordThread = new Thread(new ThreadStart(SmallSword.QuickDrawEffect));
         private static Thread darkCloudThread = new Thread(new ThreadStart(DarkCloud.GuardCrushEffect));
         private static Thread kitchenKnifeThread = new Thread(new ThreadStart(KitchenKnife.SpringsBlessingEffect));
+        private static Thread baselardThread = new Thread(new ThreadStart(Baselard.HeavyHandEffect));
         private static Thread angelGearThread = new Thread(new ThreadStart(AngelGear.GuardianReflectorEffect));
         private static Thread superSteveThread = new Thread(new ThreadStart(SuperSteve.SphereInheritanceEffect));
         private static Thread matadorThread = new Thread(new ThreadStart(Matador.ChargingBullEffect));
@@ -313,6 +314,16 @@ namespace Dark_Cloud_Improved_Version
                     {
                         kitchenKnifeThread = new Thread(new ThreadStart(KitchenKnife.SpringsBlessingEffect));
                         kitchenKnifeThread.Start();
+                    }
+                    break;
+
+                case Items.baselard:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    if (!baselardThread.IsAlive)
+                    {
+                        baselardThread = new Thread(new ThreadStart(Baselard.HeavyHandEffect));
+                        baselardThread.Start();
                     }
                     break;
 

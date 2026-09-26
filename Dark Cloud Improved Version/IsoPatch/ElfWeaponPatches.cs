@@ -467,6 +467,21 @@ namespace Dark_Cloud_Improved_Version
                          CodeCaves.ChargeHitRadiusGuest + CodeCaves.ChargeRadiusWhirl, "whirlwind hit-radius");
         }
 
+        /// <summary>Toan's five baked melee KICK STRENGTHS become data (CodeCaves.MeleeKickWords). ToanKey_Play plants each
+        /// hit's kick with `lui v0,IMM; mtc1 v0,f12` ahead of `jal SetKickBack` — combo hit 3 (1.5 at 0x2418D8), hit 4
+        /// (2.0 at 0x241978), hit 5 (3.0 at 0x241A38), the lunge (3.0 at 0x241B04) and the whirlwind (3.0 at 0x241BD4);
+        /// hits 1 and 2 already read a word. Each pair becomes `lui v0,HI; lwc1 f12,LO(v0)` of its own word, so a sword
+        /// can set the knockback of EVERY hit (MeleeKick), pnach-seeded to the vanilla figures otherwise.</summary>
+        internal static void PatchMeleeKickStrength(FileStream fs, Func<uint, long> ElfOff)
+        {
+            uint w = CodeCaves.MeleeKickWordsGuest;
+            PatchF12Site(fs, ElfOff, 0x002418D8, 0x3C023FC0, w + (uint)CodeCaves.MeleeKickHit3,  "combo hit 3 kick");
+            PatchF12Site(fs, ElfOff, 0x00241978, 0x3C024000, w + (uint)CodeCaves.MeleeKickHit4,  "combo hit 4 kick");
+            PatchF12Site(fs, ElfOff, 0x00241A38, 0x3C024040, w + (uint)CodeCaves.MeleeKickHit5,  "combo hit 5 kick");
+            PatchF12Site(fs, ElfOff, 0x00241B04, 0x3C024040, w + (uint)CodeCaves.MeleeKickLunge, "lunge kick");
+            PatchF12Site(fs, ElfOff, 0x00241BD4, 0x3C024040, w + (uint)CodeCaves.MeleeKickWhirl, "whirlwind kick");
+        }
+
         /// <summary>An immediate float handed over in f12 (`lui v0,IMM; mtc1 v0,f12`, v0 dead after) becomes a load of
         /// the data word at <paramref name="slot"/> (`lui v0,HI; lwc1 f12,LO(v0)`).</summary>
         private static void PatchF12Site(FileStream fs, Func<uint, long> ElfOff, uint luiAddr, uint vanillaLui,

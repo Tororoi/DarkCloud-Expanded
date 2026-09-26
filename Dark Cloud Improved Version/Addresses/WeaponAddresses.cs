@@ -103,6 +103,19 @@ namespace Dark_Cloud_Improved_Version
     /// (These used to sit inside a class called "WeaponCollision", so anything that merely wanted to know whether
     /// the player was charging had to reach into the collision system to find out.)
     /// </summary>
+    /// <summary>The words Toan's melee hits take their KNOCKBACK from. ToanKey_Play calls SetKickBack(strength, decay)
+    /// as each hit's collision is planted; the kick moves the enemy `strength` a frame, less `decay` each frame, so it
+    /// travels ≈ strength² / (2·decay). Strengths: hits 1–2 the shared 1.2 word (read from ten places in the ELF, Goro's
+    /// smash among them); hits 3–5, the lunge and the whirlwind bake theirs as immediates, made data by the ISO patch
+    /// (CodeCaves.MeleeKickWords). Decays: three words — 0.2 for hits 1–2, 0.3 for hits 3 and 5 and both charge attacks,
+    /// 0.4 for hit 4. Set as a whole and put back by <see cref="MeleeKick"/>.</summary>
+    internal static class MeleeKickWords
+    {
+        internal const long  Strength12 = 0x202A1AF8, Decay12 = 0x202A1C50, Decay35 = 0x202A1A80, Decay4 = 0x202A1B5C;
+        internal const float VanillaStrength12 = 1.2f, VanillaHit3 = 1.5f, VanillaHit4 = 2.0f, VanillaHit5 = 3.0f, VanillaCharge = 3.0f;
+        internal const float VanillaDecay12 = 0.2f, VanillaDecay35 = 0.3f, VanillaDecay4 = 0.4f;
+    }
+
     internal static class PlayerAction
     {
 

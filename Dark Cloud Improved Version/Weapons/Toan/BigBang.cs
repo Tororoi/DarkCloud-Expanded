@@ -77,11 +77,9 @@ namespace Dark_Cloud_Improved_Version
 
         private const int    ElementNoneIndex = 5;      // GetWeaponElementAttr clamps 0..5; element_tbl[5] = 0
         private const int    ElementIndexOff  = 0x16;   // byte on the weapon record: which element the blade swings
-        // ⚠ SHARED ELF CONSTANTS, held only while the charge is up. The strength word is every ToanKey_Play melee
-        // kick's (1.2, read from TEN places in the ELF — Goro's smash shockwave among them); the decay word (0.3) is
-        // the one the LUNGE and WHIRLWIND sites read, shared with combo hits 3 and 5, which cannot run while a charge
-        // attack is executing. RestoreSwing puts both back on the spend, a dropped charge, a swap and a floor change.
-        private const long   SwingKickStrength = 0x202A1AF8, SwingKickDecay = 0x202A1A80;
+        // ⚠ SHARED ELF KICK WORDS (MeleeKick), held only while the charge is up: the whirl's strength and decay go into
+        // every melee kick word — the combo cannot run while a charge attack is executing — and RestoreSwing puts the
+        // vanilla figures back on the spend, a dropped charge, a swap and a floor change.
         // The explosion is the thrown-gem FIRE burst, spawned at the hit point by plain field writes into the
         // always-resident Maseki pool. It is authored as a small thrown-gem puff, so it is scaled up hard and
         // slowed down to stop the animation snapping at that size. Scale is the sub-slot's own CObject scale, not a
@@ -212,7 +210,6 @@ namespace Dark_Cloud_Improved_Version
             public bool swingArmed;                     // the charge attack's stats and radius are overridden
             public ushort weaponAttack;                 // …the blade's real Attack, and
             public byte swingElement;                   // …its real element index, and
-            public float swingKickS, swingKickD;        // …the melee kick constants it is holding
             public ushort armedValue;                   // the boosted Attack that was written, to recognise our own
             public int  chargeAction;                   // the whirlwind that has already been billed (0 = none)
             public bool patchChecked;                   // the radius patch has been verified this floor
@@ -350,8 +347,6 @@ namespace Dark_Cloud_Improved_Version
                 if (atk == 0) return;
                 st.weaponAttack = atk;
                 st.swingElement = Memory.ReadByte(WeaponHave.BattleWeaponRecord + ElementIndexOff);
-                st.swingKickS   = Memory.ReadFloat(SwingKickStrength);
-                st.swingKickD   = Memory.ReadFloat(SwingKickDecay);
                 st.swingArmed   = true;
             }
             else if (atk != 0 && atk != st.armedValue)
@@ -361,8 +356,7 @@ namespace Dark_Cloud_Improved_Version
             st.armedValue = Boosted(st.weaponAttack, WhirlAttackMult);
             Player.Weapon.SetCurrentWeaponAttack(st.armedValue);
             Memory.WriteByte(WeaponHave.BattleWeaponRecord + ElementIndexOff, ElementNoneIndex);
-            Memory.WriteFloat(SwingKickStrength, WhirlKick);
-            Memory.WriteFloat(SwingKickDecay, KickDecay);
+            MeleeKick.Set(WhirlKick, KickDecay);                                    // the spin's kick, in the whirlwind's own word
             Weapons.SetChargeHitRadii(CodeCaves.LungeRadiusVanilla, WhirlRadius);   // the spin's own sphere becomes the blast
         }
 
@@ -384,8 +378,7 @@ namespace Dark_Cloud_Improved_Version
                 Player.Weapon.SetCurrentWeaponAttack(st.weaponAttack);
                 Memory.WriteByte(WeaponHave.BattleWeaponRecord + ElementIndexOff, st.swingElement);
             }
-            Memory.WriteFloat(SwingKickStrength, st.swingKickS);
-            Memory.WriteFloat(SwingKickDecay, st.swingKickD);
+            MeleeKick.Restore();
             Weapons.SeedChargeHitRadii();                          // …and the stock 6 / 12 back
             st.weaponAttack = 0; st.armedValue = 0; st.swingArmed = false;
         }

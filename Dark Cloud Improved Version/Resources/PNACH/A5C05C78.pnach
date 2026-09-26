@@ -398,6 +398,16 @@ patch=1,EE,21F10090,extended,3FC00000 //  refill multiplier = 1.5
 //re-seeds 1.0 every frame; the app sets 0x01F100EC = 1 and writes the charge's factor (1.5 / 2.25) while a shot is held.
 patch=1,EE,E1010000,extended,01F100EC //if nobody owns the word (apply next 1)
 patch=1,EE,21F100E8,extended,3F800000 //  WHP factor = 1.0
+//Toan's melee knockback — the five kick strengths ToanKey_Play bakes as immediates (combo hit 3 = 1.5, hit 4 = 2.0, hit 5 /
+//lunge / whirlwind = 3.0) are read from data words 0x01FAF8E0..F0 by the ISO's ELF patch. While 0x01FAF8F4 == 0 (the app is
+//not driving them) PCSX2 re-seeds the vanilla five every frame; the app sets 0x01FAF8F4 = 1 and writes a sword's own kick
+//(the Baselard's on every hit, Big Bang's on its whirlwind).
+patch=1,EE,E1050000,extended,01FAF8F4 //if nobody owns the words (apply next 5)
+patch=1,EE,21FAF8E0,extended,3FC00000 //  combo hit 3 = 1.5
+patch=1,EE,21FAF8E4,extended,40000000 //  combo hit 4 = 2.0
+patch=1,EE,21FAF8E8,extended,40400000 //  combo hit 5 = 3.0
+patch=1,EE,21FAF8EC,extended,40400000 //  lunge = 3.0
+patch=1,EE,21FAF8F0,extended,40400000 //  whirlwind = 3.0
 
 //Osmond's flamethrower — the spacing of its 24 flame particles along the aim (the reach is 23 × this). The ISO's ELF patch
 //makes CSHOT_FIREBAR's Set and Init read 0x01F100F8 instead of their immediate 2.0. While 0x01F100FC == 0 (the app is not
