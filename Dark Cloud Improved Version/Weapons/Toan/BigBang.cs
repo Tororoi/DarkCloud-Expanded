@@ -10,12 +10,11 @@ namespace Dark_Cloud_Improved_Version
     {
         // ── Big Bang "Detonate" ────────────────────────────────────────────────────────────
         private const int    TickMs           = 30;
-        // THE WHIRLWIND is the detonation: the spin's own hit sphere, widened to WhirlRadius, at DamageFraction × the
-        // weapon's attack with no element, and everything in it thrown clear. (The lunge and the combo are ordinary
-        // swings; the judgement blade below is the other blast.)
-        // Distance ≈ force²/(2·decay), so clearing the radius takes a force that squares past 2·decay·radius.
-        private const float  WhirlRadius      = 60f;
-        private const float  WhirlKick        = 4.0f;   // force²/(2·decay) ≈ 67 units: still clears the radius
+        // THE WHIRLWIND is the detonation: as the spin begins, the SAME blast the dropped blade makes goes off at Toan's
+        // feet (PlantFalloff — the falloff steps, elementless, the kick, every enemy turned to it), and the spin's own hit
+        // sphere is taken out of reach so nothing is struck twice. (The lunge and the combo are ordinary swings; the
+        // judgement blade below is the other blast.)
+        private const float  WhirlNoHit       = -1000f; // the whirl's own hit radius while it is armed: no enemy is inside it
         // ── the whirl's model ────────────────────────────────────────────────────────────
         // Toan's whirlwind visual IS the main-character effect instance — the same instance BorrowedShots borrows
         // for Xiao (hers sits idle holding an unused mgan01, his holds c01_fuusya). Seeding it with
@@ -37,7 +36,6 @@ namespace Dark_Cloud_Improved_Version
         private static BorrowedEffect _explosion;
         private static readonly float[] _burstBind = new float[9];
         private static bool _burstBindRead;
-        private const float  DamageFraction   = 3.0f;   // the blast's base damage, as a multiple of the weapon's attack
         // ── the whirl's blast IS its own hit ─────────────────────────────────────────────
         // Nothing here detects a hit or plants a sphere for it. ToanKey_Play built its two charge-attack hit radii as
         // baked immediates; the ISO patch (ElfWeaponPatches.PatchChargeHitRadius) turned them into the data words
@@ -59,7 +57,6 @@ namespace Dark_Cloud_Improved_Version
         // the spin's first damage frame — a first hit at the blade's plain attack would also make that enemy
         // invincible to the boosted frames that follow.
         private const float  WhirlThreshold   = 2.5f;   // the meter at which the charge becomes a whirlwind
-        private const float  WhirlAttackMult  = 1.5f;   // the engine's own multiplier on the whirlwind
         // ── immunity to explosions ───────────────────────────────────────────────────────
         // The four shot configs that ARE the explosions: Halloween's thrown pumpkin and the three self-destructs
         // (zibaku = 自爆) that Mr. Blare, Bomber Head, Sam and Billy blow themselves up with. Their entries take the
@@ -75,11 +72,9 @@ namespace Dark_Cloud_Improved_Version
         private static readonly int[] _cfgReaction = new int[ExplosionCfgs.Length];
         private static bool  _immune;
 
-        private const int    ElementNoneIndex = 5;      // GetWeaponElementAttr clamps 0..5; element_tbl[5] = 0
-        private const int    ElementIndexOff  = 0x16;   // byte on the weapon record: which element the blade swings
-        // ⚠ SHARED ELF KICK WORDS (MeleeKick), held only while the charge is up: the whirl's strength and decay go into
-        // every melee kick word — the combo cannot run while a charge attack is executing — and RestoreSwing puts the
-        // vanilla figures back on the spend, a dropped charge, a swap and a floor change.
+        // ⚠ SHARED ELF WORDS, held only while the charge is up: the whirl's hit radius (CodeCaves.ChargeHitRadius) is
+        // every charge attack's, and RestoreSwing puts the stock figure back on the spend, a dropped charge, a swap and
+        // a floor change. The blast's own kick rides its hit entries (PlantFalloff), not the shared kick words.
         // The explosion is the thrown-gem FIRE burst, spawned at the hit point by plain field writes into the
         // always-resident Maseki pool. It is authored as a small thrown-gem puff, so it is scaled up hard and
         // slowed down to stop the animation snapping at that size. Scale is the sub-slot's own CObject scale, not a
@@ -207,10 +202,7 @@ namespace Dark_Cloud_Improved_Version
             public bool bladeLogged;                    // this floor's blade state has been written to the log once
             public bool crushing;                       // the guard break is currently driven on
             public bool tinted;                         // the blade is carrying this ability's charge tint
-            public bool swingArmed;                     // the charge attack's stats and radius are overridden
-            public ushort weaponAttack;                 // …the blade's real Attack, and
-            public byte swingElement;                   // …its real element index, and
-            public ushort armedValue;                   // the boosted Attack that was written, to recognise our own
+            public bool swingArmed;                     // the whirl's own hit radius is overridden (out of reach)
             public int  chargeAction;                   // the whirlwind that has already been billed (0 = none)
             public bool patchChecked;                   // the radius patch has been verified this floor
             public int  hp = -1;                        // Toan's HP as of the last tick, for the damage probe
@@ -219,10 +211,11 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Ability Name: Detonate (Big Bang)
         /// Big Bang's WHIRLWIND is an explosion. The blade whitens as the meter fills, and the level-2 charge it
-        /// becomes is the blast: its own hit reaches <see cref="WhirlRadius"/>, deals <see cref="DamageFraction"/> ×
-        /// the weapon's attack through the normal formula, carries NO element so no resistance blunts it, crushes
-        /// guards, and throws what it hits clear; its model IS explosion.chr. The blade pays <see cref="BlastWhp"/> weapon HP per blast (whirlwind or drop) — the
-        /// flash alone SunSword.FlashWhp. The lunge and the combo are ordinary swings. Dungeon only.
+        /// becomes is the blast — the very blast the dropped judgement blade makes, at his feet: the falloff steps of
+        /// the weapon's attack by distance (<see cref="Falloff"/>), no element so no resistance blunts it, guards crushed,
+        /// everything thrown clear and turned to it; its model IS explosion.chr, and the spin's own hit is put out of
+        /// reach so nothing is struck twice. The blade pays <see cref="BlastWhp"/> weapon HP per blast (whirlwind or
+        /// drop) — the flash alone SunSword.FlashWhp. The lunge and the combo are ordinary swings. Dungeon only.
         ///
         /// While the blade is held, explosions cannot hurt Toan: the four shot configs that ARE the explosions are
         /// given a reaction the player's damage handler does not act on (see ExplosionCfgs).
@@ -318,8 +311,8 @@ namespace Dark_Cloud_Improved_Version
             }
             else if (st.tinted && !whirl) ClearTint(st);
 
-            // Armed from the moment the meter reaches whirlwind range, so the numbers are in place before the spin's
-            // first damage frame. Nothing below depends on WHEN a tick lands: every write is the same value.
+            // Armed from the moment the meter reaches whirlwind range, so the spin's own hit is already out of reach
+            // before its first damage frame. Nothing below depends on WHEN a tick lands: every write is the same value.
             if (!SunSword.FlashArmed && (whirl || (action == PlayerAction.ActionWindup && meter >= WhirlThreshold)))
                 ArmSwing(st);
             else
@@ -328,59 +321,35 @@ namespace Dark_Cloud_Improved_Version
             // Guards are crushed while the whirl spins: a blocked spin would eat the detonation.
             if (whirl != st.crushing) { GuardBreak.Drive(whirl); st.crushing = whirl; }
 
-            // The blade's weapon-HP bill, once per whirlwind.
+            // The blast, once per whirlwind, as the spin begins: the dropped blade's blast at his feet, and its bill.
             if (whirl && action != st.chargeAction)
             {
-                st.chargeAction = action; DrainWhp();
+                st.chargeAction = action;
+                float x = Memory.ReadFloat(Addresses.dunPositionX), h = Memory.ReadFloat(Addresses.dunPositionZ), y = Memory.ReadFloat(Addresses.dunPositionY);
+                LastBlast = (x, h, y);
+                PlantFalloff(x, h, y);
+                TurnEnemiesToward(x, y);
+                DrainWhp();
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[BigBang] whirlwind: hit radius {Memory.ReadFloat(CodeCaves.ChargeHitRadius + CodeCaves.ChargeRadiusWhirl):F0}"
-                    + $", attack {st.weaponAttack}→{Player.Weapon.GetCurrentWeaponAttack()}, armed {st.swingArmed}, flash {SunSword.FlashArmed}");
+                    $"[BigBang] whirlwind blast at ({x:F0},{h:F0},{y:F0}); the spin's own hit at {Memory.ReadFloat(CodeCaves.ChargeHitRadius + CodeCaves.ChargeRadiusWhirl):F0}, flash {SunSword.FlashArmed}");
             }
             else if (!whirl) st.chargeAction = 0;
         }
 
+        /// <summary>The whirl's own hit sphere put out of reach (the blast at his feet is the whirl's damage; a spin that
+        /// also struck would hit an enemy twice). The lunge's word stays at its vanilla 6.</summary>
         private static void ArmSwing(BlastState st)
         {
-            ushort atk = Player.Weapon.GetCurrentWeaponAttack();
-            if (!st.swingArmed)
-            {
-                if (atk == 0) return;
-                st.weaponAttack = atk;
-                st.swingElement = Memory.ReadByte(WeaponHave.BattleWeaponRecord + ElementIndexOff);
-                st.swingArmed   = true;
-            }
-            else if (atk != 0 && atk != st.armedValue)
-            {
-                st.weaponAttack = atk;                                   // the record was rebuilt: this is the real one
-            }
-            st.armedValue = Boosted(st.weaponAttack, WhirlAttackMult);
-            Player.Weapon.SetCurrentWeaponAttack(st.armedValue);
-            Memory.WriteByte(WeaponHave.BattleWeaponRecord + ElementIndexOff, ElementNoneIndex);
-            MeleeKick.Set(WhirlKick, KickDecay);                                    // the spin's kick, in the whirlwind's own word
-            Weapons.SetChargeHitRadii(CodeCaves.LungeRadiusVanilla, WhirlRadius);   // the spin's own sphere becomes the blast
+            st.swingArmed = true;
+            Weapons.SetChargeHitRadii(CodeCaves.LungeRadiusVanilla, WhirlNoHit);
         }
 
-        /// <summary>The Attack that makes a move landing <paramref name="moveMult"/> × its weapon's attack hit for
-        /// <see cref="DamageFraction"/> × it instead.</summary>
-        private static ushort Boosted(ushort attack, float moveMult) =>
-            (ushort)Math.Min(ushort.MaxValue, Math.Max(1, (int)Math.Round(attack * DamageFraction / moveMult)));
-
-        /// <summary>The blade's own numbers back, and the shared kick constants with them. ⚠ The weapon fields are
-        /// restored only while Big Bang is still in hand and the record still reads what we left — an equip change or
-        /// a menu has already rebuilt it, and writing a stale Attack over a rebuilt record would hand another weapon
-        /// Big Bang's damage. The ELF kick constants are global and are ALWAYS put back.</summary>
+        /// <summary>The stock 6 / 12 back. The words are global and every weapon's charge reads them.</summary>
         private static void RestoreSwing(BlastState st)
         {
             if (!st.swingArmed) return;
-            if (Player.Weapon.GetCurrentWeaponId() == Items.bigbang
-                && Player.Weapon.GetCurrentWeaponAttack() == st.armedValue)
-            {
-                Player.Weapon.SetCurrentWeaponAttack(st.weaponAttack);
-                Memory.WriteByte(WeaponHave.BattleWeaponRecord + ElementIndexOff, st.swingElement);
-            }
-            MeleeKick.Restore();
-            Weapons.SeedChargeHitRadii();                          // …and the stock 6 / 12 back
-            st.weaponAttack = 0; st.armedValue = 0; st.swingArmed = false;
+            Weapons.SeedChargeHitRadii();
+            st.swingArmed = false;
         }
 
         /// <summary>The effect this weapon wants in the main-character instance: explosion.chr, in place of Toan's

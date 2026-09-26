@@ -3,9 +3,9 @@ using System;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>What Toan's lock-on gains from the Sun Sword line's later blades — Big Bang and the Sword of Zeus: the
-    /// REACH (he locks on from <see cref="ReachFactor"/>× as far) and, with the Sword of Zeus, the SPEED (he moves at
-    /// <see cref="SpeedRate"/>× while locked on). Both are the game's own data, held while the blade is out and put
-    /// back when it goes; each blade's tick drives them and its exit releases them.</summary>
+    /// REACH (he locks on from <see cref="ReachFactor"/>× as far). The SPEED half (<see cref="SpeedRate"/>× while locked
+    /// on) is kept for a blade that wants it; none drives it now. Both are the game's own data, held while the blade
+    /// is out and put back when it goes; each blade's tick drives them and its exit releases them.</summary>
     internal static class ToanLockOn
     {
         // ── reach ─────────────────────────────────────────────────────────────────────────

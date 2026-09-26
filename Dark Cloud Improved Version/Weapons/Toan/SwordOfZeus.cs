@@ -110,9 +110,10 @@ namespace Dark_Cloud_Improved_Version
         // Charge level 2 is DISABLED while Toan charges with this sword: the whirlwind-unlock word ToanKey_Play reads
         // is zeroed for the length of the wind-up (and put back the moment it is over — it is save data), so the game
         // never reaches its own level 2 and every release is the LUNGE. The sword keeps its own level 2 instead: the
-        // room darkens with the meter from the moment he starts charging, the way the guard charge darkens it, to the
-        // Zeus profile's prime dim at whirlwind range, where the stock charge-complete flash fires on him, the release
-        // is flagged as a bolt, and the judgement blade appears ChargeHoverHeight over the spot the bolt will land —
+        // room darkens from the moment he starts charging, the way the guard charge darkens it — half the Zeus
+        // profile's prime dim by level 1, the rest over the ChargeLevel2Seconds held past it — and at the end of that
+        // hold the stock charge-complete flash fires on him, the release is flagged as a bolt, and the judgement
+        // blade (fading in over the same hold) hangs ChargeHoverHeight over the spot the bolt will land —
         // the locked target, or ChargeBoltAhead units ahead of him (moving with him while he holds the charge). The
         // blade is let go so that it reaches the ground — hilt in — as the lunge's END state comes up, which is when
         // the bolt comes down where it fell. The lunge is the same length every time: ChargeLungeFrames from its dash
@@ -132,12 +133,11 @@ namespace Dark_Cloud_Improved_Version
         private const int    ChargeFallFrames  = 19;    // the fall, hover to hilt-in-the-ground: the bolt comes ChargeLungeFrames − this after the dash begins (two frames' margin: the log said 21 was still in the air)
         private const double ChargeFallSeconds = ChargeFallFrames / 60.0, ChargeDropAfterDash = (ChargeLungeFrames - ChargeFallFrames) / 60.0;
         private const float  ChargeDimFrom     = 1.0f;  // the meter as the charge starts (ToanKey_On resets it to 1.0) …
-        private const float  ChargeDimTo       = 2.5f;  // … and at whirlwind range: the dim is full here
-        private const float  ChargeBladeFrom   = 1.5f;  // the blade appears from level 1 (the meter here) …
-        private const float  ChargeBladeTo     = 2.5f;  // … fading in to full at level 2, its glow growing with it
+        private const float  ChargeLevel1      = 1.5f;  // … and at level 1 (the game's lunge threshold): half the dim is on, and the blade appears
+        private const double ChargeLevel2Seconds = 3.0; // held this long past level 1 is the sword's level 2: the dim full, the blade solid, the release a bolt
         private static bool  _chargeDimming, _chargeFull, _chargeBoltDue, _chargeBoltFired, _unlockZeroed, _chargeDropped;
         private static float _chargeDimFloor;                // the dim a blinding already had on when the charge began: never lifted while charging
-        private static DateTime _chargeDropAt, _chargeDashAt;
+        private static DateTime _chargeDropAt, _chargeDashAt, _chargeLevel1At;
         private static int   _unlockWas, _chargeTarget = -1;
         private static float _chargeX, _chargeH, _chargeY;   // where the bolt will land (the hover's spot, frozen at the drop)
 
@@ -148,28 +148,33 @@ namespace Dark_Cloud_Improved_Version
             if (action == PlayerAction.ActionWindup)
             {
                 float meter = Memory.ReadFloat(PlayerAction.ChargeMeter);
-                float k = Math.Max(0f, Math.Min(1f, (meter - ChargeDimFrom) / (ChargeDimTo - ChargeDimFrom)));
                 if (!_chargeDimming)
                 {
-                    _chargeDimming = true; _chargeFull = false; _chargeBoltDue = false; ZeroUnlock();   // no level 2 for the game this wind-up
+                    _chargeDimming = true; _chargeFull = false; _chargeBoltDue = false; _chargeLevel1At = default; ZeroUnlock();   // no level 2 for the game this wind-up
                     _chargeDimFloor = SolarLighting.Active ? SolarLighting.LastDim : 0f;   // a blinding's dim stays on under the charge rather than lifting and snapping back
                 }
+                if (meter >= ChargeLevel1 && _chargeLevel1At == default) _chargeLevel1At = GameClock.Now;   // level 1: the sword's own clock starts
+                // The charge's progress: half of it is the meter climbing to level 1, the other half the ChargeLevel2Seconds held past it.
+                float held = _chargeLevel1At == default ? 0f : (float)Math.Min(1.0, (GameClock.Now - _chargeLevel1At).TotalSeconds / ChargeLevel2Seconds);
+                float k = _chargeLevel1At == default
+                    ? 0.5f * Math.Max(0f, Math.Min(1f, (meter - ChargeDimFrom) / (ChargeLevel1 - ChargeDimFrom)))
+                    : 0.5f + 0.5f * held;
                 SolarBlade.Set(k, SunSword.ZeusFlash.Model, 0, 0, SunSword.ZeusFlash.BladeWhite);   // the blade whitens with the meter, as under a guard charge
                 SolarLighting.BeginDim();                                        // takes an easing flash over (its capture kept)
                 SolarLighting.DimTo(Math.Max(_chargeDimFloor, SunSword.ZeusFlash.PrimeDim * k));
-                if (meter >= ChargeDimTo && !_chargeFull)
-                {   // the sword's own level 2: the stock charge-complete flash on him, and the release flagged as a bolt
+                if (held >= 1f && !_chargeFull)
+                {   // the sword's own level 2, ChargeLevel2Seconds past level 1: the stock charge-complete flash on him, and the release flagged as a bolt
                     _chargeFull = true; _chargeDropped = false;
                     Memory.WriteFloat(CodeCaves.LungeGravityExtra, LungeHigher);   // the release's lunge jumps higher
                     Player.FlashChargeComplete();
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] charge level 2 — the release is a bolt");
                 }
-                // From level 1 the blade hangs over where the bolt will land, moving with him, fading in with the meter
+                // From level 1 the blade hangs over where the bolt will land, moving with him, fading in over the hold
                 // to full at level 2 — its glow growing at the same rate.
-                if (meter >= ChargeBladeFrom)
+                if (_chargeLevel1At != default)
                 {
                     ChargeAim();
-                    BigBang.PointAlpha((meter - ChargeBladeFrom) / (ChargeBladeTo - ChargeBladeFrom));
+                    BigBang.PointAlpha(held);
                 }
                 return;
             }
@@ -286,7 +291,7 @@ namespace Dark_Cloud_Improved_Version
             return struck;
         }
 
-        /// <summary>Per tick while the Sword of Zeus is out in a dungeon: the lock-on reach and speed, and the bolt's size.</summary>
+        /// <summary>Per tick while the Sword of Zeus is out in a dungeon: the lock-on reach, the charge, and the bolt's size.</summary>
         public static void LightningEffect()
         {
             byte floor = 0xFF;
@@ -299,9 +304,6 @@ namespace Dark_Cloud_Improved_Version
                     byte f = Memory.ReadByte(Addresses.checkFloor);
                     if (f != floor) { if (floor != 0xFF) { BigBang.ReleaseJudgement(); CameraHold.Unpin(); } floor = f; }
                     ToanLockOn.HoldReach("[Zeus] ");                                  // Big Bang's reach, inherited
-                    bool moving = !Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest();
-                    ToanLockOn.DriveSpeed(moving, "[Zeus] ");
-                    ToanLockOn.DriveStride(moving, "[Zeus] ");
                     if (LightningSeeded) MaintainScale();
                     if (!Player.CheckDunIsPausedOrMenu()) { ChargeTick(); if (Player.CurrentCharacterNum() == Player.ToanId) BigBang.JudgementTick(Judgement); }
                     BigBang.ExpireShells();                                            // the bolt's blast entries, once spent
@@ -310,7 +312,7 @@ namespace Dark_Cloud_Improved_Version
                 catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] tick error: " + ex.Message); }
             }
             ChargeStandDown(); CameraHold.Unpin(); BigBang.ReleaseJudgement(); BigBang.ReleaseRedirect();
-            ToanLockOn.ReleaseReach(); ToanLockOn.ReleaseSpeed("[Zeus] "); ToanLockOn.DriveStride(false, "[Zeus] ");
+            ToanLockOn.ReleaseReach();
         }
 
         /// <summary>Hold every instance sub-shot that carries lightning.chr at <see cref="LightningScale"/> on its root

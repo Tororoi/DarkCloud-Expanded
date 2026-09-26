@@ -77,7 +77,9 @@ namespace Dark_Cloud_Improved_Version
         }
 
         internal static readonly SolarProfile SunSwordFlash = new SolarProfile(
-            Items.sunsword, 0.25f, ToanGlowBakes.GlowName, SolarBlade.SunSwordModel, 0, 0, "SunSword", flashWhp: FlashWhp);
+            Items.sunsword, 0.25f, ToanGlowBakes.GlowName, SolarBlade.SunSwordModel, 0, 0, "SunSword",
+            primeDim: 0.35f,                                                         // the room darkens as the blade brightens, as it does for Big Bang (the enemies' white with it)
+            flashWhp: FlashWhp);
         internal static readonly SolarProfile BigBangFlash = new SolarProfile(
             Items.bigbang, 0.50f, ToanGlowBakes.BlueName, SolarBlade.BigBangModel,
             SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame, "BigBang", fog: 0.8f,
