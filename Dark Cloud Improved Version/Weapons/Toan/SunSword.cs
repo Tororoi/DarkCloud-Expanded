@@ -76,6 +76,19 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>Super Steve with a Sun Sword sphere (SolarShot): the Sun Sword's flash from Xiao's shot — the same share
+        /// and blinding, the room darkening as she charges; her disc is the cat's (the only one resident for her), painted
+        /// the Angel Gear cat's gold; the weapon brightened is the slingshot's mesh.</summary>
+        internal static readonly SolarProfile SolarShotFlash = new SolarProfile(
+            Items.supersteve, 0.25f, SolarShot.GlowDisc, SolarShot.WeaponModel, 0, 0, "SolarShot",
+            primeDim: 0.35f);                                                        // its WHP is the shot's, taken as the pellet leaves (ChargedShotWhp)
+        /// <summary>Super Steve with a Big Bang sphere (BombShot): Big Bang's flash — twice the Sun Sword's share, the cool
+        /// light, the 0.35 dim — from where her bomb lands; no disc on her (the bomb carries its own).</summary>
+        internal static readonly SolarProfile BombShotFlash = new SolarProfile(
+            Items.supersteve, 0.50f, null, SolarShot.WeaponModel, 0, 0, "BombShot", fog: 0.8f,
+            light: new[] { 236f, 226f, 255f }, fogRgb: new[] { 242f, 236f, 255f },
+            primeDim: 0.35f, bladeGlowOnly: true);
+
         internal static readonly SolarProfile SunSwordFlash = new SolarProfile(
             Items.sunsword, 0.25f, ToanGlowBakes.GlowName, SolarBlade.SunSwordModel, 0, 0, "SunSword",
             primeDim: 0.35f,                                                         // the room darkens as the blade brightens, as it does for Big Bang (the enemies' white with it)
@@ -321,13 +334,21 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>The slight white Toan carries while the charge is held: the same ambient-add field the charge ramp uses,
-        /// re-asserted each tick so a status tint or a character swap cannot leave it stuck on. Not for a sword whose
-        /// profile leaves Toan plain while primed (the Sword of Zeus).</summary>
-        private static void HoldPrimedTint(SolarProfile p, float k)
+        /// <summary>The slight white the character carries while the charge is held: the same ambient-add field the charge
+        /// ramp uses, re-asserted each tick so a status tint or a character swap cannot leave it stuck on. Not for a sword
+        /// whose profile leaves Toan plain while primed (the Sword of Zeus).</summary>
+        internal static void HoldPrimedTint(SolarProfile p, float k)
         {
             if (p.HoldsPrimedTint) Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint, PrimedTint * k, PrimedTint * k, PrimedTint * k);
         }
+
+        /// <summary>A blinding is running on the floor (from any of the swords, or Xiao's Solar Shot).</summary>
+        internal static bool BlindRunning => _blindUntil != default;
+        /// <summary>The lighting's ease and the blinding's clock, for a driver that is not this sword's own loop (Xiao's
+        /// Solar Shot): what SolarTick runs first each tick.</summary>
+        internal static void BlindTick() { SolarLighting.Tick(); SolarBlind(); }
+        /// <summary>The blinding cut short: the enemies' scripts back, their guards their own.</summary>
+        internal static void EndBlinding() { SolarScript.End(); GuardBreak.Drive(false); _blindUntil = default; }
 
         /// <summary>The blinding's clock. The behaviour itself is the enemies' own scripts (SolarScript); this only decides
         /// when they lower their guard and when they get their AI back.</summary>
@@ -381,8 +402,20 @@ namespace Dark_Cloud_Improved_Version
             if (!lit) { p.ArmLighting(); SolarLighting.Flash(); }
             Player.FlashActiveCharacter(p.Light[0], p.Light[1], p.Light[2], FlashPulseSpeed, 1);
             if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
-            if (p.DamageFraction > 0f) PlantFlashHit(st, px, ph, py, p);
+            if (p.DamageFraction > 0f) PlantFlashHit(st.planted, px, ph, py, p);
             if (!lit && p.FlashWhp > 0f) WeaponWhp.Drain(p.WeaponId, p.FlashWhp, "[" + p.Tag + "] flash ");   // a blast's landing paid for itself
+            Blind(p.BlindSeconds);
+        }
+        /// <summary>The flash from a point that is not the character — Xiao's Solar Shot, where her pellet landed: the
+        /// white-out, her pulse, the light hit on every enemy in reach of the point (shoved away from it), the bill and
+        /// the blinding. <paramref name="planted"/> is the caller's list of hit entries to withdraw (<see cref="ExpireHits"/>).</summary>
+        internal static void FlashAt(SolarProfile p, float x, float h, float y, List<(int slot, int ticks)> planted)
+        {
+            p.ArmLighting(); SolarLighting.Flash();
+            Player.FlashActiveCharacter(p.Light[0], p.Light[1], p.Light[2], FlashPulseSpeed, 1);
+            if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
+            if (p.DamageFraction > 0f) PlantFlashHit(planted, x, h, y, p);
+            if (p.FlashWhp > 0f) WeaponWhp.Drain(p.WeaponId, p.FlashWhp, "[" + p.Tag + "] flash ");
             Blind(p.BlindSeconds);
         }
         /// <summary>The blinding: every enemy's own script holding its guard for <paramref name="seconds"/> from now — a
@@ -412,7 +445,7 @@ namespace Dark_Cloud_Improved_Version
         /// 300-unit sphere damaged exactly one enemy and left the rest untouched — which looked like "one per species"
         /// because a species tends to be clustered. One small sphere centred on each enemy hits all of them, and the pool
         /// holds 96 entries against at most 16 enemies.</summary>
-        private static void PlantFlashHit(SolarState st, float x, float h, float y, SolarProfile p)
+        private static void PlantFlashHit(List<(int slot, int ticks)> planted, float x, float h, float y, SolarProfile p)
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
@@ -432,11 +465,11 @@ namespace Dark_Cloud_Improved_Version
                 if (slot < 0) { missed++; continue; }
                 byte[] e = CollisionPool.PlayerHitEntry(ex, eh, ey, PerEnemyRadius, baseDmg, attr);
                 void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
-                F(0x80, x); F(0x84, h); F(0x88, y);                    // kick origin stays Toan: everyone is shoved AWAY from him
+                F(0x80, x); F(0x84, h); F(0x88, y);                    // kick origin = the flash point: everyone is shoved AWAY from it
                 F(0x90, KickStrength); F(0x94, KickDecay);
                 BitConverter.GetBytes(KickTypeMelee).CopyTo(e, 0x98);
                 CollisionPool.Plant(pool, slot, e);
-                st.planted.Add((slot, HitLifeTicks));
+                planted.Add((slot, HitLifeTicks));
                 hit++;
             }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
@@ -445,16 +478,17 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The engine withdraws its own swing spheres when the swing ends; ours is withdrawn here.</summary>
-        private static void ExpireHits(SolarState st)
+        private static void ExpireHits(SolarState st) => ExpireHits(st.planted);
+        internal static void ExpireHits(List<(int slot, int ticks)> planted)
         {
-            if (st.planted.Count == 0) return;
+            if (planted.Count == 0) return;
             long pool = CollisionPool.Resolve();
-            for (int i = st.planted.Count - 1; i >= 0; i--)
+            for (int i = planted.Count - 1; i >= 0; i--)
             {
-                var (slot, ticks) = st.planted[i];
-                if (--ticks > 0) { st.planted[i] = (slot, ticks); continue; }
+                var (slot, ticks) = planted[i];
+                if (--ticks > 0) { planted[i] = (slot, ticks); continue; }
                 if (pool != 0) CollisionPool.Deactivate(pool, slot);
-                st.planted.RemoveAt(i);
+                planted.RemoveAt(i);
             }
         }
 

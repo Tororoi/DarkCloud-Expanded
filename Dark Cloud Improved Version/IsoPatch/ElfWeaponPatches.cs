@@ -389,7 +389,7 @@ namespace Dark_Cloud_Improved_Version
                 0x00002021u,                                        // 17   addu a0,zero,zero              whpCost 0 (no monster's)
                 0x8FBF0000u,                                        // 18 lw    ra,0x0(sp)
                 0x27BD0010u,                                        // 19 addiu sp,sp,0x10
-                0x03E00008u,                                        // 20 ret: jr ra
+                MipsAsm.J(CodeCaves.DebugIfCave.CallRequest),       // 20 ret: j CallRequest (the chain's tail, which returns through ra)
                 0x00000000u,                                        // 21   nop
             };
             if (cave + (uint)words.Length * 4 > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
@@ -480,6 +480,55 @@ namespace Dark_Cloud_Improved_Version
             PatchF12Site(fs, ElfOff, 0x00241A38, 0x3C024040, w + (uint)CodeCaves.MeleeKickHit5,  "combo hit 5 kick");
             PatchF12Site(fs, ElfOff, 0x00241B04, 0x3C024040, w + (uint)CodeCaves.MeleeKickLunge, "lunge kick");
             PatchF12Site(fs, ElfOff, 0x00241BD4, 0x3C024040, w + (uint)CodeCaves.MeleeKickWhirl, "whirlwind kick");
+        }
+
+        /// <summary>The NATIVE CALL cave (see CodeCaves.CallRequest): the tail of the camera-pin chain. A request the mod has
+        /// posted — the magic in place — is consumed (the magic cleared first) and the function called with its six integer
+        /// arguments and f12 from the words; v0 is stored and Done raised. ra is kept on a frame of our own; the hooked
+        /// camera pass returns nothing, so the caller-saved registers the call spends are nobody's.</summary>
+        internal static void PatchCallRequest(FileStream fs, Func<uint, long> ElfOff)
+        {
+            uint cave = CodeCaves.DebugIfCave.CallRequest, w = CodeCaves.CallRequestGuest;
+            uint hi = w >> 16, lo = w & 0xFFFFu; if (lo >= 0x8000) hi += 1;          // signed offsets
+            uint Lo(int o) => (lo + (uint)o) & 0xFFFFu;
+            uint magic = CodeCaves.CallMagicValue;
+            uint[] words =
+            {
+                0x3C180000u | hi,                                   //  0 lui   t8,HI(words)
+                0x8F190000u | Lo(CodeCaves.CallMagic),              //  1 lw    t9,magic(t8)
+                0x3C0F0000u | (magic >> 16),                        //  2 lui   t7,HI(magic value)
+                0x35EF0000u | (magic & 0xFFFFu),                    //  3 ori   t7,t7,LO(magic value)
+                0x172F0000u | 22,                                   //  4 bne   t9,t7,ret (+22 → index 27)    nothing posted
+                0x00000000u,                                        //  5   nop
+                0x27BDFFE0u,                                        //  6 addiu sp,sp,-0x20
+                0xAFBF0010u,                                        //  7 sw    ra,0x10(sp)
+                0xAFB00014u,                                        //  8 sw    s0,0x14(sp)
+                0x03008025u,                                        //  9 or    s0,t8,zero
+                0xAE000000u | Lo(CodeCaves.CallMagic),              // 10 sw    zero,magic(s0)               consumed before the call
+                0x8E190000u | Lo(CodeCaves.CallFunc),               // 11 lw    t9,func(s0)
+                0x8E040000u | Lo(CodeCaves.CallA0),                 // 12 lw    a0,a0(s0)
+                0x8E050000u | Lo(CodeCaves.CallA1),                 // 13 lw    a1,a1(s0)
+                0x8E060000u | Lo(CodeCaves.CallA2),                 // 14 lw    a2,a2(s0)
+                0x8E070000u | Lo(CodeCaves.CallA3),                 // 15 lw    a3,a3(s0)
+                0x8E080000u | Lo(CodeCaves.CallA4),                 // 16 lw    t0,a4(s0)                    the fifth and sixth, as the EE ABI passes them
+                0x8E090000u | Lo(CodeCaves.CallA5),                 // 17 lw    t1,a5(s0)
+                0xC60C0000u | Lo(CodeCaves.CallF12),                // 18 lwc1  f12,f12(s0)
+                0x0320F809u,                                        // 19 jalr  t9
+                0x00000000u,                                        // 20   nop
+                0xAE020000u | Lo(CodeCaves.CallV0),                 // 21 sw    v0,v0(s0)
+                0x240A0001u,                                        // 22 li    t2,1
+                0xAE0A0000u | Lo(CodeCaves.CallDone),               // 23 sw    t2,done(s0)
+                0x8FBF0010u,                                        // 24 lw    ra,0x10(sp)
+                0x8FB00014u,                                        // 25 lw    s0,0x14(sp)
+                0x27BD0020u,                                        // 26 addiu sp,sp,0x20
+                0x03E00008u,                                        // 27 ret: jr ra
+                0x00000000u,                                        // 28   nop
+            };
+            if (cave + (uint)words.Length * 4 > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                throw new IOException("The call-request cave does not fit its host (DebugInfomationIF).");
+            if (RdU32(fs, ElfOff(CodeCaves.DebugIfCave.Host)) != 0x03E00008u)
+                throw new IOException("PatchCallRequest must follow PatchCircleEffects (the host's `jr ra`).");
+            for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
         }
 
         /// <summary>THE MAGIC CIRCLES as data (tools/stubs/circle_effects.s, CodeCaves.CircleTable): the cave takes over the body

@@ -47,20 +47,30 @@ namespace Dark_Cloud_Improved_Version
         private static uint  _rootGuest, _liveRoot, _playerRoot;
         private static int   _nodeCount;
         private static float _scale;
+        private static bool  _fromWeapon;                 // copied from the equipped weapon (else from a root handed in: the bomb model)
 
-        /// <summary>Put the copy up at <paramref name="scale"/>, pointing straight down, invisible until
-        /// <see cref="Alpha"/> lifts it. False if the slot or cave is in use, or the weapon has no model yet.</summary>
-        internal static bool Spawn(float scale)
+        /// <summary>Put the copy up at <paramref name="scale"/>, invisible until <see cref="Alpha"/> lifts it: the equipped
+        /// weapon's model (<paramref name="rootGuest"/> 0) pointing straight down, or the model rooted at
+        /// <paramref name="rootGuest"/> as it is authored (<paramref name="pointDown"/> false). False if the slot or cave is
+        /// in use, or there is no model yet.</summary>
+        internal static bool Spawn(float scale, uint rootGuest = 0, bool pointDown = true)
         {
             if (Active) return true;
             if (SlingshotProp.Active || CharacterClone.IsActive)
             { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "slot 3 / WeaponCave in use — no blade copy"); return false; }
-            _scale = scale;
-            if (!CopyTree() || !CopyRigidMesh() || !RegisterSlot()) return false;
-            BakeDownward();
+            _scale = scale; _fromWeapon = rootGuest == 0;
+            if (!CopyTree(rootGuest) || !CopyRigidMesh() || !RegisterSlot()) return false;
+            if (pointDown) BakeDownward();
             Active = true;
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"blade copy up (x{scale}, slot {Slot}, root 0x{_rootGuest:X}); his sword untouched");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{(_fromWeapon ? "blade" : "model")} copy up (x{scale}, slot {Slot}, root 0x{_rootGuest:X}); the original untouched");
             return true;
+        }
+
+        /// <summary>The copy's ambient add (the field a status tint uses), per channel 0–255.</summary>
+        internal static void Tint(float r, float g, float b)
+        {
+            if (!Active) return;
+            Memory.WriteVec3(SlotAddr() + CCharacter.CharaTint, r, g, b);
         }
 
         /// <summary>Where it stands and which way its flat faces. Idempotent — the slot's fields are what the draw
@@ -155,9 +165,10 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!Active) return false;
             uint wpnObj = Memory.ReadGuestPtr(EquippedWeapon.WeaponObjGlobal);
-            if (Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel) != _playerRoot
-                || !Memory.IsValidGuest(wpnObj)
-                || Memory.ReadGuestPtr(Memory.ToMmu(wpnObj) + 0xBC) != _liveRoot)
+            bool sourceGone = _fromWeapon
+                ? !Memory.IsValidGuest(wpnObj) || Memory.ReadGuestPtr(Memory.ToMmu(wpnObj) + 0xBC) != _liveRoot
+                : !Memory.IsValidGuest(_liveRoot);
+            if (Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel) != _playerRoot || sourceGone)
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "model/weapon changed — despawning");
                 Despawn();
@@ -201,12 +212,16 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The weapon's CFrame tree (WeaponObjGlobal → obj +0xBC = model root), deep-copied into the
         /// WeaponCave with its child/sibling/parent links re-based, root parent cleared: world-rooted.</summary>
-        private static bool CopyTree()
+        private static bool CopyTree(uint rootGuest)
         {
-            uint wpnObj = Memory.ReadGuestPtr(EquippedWeapon.WeaponObjGlobal);
-            if (!Memory.IsValidGuest(wpnObj)) { Console.WriteLine(Tag + "no weapon object"); return false; }
-            _liveRoot = Memory.ReadGuestPtr(Memory.ToMmu(wpnObj) + 0xBC);
-            if (!Memory.IsValidGuest(_liveRoot)) { Console.WriteLine(Tag + "no weapon model"); return false; }
+            if (rootGuest == 0)
+            {
+                uint wpnObj = Memory.ReadGuestPtr(EquippedWeapon.WeaponObjGlobal);
+                if (!Memory.IsValidGuest(wpnObj)) { Console.WriteLine(Tag + "no weapon object"); return false; }
+                _liveRoot = Memory.ReadGuestPtr(Memory.ToMmu(wpnObj) + 0xBC);
+                if (!Memory.IsValidGuest(_liveRoot)) { Console.WriteLine(Tag + "no weapon model"); return false; }
+            }
+            else _liveRoot = rootGuest;
             _playerRoot = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel);
 
             uint min = _liveRoot, max = _liveRoot;

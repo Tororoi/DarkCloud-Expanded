@@ -21,14 +21,15 @@ namespace Dark_Cloud_Improved_Version
         private static string _watchTag;
         private static Thread _flusher;
 
-        /// <summary>Post <paramref name="baseWhp"/> (the cost before Endurance) against the weapon in hand, which must be
-        /// <paramref name="weaponId"/>; the engine takes it on the next frame.</summary>
+        /// <summary>Post <paramref name="baseWhp"/> (the cost before Endurance) against the weapon in the ACTIVE character's
+        /// hand, which must be <paramref name="weaponId"/>; the engine takes it on the next frame.</summary>
         internal static void Drain(ushort weaponId, float baseWhp, string tag)
         {
             if (Player.Weapon.GetCurrentWeaponId() != weaponId) return;        // not the blade that was spent
-            int bag = Memory.ReadByte(DngStatusData.EquippedSlotAddr(Player.ToanId));
+            int ch = Player.CurrentCharacterNum();
+            int bag = Memory.ReadByte(DngStatusData.EquippedSlotAddr(ch));
             if (bag < 0 || bag >= DngStatusData.MaxWeaponSlots) return;
-            long rec = DngStatusData.WeaponRecord(Player.ToanId, bag);
+            long rec = DngStatusData.WeaponRecord(ch, bag);
             if (Memory.ReadUShort(rec) != weaponId) return;
             float factor = baseWhp / SwingBase;
             float whp = Memory.ReadFloat(rec + WeaponHave.InventoryWeaponWhpOffset);

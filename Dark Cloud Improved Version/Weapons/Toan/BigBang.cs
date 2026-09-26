@@ -91,7 +91,7 @@ namespace Dark_Cloud_Improved_Version
 
         // ── the judgement blade ─────────────────────────────────────────────────────────────
         // While Solar Flash is primed AND Toan is locked on, a copy of the sword (BladeProp) hangs point-down over the
-        // target at HoverScale, fading in over FadeSeconds; the blue glow moves onto it and the target's NAME plate is
+        // target at OwnerScale(), fading in over FadeSeconds; the blue glow moves onto it and the target's NAME plate is
         // hidden (CodeCaves.NameHide, the gate the plate's getter ANDs in — the enemy itself is never touched, so a
         // kill during the hover still counts for whatever counts kills). Losing the lock fades it out and the glow
         // shrinks off it and swells back up on Toan. The primed swing then does not flash: the blade FALLS under gravity, and where
@@ -144,6 +144,27 @@ namespace Dark_Cloud_Improved_Version
             internal bool   ToTheHilt;                        // the fall ends with the GRIP at the ground — the whole blade in it — rather than the tip
             internal bool   RampWholeFall;                    // the room darkens along the whole fall (Big Bang), not only its last RampFrames
             internal Action<int, float, float, float> Land;   // (target slot, x, h, y)
+            // What another owner may bring in place of Toan's sword (all optional; null/0 = the sword's own):
+            internal Func<bool>  IsPrimed;                    // whether the charge that hangs the copy is held (SunSword.PrimedFor otherwise)
+            internal float       Scale;                       // the copy's scale (OwnerScale() otherwise)
+            internal Func<float> Length;                      // the model's reach below its root at 1× — how far above the ground it stops (the blade's dcol1 otherwise)
+            internal Func<uint>  SpawnRoot;                   // the model to copy (the equipped weapon otherwise)
+            internal bool        Upright;                     // copied as authored rather than turned point-down
+            internal float[]     Tint;                        // the copy's ambient add, per channel
+            internal int         GlowRow;                     // the glow cave's palette row for the disc (0 = the disc's own)
+            internal float       GlowScale;                   // the disc's size (0 = Toan's)
+            internal float       GlowLift = float.NaN;        // the disc's height over the copy's root (NaN = half the length below it)
+        }
+        private static bool  Primed()      => _owner.IsPrimed != null ? _owner.IsPrimed() : SunSword.PrimedFor(_owner.WeaponId);
+        private static float OwnerScale()  => _owner.Scale > 0f ? _owner.Scale : HoverScale;
+        private static float OwnerLength() => _owner.Length != null ? _owner.Length() : BladeLength();
+        private static bool  SpawnCopy()
+        {
+            uint root = 0;
+            if (_owner.SpawnRoot != null && (root = _owner.SpawnRoot()) == 0) return false;   // the owner's model is not to be had yet
+            if (!BladeProp.Spawn(OwnerScale(), root, !_owner.Upright)) return false;
+            if (_owner.Tint != null) BladeProp.Tint(_owner.Tint[0], _owner.Tint[1], _owner.Tint[2]);
+            return true;
         }
         private static readonly JudgementOwner BigBangOwner = new JudgementOwner
         { WeaponId = Items.bigbang, Glow = ToanGlowBakes.BlueName, Profile = SunSword.BigBangFlash, Redirect = true, RampWholeFall = true, Land = LandBigBang };
@@ -476,7 +497,7 @@ namespace Dark_Cloud_Improved_Version
             if (_pointHover) { PointTick(dt); return; }
             bool locked   = PlayerAction.LockHeld(out int lockSlot)
                             && lockSlot < EnemyAddresses.FloorSlots.Count && HasHp(lockSlot);
-            bool primed   = SunSword.PrimedFor(_owner.WeaponId);
+            bool primed   = Primed();
             // DIAGNOSTIC: the gates, once a second while primed — a hover that never appears is one of these reading
             // something other than what the notes say.
             if (primed && (GameClock.Now - _gateLog).TotalSeconds >= 1.0)
@@ -507,7 +528,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (_hoverSlot != lockSlot)
                 {
-                    if (!BladeProp.Active && !BladeProp.Spawn(HoverScale)) return;
+                    if (!BladeProp.Active && !SpawnCopy()) return;
                     _hoverSlot = lockSlot;
                 }
                 // The name plate off, through the getter's gate (CodeCaves.NameHide): the flag itself is re-raised by
@@ -576,10 +597,10 @@ namespace Dark_Cloud_Improved_Version
             SolarGlow.Tick();
             if (!onBlade) { if (SolarGlow.IsUp) SolarGlow.Fade(FadeSeconds); return; }
             uint want = BladeProp.RootGuest;
-            if (want == 0 || !(_pointHover || SunSword.PrimedFor(_owner.WeaponId))) return;
+            if (want == 0 || !(_pointHover || Primed())) return;
             if (SolarGlow.OnAnchor(want)) return;                               // up, where it should be
             if (SolarGlow.IsUp) SolarGlow.Hide();                               // fading off it, or on something else
-            SolarGlow.Show(_owner.Glow, want, -BladeLength() * HoverScale / 2f, FadeSeconds);
+            SolarGlow.Show(_owner.Glow, want, float.IsNaN(_owner.GlowLift) ? -OwnerLength() * OwnerScale() / 2f : _owner.GlowLift, FadeSeconds, palRow: _owner.GlowRow, scale: _owner.GlowScale);
         }
 
         /// <summary>Alive enough to hang a blade over: HP above zero.</summary>
@@ -597,7 +618,7 @@ namespace Dark_Cloud_Improved_Version
             if (!(scale > 0.05f) || scale > 20f) scale = 1f;                                       // a grown miniboss
             float clear = height * scale + HoverMargin;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] hover over slot {slot} (species {eid}): height {height:F1} × scale {scale:F2} + {HoverMargin:F0} — tip {clear:F1} above the root");
-            return clear + BladeLength() * HoverScale;
+            return clear + OwnerLength() * OwnerScale();
         }
 
         /// <summary>The sword's reach from grip to tip, at 1×: its dcol1 frame's Z from the offline table.</summary>
@@ -627,7 +648,7 @@ namespace Dark_Cloud_Improved_Version
             // above it) — the blade in the enemy, not a blade length under the floor — or, for an owner that wants
             // it, the hilt.
             float hang = _followSlot >= 0 ? _dropH + _hoverHeight : BladeProp.WorldHeight();
-            _fallStop   = _owner.ToTheHilt ? 0f : BladeLength() * HoverScale;   // the grip's height above the root at the end: the tip in the enemy, or the hilt
+            _fallStop   = _owner.ToTheHilt ? 0f : OwnerLength() * OwnerScale();   // the grip's height above the root at the end: the tip in the enemy, or the hilt
             _fallHeight = float.IsNaN(hang) ? _hoverHeight : Math.Max(_fallStop + 1f, hang - _dropH);
             _followSlot = -1;
             BladeProp.Unpin(PlayerFacing());                                 // off the enemy and into the world, where it is, to fall
@@ -835,7 +856,7 @@ namespace Dark_Cloud_Improved_Version
             if (!_pointHover)
             {
                 if (_hoverSlot >= 0 || BladeProp.Active) return;                  // the lock-on hover has the copy
-                if (!BladeProp.Spawn(HoverScale)) return;
+                if (!SpawnCopy()) return;
                 _owner = owner; _pointHover = true; _pointDriven = false; _pointFading = false; _hoverAlpha = 0f; _hoverOut = false; PointLandedAt = default;
                 _hoverHeight = height; _spotH = h; _heightSlot = -1;
                 EnsureBladeThread();
@@ -903,7 +924,7 @@ namespace Dark_Cloud_Improved_Version
                 _pointX = Memory.ReadFloat(p); _pointY = Memory.ReadFloat(p + 8); dropH = Memory.ReadFloat(p + 4);
             }
             _bladeX = _dropX = _pointX; _bladeY = _dropY = _pointY; _dropH = dropH;
-            _fallStop   = _owner.ToTheHilt ? 0f : BladeLength() * HoverScale;
+            _fallStop   = _owner.ToTheHilt ? 0f : OwnerLength() * OwnerScale();
             _fallHeight = Math.Max(_fallStop + 1f, _hoverHeight);
             _followSlot = -1; _paceTo = 0f; _fallSeconds = Math.Max(0.05, seconds);
             SolarLighting.BeginDim();                                             // the lights go down with it (a dim already up keeps its capture)
@@ -944,7 +965,7 @@ namespace Dark_Cloud_Improved_Version
         /// plants the same blast at its strike point; <paramref name="noKickSlot"/> is the enemy it struck directly,
         /// which takes the hit where it stands (a zero-strength kick: the reaction without the shove), and its steps
         /// are scaled by <paramref name="damageScale"/> (the bolt's blast is half the blade's).</summary>
-        internal static void PlantFalloff(float x, float h, float y, int noKickSlot = -1, float damageScale = 1f)
+        internal static void PlantFalloff(float x, float h, float y, int noKickSlot = -1, float damageScale = 1f, float kickScale = 1f)
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
@@ -972,7 +993,7 @@ namespace Dark_Cloud_Improved_Version
                 byte[] e = CollisionPool.PlayerHitEntry(cx, ch, cy, cr, Math.Max(1, (int)Math.Round(attack * times * damageScale)), 0);
                 void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
                 F(0x80, x); F(0x84, h); F(0x88, y);                        // the kick still comes from the blast
-                F(0x90, s == noKickSlot ? 0f : KickStrength); F(0x94, KickDecay);
+                F(0x90, s == noKickSlot ? 0f : KickStrength * kickScale); F(0x94, KickDecay);
                 BitConverter.GetBytes(2).CopyTo(e, 0x98);                 // kick type 2: thrown away from the blast
                 CollisionPool.Plant(pool, slot, e);
                 _shells.Add((slot, ShellLifeTicks));
@@ -1180,6 +1201,10 @@ namespace Dark_Cloud_Improved_Version
             int n = Array.IndexOf(b, (byte)0);
             return System.Text.Encoding.ASCII.GetString(b, 0, n < 0 ? b.Length : n);
         }
+
+        /// <summary>The explosions inert (on) or dangerous again (off), for a wielder that inherits it (Super Steve with a Big
+        /// Bang sphere).</summary>
+        internal static void DriveImmunity(bool on) { if (on) ArmImmunity(); else RestoreImmunity(); }
 
         /// <summary>Make the explosions inert while the blade is in hand (see ExplosionCfgs).</summary>
         private static void ArmImmunity()

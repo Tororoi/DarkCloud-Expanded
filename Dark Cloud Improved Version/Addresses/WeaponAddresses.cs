@@ -109,6 +109,21 @@ namespace Dark_Cloud_Improved_Version
     /// smash among them); hits 3–5, the lunge and the whirlwind bake theirs as immediates, made data by the ISO patch
     /// (CodeCaves.MeleeKickWords). Decays: three words — 0.2 for hits 1–2, 0.3 for hits 3 and 5 and both charge attacks,
     /// 0.4 for hit 4. Set as a whole and put back by <see cref="MeleeKick"/>.</summary>
+    /// <summary>The thrown-item and bomb-effect objects (dungeon).</summary>
+    internal static class ItemModels
+    {
+        internal const long ItemModelPtr     = 0x21EC78A8;   // → CMainItemModel: cash roots at +0 (6), item ids +0x18, refcounts +0x30, model states +0x48 (16), model cash idx +0x88
+        internal const int  CashCount = 6, CashRootOffset = 0x00, CashItemOffset = 0x18, CashRefOffset = 0x30;
+        internal const uint SetCashModel     = 0x001D45E0;   // SetCashModel(this, itemId, mds, img, imgSize): loads the model + its texture block (0x38 + cash idx)
+        internal const long MenuBufferPtr    = 0x202A2CD4;   // gp−0x6B1C: the item menu's read buffer, where it loads item models (mds at +0, img at +0xFA10); free while no menu is open
+        internal const int  MenuBufferImgOffset = 0xFA10;
+        internal const int  BombItemId = 159;                // "bakudan"
+        internal const long BombEffectPtr    = 0x202A35E4;   // gp−0x620C → CItemBombEffect[3], 0xC0 each: 5 sprites (pos +i*0x10, spread +0x50, delay +0x64, size +0x78, alpha +0x8C, live +0xA0), scale +0xB4
+        internal const long ShockWavePtr     = 0x202A35E8;   // gp−0x6208 → the blast ring (pos +0, +0xC 1.0, +0x10/+0x14 radius, +0x1C, +0x28 on)
+        internal const int  BombSlots = 3, BombSlotStride = 0xC0;
+        internal const ushort BombSe = 0x6C;
+    }
+
     internal static class MeleeKickWords
     {
         internal const long  Strength12 = 0x202A1AF8, Decay12 = 0x202A1C50, Decay35 = 0x202A1A80, Decay4 = 0x202A1B5C;

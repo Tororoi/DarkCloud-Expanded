@@ -470,6 +470,9 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>tools/stubs/circle_effects.s: the magic circles, every magnitude from CodeCaves.CircleTable; dun.bin's
             /// Run_TrapCircle (0x1DBFA70) jumps here (DunPatches).</summary>
             internal const uint CircleEffects = Host + 0x8;
+            /// <summary>ElfWeaponPatches.PatchCallRequest: a native call the mod asks for (CodeCaves.CallRequest), the tail of the
+            /// camera-pin chain (after the WHP bill).</summary>
+            internal const uint CallRequest   = Host + 0x610;  // 0x1B4DD0, 116 B → 0x1B4E44 (the circle cave ends at 0x1B4DC4)
         }
 
         /// <summary>A cave INSIDE a dead main-ELF function: the body of DebugInfomationDraw (0x1B3780, 3,952 B), the developers'
@@ -1029,7 +1032,18 @@ namespace Dark_Cloud_Improved_Version
                             CircleFavour = 0x40, CircleSlowFrames = 0x44, CircleRewardCount = 0x48;
         internal const int  CircleTableBytes = 0x4C;
 
-        // ── FREE: 0x21FAF950 .. 0x21FB0000 (0x6B0 B) ────────────────────────────────────────────────────
+        /// <summary>A NATIVE CALL REQUEST (DebugIfCave.CallRequest, the tail of the camera-pin chain, once a dungeon frame):
+        /// the mod fills the function and its arguments, writes the magic LAST, and the cave calls it from the camera pass's
+        /// epilogue — clearing the magic first, storing v0 and raising Done after. Up to six integer arguments (a0–a3, then
+        /// t0/t1 as the EE ABI passes the fifth and sixth) and one float in f12. Core/NativeCall drives it and waits on Done.
+        /// Only for routines that are themselves called from the dungeon's per-frame update (SetCashModel and its like).</summary>
+        internal const long CallRequest      = 0x21FAF950;
+        internal const uint CallRequestGuest = 0x01FAF950;
+        internal const int  CallMagic = 0x00, CallFunc = 0x04, CallA0 = 0x08, CallA1 = 0x0C, CallA2 = 0x10, CallA3 = 0x14,
+                            CallA4 = 0x18, CallA5 = 0x1C, CallF12 = 0x20, CallV0 = 0x24, CallDone = 0x28;
+        internal const uint CallMagicValue = 0x4C4C4143;   // "CALL"
+
+        // ── FREE: 0x21FAF980 .. 0x21FB0000 (0x680 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

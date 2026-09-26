@@ -574,7 +574,7 @@ namespace Dark_Cloud_Improved_Version
                 // Toan Effects
                 // Divine Guard (7th Heaven) + Guard Crush (Dark Cloud; 7th Heaven inherits Guard Crush by lineage).
                 SeventhHeaven.SeventhHeavenSoftenAttacks(active && sphere == Items.seventhheaven);
-                GuardBreak.Drive(active && (sphere == Items.seventhheaven || sphere == Items.darkcloud));
+                GuardBreak.Drive(active && (sphere == Items.seventhheaven || sphere == Items.darkcloud || SunSword.BlindRunning));   // …and while a Solar Shot's blinding holds the floor
 
                 // Defensive Legacy (Aga's Sword): +15 Xiao defense.
                 SuperSteve.DriveAgasSword(active && sphere == Items.agassword);
@@ -593,6 +593,15 @@ namespace Dark_Cloud_Improved_Version
 
                 // Solar Harvest (Sun Sword / Big Bang): ~1% of the floor's enemies drop a Sun attachment.
                 SunSword.SunHarvestDrive(sphere == Items.sunsword || sphere == Items.bigbang, ssSun);
+
+                // Solar Shot (Sun Sword): a 5 s guard charge, and the next pellet carries the Sun Sword's flash to where it lands.
+                if (lastSphere == Items.sunsword && sphere != Items.sunsword) SolarShot.Stop();
+                SolarShot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.sunsword);
+
+                // Detonate (Big Bang): the guard charge hangs a bomb over the locked target for her shot to drop, or makes the next
+                // pellet a bomb; Big Bang's blast and flash where it lands; explosions cannot hurt her.
+                if (lastSphere == Items.bigbang && sphere != Items.bigbang) BombShot.Stop();
+                BombShot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.bigbang);
 
                 // Curses (full inherit): curse Xiao. Not pause-gated — mirrors the Toan loops.
                 Evilcise.Drive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);
@@ -698,6 +707,8 @@ namespace Dark_Cloud_Improved_Version
             Flamingo.Stop();
             DragonsY.Stop();
             Matador.Stop();   // the resident slingshot copy too
+            SolarShot.Stop();
+            BombShot.Stop();
             DoubleImpact.Stop();
             BanditSlingshot.Stop();
             SteelSlingshot.Stop();

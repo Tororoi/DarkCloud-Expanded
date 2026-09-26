@@ -37,14 +37,21 @@ namespace Dark_Cloud_Improved_Version
         private static bool  _on, _fading, _driven;   // driven: its size is set by hand (Drive) rather than swelling on its own clock
         private static float _k;                      // the size it was last written at, 0..1 — what a fade shrinks from
         private static DateTime _shownAt, _fadeAt;
+        private static int   _palRow;                 // the palette row this showing asked the cave for (0 = none); handed back to None on Hide
+        private static float _scaleMax = Scale;       // this showing's full size
+        private const int    PalRowNone = 6;
 
         /// <summary>Up, once. Re-arming every tick would re-bind the texture each frame.</summary>
         /// <param name="anchor">A GUEST node to hang the disc on instead of Toan (BladeProp.RootGuest for the judgement
         /// blade); 0 = Toan's own spine. A glow already up is re-hung when the anchor changes — one data write.</param>
         /// <param name="lift">Height above the anchor node, world units (negative = below); Toan's spine wants 0.</param>
         /// <param name="growSeconds">How long it takes to swell to full; <see cref="GrowSeconds"/> unless a hand-off is pacing it.</param>
-        internal static void Show(string disc = ToanGlowBakes.GlowName, uint anchor = 0, float lift = Lift, double growSeconds = GrowSeconds)
+        /// <param name="palRow">The glow cave's ONE-based palette row to paint the disc with (0 = leave it: Toan's discs carry their
+        /// own palette; the cat's disc, the one resident for Xiao, takes a row — 8 is the Angel Gear cat's gold).</param>
+        /// <param name="scale">The disc's full size (0 = <see cref="Scale"/>, Toan's; the Matador's pellet wants 0.4).</param>
+        internal static void Show(string disc = ToanGlowBakes.GlowName, uint anchor = 0, float lift = Lift, double growSeconds = GrowSeconds, int palRow = 0, float scale = 0f)
         {
+            if (scale > 0f) _scaleMax = scale; else if (!_on) _scaleMax = Scale;
             if (_on)
             {
                 uint want = anchor != 0 ? anchor : Anchor();
@@ -63,6 +70,8 @@ namespace Dark_Cloud_Improved_Version
             if (root == 0) return;                                       // no posed bone yet: try again next tick
             Reserve();                                                   // …and give the disc a home that is actually uploaded, BEFORE the cave binds it
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 0);
+            if (palRow > 0) Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, palRow);
+            _palRow = palRow;
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, 0f);       // …from nothing; Tick swells it over GrowSeconds
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, Flags);
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, Pull);
@@ -100,7 +109,7 @@ namespace Dark_Cloud_Improved_Version
             }
             else if (_driven) return;                                    // Drive holds its size
             else k = (float)Math.Min(1.0, (GameClock.Now - _shownAt).TotalSeconds / _grow);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, Scale * k);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, _scaleMax * k);
             _k = k;
         }
         /// <summary>Its size set by hand, 0..1 — a glow growing with something else's own progress (the charge
@@ -111,7 +120,7 @@ namespace Dark_Cloud_Improved_Version
             _driven = true;
             k = Math.Max(0f, Math.Min(1f, k));
             if (Math.Abs(k - _k) < 0.01f) return;
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, Scale * k);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, _scaleMax * k);
             _k = k;
         }
         private static float _fadeFrom = 1f;
@@ -133,6 +142,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Down, and the disc back where it loaded.</summary>
         internal static void Hide()
         {
+            if (_palRow != 0) { Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, PalRowNone); _palRow = 0; }   // the cave repaints the disc for whoever uses it next
             if (!_on) return;
             Memory.WriteInt(CodeCaves.Mailbox.CatGlowOn, 0);
             Release();
