@@ -49,7 +49,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  KickStrength     = 3.5f;   // the judgement blade's kick; with KickDecay: distance ≈ force²/(2·decay) ≈ 50 units
         private const float  KickDecay        = 0.12f;  // vanilla melee is 1.2 at 0.2, roughly 3.6 units
 
-        private const float  BlastWhp         = 20f;    // weapon HP a blast costs — the whirlwind's or the dropped blade's — before Endurance scales it
+        private const float  BlastWhp         = 20f;    // weapon HP a blast costs — the whirlwind's or the dropped blade's — before Endurance scales it (WeaponWhp: the engine's own drain takes it, and breaks the blade at 0)
         // THE BLADE ON A REGULAR CHARGE. Toan's charge meter runs 1.0 → 3.0 (lunge at 1.5, whirlwind at 2.5), and
         // the blade whitens across it exactly as it does for a guard charge — the same tint, driven by the meter
         // instead of by held time. It stands aside while SunSword.FlashArmed: Solar Flash owns the blade then, and
@@ -1275,8 +1275,8 @@ namespace Dark_Cloud_Improved_Version
             return Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
         }
 
-        /// <summary>Weapon HP for a blast: <see cref="BlastWhp"/> through the engine's own Endurance formula
-        /// (<see cref="WeaponWhp"/>), down to 0 — where the next swing breaks the blade the engine's way.</summary>
+        /// <summary>Weapon HP for a blast: <see cref="BlastWhp"/>, taken by the engine's own drain (<see cref="WeaponWhp"/>),
+        /// which breaks the blade at 0 the engine's way.</summary>
         private static void DrainWhp() => WeaponWhp.Drain(Items.bigbang, BlastWhp, "[BigBang] detonation ");
 
         private static void Reset(BlastState st)

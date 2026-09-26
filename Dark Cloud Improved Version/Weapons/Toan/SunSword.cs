@@ -93,7 +93,7 @@ namespace Dark_Cloud_Improved_Version
             Items.swordofzeus, 0f, null, "c01w39", 0, 0, "Zeus", fog: 0.8f,
             light: new[] { 228f, 240f, 255f }, fogRgb: new[] { 238f, 246f, 255f },   // an electric white, toward blue
             primeDim: 0.5f,                                                          // darker than Big Bang's 0.35 (k is darkness: 1 = full dim)
-            easeSeconds: 1.0,                                                        // a strike's flash, gone in a second — back to the floor's own light, not onto a rest dim
+            easeSeconds: 2.0,                                                        // a strike's flash, gone in two seconds — back to the floor's own light, not onto a rest dim
             holdsPrimedTint: false);                                                 // its flash costs nothing — each bolt does (StrikeWhp)
 
         /// <summary>True while a Solar Flash charge is building, held or going off — Big Bang's own charge-attack tint

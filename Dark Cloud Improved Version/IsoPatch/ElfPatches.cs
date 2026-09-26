@@ -121,6 +121,7 @@ namespace Dark_Cloud_Improved_Version
             PatchStrideScale(fs, ElfOff);                // Toan's stride on motion 33 × CodeCaves.StrideScale (the dun hook is in DunPatches)
             PatchCameraPin(fs, ElfOff);                  // the camera held at a world height while CodeCaves.CameraPin is set (the dun hook is in DunPatches)
             PatchBladeFall(fs, ElfOff);                  // the judgement blade's fall stepped by the engine once a frame (chained after the camera pin)
+            PatchWhpBill(fs, ElfOff);                    // a weapon-HP bill the mod posts (CodeCaves.WhpBill) taken by the engine's own drain — SwordDmgCheck1 — once a frame (the chain's tail)
             PatchLungeGravity(fs, ElfOff);               // the charge lunge's gravity × (1 + CodeCaves.LungeGravityExtra): the seed cave + its main hook (the dun hook is in DunPatches)
             PatchSolarBladeTint(fs, ElfOff);              // the Sun Sword's blade too (SolarBlade): the rigid-mesh class's DrawVu1, into the mask cave's body
             PatchCatCopyQueue(fs, ElfOff);                // the cat's mesh copy runs inside the machine instead of over PINE

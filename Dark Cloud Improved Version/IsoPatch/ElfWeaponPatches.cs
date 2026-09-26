@@ -326,7 +326,7 @@ namespace Dark_Cloud_Improved_Version
                 0xE5010000u | Lo(CodeCaves.BladeFallVy),            // 18 swc1  f1,vy(t0)
                 0x3C0B0000u | shi,                                  // 19 lui   t3,HI(slot pos)
                 0xE5600000u | SLo(4),                               // 20 swc1  f0,y(t3)               the copy's height, this frame
-                0x03E00008u,                                        // 21 jr    ra
+                MipsAsm.J(CodeCaves.DebugInfoCave.WhpBill),         // 21 j     WhpBill (the chain's tail, which returns through ra)
                 0x00000000u,                                        // 22   nop
                 0x240A0003u,                                        // 23 follow: li t2,3
                 0x152A0000u | 15,                                   // 24 bne   t1,t2,ret (+15 → index 40)
@@ -345,11 +345,55 @@ namespace Dark_Cloud_Improved_Version
                 0xE5600000u | SLo(0),                               // 37 swc1  f0,x(t3)
                 0xE5620000u | SLo(4),                               // 38 swc1  f2,y(t3)
                 0xE5610000u | SLo(8),                               // 39 swc1  f1,z(t3)
-                0x03E00008u,                                        // 40 ret: jr ra
+                MipsAsm.J(CodeCaves.DebugInfoCave.WhpBill),         // 40 ret: j WhpBill (the chain's tail, which returns through ra)
                 0x00000000u,                                        // 41   nop
             };
             if (cave + (uint)words.Length * 4 > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
                 throw new IOException("The blade-fall cave does not fit its host (DebugInfomationDraw).");
+            for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+        }
+
+        /// <summary>The WHP-BILL cave (see CodeCaves.WhpBill): the tail of the camera-pin chain, once a dungeon frame. A bill
+        /// the mod has posted — the magic in place and a non-zero factor — is taken by the engine itself: the factor is
+        /// zeroed (consumed before the call) and SwordDmgCheck1(factor, 0) is called, the very routine a landed hit calls,
+        /// so the drain, its warnings, the Auto Repair Powder and the break are all the engine's own. The call is made
+        /// from the camera pass's epilogue: ra is kept on a 16-byte frame of our own, and the pass returns nothing, so the
+        /// caller-saved registers the call spends are nobody's. t0–t2, f1 and f12 are scratch; ends by returning through
+        /// the pass's own ra.</summary>
+        internal static void PatchWhpBill(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint SwordDmgCheck1 = 0x01DB9B30;                                   // dun: SwordDmgCheck1__Ffi (float factor in f12, int whpCost in a0)
+            uint cave = CodeCaves.DebugInfoCave.WhpBill, w = CodeCaves.WhpBillGuest;
+            uint hi = w >> 16, lo = w & 0xFFFFu; if (lo >= 0x8000) hi += 1;          // signed offsets
+            uint Lo(int o) => (lo + (uint)o) & 0xFFFFu;
+            uint magic = CodeCaves.WhpBillMagicValue;
+            uint[] words =
+            {
+                0x3C080000u | hi,                                   //  0 lui   t0,HI(bill)
+                0x8D090000u | Lo(CodeCaves.WhpBillMagic),           //  1 lw    t1,magic(t0)
+                0x3C0A0000u | (magic >> 16),                        //  2 lui   t2,HI(magic value)
+                0x354A0000u | (magic & 0xFFFFu),                    //  3 ori   t2,t2,LO(magic value)
+                0x152A0000u | 15,                                   //  4 bne   t1,t2,ret (+15 → index 20)   no magic: nothing is ours here
+                0x00000000u,                                        //  5   nop
+                0xC50C0000u | Lo(CodeCaves.WhpBillFactor),          //  6 lwc1  f12,factor(t0)              the bill, as SwordDmgCheck1's factor
+                0x44800800u,                                        //  7 mtc1  zero,f1
+                0x00000000u,                                        //  8 nop
+                0x46016032u,                                        //  9 c.eq.s f12,f1                     nothing posted?
+                0x00000000u,                                        // 10 nop
+                0x45010000u | 8,                                    // 11 bc1t  ret (+8 → index 20)
+                0x00000000u,                                        // 12   nop
+                0x27BDFFF0u,                                        // 13 addiu sp,sp,-0x10                a frame of our own for ra
+                0xAFBF0000u,                                        // 14 sw    ra,0x0(sp)
+                0xAD000000u | Lo(CodeCaves.WhpBillFactor),          // 15 sw    zero,factor(t0)            consumed before the call
+                MipsAsm.Jal(SwordDmgCheck1),                        // 16 jal   SwordDmgCheck1
+                0x00002021u,                                        // 17   addu a0,zero,zero              whpCost 0 (no monster's)
+                0x8FBF0000u,                                        // 18 lw    ra,0x0(sp)
+                0x27BD0010u,                                        // 19 addiu sp,sp,0x10
+                0x03E00008u,                                        // 20 ret: jr ra
+                0x00000000u,                                        // 21   nop
+            };
+            if (cave + (uint)words.Length * 4 > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
+                throw new IOException("The WHP-bill cave does not fit its host (DebugInfomationDraw).");
             for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
         }
 
@@ -417,14 +461,16 @@ namespace Dark_Cloud_Improved_Version
         /// every charge swing, so the mod seeds both at startup; 0 would be a hit radius of nothing.</summary>
         internal static void PatchChargeHitRadius(FileStream fs, Func<uint, long> ElfOff)
         {
-            PatchRadiusSite(fs, ElfOff, 0x00241AC0, 0x3C0240C0,
-                            CodeCaves.ChargeHitRadiusGuest + CodeCaves.ChargeRadiusLunge, "lunge");
-            PatchRadiusSite(fs, ElfOff, 0x00241B90, 0x3C024140,
-                            CodeCaves.ChargeHitRadiusGuest + CodeCaves.ChargeRadiusWhirl, "whirlwind");
+            PatchF12Site(fs, ElfOff, 0x00241AC0, 0x3C0240C0,
+                         CodeCaves.ChargeHitRadiusGuest + CodeCaves.ChargeRadiusLunge, "lunge hit-radius");
+            PatchF12Site(fs, ElfOff, 0x00241B90, 0x3C024140,
+                         CodeCaves.ChargeHitRadiusGuest + CodeCaves.ChargeRadiusWhirl, "whirlwind hit-radius");
         }
 
-        private static void PatchRadiusSite(FileStream fs, Func<uint, long> ElfOff, uint luiAddr, uint vanillaLui,
-                                            uint slot, string what)
+        /// <summary>An immediate float handed over in f12 (`lui v0,IMM; mtc1 v0,f12`, v0 dead after) becomes a load of
+        /// the data word at <paramref name="slot"/> (`lui v0,HI; lwc1 f12,LO(v0)`).</summary>
+        private static void PatchF12Site(FileStream fs, Func<uint, long> ElfOff, uint luiAddr, uint vanillaLui,
+                                         uint slot, string what)
         {
             const uint VanillaMtc1 = 0x44826000;                 // mtc1 $2,$f12
             uint mtc1Addr = luiAddr + 4;
@@ -435,7 +481,7 @@ namespace Dark_Cloud_Improved_Version
             uint wantLwc1 = 0xC4000000u | (2u << 21) | (12u << 16) | lo;
             if (gotLui == wantLui && gotMtc1 == wantLwc1) return;                 // idempotent re-run
             if (gotLui != vanillaLui || gotMtc1 != VanillaMtc1)
-                throw new IOException($"Toan's {what} hit-radius site 0x{luiAddr:X} is not vanilla " +
+                throw new IOException($"Toan's {what} site 0x{luiAddr:X} is not vanilla " +
                                       $"(got 0x{gotLui:X8}/0x{gotMtc1:X8}) — is this an unmodified Dark Cloud (USA) ISO?");
             WrU32(fs, ElfOff(luiAddr),  wantLui);
             WrU32(fs, ElfOff(mtc1Addr), wantLwc1);

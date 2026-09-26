@@ -511,7 +511,8 @@ namespace Dark_Cloud_Improved_Version
             /// runs once a frame at the end of the dungeon camera pass. While CodeCaves.BladeFall's flag is 1 it steps the
             /// judgement blade's fall — vy += g, y −= vy, stopped at the floor, where the flag becomes 2 — and writes the
             /// copy's slot height: the fall is the engine's own frame, not a mod thread racing it.</summary>
-            internal const uint BladeFall      = Host + 0xDC0;   // 0x1B4540, 168 B → 0x1B45E8 (the host ends at 0x1B4700)
+            internal const uint BladeFall      = Host + 0xDC0;   // 0x1B4540, 168 B → 0x1B45E8
+            internal const uint WhpBill        = Host + 0xE70;   // 0x1B45F0, 88 B → 0x1B4648 (the host ends at 0x1B46F0)
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -981,8 +982,18 @@ namespace Dark_Cloud_Improved_Version
         internal const int  BladeFallFlag = 0x0, BladeFallY = 0x4, BladeFallVy = 0x8, BladeFallG = 0xC, BladeFallStop = 0x10, BladeFallUnit = 0x14;
         internal const int  BladeFallOffX = 0x18, BladeFallOffZ = 0x1C;   // following: an x/z offset from the unit (the charge blade ahead of Toan: the unit is HIM)
         internal const int  BladeFallOff = 0, BladeFalling = 1, BladeLanded = 2, BladeFollowing = 3;
+        /// <summary>A WEAPON-HP BILL FOR THE ENGINE TO TAKE (DebugInfoCave.WhpBill, the tail of the camera-pin chain, once a
+        /// dungeon frame): +0 the factor of a bill the mod has posted (swing-equivalents: base WHP / 1.5), +4 a magic the mod
+        /// writes ahead of it (<see cref="WhpBillMagicValue"/>) so stale memory never posts one. While the magic matches
+        /// and the factor is non-zero the cave zeroes the factor and calls SwordDmgCheck1(factor, 0) — the engine's own
+        /// per-swing drain: Endurance, Durable and Fragile, its warnings, its Auto Repair Powder and its BREAK, exactly as a
+        /// landed hit would have them. WeaponWhp posts the bills (a bolt, a blast, a flash) the moment they strike.</summary>
+        internal const long WhpBill      = 0x21FAF8D0;
+        internal const uint WhpBillGuest = 0x01FAF8D0;
+        internal const int  WhpBillFactor = 0x0, WhpBillMagic = 0x4;
+        internal const uint WhpBillMagicValue = 0x4C494257;   // "WBIL"
 
-        // ── FREE: 0x21FAF8D0 .. 0x21FB0000 (0x730 B) ────────────────────────────────────────────────────
+        // ── FREE: 0x21FAF8E0 .. 0x21FB0000 (0x720 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

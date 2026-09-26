@@ -250,8 +250,20 @@ WHP -= (1.5 − 0.01 × Endurance) × factor  +  0.1 × monster.whpCost   // +0x
   `ChargedShotWhp` writes the charge's factor while the shot is held — the game's own drain does the rest.
 - **Serpent Sword** (item 268) takes **no WHP damage** until game flag 0x30 is set
   (its story event).
-- Warnings at 10 % and 5 % of max WHP; at 0 an owned Repair Powder (item 0xB7) is
-  auto-consumed, else the weapon reverts/breaks via `WepDataListToHaveCopy`.
+- Toan's CHARGE attacks bill at the attack's START, landing or not: `ToanKey_Play` calls `SwordDmgCheck1(2.0)` as the
+  lunge begins (0x242A70) and `SwordDmgCheck1(3.0)` as the whirlwind does (0x242B64).
+- Mod: an ability's own cost (a Zeus bolt, a Big Bang blast, a flash-bang) is POSTED to the engine rather than
+  written: `WeaponWhp.Drain` puts the factor (base WHP / 1.5) in `CodeCaves.WhpBill` (0x01FAF8D0, magic at +4) and the
+  WHP-bill cave (`ElfWeaponPatches.PatchWhpBill`, the tail of the camera-pin chain, once a dungeon frame) calls
+  `SwordDmgCheck1(factor, 0)` with it — the same routine a landed hit calls — so the drain, the warnings, the powder
+  and the break are the engine's, at the moment the ability strikes.
+- Warnings at 10 % and 5 % of max WHP. At ≤ 0 (checked only inside `BattleSubWeaponDmg`, i.e. on a drain): an owned
+  Auto Repair Powder (item 183 = 0xB7) is consumed and WHP refilled; else WHP is clamped to 0, the break sound plays,
+  and the weapon breaks ONLY onto a fallback — the character's starter (`__612` table: Toan 257 Broken Dagger, Xiao
+  299, Goro 314, Ruby 331, Ungaga 347): a Dagger (starter+1) in hand reverts to the starter via
+  `WepDataListToHaveCopy`; any other weapon is destroyed (id → 0xFFFF) and the first Broken Dagger / Dagger in the
+  ten bag slots equipped. With neither in the bag nothing happens: the weapon stays equipped at 0 WHP. A mod write
+  that leaves WHP at 0 therefore breaks on the next DRAIN (a landed hit, or a charge attack's start), not at once.
 
 ## 10. Thrown items (for completeness)
 

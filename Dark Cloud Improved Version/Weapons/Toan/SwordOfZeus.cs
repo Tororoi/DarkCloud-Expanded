@@ -38,7 +38,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  StrikeReach       = 300f;  // not locked on: enemies this far from Toan are in reach (the flash's radius, about the draw distance)
         private const int    MaxStrikes        = 6;     // …and this many of the nearest take a bolt each
         private const float  BlastScale        = 0.5f;  // the bolt's blast, against Big Bang's falloff steps (½× … 2× attack)
-        private const float  StrikeWhp         = 10f;   // weapon HP a bolt costs, before the weapon's Endurance scales it down (WeaponWhp)
+        private const float  StrikeWhp         = 10f;   // weapon HP a bolt costs, before the weapon's Endurance scales it down (WeaponWhp: the engine's own drain takes it)
         // lightning.mds's root is `null2`. ⚠ Only its FIRST FIVE bytes are the name at runtime: the word after "null"
         // read `2 ??` on the live copy (whatever followed the NUL in the frame's name field), where explosion.chr's
         // `null3` happened to be NUL-padded — an 8-byte compare never matched and the whirl stayed 1×.
@@ -80,11 +80,11 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The bolt on one enemy: the strike played at its ground point, its blast, its cost. False when the
         /// bolt is not entered on this floor or every sub-shot is busy.</summary>
-        internal static bool Strike(int slot)
+        internal static bool Strike(int slot, bool bill = true)
         {
             if (slot < 0 || slot >= EnemyAddresses.FloorSlots.Count || !Enemies.IsLive(slot)) return false;
             long pos = EnemyAddresses.CharObjects.PosAddr(slot);                    // the unit's own position: its ground point
-            if (!StrikeAt(Memory.ReadFloat(pos), Memory.ReadFloat(pos + 4), Memory.ReadFloat(pos + 8), slot)) return false;
+            if (!StrikeAt(Memory.ReadFloat(pos), Memory.ReadFloat(pos + 4), Memory.ReadFloat(pos + 8), slot, bill)) return false;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] lightning on slot {slot}");
             return true;
         }
@@ -93,7 +93,7 @@ namespace Dark_Cloud_Improved_Version
         /// Bang's falloff blast at the point, and the bolt's weapon-HP cost. <paramref name="noKickSlot"/> is the enemy
         /// under it, which takes the blast where it stands — no shove; nobody is turned to face the bolt, they are
         /// stunned facing wherever they were, and the struck enemy braces behind its guard like the rest of the floor.</summary>
-        private static bool StrikeAt(float x, float h, float y, int noKickSlot)
+        private static bool StrikeAt(float x, float h, float y, int noKickSlot, bool bill = true)
         {
             if (!LightningSeeded) return false;
             if (!BorrowedShots.Burst(_lightning, x, h, y, 0, 1f)) return false;   // 1×: the root hold sizes every bolt alike
@@ -101,7 +101,7 @@ namespace Dark_Cloud_Improved_Version
             SeSeq.Play(StrikeSe, 90);
             BigBang.LastBlast = (x, h, y);
             BigBang.PlantFalloff(x, h, y, noKickSlot: noKickSlot, damageScale: BlastScale);
-            WeaponWhp.Drain(Items.swordofzeus, StrikeWhp, "[Zeus] bolt ");
+            if (bill) WeaponWhp.Drain(Items.swordofzeus, StrikeWhp, "[Zeus] bolt ");   // taken by the engine's own drain, as a landed hit's is (a volley bills once, StrikeNearest)
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] lightning at ({x:F0},{h:F0},{y:F0})");
             return true;
         }
@@ -123,7 +123,7 @@ namespace Dark_Cloud_Improved_Version
         // way the guard charge whitens it, so the copy, made at level 2, carries the charge's tint. The lunge runs through five action states (PlayerAction.InLunge); the tick the
         // END one (ActionLungeEnd: clip 17 from frame 196) comes up, the bolt comes down ChargeBoltAhead units ahead
         // of Toan with the strike's blast, and the flash goes off — the same white and
-        // pulse, one-second ease back to normal light and 5 s blinding as every strike. A charge let go
+        // pulse, two-second ease back to normal light and 5 s blinding as every strike. A charge let go
         // early plays whatever it earned and the dim simply lifts. Stands aside while Solar Flash owns the blade.
         private const float  ChargeBoltAhead   = 40f;   // units ahead of Toan the bolt lands
         private const float  LungeHigher       = 0.5f;  // the level-2 lunge's extra gravity (CodeCaves.LungeGravityExtra): 1.5× the height in the same frames
@@ -278,9 +278,10 @@ namespace Dark_Cloud_Improved_Version
             foreach (var (d, s) in near)
             {
                 if (struck >= MaxStrikes) break;
-                if (!Strike(s)) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] no free bolt for slot {s} ({d:F0} away)"); break; }
+                if (!Strike(s, bill: false)) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] no free bolt for slot {s} ({d:F0} away)"); break; }
                 struck++;
             }
+            if (struck > 0) WeaponWhp.Drain(Items.swordofzeus, StrikeWhp, "[Zeus] volley ");   // the volley is ONE hit to the blade, however many bolts
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] {struck} of {near.Count} enem" + (near.Count == 1 ? "y" : "ies") + $" within {StrikeReach:F0} struck");
             return struck;
         }
