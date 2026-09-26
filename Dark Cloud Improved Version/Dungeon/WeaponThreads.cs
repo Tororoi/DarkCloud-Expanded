@@ -24,6 +24,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread darkCloudThread = new Thread(new ThreadStart(DarkCloud.GuardCrushEffect));
         private static Thread kitchenKnifeThread = new Thread(new ThreadStart(KitchenKnife.SpringsBlessingEffect));
         private static Thread baselardThread = new Thread(new ThreadStart(Baselard.HeavyHandEffect));
+        private static Thread gladiusThread = new Thread(new ThreadStart(Gladius.JacketHunterEffect));
         private static Thread angelGearThread = new Thread(new ThreadStart(AngelGear.GuardianReflectorEffect));
         private static Thread superSteveThread = new Thread(new ThreadStart(SuperSteve.SphereInheritanceEffect));
         private static Thread matadorThread = new Thread(new ThreadStart(Matador.ChargingBullEffect));
@@ -324,6 +325,16 @@ namespace Dark_Cloud_Improved_Version
                     {
                         baselardThread = new Thread(new ThreadStart(Baselard.HeavyHandEffect));
                         baselardThread.Start();
+                    }
+                    break;
+
+                case Items.gladius:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    if (!gladiusThread.IsAlive)
+                    {
+                        gladiusThread = new Thread(new ThreadStart(Gladius.JacketHunterEffect));
+                        gladiusThread.Start();
                     }
                     break;
 
