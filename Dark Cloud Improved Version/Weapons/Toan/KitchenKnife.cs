@@ -5,7 +5,8 @@ using System.Threading.Tasks;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Kitchen Knife — a healing spring blesses the knife: triple length, double attack, for a minute.</summary>
+    /// <summary>Kitchen Knife — a healing spring blesses the knife: triple length, double attack, for a minute, and its
+    /// weapon HP mended to full each time Toan steps into the water.</summary>
     internal static class KitchenKnife
     {
         // ── Kitchen Knife: "Spring's Blessing" ───────────────────────────────────────────
@@ -21,11 +22,13 @@ namespace Dark_Cloud_Improved_Version
         /// BATTLE-copy attack is doubled (past the menu cap, Quick-Draw style). Lasts
         /// <see cref="KkBoostSeconds"/>s from the moment the player last stood in the spring; flavor
         /// messages mark the blessing and its fading (no numbers shown). Scale and attack are re-asserted
-        /// each tick, so floor reloads / battle-record refreshes can't strand a half-applied boost.
+        /// each tick, so floor reloads / battle-record refreshes can't strand a half-applied boost. Each
+        /// step INTO the water (the edge, so wading about does not spam it) also mends the knife's weapon
+        /// HP to its maximum — the inventory record, the copy the engine drains and the menu shows.
         /// </summary>
         public static void SpringsBlessingEffect()
         {
-            bool boosted = false;
+            bool boosted = false, wasInSpring = false;
             bool warnedNoBlade = false;
             ushort baseAtk = 0;
             DateTime deadline = DateTime.MinValue;
@@ -47,6 +50,8 @@ namespace Dark_Cloud_Improved_Version
                                 Player.CurrentCharacterNum() == Player.ToanId;
                 long atkAddr = WeaponHave.BattleWeaponRecord + WeaponHave.EffAttackOffset;
 
+                if (inSpring && !wasInSpring) MendWhp(!boosted);             // stepping in: the knife made whole
+                wasInSpring = inSpring;
                 if (inSpring)
                 {
                     if (!boosted)
@@ -89,6 +94,7 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // Weapon swapped / left the dungeon mid-blessing: quietly put everything back.
+            wasInSpring = false;
             if (boosted)
             {
                 long atkAddr = WeaponHave.BattleWeaponRecord + WeaponHave.EffAttackOffset;
@@ -96,6 +102,22 @@ namespace Dark_Cloud_Improved_Version
                     Memory.WriteUShort(atkAddr, baseAtk);
                 Weapons.ScaleWeaponBlade(kkCode, 1f);
             }
+        }
+
+        /// <summary>The knife's weapon HP to its maximum on the inventory record of the bag slot Toan has it in.
+        /// <paramref name="withBlessing"/>: the blessing's own message is about to show, so none of ours.</summary>
+        private static void MendWhp(bool withBlessing)
+        {
+            int bag = Memory.ReadByte(DngStatusData.EquippedSlotAddr(Player.ToanId));
+            if (bag < 0 || bag >= DngStatusData.MaxWeaponSlots) return;
+            long rec = DngStatusData.WeaponRecord(Player.ToanId, bag);
+            if (Memory.ReadUShort(rec) != Items.kitchenknife) return;
+            float whp = Memory.ReadFloat(rec + WeaponHave.InventoryWeaponWhpOffset);
+            short max = Memory.ReadShort(rec + WeaponHave.InventoryWeaponMaxWhpOffset);
+            if (max <= 0 || whp >= max) return;
+            Memory.WriteFloat(rec + WeaponHave.InventoryWeaponWhpOffset, max);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[KitchenKnife] the spring mends the knife: WHP {whp:F0} → {max}");
+            if (!withBlessing) DungeonMessages.DisplayMessage("The spring mends\nthe Kitchen Knife.", 2, 30, 3000);
         }
     }
 }
