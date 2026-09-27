@@ -439,8 +439,10 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>A player-attack sphere ON EACH ENEMY in range (CollisionPool: the same entries CheckDmg tests his sword
-        /// swings against): base = attack × <see cref="FlashDamageFraction"/>, the sword's selected element as a pure bit, and
-        /// a melee kick originating at Toan so each one is shoved outward from him.
+        /// swings against): base = attack × <see cref="FlashDamageFraction"/>, NO element (light is not the weapon's element; the
+        /// engine's elemental step is skipped), the weapon's ability flags and anti-category bytes (so Poison, Stop, Steal, Drain
+        /// and Critical roll as on any hit of that weapon), and a melee kick originating at Toan so each one is shoved outward
+        /// from him.
         ///
         /// ⚠ NOT one big sphere. An entry is CONSUMED by the first victim the engine matches it against, so a single
         /// 300-unit sphere damaged exactly one enemy and left the rest untouched — which looked like "one per species"
@@ -452,8 +454,7 @@ namespace Dark_Cloud_Improved_Version
             if (pool == 0) return;
             float attack = Memory.ReadShort(WeaponHave.BattleWeaponRecord + 0x04);
             int baseDmg = Math.Max(1, (int)Math.Round(attack * p.DamageFraction));
-            uint elem = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
-            uint attr = (elem != 0 && (elem & (elem - 1)) == 0) ? elem : 0u;
+            const uint attr = 0;                                                     // elementless, as every blast of this kit is
             int hit = 0, missed = 0;
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {

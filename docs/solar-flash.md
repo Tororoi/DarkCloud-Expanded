@@ -49,9 +49,11 @@ from `WeaponThreads`) drives it with three helpers in `Weapons/Toan/SunSword/`.
   otherwise. The flash captures the drawn set, writes ambient and the four light-colour rows to 255 and pulls the fog to
   white from 0 to 1 unit, then eases back with k = (1 − t)² over 1 s (the fog by k², so it clears first). A floor with no
   fog (end ≤ start) keeps none. Implausible captured values (outside 0-512) skip the lighting and log the set.
-- **The hit** — one `CollisionPool.PlayerHitEntry` at Toan, radius 300: base = attack × 0.25, the sword's selected
-  element as a pure bit, and the melee kick words (strength 2.0 / decay 0.3 / type 2, origin = Toan) so CheckDmg runs the
-  enemy's own flinch + shove. Withdrawn after three ticks (the engine only withdraws its own swing spheres).
+- **The hit** — one `CollisionPool.PlayerHitEntry` on each enemy within 300 of the flash: base = attack × 0.25 (× 0.5
+  for Big Bang's and the bomb kit's), NO element (every flash and blast of this kit is elementless, so the engine's
+  elemental step is skipped), the weapon's ability flags and anti-category bytes (Poison, Stop, Steal, Drain and Critical
+  roll as on any hit of that weapon), and the melee kick words (strength 2.0 / decay 0.3 / type 2, origin = the flash) so
+  CheckDmg runs the enemy's own flinch + shove. Withdrawn after three ticks (the engine only withdraws its own swing spheres).
 - **The blinding** (`SolarStun`) — every live slot within 300 u horizontally. Its AI is held per slot, not frozen:
   CMonstorUnit::Step (0x1DD540) runs a slot's script by `run(ctx, label)` when the slot's running word
   (`MainMonstorUnit.ScriptRunning`, unit+0x50+slot*4) is 0, else `resume(ctx)` — and `resume` just calls the VM from the
