@@ -111,6 +111,12 @@ namespace Dark_Cloud_Improved_Version
             primeDim: 0.5f,                                                          // darker than Big Bang's 0.35 (k is darkness: 1 = full dim)
             easeSeconds: 2.0,                                                        // a strike's flash, gone in two seconds — back to the floor's own light, not onto a rest dim
             holdsPrimedTint: false);                                                 // its flash costs nothing — each bolt does (StrikeWhp)
+        /// <summary>Super Steve with a Sword of Zeus sphere (ZeusShot): the Sword of Zeus's look on her slingshot — its dim, its
+        /// electric light, the two-second ease, no white on her while primed, no disc, no hit of its own (the bolts' blasts do).</summary>
+        internal static readonly SolarProfile ZeusShotFlash = new SolarProfile(
+            Items.supersteve, 0f, null, SolarShot.WeaponModel, 0, 0, "ZeusShot", fog: 0.8f,
+            light: new[] { 228f, 240f, 255f }, fogRgb: new[] { 238f, 246f, 255f },
+            primeDim: 0.5f, easeSeconds: 2.0, holdsPrimedTint: false);
 
         /// <summary>True while a Solar Flash charge is building, held or going off — Big Bang's own charge-attack tint
         /// stands aside for it rather than fighting it for the blade.</summary>

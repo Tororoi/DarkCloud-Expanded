@@ -597,7 +597,7 @@ namespace Dark_Cloud_Improved_Version
                 BoneRapier.SkeletonKeyEffect(active && (sphere == Items.bonerapier || sphere == Items.boneslingshot));
 
                 // Solar Harvest (Sun Sword / Big Bang): ~1% of the floor's enemies drop a Sun attachment.
-                SunSword.SunHarvestDrive(sphere == Items.sunsword || sphere == Items.bigbang, ssSun);
+                SunSword.SunHarvestDrive(sphere == Items.sunsword || sphere == Items.bigbang || sphere == Items.swordofzeus, ssSun);
 
                 // Solar Shot (Sun Sword): a 5 s guard charge, and the next pellet carries the Sun Sword's flash to where it lands.
                 if (lastSphere == Items.sunsword && sphere != Items.sunsword) SolarShot.Stop();
@@ -607,6 +607,11 @@ namespace Dark_Cloud_Improved_Version
                 // pellet a bomb; Big Bang's blast and flash where it lands; explosions cannot hurt her.
                 if (lastSphere == Items.bigbang && sphere != Items.bigbang) BombShot.Stop();
                 BombShot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.bigbang);
+
+                // Lightning (Sword of Zeus): the guard charge primes the sword's bolts — the volley on a release with no lock; locked on, a
+                // bolt on every pellet hit for five seconds; the shot charge's pellet calls the charge bolt down wherever it dies.
+                if (lastSphere == Items.swordofzeus && sphere != Items.swordofzeus) ZeusShot.Stop();
+                ZeusShot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.swordofzeus);
 
                 // Curses (full inherit): curse Xiao. Not pause-gated — mirrors the Toan loops.
                 Evilcise.Drive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);
@@ -633,7 +638,7 @@ namespace Dark_Cloud_Improved_Version
                 DragonsY.LockOnSpeedDrive(active && DragonsY.LockOnSpeedGrants(sphere));
 
                 // Lock-on reach (Flamingo / Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear — and Big Bang, whose sword has it): enemies locked from twice as far.
-                Flamingo.Drive(active && (Flamingo.GrantsReach(sphere) || sphere == Items.bigbang));
+                Flamingo.Drive(active && (Flamingo.GrantsReach(sphere) || sphere == Items.bigbang || sphere == Items.swordofzeus));   // Big Bang's reach, and the Sword of Zeus's inherited from it
 
                 // Dragon's Y: the charged shot — the Gemron ball of Super Steve's own selected element.
                 DragonsY.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.dragonsy);

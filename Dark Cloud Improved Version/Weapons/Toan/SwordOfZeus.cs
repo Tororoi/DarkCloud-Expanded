@@ -63,6 +63,12 @@ namespace Dark_Cloud_Improved_Version
         {
             if (Player.CurrentCharacterNum() != Player.ToanId) return null;
             if (Player.Weapon.GetCurrentWeaponId() != Items.swordofzeus) return null;
+            return Lightning();
+        }
+        /// <summary>The bolt's config (built once): lightning.chr under a stock config's shape, the strike its muzzle motion, no
+        /// radius on any phase. Xiao's Zeus sphere (ZeusShot) borrows the same bolt.</summary>
+        internal static BorrowedEffect Lightning()
+        {
             if (_lightning == null)
             {
                 _lightning = BorrowedShots.CustomConfig(LightningTemplate, LightningName,
@@ -78,13 +84,14 @@ namespace Dark_Cloud_Improved_Version
         /// (the model it validates, "kiru" + "fkiri", is not the one loaded).</summary>
         internal static bool LightningSeeded => _lightning != null && BorrowedShots.Entered(_lightning);
 
-        /// <summary>The bolt on one enemy: the strike played at its ground point, its blast, its cost. False when the
-        /// bolt is not entered on this floor or every sub-shot is busy.</summary>
-        internal static bool Strike(int slot, bool bill = true)
+        /// <summary>The bolt on one enemy: the strike played at its ground point, its blast, its cost (billed to
+        /// <paramref name="weapon"/>, the one in the active character's hand). False when the bolt is not entered on this floor
+        /// or every sub-shot is busy.</summary>
+        internal static bool Strike(int slot, bool bill = true, ushort weapon = (ushort)Items.swordofzeus)
         {
             if (slot < 0 || slot >= EnemyAddresses.FloorSlots.Count || !Enemies.IsLive(slot)) return false;
             long pos = EnemyAddresses.CharObjects.PosAddr(slot);                    // the unit's own position: its ground point
-            if (!StrikeAt(Memory.ReadFloat(pos), Memory.ReadFloat(pos + 4), Memory.ReadFloat(pos + 8), slot, bill)) return false;
+            if (!StrikeAt(Memory.ReadFloat(pos), Memory.ReadFloat(pos + 4), Memory.ReadFloat(pos + 8), slot, bill, weapon)) return false;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] lightning on slot {slot}");
             return true;
         }
@@ -93,7 +100,7 @@ namespace Dark_Cloud_Improved_Version
         /// Bang's falloff blast at the point, and the bolt's weapon-HP cost. <paramref name="noKickSlot"/> is the enemy
         /// under it, which takes the blast where it stands — no shove; nobody is turned to face the bolt, they are
         /// stunned facing wherever they were, and the struck enemy braces behind its guard like the rest of the floor.</summary>
-        private static bool StrikeAt(float x, float h, float y, int noKickSlot, bool bill = true)
+        internal static bool StrikeAt(float x, float h, float y, int noKickSlot, bool bill = true, ushort weapon = (ushort)Items.swordofzeus)
         {
             if (!LightningSeeded) return false;
             if (!BorrowedShots.Burst(_lightning, x, h, y, 0, 1f)) return false;   // 1×: the root hold sizes every bolt alike
@@ -101,7 +108,7 @@ namespace Dark_Cloud_Improved_Version
             SeSeq.Play(StrikeSe, 90);
             BigBang.LastBlast = (x, h, y);
             BigBang.PlantFalloff(x, h, y, noKickSlot: noKickSlot, damageScale: BlastScale);
-            if (bill) WeaponWhp.Drain(Items.swordofzeus, StrikeWhp, "[Zeus] bolt ");   // taken by the engine's own drain, as a landed hit's is (a volley bills once, StrikeNearest)
+            if (bill) WeaponWhp.Drain(weapon, StrikeWhp, "[Zeus] bolt ");   // taken by the engine's own drain, as a landed hit's is (a volley bills once, StrikeNearest)
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] lightning at ({x:F0},{h:F0},{y:F0})");
             return true;
         }
@@ -264,8 +271,9 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Not locked on: a bolt on each of the nearest <see cref="MaxStrikes"/> live enemies within
-        /// <see cref="StrikeReach"/> of Toan, nearest first, as far as the instance has sub-shots free. How many struck.</summary>
-        internal static int StrikeNearest()
+        /// <see cref="StrikeReach"/> of the active character, nearest first, as far as the instance has sub-shots free; the
+        /// volley billed once to <paramref name="weapon"/>. How many struck.</summary>
+        internal static int StrikeNearest(ushort weapon = (ushort)Items.swordofzeus)
         {
             if (!LightningSeeded) return 0;
             float tx = Memory.ReadFloat(Addresses.dunPositionX), ty = Memory.ReadFloat(Addresses.dunPositionY);
@@ -286,7 +294,7 @@ namespace Dark_Cloud_Improved_Version
                 if (!Strike(s, bill: false)) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] no free bolt for slot {s} ({d:F0} away)"); break; }
                 struck++;
             }
-            if (struck > 0) WeaponWhp.Drain(Items.swordofzeus, StrikeWhp, "[Zeus] volley ");   // the volley is ONE hit to the blade, however many bolts
+            if (struck > 0) WeaponWhp.Drain(weapon, StrikeWhp, "[Zeus] volley ");   // the volley is ONE hit to the weapon, however many bolts
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] {struck} of {near.Count} enem" + (near.Count == 1 ? "y" : "ies") + $" within {StrikeReach:F0} struck");
             return struck;
         }
@@ -318,7 +326,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Hold every instance sub-shot that carries lightning.chr at <see cref="LightningScale"/> on its root
         /// frame's local 3×3 (translation left anchored). The authored bind is read once, from the first root seen at
         /// its authored size.</summary>
-        private static void MaintainScale()
+        internal static void MaintainScale()
         {
             if (!Player.CheckDunIsWalkingMode()) return;          // models are reallocated in menus and on transitions
             var seen = new System.Collections.Generic.List<string>(); bool matched = false;
