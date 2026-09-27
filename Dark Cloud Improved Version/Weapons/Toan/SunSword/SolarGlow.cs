@@ -62,6 +62,7 @@ namespace Dark_Cloud_Improved_Version
                     Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, lift);
                     _anchor = want;
                 }
+                if (palRow > 0 && palRow != _palRow) { Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, palRow); _palRow = palRow; }   // repainted for its new user
                 KeepAlive(); return;
             }
             _disc = disc;
@@ -72,7 +73,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 0);
             if (palRow > 0) Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, palRow);
             _palRow = palRow;
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, 0f);       // …from nothing; Tick swells it over GrowSeconds
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, growSeconds <= 0 ? _scaleMax : 0f);   // …from nothing, Tick swelling it over GrowSeconds — or full size at once
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, Flags);
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, Pull);
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, lift);
@@ -82,14 +83,14 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowReady, 0);        // bind the disc
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 1);           // armed last
-            _on = true; _fading = false; _driven = false; _k = 0f; _shownAt = GameClock.Now; _grow = Math.Max(0.01, growSeconds);
+            _on = true; _fading = false; _driven = false; _k = growSeconds <= 0 ? 1f : 0f; _shownAt = GameClock.Now; _grow = Math.Max(0.01, growSeconds);
             // Where the anchor really sits, so any residual offset is one measurement rather than another guess: the cave
             // places the sprite at the node's posed world position (world matrix translation row), and his feet are the
             // player's own height.
             float anchorH = Memory.ReadFloat(Memory.ToMmu(root) + CFrameVu1.WorldMatrix + 0x30 + 4);
             float feetH   = Memory.ReadFloat(Addresses.dunPositionZ);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[SunSword] glow up at bone 0x{root:X} (disc `{_disc}`, scale {Scale:0.00}, lift {Lift:0}); bone sits {anchorH - feetH:0.#} above his feet");
+                $"[SunSword] glow up at bone 0x{root:X} (disc `{_disc}`, scale {_scaleMax:0.00}, lift {lift:0}); bone sits {anchorH - feetH:0.#} above the feet");
         }
 
         /// <summary>One line describing where the disc actually LIVES: its manager entry, the block it belongs to, its TEX0
@@ -100,6 +101,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void Tick()
         {
             if (!_on) return;
+            KeepAlive();                                                 // re-sent every tick: the palette cave's repaint reaches VRAM within a tick (a one-off upload could beat it and leave the disc in its old colours)
             float k;
             if (_fading)
             {
@@ -126,6 +128,8 @@ namespace Dark_Cloud_Improved_Version
         private static float _fadeFrom = 1f;
 
         internal static bool IsUp => _on;
+        /// <summary>The palette row the disc is painted with while up (0 = its own colours).</summary>
+        internal static int PalRow => _palRow;
         /// <summary>Up at this node, on its way down or not — what must be cut before that node goes away.</summary>
         internal static bool AnchoredTo(uint anchor) => _on && anchor != 0 && _anchor == anchor;
         /// <summary>Up (and not on its way down) at this node — 0 meaning Toan's own spine.</summary>

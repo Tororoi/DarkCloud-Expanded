@@ -224,6 +224,9 @@ namespace Dark_Cloud_Improved_Version
             if (!Entered(fx)) return;
             Memory.WriteFloat(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotCfg + ShotEffectPack.CfgRadiusMuzzle + phase * 4, radius);
         }
+        /// <summary>The radius phase <paramref name="phase"/> plants with, as the entered copy has it now (NaN when not entered).</summary>
+        internal static float PhaseRadius(BorrowedEffect fx, int phase)
+            => Entered(fx) ? Memory.ReadFloat(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotCfg + ShotEffectPack.CfgRadiusMuzzle + phase * 4) : float.NaN;
 
         /// <summary>Set the element bits the effect's damage carries (CfgFlags, element bits only) on the copy the instance
         /// runs from — the step reads it live, so a burst can hurt with the weapon's element rather than the effect's own.</summary>
@@ -353,7 +356,11 @@ namespace Dark_Cloud_Improved_Version
         /// <paramref name="vx"/>/<paramref name="vh"/>/<paramref name="vy"/> (units per frame), <paramref name="damage"/> base
         /// damage and <paramref name="life"/> frames of flight, as Xiao's. False when the effect is not entered on this floor
         /// or its sub-shots are all busy.</summary>
-        internal static bool Fire(BorrowedEffect fx, float x, float h, float y, float vx, float vh, float vy, int damage, int life, int owner = Player.XiaoId)
+        /// <param name="plant">False: the shot plants no damage entry at all (its caller does the hurting where it lands).</param>
+        /// <param name="reload">Frames of silence after each plant. The default outlasts any flight, so with the flying radius
+        /// zeroed the impact's first frame is the one plant; a shot that plants IN FLIGHT (a flying radius set) wants a short one,
+        /// or its first frame's plant — beside the shooter, hitting nothing — silences the rest of the flight.</param>
+        internal static bool Fire(BorrowedEffect fx, float x, float h, float y, float vx, float vh, float vy, int damage, int life, int owner = Player.XiaoId, bool plant = true, byte reload = PlantReload)
         {
             if (!Entered(fx)) return false;
             byte[] cfg = fx.Cfg;
@@ -392,8 +399,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt   (inst + ShotEffectPack.OffWepFlags + j * 4, Memory.ReadUShort(rec + WeaponHave.AbilityFlagsOffset));
             Memory.WriteUInt  (inst + ShotEffectPack.OffAntiPtr + j * 4, (uint)(rec - 0x20000000 + WeaponHave.WeaponAntiOffset));
             Memory.WriteByte  (inst + ShotEffectPack.OffSndFlag + j, 0);
-            Memory.WriteByte  (inst + ShotEffectPack.OffReload + j, PlantReload);
-            Memory.WriteByte  (inst + ShotEffectPack.OffLatch + j, 0);                 // plants its damage
+            Memory.WriteByte  (inst + ShotEffectPack.OffReload + j, reload);
+            Memory.WriteByte  (inst + ShotEffectPack.OffLatch + j, plant ? (byte)0 : PlantReload);   // plants its damage — or never does
             Memory.WriteInt   (inst + ShotEffectPack.OffLastIdx, j);
             ShotEffects.FaceAlong(obj, vx, vh, vy);
             Memory.WriteUShort(inst + ShotEffectPack.OffActive + j * 2, 1);

@@ -190,6 +190,7 @@ namespace Dark_Cloud_Improved_Version
             using var arc = new IsoArchive(outIso, progress);
             CatPackBakes.Run(arc, progress);      // the Divine Beast cat, into Xiao's pack
             ToanGlowBakes.Run(arc, progress);     // Solar Flash's white glow disc, into Toan's
+            PelletSheetBakes.Run(arc, progress);  // the pellet sheet's transparent cell (the bottom row is the mod's)
         }
 
         // MonsterScriptBakes rewrites the hurt-sphere declarations of a few monster scripts (each `_SET_BODY_COL` block

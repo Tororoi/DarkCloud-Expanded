@@ -300,13 +300,16 @@ immediate in one of four routines.
 
 ## 11. Thrown items (for completeness)
 
-`CMainItemModel::Step` (0x1D4E20 region) special-cases throwables on landing:
-elemental gems (items 161–165) and items 152/159 deal **30 × (selectMapNo + 1)**
-(dungeon-indexed, ignores weapon stats entirely); items 160/166/167/169 register fixed
-2- or 8-damage collisions whose attribute bits (0x100/0x200/0x800) inflict the
-corresponding status instead of real damage.
+`CMainItemModel::Step` (0x1D4E20 region) handles every thrown item on landing (an enemy hit, or 0x2C frames):
+elemental gems (items 161–165) spawn their Maseki burst; Holy Water (152) a light burst — both at **30 ×
+(selectMapNo + 1)** (dungeon-indexed, ignores weapon stats entirely); Stone (160) and the fruits 166/167/169
+register fixed 2- or 8-damage collisions whose attribute bits (0x100/0x200/0x800) inflict the corresponding status;
+and EVERY OTHER thrown item — the Bomb (159), Bomb Nuts (168), and anything else you throw — goes to
+`SetBombEffect(1.0, pos, 3, 30 × (selectMapNo + 1))`: the bomb blast. The chest-opening display loads the item's
+own model the same way the throw does (`BtGetItemNamePath` → `dun/item/main_data/<code>.mds/.img`, textured
+through `SetTempTexture(0x1C, img)`), so the bomb in a chest IS `bakudan.mds`.
 
-## 11. Constants reference
+## 12. Constants reference
 
 | Address | Value | Used for |
 |---|---|---|

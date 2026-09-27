@@ -116,29 +116,32 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>A player pellet's sprite cell taken from the item id in Mailbox.PelletSpriteId when it is set (tools/stubs/
-        /// pellet_sprite.s, after the sharing cave in DebugInfomationDraw's body): draw__5CSHOT's read of the equipped weapon's
-        /// id (0x1ABC74 `lw v0,-0x62FC(gp); lh v0,0(v0)`) becomes a call to it.</summary>
+        /// <summary>A player pellet's sprite cell (draw__5CSHOT's hook at 0x1ABC74 calls the cave for the item id the cell is
+        /// taken from, in v0): Mailbox.PelletSpriteId when it is set, else the equipped weapon's. Eight words at
+        /// DebugIfCave.PelletSprite; `at` and v0 are the only registers touched. (The sheet's bottom row is the mod's —
+        /// PelletSheetBakes: cell 315 transparent, 314 free, 312/313 Super Steve's and Angel Gear's own.)</summary>
         internal static void PatchPelletSprite(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint CaveAddr = CodeCaves.DebugInfoCave.PelletSprite, HookAddr = 0x001ABC74;
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.pelletSprite.bin")
-                ?? throw new IOException("Embedded EE function missing: pelletSprite.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
-            // Shape: reads the mailbox word, carries the vanilla `lw v0,-0x62FC(gp)` and `lh v0,0(v0)`, ends in `jr ra`.
-            bool vanillaRead = false, jrRa = false;
-            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == 0x8F829D04u) vanillaRead = true; if (w == 0x03E00008u) jrRa = true; }
-            if (b.Length % 4 != 0 || b.Length < 0x20 || U32(b, 0) != 0x3C0101F1u || !vanillaRead || !jrRa)
-                throw new IOException($"pelletSprite.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.DebugInfoCave.SteelLevelUp)
-                throw new IOException("pelletSprite.bin overruns into the level-up cave that follows it in DebugInfomationDraw.");
-            if (RdU32(fs, ElfOff(CodeCaves.DebugInfoCave.Host)) != 0x03E00008u)
-                throw new IOException("PatchPelletSprite must follow PatchSharedShots (the host's `jr ra`).");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
-            uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4)), ours = Jal(CaveAddr);
-            bool vanilla = cur0 == 0x8F829D04u && cur1 == 0x84420000u, patched = cur0 == ours && cur1 == 0;
+            const uint HookAddr = 0x001ABC74;
+            uint cave = CodeCaves.DebugIfCave.PelletSprite;
+            uint sprite = (uint)(CodeCaves.Mailbox.PelletSpriteId - 0x20000000L), shi = sprite >> 16, slo = sprite & 0xFFFFu; if (slo >= 0x8000) shi += 1;
+            uint[] words =
+            {
+                0x3C010000u | shi,                                  //  0 lui   at,HI(PelletSpriteId)
+                0x8C220000u | slo,                                  //  1 lw    v0,LO(at)                     the mod's id (0 = the weapon's)
+                0x14400000u | 3,                                    //  2 bne   v0,zero,ret (+3 → index 6)
+                0x00000000u,                                        //  3   nop
+                0x8F829D04u,                                        //  4 lw    v0,-0x62FC(gp)                NowWeaponHave
+                0x84420000u,                                        //  5 lh    v0,0(v0)                      its item id
+                0x03E00008u,                                        //  6 ret: jr ra
+                0x00000000u,                                        //  7   nop
+            };
+            if (cave + (uint)words.Length * 4 > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                throw new IOException("The pellet-sprite cave does not fit its host (DebugInfomationIF).");
+            for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+            for (int i = words.Length; i < 14; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), 0);   // the span an earlier build used
+            uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4)), ours = Jal(cave), older = Jal(CodeCaves.DebugInfoCave.PelletSprite);
+            bool vanilla = cur0 == 0x8F829D04u && cur1 == 0x84420000u, patched = (cur0 == ours || cur0 == older) && cur1 == 0;
             if (!(vanilla || patched) || RdU32(fs, ElfOff(HookAddr + 8)) != 0x2443FED5u)
                 throw new IOException($"Pellet draw site 0x{HookAddr:X} is not vanilla `lw v0,-0x62FC(gp); lh v0,0(v0); addiu v1,v0,-0x12B` — unmodified Dark Cloud (USA) ISO expected.");
             WrU32(fs, ElfOff(HookAddr), ours);

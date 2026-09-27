@@ -18,9 +18,9 @@ namespace Dark_Cloud_Improved_Version
     {
         private const string Tag = "[SolarShot] ";
         internal const string GlowDisc    = "catglowp";   // the cat's disc: the one glow disc resident while Xiao is the active character
-        internal const int    GlowGoldRow = 8;            // the glow cave's palette row: the Angel Gear cat's gold, the Sun Sword's own colour
+        internal const int    GlowGoldRow = 9;            // the glow cave's ONE-based palette row: 1–5 the elements, 6 none, 7 the Divine Beast blue, 8 the Angel Shooter white, 9 the Angel Gear gold — the Sun Sword's colour
         internal const string WeaponModel = "c04w13";     // Super Steve's dungeon rig (item 312 = c04w13.chr): what SolarBlade whitens
-        private const double  ChargeSeconds = 5.0;        // guard held this long primes the shot
+        private const double  ChargeSeconds = 3.0;        // guard held this long primes the shot
         private const float   PelletScale = 5f;           // the charged pellet's sprite
         private const double  TintFadeSeconds = 0.25;     // her white, gone this long after the pellet leaves
         private const double  MissSeconds = 3.0;          // a pellet out this long without landing on anything: the charge is spent

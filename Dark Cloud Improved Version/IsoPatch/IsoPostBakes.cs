@@ -16,6 +16,7 @@ namespace Dark_Cloud_Improved_Version
             ["town-collision"]  = TownCollisionBakes.Run,
             ["cat-pack"]        = CatPackBakes.Run,
             ["toan-glow"]       = ToanGlowBakes.Run,
+            ["pellet-sheet"]    = PelletSheetBakes.Run,
             ["town-scene-parts"] = (arc, log) => TownScenePartBakes.Run(arc, log, Environment.GetEnvironmentVariable("DC_FISHING_OUT"))   // dev: the bins go where the env var says,
         };
 

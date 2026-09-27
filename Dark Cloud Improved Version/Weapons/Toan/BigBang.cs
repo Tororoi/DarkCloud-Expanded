@@ -44,8 +44,8 @@ namespace Dark_Cloud_Improved_Version
         // sweeps several enemies, the damage, and the knockback. What the ability contributes is all data written
         // while the charge is up: the radius, the boosted Attack, the elementless attribute, and the kick. The
         // lunge's word is held at its vanilla 6.
-        private const float  KickStrength     = 3.5f;   // the judgement blade's kick; with KickDecay: distance ≈ force²/(2·decay) ≈ 50 units
-        private const float  KickDecay        = 0.12f;  // vanilla melee is 1.2 at 0.2, roughly 3.6 units
+        internal const float KickStrength     = 3.5f;   // the judgement blade's kick; with KickDecay: distance ≈ force²/(2·decay) ≈ 50 units
+        internal const float KickDecay        = 0.12f;  // vanilla melee is 1.2 at 0.2, roughly 3.6 units
 
         private const float  BlastWhp         = 20f;    // weapon HP a blast costs — the whirlwind's or the dropped blade's — before Endurance scales it (WeaponWhp: the engine's own drain takes it, and breaks the blade at 0)
         // THE BLADE ON A REGULAR CHARGE. Toan's charge meter runs 1.0 → 3.0 (lunge at 1.5, whirlwind at 2.5), and
@@ -131,6 +131,8 @@ namespace Dark_Cloud_Improved_Version
         // on its own body, carries that step — an entry is consumed by the first enemy it touches, so the sizing is
         // what makes it that enemy's alone.
         private static readonly (float radius, float times)[] Falloff = { (50f, 1f), (40f, 2f), (25f, 3f), (10f, 4f) };
+        /// <summary>How far the falloff blast reaches (its outermost step).</summary>
+        internal static float BlastRadius => Falloff[0].radius;
 
         /// <summary>Who the judgement blade is hanging for. Big Bang's own, or the Sword of Zeus's (SwordOfZeus.Judgement):
         /// the weapon whose primed state hangs it, the glow disc it carries, the profile whose prime dim the fall darkens
@@ -146,6 +148,7 @@ namespace Dark_Cloud_Improved_Version
             internal Action<int, float, float, float> Land;   // (target slot, x, h, y)
             // What another owner may bring in place of Toan's sword (all optional; null/0 = the sword's own):
             internal Func<bool>  IsPrimed;                    // whether the charge that hangs the copy is held (SunSword.PrimedFor otherwise)
+            internal Func<float> Alpha;                       // a ceiling on the copy's fade-in, 0..1 — a copy hung while its charge still builds fades in with it (FadeSeconds alone otherwise)
             internal float       Scale;                       // the copy's scale (OwnerScale() otherwise)
             internal Func<float> Length;                      // the model's reach below its root at 1× — how far above the ground it stops (the blade's dcol1 otherwise)
             internal Func<uint>  SpawnRoot;                   // the model to copy (the equipped weapon otherwise)
@@ -154,7 +157,9 @@ namespace Dark_Cloud_Improved_Version
             internal int         GlowRow;                     // the glow cave's palette row for the disc (0 = the disc's own)
             internal float       GlowScale;                   // the disc's size (0 = Toan's)
             internal float       GlowLift = float.NaN;        // the disc's height over the copy's root (NaN = half the length below it)
+            internal float       Margin;                      // how far the copy's lowest point hangs above the species' authored height (0 = HoverMargin)
         }
+        private static float OwnerMargin() => _owner.Margin > 0f ? _owner.Margin : HoverMargin;
         private static bool  Primed()      => _owner.IsPrimed != null ? _owner.IsPrimed() : SunSword.PrimedFor(_owner.WeaponId);
         private static float OwnerScale()  => _owner.Scale > 0f ? _owner.Scale : HoverScale;
         private static float OwnerLength() => _owner.Length != null ? _owner.Length() : BladeLength();
@@ -182,7 +187,13 @@ namespace Dark_Cloud_Improved_Version
         private static bool   _landed;
         private static int    _hoverSlot = -1;                 // the enemy the blade hangs over (−1 = none up)
         private static float  _hoverAlpha;                     // 0..1, the fade
+        /// <summary>The hanging copy's fade, 0..1 (1 = fully in) — for an owner that paints it as it appears.</summary>
+        internal static float HoverAlpha => _hoverAlpha;
         private static bool   _hoverOut;                       // fading OUT (lock lost) — no re-placement
+        private static DateTime _lockLostAt;                   // when the lock last left the hovered enemy (default = on it)
+        private const double  LockGrace = 0.35;                // seconds a hover rides out a lock that blinks or wanders before it fades
+        /// <summary>A copy hangs over a live enemy, ready to drop (what BeginDrop needs).</summary>
+        internal static bool HoverReady => _hoverSlot >= 0 && !_hoverOut && BladeProp.Active && HasHp(_hoverSlot);
         private static DateTime _dropStart, _gateLog;
         private static float  _dropX, _dropH, _dropY;          // where the BLAST goes off: the target's root, on the ground
         private static float  _fallHeight;                     // how far above _dropH the grip hung when it was let go
@@ -498,6 +509,15 @@ namespace Dark_Cloud_Improved_Version
             bool locked   = PlayerAction.LockHeld(out int lockSlot)
                             && lockSlot < EnemyAddresses.FloorSlots.Count && HasHp(lockSlot);
             bool primed   = Primed();
+            // A lock that flickers off, or wanders to another enemy, for less than LockGrace keeps the hover on its enemy: the
+            // lock-on words blink as the target is re-acquired, and each blink faded the copy out where it stood (no
+            // re-placement while fading) and spawned it afresh over the target — a stall, then a jump.
+            if (_hoverSlot >= 0 && !_hoverOut && primed && HasHp(_hoverSlot) && (!locked || lockSlot != _hoverSlot))
+            {
+                if (_lockLostAt == default) _lockLostAt = GameClock.Now;
+                if ((GameClock.Now - _lockLostAt).TotalSeconds < LockGrace) { locked = true; lockSlot = _hoverSlot; }
+            }
+            else _lockLostAt = default;
             // DIAGNOSTIC: the gates, once a second while primed — a hover that never appears is one of these reading
             // something other than what the notes say.
             if (primed && (GameClock.Now - _gateLog).TotalSeconds >= 1.0)
@@ -534,7 +554,7 @@ namespace Dark_Cloud_Improved_Version
                 // The name plate off, through the getter's gate (CodeCaves.NameHide): the flag itself is re-raised by
                 // the engine every frame the target is on screen, so writing it only made the name flicker.
                 Memory.WriteInt(CodeCaves.NameHide, 1);
-                if (!BladeProp.Maintain()) { AbandonHover(); return; }
+                if (!BladeProp.Maintain()) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[BigBang] hover: the copy did not maintain — down"); AbandonHover(); return; }
                 // PINNED to the target's model root: the engine chains the copy's world through the enemy's every
                 // frame, so it rides a moving enemy with no placement writes at all — no tick, no thread, no jitter.
                 // Its height above the root is measured ONCE, as the hover begins (the enemy at rest): measuring the
@@ -563,9 +583,10 @@ namespace Dark_Cloud_Improved_Version
                     // Its flat faces the way the fallen blade will (PlayerFacing): the parent's yaw is taken back out.
                     BladeProp.Face(PlayerFacing(), Memory.ReadFloat(EnemyAddresses.CharObjects.CharAddr(lockSlot) + CCharacter.CharRotY));
                 }
-                _hoverAlpha = (float)Math.Min(1.0, _hoverAlpha + dt / FadeSeconds);
+                _hoverAlpha = (float)Math.Min(_owner.Alpha?.Invoke() ?? 1f, _hoverAlpha + dt / FadeSeconds);
                 BladeProp.Alpha(_hoverAlpha);
                 DriveGlow(true);                                                 // the glow crosses to the blade
+                if (_owner.Alpha != null) SolarGlow.Drive(_hoverAlpha);          // …and grows with the copy
                 if (_hoverTraceTicks < 12)                                       // DIAGNOSTIC: the first ~third of a second of every hover
                 {
                     _hoverTraceTicks++;
@@ -578,6 +599,7 @@ namespace Dark_Cloud_Improved_Version
             _hoverTraceTicks = 0;
             if (_hoverSlot >= 0)                                             // up, but no longer wanted: fade out and down
             {
+                if (!_hoverOut) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] hover out: primed {primed}, locked {locked} (slot {lockSlot}, held {Memory.ReadInt(PlayerAction.LockOnHeld)}, hp {HasHp(_hoverSlot)}) — fading");
                 _hoverOut = true;
                 _hoverAlpha = (float)Math.Max(0.0, _hoverAlpha - dt / FadeSeconds);
                 if (BladeProp.Maintain()) BladeProp.Alpha(_hoverAlpha);
@@ -598,7 +620,7 @@ namespace Dark_Cloud_Improved_Version
             if (!onBlade) { if (SolarGlow.IsUp) SolarGlow.Fade(FadeSeconds); return; }
             uint want = BladeProp.RootGuest;
             if (want == 0 || !(_pointHover || Primed())) return;
-            if (SolarGlow.OnAnchor(want)) return;                               // up, where it should be
+            if (SolarGlow.OnAnchor(want) && (_owner.GlowRow == 0 || SolarGlow.PalRow == _owner.GlowRow)) return;   // up, where it should be, in its colour
             if (SolarGlow.IsUp) SolarGlow.Hide();                               // fading off it, or on something else
             SolarGlow.Show(_owner.Glow, want, float.IsNaN(_owner.GlowLift) ? -OwnerLength() * OwnerScale() / 2f : _owner.GlowLift, FadeSeconds, palRow: _owner.GlowRow, scale: _owner.GlowScale);
         }
@@ -616,8 +638,8 @@ namespace Dark_Cloud_Improved_Version
             float height = EnemySpecies.Defaults.TryGetValue(eid, out var def) && def.HeightFromRoot.HasValue ? def.HeightFromRoot.Value : HoverFallback;
             float scale = Memory.ReadFloat(EnemyAddresses.CharObjects.CharAddr(slot) + CCharacter.CharScale + 4);
             if (!(scale > 0.05f) || scale > 20f) scale = 1f;                                       // a grown miniboss
-            float clear = height * scale + HoverMargin;
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] hover over slot {slot} (species {eid}): height {height:F1} × scale {scale:F2} + {HoverMargin:F0} — tip {clear:F1} above the root");
+            float clear = height * scale + OwnerMargin();
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BigBang] hover over slot {slot} (species {eid}): height {height:F1} × scale {scale:F2} + {OwnerMargin():F0} — tip {clear:F1} above the root");
             return clear + OwnerLength() * OwnerScale();
         }
 
@@ -638,9 +660,11 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_hoverSlot < 0 || _hoverOut || !BladeProp.Active || !HasHp(_hoverSlot)) return false;
             _paceFrom = paceFrom; _paceTo = paceTo > paceFrom ? paceTo : 0f; _fallSeconds = 0;
-            long a = EnemyAddresses.FloorSlots.SlotAddr(_hoverSlot, 0);
-            _bladeX = Memory.ReadFloat(a + EnemySlotOffsets.LocationX);
-            _bladeY = Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
+            // The target's own CCharacter position (per slot, what the engine moves and the follow cave reads): the floor-slot
+            // record's location fields read 0 for some enemies, which put a blast at the world origin.
+            long up = EnemyAddresses.CharObjects.PosAddr(_hoverSlot);
+            _bladeX = Memory.ReadFloat(up);
+            _bladeY = Memory.ReadFloat(up + 8);
             _dropH  = UnitHeight(_hoverSlot);                                // the target's root, wherever it is (a flyer's is up)
             _dropX = _bladeX; _dropY = _bladeY;                              // the blast goes off on the target itself
             // The fall starts from where the blade HANGS — its own world matrix when pinned, the followed height
@@ -965,7 +989,7 @@ namespace Dark_Cloud_Improved_Version
         /// plants the same blast at its strike point; <paramref name="noKickSlot"/> is the enemy it struck directly,
         /// which takes the hit where it stands (a zero-strength kick: the reaction without the shove), and its steps
         /// are scaled by <paramref name="damageScale"/> (the bolt's blast is half the blade's).</summary>
-        internal static void PlantFalloff(float x, float h, float y, int noKickSlot = -1, float damageScale = 1f, float kickScale = 1f)
+        internal static void PlantFalloff(float x, float h, float y, int noKickSlot = -1, float damageScale = 1f, float kickScale = 1f, float reachScale = 1f)
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
@@ -979,11 +1003,11 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (!Enemies.IsLive(s)) continue;
                 long a = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
-                float dx = Memory.ReadFloat(a + EnemySlotOffsets.LocationX) - x;
-                float dy = Memory.ReadFloat(a + EnemySlotOffsets.LocationY) - y;
-                float dist = (float)Math.Sqrt(dx * dx + dy * dy);
+                // The distance is to the nearest edge of the enemy's HIT SPHERES (its script's _SET_BODY_COL set, the ones CheckDmg
+                // tests): a blast touching any part of a big enemy is on it, however far its root is.
+                float dist = NearestHitSphereEdge(s, a, x, y);
                 float times = 0f;
-                foreach (var (radius, t) in Falloff) if (dist <= radius) times = t;   // steps ordered outermost first: the last match is the innermost
+                foreach (var (radius, t) in Falloff) if (dist <= radius * reachScale) times = t;   // steps ordered outermost first: the last match is the innermost
                 if (times <= 0f) continue;
                 inRange++;
                 if (CollisionPool.FreeCount(pool) <= ShellPoolReserve) break;
@@ -1000,7 +1024,7 @@ namespace Dark_Cloud_Improved_Version
                 planted++;
             }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[BigBang] falloff blast: {planted} sphere(s) on {inRange} enem" + (inRange == 1 ? "y" : "ies") + $" within {Falloff[0].radius:F0}");
+                $"[BigBang] falloff blast: {planted} sphere(s) on {inRange} enem" + (inRange == 1 ? "y" : "ies") + $" within {Falloff[0].radius * reachScale:F0}");
         }
 
         /// <summary>The enemy's largest live body sphere (centre and radius), the surest thing a hit sphere of the same
@@ -1008,7 +1032,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void BodyCentre(int slot, long a, out float cx, out float ch, out float cy, out float cr)
         {
             long b = BodyCollision.SlotBase(slot);
-            cx = Memory.ReadFloat(a + EnemySlotOffsets.LocationX); cy = Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
+            cx = Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(slot)); cy = Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(slot) + 8);
             ch = UnitHeight(slot) + BodyRadiusFallback;
             cr = BodyRadiusFallback;
             float best = 0f;
@@ -1023,6 +1047,33 @@ namespace Dark_Cloud_Improved_Version
             }
         }
         private const float BodyRadiusFallback = 10f;
+
+        /// <summary>How far (x, y) is from the nearest edge of the enemy's active hit spheres, in the ground plane (0 = inside one);
+        /// with none active (or none posed — a sphere the frame has not placed sits far from its unit), from its own position
+        /// less the fallback radius.</summary>
+        internal static float NearestHitSphereEdge(int slot, long a, float x, float y)
+        {
+            long b = BodyCollision.SlotBase(slot), up = EnemyAddresses.CharObjects.PosAddr(slot);
+            float ux = Memory.ReadFloat(up), uy = Memory.ReadFloat(up + 8);
+            float best = float.MaxValue;
+            for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
+            {
+                if (Memory.ReadInt(b + BodyCollision.ActiveArray + part * BodyCollision.BodyPartStride) == 0) continue;
+                float r = Memory.ReadFloat(b + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride);
+                long c = b + BodyCollision.CentreArray + part * BodyCollision.CentreStride;
+                float cx = Memory.ReadFloat(c), cy = Memory.ReadFloat(c + 8);
+                if (Math.Abs(cx - ux) > UnposedSphere || Math.Abs(cy - uy) > UnposedSphere) continue;   // not this frame's placement
+                float dx = cx - x, dy = cy - y;
+                best = Math.Min(best, (float)Math.Sqrt(dx * dx + dy * dy) - r);
+            }
+            if (best == float.MaxValue)
+            {
+                float dx = ux - x, dy = uy - y;
+                best = (float)Math.Sqrt(dx * dx + dy * dy) - BodyRadiusFallback;
+            }
+            return Math.Max(0f, best);
+        }
+        private const float UnposedSphere = 80f;   // a hit sphere farther than this from its own unit has not been placed this frame
 
         /// <summary>The unit's own world height: its CCharacter position (per slot — the model root's world matrix is
         /// the SPECIES' tree, posed for whichever unit drew last, and the slot's LocationZ is floor-relative).</summary>
@@ -1125,8 +1176,8 @@ namespace Dark_Cloud_Improved_Version
                 // An enemy the blast cannot move (knockback 0: bosses, rooted plants) is not turned either — with no
                 // shove to settle it, the turn fought its own AI and it never held a direction.
                 if (Memory.ReadFloat(a + EnemySlotOffsets.KnockbackMult) <= 0f) continue;
-                float dx = _faceX - Memory.ReadFloat(a + EnemySlotOffsets.LocationX);
-                float dy = _faceY - Memory.ReadFloat(a + EnemySlotOffsets.LocationY);
+                float dx = _faceX - Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(s));       // the unit's own position (the floor-slot location fields read 0 for some enemies)
+                float dy = _faceY - Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(s) + 8);
                 float len = (float)Math.Sqrt(dx * dx + dy * dy);
                 if (len < 1e-3f) continue;
                 float fx = dx / len, fz = dy / len;

@@ -120,12 +120,13 @@ namespace Dark_Cloud_Improved_Version
         private static bool _spriteWarned;
         /// <summary>Super Steve's pellet drawn as the sphere weapon's when the sphere came from a slingshot (the pellet sprite is
         /// a per-weapon cell of basefx01, so a slingshot's sphere brings its pellet): Mailbox.PelletSpriteId = that weapon's id,
-        /// read by DebugInfoCave.PelletSprite at every pellet draw; 0 (vanilla) for any other sphere, or none.</summary>
+        /// read by DebugIfCave.PelletSprite at every pellet draw; 0 (vanilla) for any other sphere, or none.</summary>
         internal static void DriveSphereSprite(int sphere)
         {
             if (sphere == _spriteSphere) return;
             bool slingshot = sphere >= Items.woodenslingshot && sphere <= Items.angelgear && sphere != Items.supersteve;
-            if (slingshot && (uint)Memory.ReadInt(0x20000000L + 0x001ABC74) != Jal(CodeCaves.DebugInfoCave.PelletSprite))
+            uint hook = (uint)Memory.ReadInt(0x20000000L + 0x001ABC74);
+            if (slingshot && hook != Jal(CodeCaves.DebugIfCave.PelletSprite) && hook != Jal(CodeCaves.DebugInfoCave.PelletSprite))
             {
                 if (!_spriteWarned) { _spriteWarned = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SuperSteve] pellet-sprite hook not in this ISO — the pellet stays Super Steve's (re-patch the ISO)"); }
                 return;
@@ -558,18 +559,22 @@ namespace Dark_Cloud_Improved_Version
             var ssSnail = new CustomOsmondEffects.SnailState();
             var ssStarBreaker = new CustomOsmondEffects.StarBreakerState();
             int lastSphere = 0;   // the sphere last seen: Charging Bull keeps a resident copy that must go when its sphere does
+            int errors = 0;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SuperSteve] sphere dispatch up");
             while (Player.InDungeonFloor())
             {
                 int ch = Player.CurrentCharacterNum();
-                if (ch != Player.XiaoId) break;
+                if (ch != Player.XiaoId) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] dispatch down: character {ch}"); break; }
                 int equipSlot = Memory.ReadByte(DngStatusData.Base +
                                                 DngStatusData.EquipSlotArrayOffset + ch);
-                if ((uint)equipSlot > 9) break;
+                if ((uint)equipSlot > 9) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] dispatch down: equip slot {equipSlot}"); break; }
                 long rec = DngStatusData.WeaponRecord(ch, equipSlot);
-                if (Memory.ReadUShort(rec) != Items.supersteve) break;
+                if (Memory.ReadUShort(rec) != Items.supersteve) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] dispatch down: weapon {Memory.ReadUShort(rec)} in slot {equipSlot}"); break; }
 
                 int sphere = SuperSteve.AttachedSphere(rec);
                 bool active = !Player.CheckDunIsPaused();
+                if (sphere != lastSphere) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] sphere {lastSphere} → {sphere}");
+                try {
 
                 // Toan Effects
                 // Divine Guard (7th Heaven) + Guard Crush (Dark Cloud; 7th Heaven inherits Guard Crush by lineage).
@@ -627,8 +632,8 @@ namespace Dark_Cloud_Improved_Version
                 // Lock-on speed (Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear): ×1.3 movement while locked on.
                 DragonsY.LockOnSpeedDrive(active && DragonsY.LockOnSpeedGrants(sphere));
 
-                // Lock-on reach (Flamingo / Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear): enemies locked from twice as far.
-                Flamingo.Drive(active && Flamingo.GrantsReach(sphere));
+                // Lock-on reach (Flamingo / Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear — and Big Bang, whose sword has it): enemies locked from twice as far.
+                Flamingo.Drive(active && (Flamingo.GrantsReach(sphere) || sphere == Items.bigbang));
 
                 // Dragon's Y: the charged shot — the Gemron ball of Super Steve's own selected element.
                 DragonsY.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.dragonsy);
@@ -684,6 +689,11 @@ namespace Dark_Cloud_Improved_Version
 
                 // Star Breaker: 2% chance on an enemy kill to receive an empty SynthSphere.
                 CustomOsmondEffects.StarBreakerDrive(active && sphere == Items.starbreaker, ssStarBreaker);
+                }
+                catch (Exception ex)
+                {   // one ability's fault must not take the whole dispatch down with it
+                    if (errors++ < 5) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SuperSteve] tick error: " + ex.Message + "\n" + ex.StackTrace);
+                }
 
                 Thread.Sleep(16);
             }

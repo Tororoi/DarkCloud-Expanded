@@ -473,6 +473,9 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>ElfWeaponPatches.PatchCallRequest: a native call the mod asks for (CodeCaves.CallRequest), the tail of the
             /// camera-pin chain (after the WHP bill).</summary>
             internal const uint CallRequest   = Host + 0x610;  // 0x1B4DD0, 116 B → 0x1B4E44 (the circle cave ends at 0x1B4DC4)
+            /// <summary>ElfWeaponPatches.PatchPelletSprite: the item id a player pellet's sprite cell is taken from — Mailbox.PelletSpriteId
+            /// when set, else the equipped weapon's (draw__5CSHOT's hook at 0x1ABC74 calls it).</summary>
+            internal const uint PelletSprite  = Host + 0x690;  // 0x1B4E50, 56 B → 0x1B4E88
         }
 
         /// <summary>A cave INSIDE a dead main-ELF function: the body of DebugInfomationDraw (0x1B3780, 3,952 B), the developers'
@@ -493,7 +496,7 @@ namespace Dark_Cloud_Improved_Version
             internal const uint SharedShotsEnter = Host + 0x20;
             /// <summary>tools/stubs/pellet_sprite.s: the item id a player pellet's sprite cell is taken from — Mailbox.PelletSpriteId
             /// when set, else the equipped weapon's (the hook at draw__5CSHOT 0x1ABC74).</summary>
-            internal const uint PelletSprite     = Host + 0xB40;  // 0x1B42C0, 32 B → 0x1B42E0
+            internal const uint PelletSprite     = Host + 0xB40;  // 0x1B42C0, 32 B → 0x1B42E0 — RETIRED: the sprite cave lives in DebugIfCave.PelletSprite now (this span is left as an older ISO has it)
             /// <summary>tools/stubs/steel_level_up.s: the Steel Slingshot's level-up bonus is +2 endurance and twice the max-WHP
             /// roll — four entries at fixed offsets, one per hooked add in SetLevelUpWeaponData (B endurance, C max WHP) and
             /// WeaponLevelUpValueCalc (D endurance, E max WHP).</summary>

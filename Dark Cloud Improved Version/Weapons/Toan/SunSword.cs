@@ -83,11 +83,12 @@ namespace Dark_Cloud_Improved_Version
             Items.supersteve, 0.25f, SolarShot.GlowDisc, SolarShot.WeaponModel, 0, 0, "SolarShot",
             primeDim: 0.35f);                                                        // its WHP is the shot's, taken as the pellet leaves (ChargedShotWhp)
         /// <summary>Super Steve with a Big Bang sphere (BombShot): Big Bang's flash — twice the Sun Sword's share, the cool
-        /// light, the 0.35 dim — from where her bomb lands; no disc on her (the bomb carries its own).</summary>
+        /// light — from where her bomb lands; no dim while she primes (the room darkens only along the fall, or the four frames
+        /// before a shot's flash); no disc on her (the bomb carries its own).</summary>
         internal static readonly SolarProfile BombShotFlash = new SolarProfile(
             Items.supersteve, 0.50f, null, SolarShot.WeaponModel, 0, 0, "BombShot", fog: 0.8f,
             light: new[] { 236f, 226f, 255f }, fogRgb: new[] { 242f, 236f, 255f },
-            primeDim: 0.35f, bladeGlowOnly: true);
+            primeDim: 0f, bladeGlowOnly: true);                                     // no dim while it primes: the darkening is the fall's, or the four frames before a shot's flash
 
         internal static readonly SolarProfile SunSwordFlash = new SolarProfile(
             Items.sunsword, 0.25f, ToanGlowBakes.GlowName, SolarBlade.SunSwordModel, 0, 0, "SunSword",
@@ -457,9 +458,9 @@ namespace Dark_Cloud_Improved_Version
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
                 if (!Enemies.IsLive(s)) continue;
-                float ex = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX));
-                float ey = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationY));
-                float eh = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationZ));
+                float ex = Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(s));          // the unit's own position (the floor-slot record's location fields read 0 for some enemies)
+                float ey = Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(s) + 8);
+                float eh = Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(s) + 4);
                 if (Math.Sqrt((ex - x) * (ex - x) + (ey - y) * (ey - y)) > FlashRadius) continue;
                 int slot = CollisionPool.TakeFreeSlot(pool);
                 if (slot < 0) { missed++; continue; }
