@@ -699,7 +699,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  OffDir     = 0x9F40;    // + i*0x10, vec3 — per-frame position delta (velocity)
         internal const int  OffAttr2   = 0x9FC0;    // + i*2, short — Set param_6
         internal const int  OffWait    = 0x9FD0;    // + i*4 — phase-1 countdown
-        internal const int  OffPhase   = 0x9FF0;    // + i*2 — 0 muzzle, 1 flying, 3+ impact chain
+        internal const int  OffPhase   = 0x9FF0;    // + i*2 — 0 muzzle, 1 flying, 2 the impact after a CONTACT, 3 the burst when the wait ran out (Step: a contact writes 2; a timeout adds 2)
         internal const int  OffActive  = 0xA000;    // + i*2 (Set writes it LAST)
         internal const int  OffDamage  = 0xA010;    // + i*4 — the shot's DAMAGE (Set: cfg+0x3C; SetDmg; Step passes it as entry +0x34). Life/wait = OffWait.
         internal const int  OffOwner   = 0xA050;    // + i*2, short — owner attr → CollisionData +0x58

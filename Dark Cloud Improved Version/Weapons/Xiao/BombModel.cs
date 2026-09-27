@@ -79,11 +79,11 @@ namespace Dark_Cloud_Improved_Version
         // ── THE TEXTURE'S HOME. SetCashModel loads the bomb's texture through the cash's block (0x38 + cash), and every block's
         // window is packed up from the same VRAM base — the enemy, effect and weapon blocks over the same pages; the last upload
         // before a draw wins. A copy drawn in the clone slot binds before that slot's own upload lands (its draw is in the packet
-        // the GS reads first), and the pumpkin shot's pass uploads the pumpkin's own textures over those pages: the bomb sampled
-        // whichever texture held them — the slingshot's atlas, the pumpkin's. So, as the Divine Beast cat's textures: the entry's
+        // the GS reads first), and the apple shot's pass uploads the apple's own textures over those pages: the bomb sampled
+        // whichever texture held them — the slingshot's atlas, the apple's. So, as the Divine Beast cat's textures: the entry's
         // TEX0 (its pixels and its CLUT) is moved to a window RESERVED above every block's top, taken off the manager's downward
         // cursor so nothing is ever handed out on top of it, and the same TEX0 word is patched in the model's own draw packet —
-        // which every copy (BladeProp) and graft (the pumpkin shot) draws from. Once uploaded there, the pages are the bomb's for good.
+        // which every copy (BladeProp) and graft (the apple shot) draws from. Once uploaded there, the pages are the bomb's for good.
         private static uint _placedRoot;                                 // the root whose texture was placed (0 = none)
         private static uint _winBase, _winSize, _cursorSaved;            // the reserved window, and the cursor before it was taken
         private const uint  WindowAlign = 0x20;                          // 32 GS blocks = one 8 KB page
@@ -181,7 +181,7 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        // ── THE COPY'S UPLOAD. A chara-slot copy (BladeProp) is drawn in the clone-weapon slot, and the pumpkin shot in the main
+        // ── THE COPY'S UPLOAD. A chara-slot copy (BladeProp) is drawn in the clone-weapon slot, and the apple shot in the main
         // effect's pass; each pass reloads ITS block before it draws, never the cash's. While a copy is up the bomb's entries are
         // RE-TAGGED into that pass's block, and the block is marked unloaded every tick so its uploader re-sends every entry —
         // ours among them (the trick the Sun Sword's disc uses to stay uploaded); with the window above, one upload is enough,

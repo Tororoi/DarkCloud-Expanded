@@ -14,13 +14,15 @@ namespace Dark_Cloud_Improved_Version
     /// and Big Bang's flash. NOT locked
     /// on, her release IS the flash: Big Bang's flash from where she stands — twice the Sun Sword's share — with no pellet
     /// (the shoot motion plays and bills the shot; its pellet is retired as the drop's is).
-    /// <br/>EVERY PELLET IS A BOMB: each shot flies as Halloween's pumpkin bomb (table config 3, `pump_bom`, entered in the
-    /// main-character effect instance — the monster pack's is untouched) with the Bomb's mesh grafted onto the pumpkin's node in
-    /// place of its own, so it flies as the pumpkin does, with no impact animation and no light or flash of any kind. A PLAIN
-    /// shot is the bomb at 1× that hits as her pellet would — the shot's own damage entry, planted every frame of its flight
-    /// at a pellet's radius with the pellet's damage (the engine's hit, reaction and weapon HP), with the drop's kick at a
-    /// quarter of its distance stamped on it by the guard-bypass cave (Mailbox.PelletKickDamage, as Dragon's Y's shot) — and
-    /// bursts in the bomb's half-size visual where it dies, no blast of its own. THE SHOT CHARGE (the shot held <see cref="ShotChargeSeconds"/>, as her other charged shots are made)
+    /// <br/>EVERY PELLET IS A BOMB: each shot flies as Witch Illza's thrown-apple shot (table config 4, `ringo_ex`, entered in
+    /// the main-character effect instance — hers in the monster pack is untouched) with the Bomb's mesh grafted onto the
+    /// apple's node in place of its own, so it flies and turns as the apple does, with no light or flash of any kind; the
+    /// sub-shot is cut the tick it leaves its flight, so the apple's own impact never draws — the bomb's burst is the impact.
+    /// A PLAIN shot is the bomb at 1× that hits as her pellet would — the shot's own damage entry, planted ONCE on the frame
+    /// its contact turns it to its impact (no plants in flight, and the sub-shot is cut before a second), with the pellet's
+    /// damage (the engine's hit, reaction and weapon HP) and the drop's kick at a quarter of its distance stamped on it by the
+    /// guard-bypass cave (Mailbox.PelletKickDamage, as Dragon's Y's shot) — and bursts in the bomb's half-size visual there,
+    /// no blast of its own. THE SHOT CHARGE (the shot held <see cref="ShotChargeSeconds"/>, as her other charged shots are made)
     /// is the bomb at 2× wearing the drop's red-orange disc, bursting where it dies with the bomb's own blast at 1.1× with
     /// half the drop's damage, kick and reach. Several may be in the air at once.
     /// <br/>Her white bleeds out over <see cref="TintFadeSeconds"/> once a shot leaves. Weapon HP is the shot's, taken as the
@@ -32,7 +34,7 @@ namespace Dark_Cloud_Improved_Version
         private const double GuardSeconds = 3.0, ShotChargeSeconds = 1.0;
         private const float  HoverScale = 4f;                          // the bomb over a target
         private const float  HoverFxScale = 2f, BombFxScale = 1.1f, PelletFxScale = 0.5f;   // the blast sprites: the drop, the charged shot, the plain shot; each ring reaches its blast's edge
-        private const float  ShotBombScale = 2f, PelletBombScale = 1f;  // the bomb on the pumpkin shot, over the pumpkin's own size (the sub-shot object's own scale): charged, plain
+        private const float  ShotBombScale = 2f, PelletBombScale = 1f;  // the bomb on the apple shot, over the apple's own size (the sub-shot object's own scale): charged, plain
         private const float  HoverMargin = 10f;                         // the hanging bomb's bottom this far above the species' authored height (Big Bang's blade: 6)
         private const float  ContactPad = 3f;                           // the bomb shot touches an enemy this far outside its body width
         // THE BOMB'S PULSE: red, 150,0,0, while the hanging bomb fades in; from the frame it is fully in, a smooth cosine
@@ -42,14 +44,12 @@ namespace Dark_Cloud_Improved_Version
         private static DateTime _pulseStart;
         private static bool _pulsing;
         private const float  BombLength = 1.22f;                        // bakudan.mds: its mesh runs 1.22 below the root to 1.98 above it at 1×, so this is root-to-bottom — the drop stops with the bottom ON the root
-        private const int    CarrierConfig = 3;                         // the shot table's `pump_bom`: Halloween's pumpkin bomb (no impact or expiry motion: nothing plays under the bomb's own burst)
-        private const string CarrierNode = "kabo";                      // the node that draws the pumpkin in each of its trees (under its `null1` root)
-        private const byte   PelletReload = 1;                          // frames between the plain shot's flight plants: it hits whatever it flies into
+        private const int    CarrierConfig = 4;                         // the shot table's `ringo_ex`: Witch Illza's thrown apple (its flight motion turns the bomb as the apple turns)
+        private const string CarrierNode = "dokuring__m";               // the node that draws the apple in each of its trees (the impact's light, `hikari04__bacapp`, sits beside it)
         private const float  BombDamage = 0.5f, BombKick = 0.5f, BombReach = 0.5f;            // the charged shot's blast against the drop's (the kick as DISTANCE)
         private const float  PelletKick = 0.25f;                        // the plain shot's kick DISTANCE, of the drop's (half the charged shot's); its damage is the pellet's own
         /// <summary>The kick strength that throws <paramref name="distanceFraction"/> as far as the drop's: distance ≈ strength² / (2 · decay).</summary>
         private static float KickFor(float distanceFraction) => (float)Math.Sqrt(distanceFraction);
-        private const float  PelletRadius = 3f;                         // the carrier's flying radius while the sphere is on: a pellet's own, so its contact sweep and the plain shot's flight plants work (the seed zeroes it)
         private const float  DropFxLift = 2f;                            // the drop's blast drawn this far above the landing, so its ring is not flat on the floor
         private const float  DropWhp = 20f, BombWhp = 10f, FlashWhp = 5f, SwingBase = 1.5f;
         private const double TintFadeSeconds = 0.25, MissSeconds = 3.0;
@@ -69,13 +69,14 @@ namespace Dark_Cloud_Improved_Version
 
         private enum Guard { Idle, Charging, Primed, Dropping }
         private enum Shot  { Bomb, Pellet }                            // a shot in flight: the charged bomb, the plain bomb
-        /// <summary>A shot in the air: the pool pellet it began as (<see cref="Slot"/>), the pumpkin sub-shot carrying its bomb
-        /// (<see cref="Sub"/>, −1 for a pellet flying plain), its disc's node, where it was last seen, and whether its burst is drawn.</summary>
+        /// <summary>A shot in the air: the pool pellet it began as (<see cref="Slot"/>), the apple sub-shot carrying its bomb
+        /// (<see cref="Sub"/>, −1 for a pellet flying plain), its disc's node, and where it was last seen.</summary>
         private sealed class Flight
         {
             internal Shot Kind; internal int Slot = -1, Sub = -1; internal uint Anchor;
-            internal DateTime FiredAt; internal bool Burst;
+            internal DateTime FiredAt;
             internal float X, H, Y;
+            internal int Damage; internal int[] Hp;                 // a plain shot: its planted damage, and every enemy's HP as it left (the hit report)
         }
         private static readonly List<Flight> _flights = new List<Flight>();
         private static Guard _guard;
@@ -89,13 +90,13 @@ namespace Dark_Cloud_Improved_Version
         private static float _flashX, _flashH, _flashY;
         private static bool  _hiding;                                  // pellets drawn from the blank cell while the sphere is on: no pellet of hers is ever meant to be seen
         private static int   _spriteBefore;                            // Mailbox.PelletSpriteId as the hide found it, put back after
-        private static BorrowedEffect _carrier;                            // the pumpkin shot, ours in the main-character instance
+        private static BorrowedEffect _carrier;                            // the apple shot, ours in the main-character instance
         private static uint  _graftRoot, _graftVisual;                  // the entered instance's template root (the entry the grafts belong to) and the bomb's visual
         private static readonly bool[] _seen = new bool[PlayerShotPool.SlotCount];
         private static readonly List<(int slot, int ticks)> _planted = new List<(int, int)>();
         private static byte _floor = 0xFF;
 
-        /// <summary>The shot effect this sphere wants entered on every floor (BorrowedShots asks every tick): the pumpkin shot,
+        /// <summary>The shot effect this sphere wants entered on every floor (BorrowedShots asks every tick): the apple shot,
         /// while Xiao is out with Super Steve carrying a Big Bang sphere.</summary>
         internal static BorrowedEffect WantedShot()
         {
@@ -105,10 +106,10 @@ namespace Dark_Cloud_Improved_Version
             return _carrier ??= BorrowedShots.TableConfig(CarrierConfig);
         }
 
-        /// <summary>The Bomb's mesh onto the pumpkin shot's nodes. The entered instance holds a template tree (+0xCC) AND one tree
+        /// <summary>The Bomb's mesh onto the apple shot's nodes. The entered instance holds a template tree (+0xCC) AND one tree
         /// per sub-shot object (each object's own model pointer) — the sub-shots draw their own — so every tree is walked for
-        /// the node that draws (the pumpkin, `kabo`) and its visual pointer swapped for the bomb model's; the bomb's
-        /// textures are tagged into the effect's texture block for as long as it stays. The pumpkins' own visuals go back on
+        /// the node that draws (the apple, `dokuring__m`) and its visual pointer swapped for the bomb model's; the bomb's
+        /// textures are tagged into the effect's texture block for as long as it stays. The apples' own visuals go back on
         /// Stop. Re-done whenever the instance is re-entered (a new floor: new trees).</summary>
         private static readonly List<(uint node, uint carrierVisual)> _grafts = new List<(uint, uint)>();
         private static readonly Dictionary<long, float> _objScale = new Dictionary<long, float>();   // each sub-shot object's scale while grafted — the fired shot's kind sets it (an animated node's matrix is rebuilt every frame; the object's scale is not)
@@ -121,7 +122,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (_grafts.Count == 0) return;
                 foreach (var (node, _) in _grafts)
-                    if (Memory.ReadGuestPtr(Memory.ToMmu(node) + CFrameVu1.GeomPtr) != _graftVisual) Memory.WriteUInt(Memory.ToMmu(node) + CFrameVu1.GeomPtr, _graftVisual);   // a rebuild put a pumpkin back
+                    if (Memory.ReadGuestPtr(Memory.ToMmu(node) + CFrameVu1.GeomPtr) != _graftVisual) Memory.WriteUInt(Memory.ToMmu(node) + CFrameVu1.GeomPtr, _graftVisual);   // a rebuild put an apple back
                 foreach (var kv in _objScale)
                     if (Math.Abs(Memory.ReadFloat(kv.Key + CCharacter.CharScale) - kv.Value) > 0.01f) Memory.WriteVec3(kv.Key + CCharacter.CharScale, kv.Value, kv.Value, kv.Value);
                 return;
@@ -141,8 +142,8 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteVec3(obj + CCharacter.CharScale, PelletBombScale, PelletBombScale, PelletBombScale);   // the object's scale, which the draw re-applies every frame; a fire sets its shot's
                 _objScale[obj] = PelletBombScale;
             }
-            // The pumpkin's node BY NAME: a tree still being built (the instance re-entered) has the impact's light node with a visual
-            // before the pumpkin has one, and a graft onto that node drew the bomb offset — so a tree without a posed pumpkin node
+            // The apple's node BY NAME: a tree still being built (the instance re-entered) has the impact's light node with a visual
+            // before the apple has one, and a graft onto that node drew the bomb offset — so a tree without a posed apple node
             // waits (nothing recorded; next tick tries again).
             var found = new List<(uint node, uint carrierVisual)>();
             foreach (uint r in roots)
@@ -154,8 +155,8 @@ namespace Dark_Cloud_Improved_Version
             }
             foreach (var (node, _) in found) Memory.WriteUInt(Memory.ToMmu(node) + CFrameVu1.GeomPtr, bombVis);
             _grafts.AddRange(found);
-            if (_grafts.Count == 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the pumpkin shot's trees already carry the bomb"); return; }
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the bomb's mesh grafted onto `{CarrierNode}` in {_grafts.Count} of the pumpkin shot's trees ({roots.Count} trees: the template and the sub-shots) → visual 0x{bombVis:X}");
+            if (_grafts.Count == 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the apple shot's trees already carry the bomb"); return; }
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the bomb's mesh grafted onto `{CarrierNode}` in {_grafts.Count} of the apple shot's trees ({roots.Count} trees: the template and the sub-shots) → visual 0x{bombVis:X}");
         }
         /// <summary>The hanging bomb's tint: red while it fades in; the pulse from the frame it is fully in.</summary>
         private static void PulseTint(bool hanging)
@@ -186,7 +187,7 @@ namespace Dark_Cloud_Improved_Version
             if (_grafts.Count > 0 && _carrier != null && Memory.ReadGuestPtr(_carrier.Instance + 0xCC) == _graftRoot)
             {
                 foreach (var (node, carrierVis) in _grafts)
-                    if (Memory.ReadGuestPtr(Memory.ToMmu(node) + CFrameVu1.GeomPtr) == _graftVisual) Memory.WriteUInt(Memory.ToMmu(node) + CFrameVu1.GeomPtr, carrierVis);   // the pumpkin's own visual back
+                    if (Memory.ReadGuestPtr(Memory.ToMmu(node) + CFrameVu1.GeomPtr) == _graftVisual) Memory.WriteUInt(Memory.ToMmu(node) + CFrameVu1.GeomPtr, carrierVis);   // the apple's own visual back
                 foreach (long obj in _objScale.Keys) Memory.WriteVec3(obj + CCharacter.CharScale, 1f, 1f, 1f);                                                                  // …and its size
             }
             _graftRoot = 0; _graftVisual = 0; _grafts.Clear(); _objScale.Clear();
@@ -201,10 +202,9 @@ namespace Dark_Cloud_Improved_Version
             byte floor = Memory.ReadByte(Addresses.checkFloor);
             if (floor != _floor) { if (_floor != 0xFF) { BombModel.Forget(); _graftRoot = 0; _grafts.Clear(); EndFlights(); Dissipate(); } _floor = floor; }
             BigBang.DriveImmunity(true);
-            GraftBomb();                                                                   // the pumpkin shot carries the bomb's mesh while the sphere is on
-            if (_carrier != null && Math.Abs(BorrowedShots.PhaseRadius(_carrier, 1) - PelletRadius) > 0.01f) BorrowedShots.SetPhaseRadius(_carrier, 1, PelletRadius);   // NaN when not entered: no write
+            GraftBomb();                                                                   // the apple shot carries the bomb's mesh while the sphere is on
             // The bomb's textures have ONE home at a time — the pass that is drawing it now: the clone slot's while the copy
-            // hangs, the effect's while the pumpkin shot carries it. Two homes swapped every tick flickered the hanging bomb.
+            // hangs, the effect's while the apple shot carries it. Two homes swapped every tick flickered the hanging bomb.
             bool copyUp = BladeProp.Active && (_guard == Guard.Charging || _guard == Guard.Primed || _guard == Guard.Dropping);
             if (copyUp) BombModel.KeepTextures(BombModel.WeaponPassBlock);
             else if (_grafts.Count > 0) BombModel.KeepTextures(BombModel.MainEffectBlock);
@@ -345,16 +345,12 @@ namespace Dark_Cloud_Improved_Version
             foreach (Flight f in _flights.ToArray())
             {
                 double since = (GameClock.Now - f.FiredAt).TotalSeconds;
+                if (f.Hp != null) ReportHits(f);                                           // DIAGNOSTIC: every HP drop while a plain shot is out, as it happens
                 bool live;
                 if (f.Sub >= 0)
                 {   // the borrowed shot: flying while it is active and its phase is the flight; its object's position is the bomb's
                     long inst = _carrier.Instance;
-                    if (f.Kind == Shot.Pellet && f.Burst)
-                    {   // its burst drawn last tick; the engine had its impact frame (the native plant): the sub-shot is cut now
-                        Memory.WriteUShort(inst + ShotEffectPack.OffActive + f.Sub * 2, 0);
-                        EndFlight(f); continue;
-                    }
-                    live = Memory.ReadUShort(inst + ShotEffectPack.OffActive + f.Sub * 2) != 0 && Memory.ReadUShort(inst + ShotEffectPack.OffPhase + f.Sub * 2) < 3;
+                    live = Memory.ReadUShort(inst + ShotEffectPack.OffActive + f.Sub * 2) != 0 && Memory.ReadUShort(inst + ShotEffectPack.OffPhase + f.Sub * 2) < 2;   // 2 = its contact (the impact's first frame has planted), 3 = its wait ran out
                     if (live)
                     {
                         long op = inst + ShotEffectPack.OffObj + f.Sub * ShotEffectPack.ObjStride + ShotEffectPack.ObjPos;
@@ -366,11 +362,12 @@ namespace Dark_Cloud_Improved_Version
                         Memory.WriteUShort(inst + ShotEffectPack.OffActive + f.Sub * 2, 0);   // the bomb is spent where it is
                     }
                     else if (f.Kind == Shot.Pellet)
-                    {   // out of its flight (its contact, a wall, its end): the bomb's visual here; the native impact runs on for a tick
-                        f.Burst = true;
+                    {   // out of its flight (its contact — the impact's first frame planted the one hit — a wall, or its end): the bomb's
+                        // burst here, and the sub-shot cut before its impact draws or plants again
+                        Memory.WriteUShort(inst + ShotEffectPack.OffActive + f.Sub * 2, 0);
                         BombFx.Spawn(f.X, f.H, f.Y, PelletFxScale, ringRadius: 0f);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"plain bomb bursts at ({f.X:F0},{f.H:F0},{f.Y:F0})");
-                        continue;
+                        EndFlight(f); continue;
                     }
                 }
                 else
@@ -387,7 +384,7 @@ namespace Dark_Cloud_Improved_Version
                 EndFlight(f);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{(f.Kind == Shot.Bomb ? "charged" : "plain")} bomb bursts at ({f.X:F0},{f.H:F0},{f.Y:F0})" + (live ? " on contact" : " where it died"));
                 if (f.Kind == Shot.Bomb) Blast(f.X, f.H, f.Y, BombFxScale, BombDamage, KickFor(BombKick), BombReach, flash: false, ring: true);
-                else BombFx.Spawn(f.X, f.H, f.Y, PelletFxScale, ringRadius: 0f);              // a plain shot flying as a pellet (no pumpkin shot entered): the visual alone
+                else BombFx.Spawn(f.X, f.H, f.Y, PelletFxScale, ringRadius: 0f);              // a plain shot flying as a pellet (no apple shot entered): the visual alone
             }
         }
 
@@ -430,7 +427,7 @@ namespace Dark_Cloud_Improved_Version
             return f;
         }
 
-        /// <summary>A bomb — charged (<see cref="Shot.Bomb"/>) or plain (<see cref="Shot.Pellet"/>): the pumpkin shot with the bomb's
+        /// <summary>A bomb — charged (<see cref="Shot.Bomb"/>) or plain (<see cref="Shot.Pellet"/>): the apple shot with the bomb's
         /// mesh on it, at its kind's size, fired in the pellet's place on the pellet's own line and speed, planting nothing of its
         /// own (the blast where it dies is the damage); the charged one carries the drop's red-orange disc. Without the shot
         /// entered on this floor the pellet flies plain and bursts where it dies.</summary>
@@ -446,11 +443,13 @@ namespace Dark_Cloud_Improved_Version
             if (kind == Shot.Pellet)
             {   // the pellet's own damage, planted by the shot itself; the drop's kick at PelletKick, stamped on that damage's entries by the bypass cave
                 damage = Memory.ReadInt(PlayerShotPool.DamageAddr(pool, slot));
+                f.Damage = damage; f.Hp = new int[EnemyAddresses.FloorSlots.Count];
+                for (int s = 0; s < f.Hp.Length; s++) f.Hp[s] = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
                 Memory.WriteFloat(CodeCaves.Mailbox.PelletKickStrength, BigBang.KickStrength * KickFor(PelletKick));
                 Memory.WriteFloat(CodeCaves.Mailbox.PelletKickDecay, BigBang.KickDecay);
                 Memory.WriteInt  (CodeCaves.Mailbox.PelletKickDamage, damage);
             }
-            if (_carrier != null && BorrowedShots.Fire(_carrier, f.X, f.H, f.Y, vx, vh, vy, damage, life, plant: kind == Shot.Pellet, reload: PelletReload))
+            if (_carrier != null && BorrowedShots.Fire(_carrier, f.X, f.H, f.Y, vx, vh, vy, damage, life, plant: kind == Shot.Pellet))
             {
                 Memory.WriteInt(PlayerShotPool.FlagAddr(pool, slot), 0);                  // the pellet gives way to the shot
                 f.Sub = Memory.ReadInt(_carrier.Instance + ShotEffectPack.OffLastIdx);
@@ -468,10 +467,10 @@ namespace Dark_Cloud_Improved_Version
                         SolarGlow.Show(GlowDisc, anchor: f.Anchor, lift: 0f, growSeconds: 0, palRow: GlowFireRow, scale: BombGlowSize);
                     }
                 }
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{what}: the pumpkin shot #{f.Sub} carrying the bomb at {sc:0.#}×, in the pellet's place ({life} frames" + (kind == Shot.Pellet ? $", damage {damage}, kick {BigBang.KickStrength * KickFor(PelletKick):0.##}" : "") + ")");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{what}: the apple shot #{f.Sub} carrying the bomb at {sc:0.#}×, in the pellet's place ({life} frames" + (kind == Shot.Pellet ? $", damage {damage}, kick {BigBang.KickStrength * KickFor(PelletKick):0.##}" : "") + ")");
                 return;
             }
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{what}: the pumpkin shot is not entered on this floor — the pellet flies plain");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{what}: the apple shot is not entered on this floor — the pellet flies plain");
         }
 
         /// <summary>Every pellet drawn from the sheet's transparent cell, until <see cref="Unhide"/>.</summary>
@@ -488,6 +487,41 @@ namespace Dark_Cloud_Improved_Version
             if (Memory.ReadInt(CodeCaves.Mailbox.PelletSpriteId) == PelletSheetBakes.BlankCell)   // still ours (nothing else wrote it meanwhile)
                 Memory.WriteInt(CodeCaves.Mailbox.PelletSpriteId, _spriteBefore);
             _hiding = false;
+        }
+
+        /// <summary>DIAGNOSTIC: each HP drop while a plain shot is out, the tick it shows, with the terms CheckDmg applied — the
+        /// sphere the last hit landed on and that sphere's damage percent for Xiao, the enemy's defense, and her distance to it
+        /// (point-blank ×1.5 within 20, down to ×0.5 past 100). Two sources hitting one enemy show as two lines.</summary>
+        private static void ReportHits(Flight f)
+        {
+            float px = Memory.ReadFloat(Addresses.dunPositionX), py = Memory.ReadFloat(Addresses.dunPositionY);
+            for (int s = 0; s < f.Hp.Length; s++)
+            {
+                long a = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+                int hp = Memory.ReadInt(a + EnemySlotOffsets.Hp);
+                if (hp >= f.Hp[s]) { f.Hp[s] = hp; continue; }
+                int before = f.Hp[s]; f.Hp[s] = hp;
+                long b = BodyCollision.SlotBase(s);
+                int part = Memory.ReadInt(b + BodyCollision.LastHitSphere);
+                int pct = part >= 0 && part < BodyCollision.MaxBodyParts ? Memory.ReadInt(b + BodyCollision.DamagePctArray + part * BodyCollision.DamagePctStride + Player.XiaoId * 4) : -1;
+                float r = part >= 0 && part < BodyCollision.MaxBodyParts ? Memory.ReadFloat(b + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride) : 0f;
+                uint defs = Memory.ReadUInt(a + EnemySlotOffsets.DefenseStats);
+                long up = EnemyAddresses.CharObjects.PosAddr(s);
+                float dx = Memory.ReadFloat(up) - px, dy = Memory.ReadFloat(up + 8) - py;
+                // The guard: the enemy's three guard windows (flag, start..end frame) against its playing motion frame — a hit inside
+                // an active window is BLOCKED (chip damage), as a pellet's would be.
+                float frame = Memory.ReadFloat(EnemyAddresses.MainMonstorUnit.Base + (long)s * EnemyAddresses.CharObjects.Stride + ModelScaleOffsets.PlayingMotionFrameFromUnit);
+                string guard = "";
+                for (int w = 0; w < EnemyAddresses.GuardWindows.WindowCount; w++)
+                {
+                    ushort flag = Memory.ReadUShort(EnemyAddresses.GuardWindows.FlagAddr(s, w));
+                    if (flag == 0) continue;
+                    long wb = EnemyAddresses.MainMonstorUnit.Base + (long)s * EnemyAddresses.GuardWindows.Stride;
+                    float ws = Memory.ReadFloat(wb + EnemyAddresses.GuardWindows.StartOffset + w * 4), we = Memory.ReadFloat(wb + EnemyAddresses.GuardWindows.EndOffset + w * 4);
+                    guard += $" w{w} {ws:0}..{we:0}{(frame >= ws && frame <= we ? " IN" : "")}";
+                }
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"plain bomb hit slot {s} (species {Memory.ReadUShort(a + EnemySlotOffsets.EnemySpeciesId)}) {(GameClock.Now - f.FiredAt).TotalMilliseconds:0} ms after the shot: HP {before} -> {hp} (-{before - hp}); base {f.Damage}, sphere {part} ({pct}% for Xiao, r {r:0.#}), defense {defs & 0xFFFF} / weapon {defs >> 16}, her distance {Math.Sqrt(dx * dx + dy * dy):0}, motion frame {frame:0}, guard windows:{(guard.Length == 0 ? " none" : guard)}");
+            }
         }
 
         /// <summary>A flight over: its disc hidden if it is on it.</summary>
