@@ -53,6 +53,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  DropFxLift = 2f;                            // the drop's blast drawn this far above the landing, so its ring is not flat on the floor
         private const float  DropWhp = 20f, BombWhp = 10f, FlashWhp = 5f, SwingBase = 1.5f;
         private const double TintFadeSeconds = 0.25, MissSeconds = 3.0;
+        private const double CutWait = 0.1;                             // how long a plain shot out of its flight waits for the engine's impact plant before it is cut regardless
         private const string GlowDisc = "catglowp";
         private const int    GlowFireRow = 1;                           // the cave's one-based row: the Matador's red-orange, on the bomb
         private const float  BombGlowSize = 0.6f;
@@ -74,7 +75,7 @@ namespace Dark_Cloud_Improved_Version
         private sealed class Flight
         {
             internal Shot Kind; internal int Slot = -1, Sub = -1; internal uint Anchor;
-            internal DateTime FiredAt;
+            internal DateTime FiredAt, EndedAt; internal bool BurstShown;   // when its flight was seen to end, and whether its burst is drawn
             internal float X, H, Y;
             internal int Damage; internal int[] Hp;                 // a plain shot: its planted damage, and every enemy's HP as it left (the hit report)
         }
@@ -362,11 +363,20 @@ namespace Dark_Cloud_Improved_Version
                         Memory.WriteUShort(inst + ShotEffectPack.OffActive + f.Sub * 2, 0);   // the bomb is spent where it is
                     }
                     else if (f.Kind == Shot.Pellet)
-                    {   // out of its flight (its contact — the impact's first frame planted the one hit — a wall, or its end): the bomb's
-                        // burst here, and the sub-shot cut before its impact draws or plants again
+                    {   // out of its flight (its contact, a wall, or its end): the bomb's burst here at once. The hit is the engine's plant on
+                        // the impact's FIRST frame — the frame after the contact — and a mod tick can fall between the two, so the sub-shot is
+                        // cut only once the plant has happened (the reload latch it sets), or once nothing can plant (inactive, or a wait past
+                        // any impact frame: a wall, or the flight's end), never on sight.
+                        if (!f.BurstShown)
+                        {
+                            f.BurstShown = true; f.EndedAt = GameClock.Now;
+                            BombFx.Spawn(f.X, f.H, f.Y, PelletFxScale, ringRadius: 0f);
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"plain bomb bursts at ({f.X:F0},{f.H:F0},{f.Y:F0})");
+                        }
+                        bool planted  = Memory.ReadByte(inst + ShotEffectPack.OffLatch + f.Sub) != 0;
+                        bool inactive = Memory.ReadUShort(inst + ShotEffectPack.OffActive + f.Sub * 2) == 0;
+                        if (!planted && !inactive && (GameClock.Now - f.EndedAt).TotalSeconds < CutWait) continue;   // the impact frame has not run yet
                         Memory.WriteUShort(inst + ShotEffectPack.OffActive + f.Sub * 2, 0);
-                        BombFx.Spawn(f.X, f.H, f.Y, PelletFxScale, ringRadius: 0f);
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"plain bomb bursts at ({f.X:F0},{f.H:F0},{f.Y:F0})");
                         EndFlight(f); continue;
                     }
                 }
