@@ -1,8 +1,9 @@
 # Shamshir — "Swift Strikes"
 
 While the Shamshir (item 270) is in Toan's hand on a dungeon floor, his five combo swings play a third faster (KEY step ×4/3, 0.3 → 0.4).
-The charge attacks (lunge, whirlwind) are untouched. Code: `Weapons/Toan/Shamshir.cs`, started from `WeaponThreads`
-(`case Items.shamshir`). No ISO patch.
+The charge attacks (lunge, whirlwind) are untouched. The Dusack (293), 7 Branch Sword (292), Atlamillia Sword (276) and
+Chronicle Sword (297) inherit it (`Shamshir.Grants`), each starting the same thread from its `WeaponThreads` case. Code:
+`Weapons/Toan/Shamshir.cs`. No ISO patch.
 
 ## Mechanism
 
@@ -31,7 +32,7 @@ motion change, so a poll would miss the first ticks of each swing, whereas the l
 
 ## Super Steve sphere
 
-A Shamshir sphere speeds Xiao's shot (`Shamshir.DriveSphere`, from the Super Steve dispatch):
+A sphere from any of the five swords speeds Xiao's shot (`Shamshir.DriveSphere`, from the Super Steve dispatch):
 
 | motion id | c04b | frames | stock step | raised |
 |---|---|---|---|---|

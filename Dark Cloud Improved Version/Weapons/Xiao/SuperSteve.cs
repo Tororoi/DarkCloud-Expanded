@@ -554,7 +554,7 @@ namespace Dark_Cloud_Improved_Version
         ///
         /// NOT every weapon's ability transfers. Excluded by design:
         ///   • Macho Sword, Wise Owl Sword, Chronicle 2 — rely on weapon ownership
-        ///   • Buster Sword, 7 Branch Sword - modify upgrading / status-breaks
+        ///   • Buster Sword, 7 Branch Sword - modify upgrading / status-breaks (the 7 Branch sphere still hands over Swift Strikes)
         /// </summary>
         public static void SphereInheritanceEffect()
         {
@@ -628,8 +628,9 @@ namespace Dark_Cloud_Improved_Version
                 // Claymore's size stays with the sword).
                 Baselard.DriveSphere(active && (sphere == Items.baselard || sphere == Items.claymore));
 
-                // Swift Strikes (Shamshir): her draw plays ×1.6 faster and her shoot at the fastest step that still fires.
-                Shamshir.DriveSphere(active && sphere == Items.shamshir);
+                // Swift Strikes (Shamshir / Dusack / 7 Branch Sword / Atlamillia Sword / Chronicle Sword): her draw plays ×1.6 faster and
+                // her shoot at the fastest step that still fires.
+                Shamshir.DriveSphere(active && Shamshir.Grants(sphere));
 
                 // Curses (full inherit): curse Xiao. Not pause-gated — mirrors the Toan loops.
                 Evilcise.Drive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);

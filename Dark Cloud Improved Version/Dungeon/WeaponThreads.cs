@@ -138,7 +138,43 @@ namespace Dark_Cloud_Improved_Version
                         chronicleSwordThread = new Thread(new ThreadStart(ChronicleSword.ChronicleSwordEffect));
                         chronicleSwordThread.Start();
                     }
+                    if (!shamshirThread.IsAlive)   // Swift Strikes, inherited from the Shamshir
+                    {
+                        shamshirThread = new Thread(new ThreadStart(Shamshir.SwiftStrikesEffect));
+                        shamshirThread.Start();
+                    }
                     break;
+
+                case Items.dusack:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    if (!shamshirThread.IsAlive)   // Swift Strikes, inherited from the Shamshir
+                    {
+                        shamshirThread = new Thread(new ThreadStart(Shamshir.SwiftStrikesEffect));
+                        shamshirThread.Start();
+                    }
+                    break;
+
+                case Items.sevenbranchsword:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    if (!shamshirThread.IsAlive)   // Swift Strikes, inherited from the Shamshir
+                    {
+                        shamshirThread = new Thread(new ThreadStart(Shamshir.SwiftStrikesEffect));
+                        shamshirThread.Start();
+                    }
+                    break;
+
+                case Items.atlamilliasword:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    if (!shamshirThread.IsAlive)   // Swift Strikes, inherited from the Shamshir
+                    {
+                        shamshirThread = new Thread(new ThreadStart(Shamshir.SwiftStrikesEffect));
+                        shamshirThread.Start();
+                    }
+                    break;
+
 
                 case Items.heavenscloud:
                     BoneRapier.SkeletonKeyEffect(false);

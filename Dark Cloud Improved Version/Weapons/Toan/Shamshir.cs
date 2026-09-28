@@ -4,7 +4,8 @@ using System.Threading;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>Shamshir — "Swift Strikes": Toan's five combo swings play a third faster; the charge attacks (lunge and
-    /// whirlwind) keep theirs.
+    /// whirlwind) keep theirs. The Dusack, 7 Branch Sword, Atlamillia Sword and Chronicle Sword carry it too (<see cref="Grants"/>),
+    /// and any of the five as Super Steve's sphere hands her the shot speed-up.
     ///
     /// Each motion's play rate is the KEY step of its Mot_List entry (CCharacter +0x344, 0x10 a motion: start, end, step),
     /// which Step__10CCharacter reads every frame; so the five combo entries' steps are raised in place (0.3 → 0.4 frames a
@@ -21,6 +22,11 @@ namespace Dark_Cloud_Improved_Version
     internal static class Shamshir
     {
         internal const float SpeedFactor = 0.4f / 0.3f;   // the combo step 0.3 → 0.4
+
+        /// <summary>Whether a weapon (or a sphere's source weapon) carries Swift Strikes.</summary>
+        internal static bool Grants(int weaponId) =>
+            weaponId == Items.shamshir || weaponId == Items.dusack || weaponId == Items.sevenbranchsword ||
+            weaponId == Items.atlamilliasword || weaponId == Items.chroniclesword;
         private const int    TickMs      = 100;
 
         /// <summary>A motion whose play rate the sword changes: its list index, the frames that identify it, its stock step and
@@ -54,7 +60,7 @@ namespace Dark_Cloud_Improved_Version
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Shamshir] swift strikes: combo swings at {SpeedFactor:F2}× (KEY step 0.3 → {0.3f * SpeedFactor:F2}); charge attacks untouched");
             bool logged = false;
-            while (Player.Weapon.GetCurrentWeaponId() == Items.shamshir && Player.InDungeonFloor())
+            while (Grants(Player.Weapon.GetCurrentWeaponId()) && Player.InDungeonFloor())
             {
                 if (Player.CurrentCharacterNum() == Player.ToanId)
                 {
