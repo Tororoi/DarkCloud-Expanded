@@ -26,6 +26,8 @@ namespace Dark_Cloud_Improved_Version
         private static Thread baselardThread = new Thread(new ThreadStart(Baselard.HeavyHandEffect));
         private static Thread claymoreThread = new Thread(new ThreadStart(Claymore.GreatswordEffect));
         private static Thread shamshirThread = new Thread(new ThreadStart(Shamshir.SwiftStrikesEffect));
+        private static Thread dusackThread = new Thread(new ThreadStart(Dusack.NoFoolsGoldEffect));
+        private static Thread saxThread = new Thread(new ThreadStart(Sax.FineFareEffect));
         private static Thread gladiusThread = new Thread(new ThreadStart(Gladius.JacketHunterEffect));
         private static Thread crysKnifeThread = new Thread(new ThreadStart(CrysKnife.CrystalAffinityEffect));
         private static Thread angelGearThread = new Thread(new ThreadStart(AngelGear.GuardianReflectorEffect));
@@ -143,11 +145,26 @@ namespace Dark_Cloud_Improved_Version
                         shamshirThread = new Thread(new ThreadStart(Shamshir.SwiftStrikesEffect));
                         shamshirThread.Start();
                     }
+                    if (!saxThread.IsAlive)        // Fine Fare, inherited down the Sax line (with Treasure Keys → Gold Bullion, Repair → Auto Repair one in four)
+                    {
+                        saxThread = new Thread(new ThreadStart(Sax.FineFareEffect));
+                        saxThread.Start();
+                    }
                     break;
 
                 case Items.dusack:
                     BoneRapier.SkeletonKeyEffect(false);
 
+                    if (!dusackThread.IsAlive)     // No Fool's Gold
+                    {
+                        dusackThread = new Thread(new ThreadStart(Dusack.NoFoolsGoldEffect));
+                        dusackThread.Start();
+                    }
+                    if (!saxThread.IsAlive)        // Fine Fare, inherited from the Sax (plus Treasure Keys → Gold Bullion)
+                    {
+                        saxThread = new Thread(new ThreadStart(Sax.FineFareEffect));
+                        saxThread.Start();
+                    }
                     if (!shamshirThread.IsAlive)   // Swift Strikes, inherited from the Shamshir
                     {
                         shamshirThread = new Thread(new ThreadStart(Shamshir.SwiftStrikesEffect));
@@ -163,6 +180,11 @@ namespace Dark_Cloud_Improved_Version
                         shamshirThread = new Thread(new ThreadStart(Shamshir.SwiftStrikesEffect));
                         shamshirThread.Start();
                     }
+                    if (!saxThread.IsAlive)        // Fine Fare, inherited down the Sax line (with Treasure Keys → Gold Bullion, Repair → Auto Repair one in four)
+                    {
+                        saxThread = new Thread(new ThreadStart(Sax.FineFareEffect));
+                        saxThread.Start();
+                    }
                     break;
 
                 case Items.atlamilliasword:
@@ -172,6 +194,11 @@ namespace Dark_Cloud_Improved_Version
                     {
                         shamshirThread = new Thread(new ThreadStart(Shamshir.SwiftStrikesEffect));
                         shamshirThread.Start();
+                    }
+                    if (!saxThread.IsAlive)        // Fine Fare, inherited down the Sax line (with Treasure Keys → Gold Bullion, Repair → Auto Repair one in four)
+                    {
+                        saxThread = new Thread(new ThreadStart(Sax.FineFareEffect));
+                        saxThread.Start();
                     }
                     break;
 
@@ -341,6 +368,11 @@ namespace Dark_Cloud_Improved_Version
                         braveArkThread = new Thread(new ThreadStart(BraveArk.HerosCourageEffect));
                         braveArkThread.Start();
                     }
+                    if (!dusackThread.IsAlive)     // No Fool's Gold, inherited from the Dusack
+                    {
+                        dusackThread = new Thread(new ThreadStart(Dusack.NoFoolsGoldEffect));
+                        dusackThread.Start();
+                    }
                     break;
 
                 // Kitchen Knife is a TOAN sword — its effect gates on ToanId, so registering it under
@@ -373,6 +405,16 @@ namespace Dark_Cloud_Improved_Version
                     {
                         claymoreThread = new Thread(new ThreadStart(Claymore.GreatswordEffect));
                         claymoreThread.Start();
+                    }
+                    break;
+
+                case Items.sax:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    if (!saxThread.IsAlive)
+                    {
+                        saxThread = new Thread(new ThreadStart(Sax.FineFareEffect));
+                        saxThread.Start();
                     }
                     break;
 

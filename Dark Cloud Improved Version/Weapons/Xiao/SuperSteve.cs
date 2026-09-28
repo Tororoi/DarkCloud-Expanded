@@ -628,6 +628,14 @@ namespace Dark_Cloud_Improved_Version
                 // Claymore's size stays with the sword).
                 Baselard.DriveSphere(active && (sphere == Items.baselard || sphere == Items.claymore));
 
+                // No Fool's Gold (Dusack / Brave Ark): mimics' wake guard held open for her pellets (Dark Cloud's and 7th Heaven's
+                // Guard Crush above covers every guard, the wake included).
+                Dusack.DriveSphere(active && Dusack.Grants(sphere));
+
+                // Fine Fare (Sax / Dusack / 7 Branch Sword / Atlamillia Sword / Chronicle Sword): the floor's chest water, food, keys and
+                // repair powder upgraded at the sphere's sword's form; the originals back when the sphere goes.
+                Sax.DriveSphere(sphere, active);
+
                 // Swift Strikes (Shamshir / Dusack / 7 Branch Sword / Atlamillia Sword / Chronicle Sword): her draw plays ×1.6 faster and
                 // her shoot at the fastest step that still fires.
                 Shamshir.DriveSphere(active && Shamshir.Grants(sphere));
@@ -731,6 +739,8 @@ namespace Dark_Cloud_Improved_Version
             Maneater.Drive(false, xiaoCurse, 0, ssManeater);
             SuperSteve.DriveSmallSword(false);
             Shamshir.DriveSphere(false);
+            Dusack.DriveSphere(false);
+            Sax.DriveSphere(0, false);
             SuperSteve.DriveTsukikage(false);
             SuperSteve.DriveHeavensCloud(false);   // resets the flash latches
             SuperSteve.DriveAgasSword(false);
