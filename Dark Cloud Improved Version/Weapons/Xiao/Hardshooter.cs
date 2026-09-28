@@ -14,9 +14,10 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// THE HIT. step__5CSHOT tests a live pellet BEFORE moving it: checkCollision(2.0, …) walks every living enemy's active
     /// hurt spheres (<see cref="BodyCollision"/>: centres rebuilt each frame, radii) and the pellet dies where it stands
-    /// when its position lies within 2 + radius of a centre — walls are tested after the enemies. A dead slot keeps its
-    /// position, velocity and damage, so the driver reads the death point exactly and applies the game's own rule to the
-    /// live spheres: the enemy whose sphere the point is inside is the one hit; none means a wall or the end of its flight.
+    /// when its position lies within 2 + radius of a centre — walls are tested after the enemies. The pellet-contact cave
+    /// records that very test (PelletContacts: the slot, enemy or wall, the sphere struck), so the enemy hit is the engine's
+    /// own word; a dead slot keeps its position, velocity and damage, so the death point is exact. Without a record (an ISO
+    /// without the cave, or two pellets dying in one frame) the driver applies the game's rule to the live spheres itself.
     ///
     /// THE DEPARTURE. The ricochet is written at the death point with its collision OFF (+0x280), which also stops the
     /// game moving it; the driver steps it along its new line each tick until it stands clear of every sphere of the enemy
@@ -41,6 +42,10 @@ namespace Dark_Cloud_Improved_Version
         private static readonly List<Departure> _departing = new List<Departure>();
         private static readonly TimeSpan ClaimWindow = TimeSpan.FromMilliseconds(250);   // two pellets landing together take different targets
         private static readonly List<(int enemy, DateTime at)> _claims = new List<(int, DateTime)>();
+        private static readonly int[] _contactHit = new int[PlayerShotPool.SlotCount];   // per slot: the enemy the engine's contact named (−2 a wall; NoRecord none)
+        private const int NoRecord = int.MinValue, WallRecord = -2;
+        private static int _contactSeen = PelletContacts.Fresh;
+        private static bool _contactsReset;
 
         /// <summary>Whether the pellet in <paramref name="slot"/> is a ricochet (Double Impact leaves those untwinned).</summary>
         internal static bool IsBounced(int slot) => _bounced[slot];
@@ -51,6 +56,9 @@ namespace Dark_Cloud_Improved_Version
             if (!active) return;
             long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
             if (!Memory.IsValidGuest(pool)) return;
+            if (!_contactsReset) { _contactsReset = true; for (int i = 0; i < _contactHit.Length; i++) _contactHit[i] = NoRecord; }
+            if (PelletContacts.Poll(ref _contactSeen, out var c) && c.Slot >= 0 && c.Slot < _contactHit.Length)
+                _contactHit[c.Slot] = c.Enemy ? PelletContacts.EnemyAtSphere(c) : WallRecord;                    // the engine's contact, for the death below
             StepDepartures(pool);
             for (int i = 0; i < PlayerShotPool.SlotCount; i++)
             {
@@ -67,7 +75,9 @@ namespace Dark_Cloud_Improved_Version
         {
             long pa = PlayerShotPool.PosAddr(pool, slot), va = PlayerShotPool.VelAddr(pool, slot);
             float x = Memory.ReadFloat(pa), h = Memory.ReadFloat(pa + 4), y = Memory.ReadFloat(pa + 8);   // the death point: the slot keeps it
-            int hit = EnemyAt(x, h, y, PelletRadius);
+            int record = _contactHit[slot]; _contactHit[slot] = NoRecord;
+            if (record == WallRecord) return;                                       // the engine says a wall
+            int hit = record >= 0 ? record : EnemyAt(x, h, y, PelletRadius);        // the engine's enemy, else the game's rule applied here
             if (hit < 0) return;                                                    // a wall, or the end of its flight
             _claims.RemoveAll(c => GameClock.Now - c.at > ClaimWindow);
             int target = NearestTo(hit, NextEnemyRange, out float tx, out float ty, x, h, y);

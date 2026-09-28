@@ -299,7 +299,7 @@ namespace Dark_Cloud_Improved_Version
             byte floor = Memory.ReadByte(Addresses.checkFloor);
             if (floor != st.floor) { if (st.floor != 0xFF) Reset(st); st.floor = floor; st.bladeLogged = false; _yawConv = -1; }
             if (!st.bladeLogged) st.bladeLogged = LogBlade();
-            ToanLockOn.HoldReach("[BigBang] ");
+            ToanLockOn.HoldReach("[BigBang] ");                                       // the Cross Hinder's reach, inherited
             FaceTick();
 
             ExpireShells();

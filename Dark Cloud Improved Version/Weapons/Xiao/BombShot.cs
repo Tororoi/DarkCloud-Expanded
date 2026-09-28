@@ -283,6 +283,7 @@ namespace Dark_Cloud_Improved_Version
                     if (held >= GuardSeconds)
                     {
                         _guard = Guard.Primed; ChargeTint.Clear();
+                        Player.FlashChargeComplete();                                     // the stock charge-complete flash on her: the cue that it is ready (the hanging bomb is a fainter one than Toan's blade)
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "primed — locked on, the bomb hangs for the next shot to drop; else the next shot is the flash");
                     }
                     break;
@@ -379,6 +380,7 @@ namespace Dark_Cloud_Improved_Version
                         Memory.WriteUShort(inst + ShotEffectPack.OffActive + f.Sub * 2, 0);
                         EndFlight(f); continue;
                     }
+                    else Memory.WriteUShort(inst + ShotEffectPack.OffActive + f.Sub * 2, 0);   // the charged bomb's flight ended on the engine's own contact: cut before its impact animation lingers (it plants nothing, so nothing waits)
                 }
                 else
                 {
@@ -554,7 +556,9 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Is (x, h, y) inside a live enemy's body — within its authored width (scaled with the unit) plus ContactPad
         /// across, and between its feet and its authored height up?</summary>
-        private static bool Touching(float x, float h, float y)
+        private static bool Touching(float x, float h, float y) => TouchingSlot(x, h, y) >= 0;
+        /// <summary>The live enemy whose body (x, h, y) is inside, or −1.</summary>
+        internal static int TouchingSlot(float x, float h, float y)
         {
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
@@ -570,9 +574,9 @@ namespace Dark_Cloud_Improved_Version
                 float r = width * scale + ContactPad, dx = ex - x, dy = ey - y;
                 if (dx * dx + dy * dy > r * r) continue;
                 if (h < eh - ContactPad || h > eh + height * scale + ContactPad) continue;
-                return true;
+                return s;
             }
-            return false;
+            return -1;
         }
 
         /// <summary>The sphere or the weapon went: everything down, a blinding of hers ended, explosions dangerous again.</summary>

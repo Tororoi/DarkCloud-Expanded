@@ -49,36 +49,41 @@ namespace Dark_Cloud_Improved_Version
         /// <param name="palRow">The glow cave's ONE-based palette row to paint the disc with (0 = leave it: Toan's discs carry their
         /// own palette; the cat's disc, the one resident for Xiao, takes a row — 8 is the Angel Gear cat's gold).</param>
         /// <param name="scale">The disc's full size (0 = <see cref="Scale"/>, Toan's; the Matador's pellet wants 0.4).</param>
-        internal static void Show(string disc = ToanGlowBakes.GlowName, uint anchor = 0, float lift = Lift, double growSeconds = GrowSeconds, int palRow = 0, float scale = 0f)
+        /// <param name="pelletSlot">A player PELLET (its shot-pool slot) to ride instead of a node: the cave takes the pellet's own
+        /// position every frame (CodeCaves.GlowPellet), so nothing has to carry the disc. −1 = a node, as above.</param>
+        /// <param name="pull">How far toward the camera the sprite is pulled (<see cref="Pull"/> unless a showing wants more).</param>
+        internal static void Show(string disc = ToanGlowBakes.GlowName, uint anchor = 0, float lift = Lift, double growSeconds = GrowSeconds, int palRow = 0, float scale = 0f, int pelletSlot = -1, float pull = Pull)
         {
             if (scale > 0f) _scaleMax = scale; else if (!_on) _scaleMax = Scale;
             if (_on)
             {
-                uint want = anchor != 0 ? anchor : Anchor();
+                uint want = pelletSlot >= 0 ? PelletAnchor(pelletSlot) : anchor != 0 ? anchor : Anchor();
                 if (want != 0 && want != _anchor)
                 {
-                    Memory.WriteUInt(CodeCaves.Mailbox.CatGlowNodeA, want);
-                    Memory.WriteUInt(CodeCaves.Mailbox.CatGlowNodeB, want);
+                    Memory.WriteInt(CodeCaves.GlowPellet, pelletSlot >= 0 ? pelletSlot + 1 : 0);   // a pellet, or the frames below
+                    if (pelletSlot < 0) { Memory.WriteUInt(CodeCaves.Mailbox.CatGlowNodeA, want); Memory.WriteUInt(CodeCaves.Mailbox.CatGlowNodeB, want); }
                     Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, lift);
+                    Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, pull);
                     _anchor = want;
                 }
                 if (palRow > 0 && palRow != _palRow) { Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, palRow); _palRow = palRow; }   // repainted for its new user
                 KeepAlive(); return;
             }
             _disc = disc;
-            uint root = anchor != 0 ? anchor : Anchor();
+            uint root = pelletSlot >= 0 ? PelletAnchor(pelletSlot) : anchor != 0 ? anchor : Anchor();
             _anchor = root;
             if (root == 0) return;                                       // no posed bone yet: try again next tick
+            Memory.WriteInt(CodeCaves.GlowPellet, pelletSlot >= 0 ? pelletSlot + 1 : 0);
             Reserve();                                                   // …and give the disc a home that is actually uploaded, BEFORE the cave binds it
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 0);
             if (palRow > 0) Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, palRow);
             _palRow = palRow;
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, growSeconds <= 0 ? _scaleMax : 0f);   // …from nothing, Tick swelling it over GrowSeconds — or full size at once
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, Flags);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, Pull);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, pull);
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, lift);
-            Memory.WriteUInt (CodeCaves.Mailbox.CatGlowNodeA, root);
-            Memory.WriteUInt (CodeCaves.Mailbox.CatGlowNodeB, root);
+            Memory.WriteUInt (CodeCaves.Mailbox.CatGlowNodeA, pelletSlot >= 0 ? 0u : root);   // a pellet anchor leaves the frames unset: the cave reads the pool
+            Memory.WriteUInt (CodeCaves.Mailbox.CatGlowNodeB, pelletSlot >= 0 ? 0u : root);
             byte[] nm = new byte[16]; System.Text.Encoding.ASCII.GetBytes(_disc).CopyTo(nm, 0);
             Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowReady, 0);        // bind the disc
@@ -87,6 +92,7 @@ namespace Dark_Cloud_Improved_Version
             // Where the anchor really sits, so any residual offset is one measurement rather than another guess: the cave
             // places the sprite at the node's posed world position (world matrix translation row), and his feet are the
             // player's own height.
+            if (pelletSlot >= 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] glow up on pellet slot {pelletSlot} (disc `{_disc}`, scale {_scaleMax:0.00}, lift {lift:0})"); return; }
             float anchorH = Memory.ReadFloat(Memory.ToMmu(root) + CFrameVu1.WorldMatrix + 0x30 + 4);
             float feetH   = Memory.ReadFloat(Addresses.dunPositionZ);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
@@ -128,6 +134,8 @@ namespace Dark_Cloud_Improved_Version
         private static float _fadeFrom = 1f;
 
         internal static bool IsUp => _on;
+        /// <summary>What <see cref="AnchoredTo"/> / <see cref="OnAnchor"/> compare for a disc riding pellet <paramref name="slot"/>.</summary>
+        internal static uint PelletAnchor(int slot) => 0xF0000000u | (uint)slot;
         /// <summary>The palette row the disc is painted with while up (0 = its own colours).</summary>
         internal static int PalRow => _palRow;
         /// <summary>Up at this node, on its way down or not — what must be cut before that node goes away.</summary>
@@ -149,6 +157,7 @@ namespace Dark_Cloud_Improved_Version
             if (_palRow != 0) { Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, PalRowNone); _palRow = 0; }   // the cave repaints the disc for whoever uses it next
             if (!_on) return;
             Memory.WriteInt(CodeCaves.Mailbox.CatGlowOn, 0);
+            Memory.WriteInt(CodeCaves.GlowPellet, 0);
             Release();
             _on = false; _fading = false;
         }

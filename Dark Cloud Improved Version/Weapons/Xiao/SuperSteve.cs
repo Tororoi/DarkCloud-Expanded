@@ -307,6 +307,7 @@ namespace Dark_Cloud_Improved_Version
                         long dmgA = PlayerShotPool.DamageAddr(poolBase, i);
                         Memory.WriteInt(dmgA, (int)(Memory.ReadInt(dmgA) * (1f + empowered * (HcMaxDamageMult - 1f))));
                         _ssArmedSlot   = i;                  // ANY empowered shot bursts on impact, not just a max one
+                        PelletContacts.Sync(ref _hcContactSeen);   // only contacts from here on are this pellet's
                         _ssArmedCharge = empowered;
                         // The burst LOOKS like wind but HURTS like the weapon: it inherits whatever element is
                         // selected on Super Steve (0 = none). Frozen at the shot, like the charge.
@@ -367,18 +368,27 @@ namespace Dark_Cloud_Improved_Version
             long poolBase = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
             if (!Memory.IsValidGuest(poolBase)) { _ssArmedSlot = -1; return; }
 
-            // Still in flight → keep its position fresh; the last one we see before it dies is the impact point.
-            if (Memory.ReadInt(PlayerShotPool.FlagAddr(poolBase, _ssArmedSlot)) != 0)
+            // The engine's own contact record first (the pellet-contact cave): an enemy — the burst on the hit sphere it struck;
+            // a wall — no burst. Without a record (an ISO without the cave), the pellet's death and the nearest enemy decide.
+            if (PelletContacts.Poll(ref _hcContactSeen, out var c) && c.Slot == _ssArmedSlot)
             {
-                long pp = PlayerShotPool.PosAddr(poolBase, _ssArmedSlot);
-                _ssArmedX = Memory.ReadFloat(pp);
-                _ssArmedH = Memory.ReadFloat(pp + 4);
-                _ssArmedY = Memory.ReadFloat(pp + 8);
-                return;
+                if (!c.Enemy) { _ssArmedSlot = -1; return; }
+                _ssArmedX = c.X; _ssArmedH = c.H; _ssArmedY = c.Y;
             }
-
+            else
+            {
+                // Still in flight → keep its position fresh; the last one we see before it dies is the impact point.
+                if (Memory.ReadInt(PlayerShotPool.FlagAddr(poolBase, _ssArmedSlot)) != 0)
+                {
+                    long pp = PlayerShotPool.PosAddr(poolBase, _ssArmedSlot);
+                    _ssArmedX = Memory.ReadFloat(pp);
+                    _ssArmedH = Memory.ReadFloat(pp + 4);
+                    _ssArmedY = Memory.ReadFloat(pp + 8);
+                    return;
+                }
+                if (!EnemyNear(_ssArmedX, _ssArmedY, WindImpactProximity)) { _ssArmedSlot = -1; return; }   // hit a wall / flew its full range
+            }
             _ssArmedSlot = -1;                                   // it landed — one blast per empowered shot
-            if (!EnemyNear(_ssArmedX, _ssArmedY, WindImpactProximity)) return;   // hit a wall / flew its full range
 
             float charge = _ssArmedCharge;                       // 0..1 across the empowered band
             float scale  = WindFxScaleMin + charge * (WindFxScaleMax - WindFxScaleMin);
@@ -405,15 +415,16 @@ namespace Dark_Cloud_Improved_Version
                                     WindKnockScale);
         }
 
-        /// <summary>Is any live enemy within <paramref name="range"/> of (x, y)? Distinguishes a pellet that LANDED
-        /// on something from one that expired at the end of its flight or clipped a wall.</summary>
+        private static int _hcContactSeen = PelletContacts.Fresh;
+        /// <summary>Is any live enemy within <paramref name="range"/> of (x, y), by its own position? Distinguishes a pellet that
+        /// LANDED on something from one that expired at the end of its flight or clipped a wall (the fallback without the contact cave).</summary>
         private static bool EnemyNear(float x, float y, float range)
         {
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
-                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) <= 0) continue;
-                long pos = EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX);
-                float dx = Memory.ReadFloat(pos) - x, dy = Memory.ReadFloat(pos + 8) - y;
+                if (!Enemies.IsLive(s) || Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) <= 0) continue;
+                long up = EnemyAddresses.CharObjects.PosAddr(s);
+                float dx = Memory.ReadFloat(up) - x, dy = Memory.ReadFloat(up + 8) - y;
                 if (dx * dx + dy * dy <= range * range) return true;
             }
             return false;
@@ -613,6 +624,9 @@ namespace Dark_Cloud_Improved_Version
                 if (lastSphere == Items.swordofzeus && sphere != Items.swordofzeus) ZeusShot.Stop();
                 ZeusShot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.swordofzeus);
 
+                // Heavy Hand (Baselard): every pellet throws its enemy as the sword's hits do.
+                Baselard.DriveSphere(active && sphere == Items.baselard);
+
                 // Curses (full inherit): curse Xiao. Not pause-gated — mirrors the Toan loops.
                 Evilcise.Drive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);
                 Maneater.Drive(sphere == Items.maneater, xiaoCurse, rec, ssManeater);
@@ -638,7 +652,7 @@ namespace Dark_Cloud_Improved_Version
                 DragonsY.LockOnSpeedDrive(active && DragonsY.LockOnSpeedGrants(sphere));
 
                 // Lock-on reach (Flamingo / Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear — and Big Bang, whose sword has it): enemies locked from twice as far.
-                Flamingo.Drive(active && (Flamingo.GrantsReach(sphere) || sphere == Items.bigbang || sphere == Items.swordofzeus));   // Big Bang's reach, and the Sword of Zeus's inherited from it
+                Flamingo.Drive(active && (Flamingo.GrantsReach(sphere) || sphere == Items.crosshinder || sphere == Items.bigbang || sphere == Items.swordofzeus));   // the Cross Hinder's reach, and Big Bang's and the Sword of Zeus's inherited from it
 
                 // Dragon's Y: the charged shot — the Gemron ball of Super Steve's own selected element.
                 DragonsY.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.dragonsy);

@@ -32,8 +32,12 @@ namespace Dark_Cloud_Improved_Version
         private const float  PrimedTint           = 45f;    // the slight white Toan keeps while the charge is held, per channel (the tint is an ambient ADD)
         private const ushort FlashSe              = 0;      // sound effect at the flash (SeSeq id; 0 = none)
         internal const float SwingCursorPerFrame = 0.3f;   // the combo clips' KEY step: what the frame cursor moves per engine frame
-        private const float  Combo1Start = 820f;           // where the first combo clip begins: the judgement blade's fall is paced from here
-        private const float  Combo1Hit = 826f, Combo2Hit = 835f, Combo3Hit = 843f, Combo4Hit = 852f, Combo5Hit = 867f;   // frame cursor at which each combo swing comes forward (docs/character-motion-table.md clips 37: 820-830, 38: 830-838, 39: 838-847, 40: 847-857, 41: 856-884)
+        private const float  Combo1Start = 820f, Combo1End = 830f;   // the first combo clip's frame cursor span (docs/character-motion-table.md clip 37)
+        private const float  Combo1Hit = 826f, Combo2Hit = 835f, Combo3Hit = 844f, Combo4Hit = 853f, Combo5Hit = 867f;   // frame cursor at which each combo swing comes forward (docs/character-motion-table.md clips 37: 820-830, 38: 830-838, 39: 838-847, 40: 847-857, 41: 856-884)
+        // THE JUDGEMENT BLADE'S DROP on the primed first swing, locked on: let go when the swing's frame cursor reaches DropFrame.
+        // The Sword of Zeus's fall is PACED to land — the bolt — at ZeusLandFrame; Big Bang's falls under gravity from there (a
+        // BigBangLandFrame above DropFrame would pace it likewise) and its blast is the landing.
+        private const float  DropFrame = 824f, ZeusLandFrame = 828f, BigBangLandFrame = 0f;
 
         /// <summary>What differs between the swords that carry Solar Flash. The ability itself — the charge, the
         /// blinding, the script hold — is identical; each weapon brings its own damage share, glow disc and blade
@@ -256,18 +260,22 @@ namespace Dark_Cloud_Improved_Version
                     // ⚠ Paced from the CLIP'S START, not from the cursor read now: the action word turns to the swing a
                     // frame before the cursor is reset to the clip, so a read here can still be the idle clip's, a
                     // hundred frames off — that was a two-second fall, and a bolt after the combo was over.
-                    if (p.WeaponId == Items.swordofzeus && action == PlayerAction.ActionComboFirst && PlayerAction.LockHeld(out _)
-                        && BigBang.BeginDrop(Combo1Start, ComboHitFrame(action)))
+                    float cursor = Memory.ReadFloat(PlayerAction.AnimFrameCursor);
+                    bool dropDue = action == PlayerAction.ActionComboFirst && cursor >= DropFrame && cursor <= Combo1End;   // inside the first clip, at the drop frame
+                    if (p.WeaponId == Items.swordofzeus && dropDue && PlayerAction.LockHeld(out _)
+                        && BigBang.BeginDrop(DropFrame, ZeusLandFrame))
                     { st.phase = Phase.Chain; st.chainAction = action; st.chainFired = true; st.chainDropped = true; break; }
+                    if (p.WeaponId == Items.bigbang && dropDue && BigBang.BeginDrop(DropFrame, BigBangLandFrame)) { st.phase = Phase.Dropping; break; }
                     bool forward = action == PlayerAction.ActionWhirlwind || action == PlayerAction.ActionLunge
-                                || Memory.ReadFloat(PlayerAction.AnimFrameCursor) >= ComboHitFrame(action);
+                                || cursor >= ComboHitFrame(action);
                     if (!forward)
                     {   // the Sword of Zeus: the room plunges to black along the swing, peaking on the bolt
                         if (p.WeaponId == Items.swordofzeus && action >= PlayerAction.ActionComboFirst && action <= PlayerAction.ActionComboLast) SwingDim(p, action);
                         break;
                     }
-                    // Big Bang, locked on: the swing does not flash — it lets the judgement blade fall, and the flash
-                    // goes off when it lands (BigBang.BeginDrop → Dropping). Not locked on: the flash, as ever.
+                    // Big Bang, locked on: the swing does not flash — it lets the judgement blade fall (at DropFrame above, or here
+                    // for a whirlwind or lunge), and the flash goes off when it lands (BigBang.BeginDrop → Dropping). Not locked on:
+                    // the flash, as ever.
                     if (p.WeaponId == Items.bigbang && BigBang.BeginDrop()) { st.phase = Phase.Dropping; break; }
                     // The Sword of Zeus. Locked on with the judgement blade hanging: the blade is let go as the FIRST
                     // swing begins (above, before the swing comes forward), paced by the swing so it lands at the
@@ -416,12 +424,14 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The flash from a point that is not the character — Xiao's Solar Shot, where her pellet landed: the
         /// white-out, her pulse, the light hit on every enemy in reach of the point (shoved away from it), the bill and
         /// the blinding. <paramref name="planted"/> is the caller's list of hit entries to withdraw (<see cref="ExpireHits"/>).</summary>
-        internal static void FlashAt(SolarProfile p, float x, float h, float y, List<(int slot, int ticks)> planted)
+        /// <param name="excludeSlot">An enemy the flash's light hit leaves alone — the one the shot itself struck (its pellet's damage
+        /// is its share).</param>
+        internal static void FlashAt(SolarProfile p, float x, float h, float y, List<(int slot, int ticks)> planted, int excludeSlot = -1)
         {
             p.ArmLighting(); SolarLighting.Flash();
             Player.FlashActiveCharacter(p.Light[0], p.Light[1], p.Light[2], FlashPulseSpeed, 1);
             if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
-            if (p.DamageFraction > 0f) PlantFlashHit(planted, x, h, y, p);
+            if (p.DamageFraction > 0f) PlantFlashHit(planted, x, h, y, p, excludeSlot);
             if (p.FlashWhp > 0f) WeaponWhp.Drain(p.WeaponId, p.FlashWhp, "[" + p.Tag + "] flash ");
             Blind(p.BlindSeconds);
         }
@@ -454,7 +464,7 @@ namespace Dark_Cloud_Improved_Version
         /// 300-unit sphere damaged exactly one enemy and left the rest untouched — which looked like "one per species"
         /// because a species tends to be clustered. One small sphere centred on each enemy hits all of them, and the pool
         /// holds 96 entries against at most 16 enemies.</summary>
-        private static void PlantFlashHit(List<(int slot, int ticks)> planted, float x, float h, float y, SolarProfile p)
+        private static void PlantFlashHit(List<(int slot, int ticks)> planted, float x, float h, float y, SolarProfile p, int excludeSlot = -1)
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
@@ -464,7 +474,7 @@ namespace Dark_Cloud_Improved_Version
             int hit = 0, missed = 0;
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
-                if (!Enemies.IsLive(s)) continue;
+                if (!Enemies.IsLive(s) || s == excludeSlot) continue;
                 float ex = Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(s));          // the unit's own position (the floor-slot record's location fields read 0 for some enemies)
                 float ey = Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(s) + 8);
                 float eh = Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(s) + 4);
@@ -473,8 +483,11 @@ namespace Dark_Cloud_Improved_Version
                 if (slot < 0) { missed++; continue; }
                 byte[] e = CollisionPool.PlayerHitEntry(ex, eh, ey, PerEnemyRadius, baseDmg, attr);
                 void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
+                // An enemy the game cannot move (knockback 0: bosses, rooted plants) takes the hit where it stands — the reaction
+                // without the shove: a kick on one left it locked in its reaction pose rather than falling into the hold.
+                bool rooted = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.KnockbackMult)) <= 0f;
                 F(0x80, x); F(0x84, h); F(0x88, y);                    // kick origin = the flash point: everyone is shoved AWAY from it
-                F(0x90, KickStrength); F(0x94, KickDecay);
+                F(0x90, rooted ? 0f : KickStrength); F(0x94, KickDecay);
                 BitConverter.GetBytes(KickTypeMelee).CopyTo(e, 0x98);
                 CollisionPool.Plant(pool, slot, e);
                 planted.Add((slot, HitLifeTicks));

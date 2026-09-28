@@ -400,6 +400,11 @@ namespace Dark_Cloud_Improved_Version
                         crossHinderThread = new Thread(new ThreadStart(CrossHinder.SanctifierEffect));
                         crossHinderThread.Start();
                     }
+                    if (!gladiusThread.IsAlive && Gladius.Wielded())   // Jacket Hunter, for a Gladius sphere
+                    {
+                        gladiusThread = new Thread(new ThreadStart(Gladius.JacketHunterEffect));
+                        gladiusThread.Start();
+                    }
                     break;
 
                 case Items.matador:

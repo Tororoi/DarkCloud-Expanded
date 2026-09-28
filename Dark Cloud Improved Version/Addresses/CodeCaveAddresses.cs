@@ -476,6 +476,14 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>ElfWeaponPatches.PatchPelletSprite: the item id a player pellet's sprite cell is taken from — Mailbox.PelletSpriteId
             /// when set, else the equipped weapon's (draw__5CSHOT's hook at 0x1ABC74 calls it).</summary>
             internal const uint PelletSprite  = Host + 0x690;  // 0x1B4E50, 56 B → 0x1B4E88
+            /// <summary>ElfWeaponPatches.PatchPelletPlant: a player pellet's contact plants its damage entry natively — or, for a pellet
+            /// whose damage word (pool +0x2E0) is NEGATIVE, plants nothing and simply ends (step__5CSHOT's plant call at 0x1ABE04 lands
+            /// here). The mod writes −1 into a pellet that must hurt nothing itself (ZeusShot: the bolt is the hit).</summary>
+            internal const uint PelletPlant   = Host + 0x6D0;  // 0x1B4E90, 28 B → 0x1B4EAC
+            /// <summary>ElfWeaponPatches.PatchPelletContact: a player pellet's contact test made natively, and every contact recorded in
+            /// CodeCaves.PelletContact — the pellet's slot, what it met (3 an enemy, 1 a wall) and the point (an enemy's hit-sphere centre)
+            /// — on the engine's own frame (step__5CSHOT's contact call at 0x1ABD88 lands here).</summary>
+            internal const uint PelletContact = Host + 0x700;  // 0x1B4EC0, 96 B → 0x1B4F20
         }
 
         /// <summary>A cave INSIDE a dead main-ELF function: the body of DebugInfomationDraw (0x1B3780, 3,952 B), the developers'
@@ -1046,7 +1054,22 @@ namespace Dark_Cloud_Improved_Version
                             CallA4 = 0x18, CallA5 = 0x1C, CallF12 = 0x20, CallV0 = 0x24, CallDone = 0x28;
         internal const uint CallMagicValue = 0x4C4C4143;   // "CALL"
 
-        // ── FREE: 0x21FAF980 .. 0x21FB0000 (0x680 B) ────────────────────────────────────────────────────
+        /// <summary>GLOW ON A PELLET (the cat glow draw cave, tools/stubs/cat_glow_draw.s): a player pellet's pool slot + 1, or 0.
+        /// Non-zero, the glow disc sits on that pellet's own position (the shot pool, +0x40 + slot × 0x10) every frame instead of
+        /// on the frames in CatGlowNodeA/B — a disc rides a pellet with nothing to carry it (SolarGlow.Show's pelletSlot).</summary>
+        internal const long GlowPellet      = 0x21FAF980;
+        internal const uint GlowPelletGuest = 0x01FAF980;
+
+        /// <summary>PELLET CONTACTS (the pellet-contact cave, DebugIfCave.PelletContact): the last player pellet contact the engine made.
+        /// +0 a counter the cave steps per contact (the mod polls it), +4 the pellet's pool slot, +8 what it met (checkCollision's
+        /// return: 3 an enemy, 1 a wall), +0xC/+0x10/+0x14 the point — an enemy's hit-sphere centre (its own table's), or the wall
+        /// point. Read by PelletContacts.</summary>
+        internal const long PelletContact      = 0x21FAF990;
+        internal const uint PelletContactGuest = 0x01FAF990;
+        internal const int  ContactCounter = 0x00, ContactSlot = 0x04, ContactKind = 0x08, ContactX = 0x0C, ContactH = 0x10, ContactY = 0x14;
+        internal const int  ContactEnemy = 3, ContactWall = 1;
+
+        // ── FREE: 0x21FAF9B0 .. 0x21FB0000 (0x650 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

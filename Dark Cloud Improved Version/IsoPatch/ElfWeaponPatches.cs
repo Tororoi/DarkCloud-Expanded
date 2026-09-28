@@ -148,6 +148,93 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(HookAddr + 4), 0);
         }
 
+        /// <summary>A player pellet's contact, with a way to make it hurt nothing. step__5CSHOT, on a pellet's contact
+        /// (checkCollision, radius 2 + the part's), calls <c>Set__14CCollisionData(3.0, 0, NowColData, pos, damage, 1, 2, 2, 0, 0)</c>
+        /// — the damage from the pellet's own word (pool +0x2E0) in a2 — then fills the planted entry in (owner 1, element, ability
+        /// flags, anti bytes), retires the pellet (<c>sw zero,0(s0)</c>: s0 = its active word) and falls into the loop's tail at
+        /// 0x1ABEBC, which needs only s0/s1/s2/s4 — all untouched by the call. The call becomes `jal PelletPlant`:
+        /// <code>
+        ///   bltz a2,nodmg / nop / j Set__14CCollisionData / nop      a pellet with a damage word ≥ 0: the native plant, returning into the fill-in
+        ///   nodmg: sw zero,0(s0) / j 0x1ABEBC / nop                    a NEGATIVE damage word: nothing planted (no fill-in either — it would
+        ///                                                              stamp whichever entry the pool last set), the pellet ended, the tail
+        /// </code>
+        /// Vanilla never writes a negative pellet damage, so an unmarked pellet is untouched; the mod marks a pellet with −1
+        /// (ZeusShot) and the contact still ends it on the engine's own frame.</summary>
+        internal static void PatchPelletPlant(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint HookAddr = 0x001ABE04, SetCollision = 0x001B57A0, LoopTail = 0x001ABEBC;
+            uint cave = CodeCaves.DebugIfCave.PelletPlant;
+            uint J(uint target) => 0x08000000u | ((target >> 2) & 0x03FFFFFFu);
+            uint[] words =
+            {
+                0x04C00003u,        // 0 bltz  a2,nodmg (+3 → index 4)
+                0x00000000u,        // 1   nop
+                J(SetCollision),    // 2 j     Set__14CCollisionData         the native plant; ra still points into step__5CSHOT
+                0x00000000u,        // 3   nop
+                0xAE000000u,        // 4 nodmg: sw zero,0(s0)                 the pellet retired, as the native path does after its fill-in
+                J(LoopTail),        // 5 j     0x1ABEBC                       the loop's tail: its lifetime count, the next slot
+                0x00000000u,        // 6   nop
+            };
+            if (cave + (uint)words.Length * 4 > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                throw new IOException("The pellet-plant cave does not fit its host (DebugInfomationIF).");
+            for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+            uint cur = RdU32(fs, ElfOff(HookAddr)), ours = Jal(cave);
+            if (cur != Jal(SetCollision) && cur != ours)
+                throw new IOException($"Pellet plant site 0x{HookAddr:X} is not vanilla `jal Set__14CCollisionData` — unmodified Dark Cloud (USA) ISO expected.");
+            if (RdU32(fs, ElfOff(HookAddr + 4)) != 0 || RdU32(fs, ElfOff(0x001ABEB8)) != 0xAE000000u || RdU32(fs, ElfOff(LoopTail)) != 0x02912021u)
+                throw new IOException("step__5CSHOT is not laid out as expected around its plant (delay slot, retire store, loop tail).");
+            WrU32(fs, ElfOff(HookAddr), ours);
+        }
+
+        /// <summary>Every player pellet contact recorded for the mod. step__5CSHOT tests each live pellet with
+        /// <c>checkCollision(2.0, out, pos, dir, 2)</c> (0x1ABD88; out = its frame's sp+0x70) — 3 when a hit sphere of an enemy is
+        /// within 2 + its radius (the sphere's centre copied to out), 1 when a wall is (the wall point), 0 otherwise — and only
+        /// then plants and retires the pellet. The call becomes `jal PelletContact`, which makes the call and, on a non-zero
+        /// result, writes CodeCaves.PelletContact: the counter stepped, the slot (s2 — the loop's index), the result and the out
+        /// point; v0 and the caller's saved registers are untouched. The mod polls the counter: a contact is known the tick after
+        /// the engine's own frame, with the enemy named by its sphere.</summary>
+        internal static void PatchPelletContact(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint HookAddr = 0x001ABD88, CheckCollision = 0x001AB740;
+            uint cave = CodeCaves.DebugIfCave.PelletContact;
+            uint block = CodeCaves.PelletContactGuest, bhi = (block + 0x8000) >> 16;   // lui/offset pair: the block is below the 0x01FB0000 page, so the offsets are negative
+            ushort Off(int field) => (ushort)((block + (uint)field - (bhi << 16)) & 0xFFFFu);
+            uint[] words =
+            {
+                0x27BDFFF0u,                                    //  0 addiu sp,sp,-0x10
+                0xAFBF0000u,                                    //  1 sw    ra,0(sp)
+                Jal(CheckCollision),                            //  2 jal   checkCollision                 a0..a3 straight through
+                0x00000000u,                                    //  3   nop
+                0x8FBF0000u,                                    //  4 lw    ra,0(sp)
+                0x27BD0010u,                                    //  5 addiu sp,sp,0x10                     the caller's frame is sp again: its out vector is at 0x70(sp)
+                0x10400000u | 13,                               //  6 beq   v0,zero,done (+13 → index 20)
+                0x00000000u,                                    //  7   nop
+                0x3C080000u | bhi,                              //  8 lui   t0,HI(PelletContact)
+                0x8D090000u | Off(CodeCaves.ContactCounter),    //  9 lw    t1,counter(t0)
+                0x25290001u,                                    // 10 addiu t1,t1,1
+                0xAD090000u | Off(CodeCaves.ContactCounter),    // 11 sw    t1,counter(t0)
+                0xAD120000u | Off(CodeCaves.ContactSlot),       // 12 sw    s2,slot(t0)                    the pellet's pool slot
+                0xAD020000u | Off(CodeCaves.ContactKind),       // 13 sw    v0,kind(t0)                    3 an enemy, 1 a wall
+                0x8FAA0070u,                                    // 14 lw    t2,0x70(sp)                    the point: x
+                0xAD0A0000u | Off(CodeCaves.ContactX),          // 15 sw    t2,x(t0)
+                0x8FAA0074u,                                    // 16 lw    t2,0x74(sp)                    h
+                0xAD0A0000u | Off(CodeCaves.ContactH),          // 17 sw    t2,h(t0)
+                0x8FAA0078u,                                    // 18 lw    t2,0x78(sp)                    y
+                0xAD0A0000u | Off(CodeCaves.ContactY),          // 19 sw    t2,y(t0)
+                0x03E00008u,                                    // 20 done: jr ra
+                0x00000000u,                                    // 21   nop
+            };
+            if (cave + (uint)words.Length * 4 > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                throw new IOException("The pellet-contact cave does not fit its host (DebugInfomationIF).");
+            for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+            uint cur = RdU32(fs, ElfOff(HookAddr)), ours = Jal(cave);
+            if (cur != Jal(CheckCollision) && cur != ours)
+                throw new IOException($"Pellet contact site 0x{HookAddr:X} is not vanilla `jal checkCollision` — unmodified Dark Cloud (USA) ISO expected.");
+            if (RdU32(fs, ElfOff(HookAddr + 4)) != 0 || RdU32(fs, ElfOff(0x001ABD78)) != 0x27A40070u)   // its delay slot; `addiu a0,sp,0x70`: the out vector
+                throw new IOException("step__5CSHOT is not laid out as expected around its contact test.");
+            WrU32(fs, ElfOff(HookAddr), ours);
+        }
+
         /// <summary>The Sun Sword's blade under its own ambient (SolarBlade): the mask-tint cave's BODY is generic — it adds
         /// Mailbox.CatCapeTint to the ambient, calls the DrawVu1 in t9, restores — only its two 3-word entries name the skinned
         /// class's overloads. A weapon model's mesh is a CVisualVu1, so these two entries load THAT class's overloads and jump

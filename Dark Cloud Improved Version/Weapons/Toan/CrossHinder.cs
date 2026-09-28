@@ -34,6 +34,8 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>
         /// Ability Name: Sanctifier (Cross Hinder; Super Steve with its sphere has it too — <see cref="CrossHinderWielded"/>)
+        /// Toan also locks on from twice as far while it is out (ToanLockOn.HoldReach) — the reach Big Bang and the Sword of
+        /// Zeus inherit from it.
         /// Against UNDEAD enemies (slot category 1):
         ///   • ~2× damage — the BATTLE weapon record's anti-undead byte (+0x1C+1) is raised past the 99 menu
         ///     cap to the value the damage formula (dmg += dmg × 0.015 × anti) needs for double damage:
@@ -66,6 +68,7 @@ namespace Dark_Cloud_Improved_Version
                     PatchUndeadRevivers(patched);    // one multi-needle RAM sweep, then one u32 write per script
                 }
                 if (Player.CheckDunIsPaused()) continue;
+                if (Player.CurrentCharacterNum() == Player.ToanId) ToanLockOn.HoldReach("[CrossHinder] ");   // Toan locks on from twice as far (Super Steve's sphere takes the Flamingo's route instead)
 
                 // 2× ABS: double each undead slot's kill-ABS once, as soon as it exists on the floor.
                 for (int h = 0; h < n; h++)
@@ -98,6 +101,7 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // Restore on unequip / character switch / dungeon exit.
+            ToanLockOn.ReleaseReach();
             if (Memory.ReadByte(Addresses.checkFloor) == floor)   // same floor → our patch addresses are still valid
             {
                 foreach ((long addr, int orig) in patched)

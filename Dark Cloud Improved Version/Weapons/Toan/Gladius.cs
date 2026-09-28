@@ -3,9 +3,18 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Gladius — "Jacket Hunter": a Master Jacket killed while the Gladius is in hand gives four times its ABS.</summary>
+    /// <summary>Gladius — "Jacket Hunter": a Master Jacket killed while the Gladius is in hand gives four times its ABS. Super
+    /// Steve carrying its SynthSphere has it too (<see cref="Wielded"/>).</summary>
     internal static class Gladius
     {
+        /// <summary>Whether the equipped weapon is the Gladius, or Super Steve carrying its SynthSphere.</summary>
+        internal static bool Wielded()
+        {
+            int id = Player.Weapon.GetCurrentWeaponId();
+            if (id == Items.gladius) return true;
+            return id == Items.supersteve && SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.gladius;
+        }
+
         private const int AbsMult = 4;      // the Master Jacket's kill-ABS multiplier (applied once per slot)
         private const int TickMs  = 250;    // nothing here is latency-critical: one write per slot, asserted
 
@@ -21,7 +30,7 @@ namespace Dark_Cloud_Improved_Version
             byte floor = 0xFF;
             ushort jacket = EnemySpecies.MasterJacket.Id;
 
-            while (Player.Weapon.GetCurrentWeaponId() == Items.gladius && Player.InDungeonFloor())
+            while (Wielded() && Player.InDungeonFloor())
             {
                 Thread.Sleep(TickMs);
                 byte f = Memory.ReadByte(Addresses.checkFloor);

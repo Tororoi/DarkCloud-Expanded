@@ -56,7 +56,7 @@ stats are built), then applies a per-move multiplier. If the player has **buff s
 | | lunge (charge ≥ 1.5) | Attack × 1.5 | attack kind 2 |
 | | windmill spin (charge ≥ 2.5 + unlock `UserStatus+0x4324`) | Attack × 1.5 | attack kind 3, radius 12.0 |
 | | windmill projectile | Attack × 1.5 | `CSHOT_EFFECT`, full weapon data |
-| Xiao (1) | slingshot stone | Attack × 1.0 | latched at `BattleActionPlay_Jinn` entry into `NowShotData` slot `+0x2E0` (pool ptr @ `0x2A35D4`, 12 slots, 120-frame life). On impact `CSHOT::step` registers the hit (radius 3.0) reading element/anti/ability data from `NowWeaponHave` **at impact time**. Her hits never cause flinch. |
+| Xiao (1) | slingshot stone | Attack × 1.0 | latched at `BattleActionPlay_Jinn` entry into `NowShotData` slot `+0x2E0` (pool ptr @ `0x2A35D4`, 12 slots, 120-frame life). On impact `CSHOT::step` registers the hit (radius 3.0) reading element/anti/ability data from `NowWeaponHave` **at impact time**. Her hits never cause flinch. Patched: a NEGATIVE `+0x2E0` makes the contact plant nothing and just end the pellet (`DebugIfCave.PelletPlant`, the plant call at 0x1ABE04 → cave) — how the Zeus sphere's bolt pellets hurt nothing themselves. |
 | Goro (2) | swing | Attack × 1.0 | radius 5.0 |
 | | charged smash | Attack × 1.5 | attack kind 1 |
 | | smash shockwave | Attack × **1.8** (1.2 (`0x2A1AF8`) × 1.5) | projectile |
