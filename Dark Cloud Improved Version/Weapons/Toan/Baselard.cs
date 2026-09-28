@@ -4,17 +4,17 @@ using System.Threading;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>Baselard — "Heavy Hand": every hit from the sword throws its enemy far. Each melee hit, the lunge and
-    /// the whirlwind kick at half the distance Big Bang's blast does (MeleeKick, the engine's own knockback words),
+    /// the whirlwind kick at a third of the distance Big Bang's blast does (MeleeKick, the engine's own knockback words),
     /// for as long as the Baselard is in Toan's hand on a dungeon floor. Super Steve carrying its SynthSphere throws with
     /// every PELLET the same way (<see cref="DriveSphere"/>): a pellet's hit carries no kick of its own, so the guard-bypass
     /// cave stamps this one on every entry planted with her pellets' damage (Mailbox.PelletKickDamage, as Dragon's Y's shot),
-    /// out of the hit itself — the vanilla guard test kept.</summary>
+    /// out of the hit itself — the vanilla guard test kept. A Claymore sphere drives the same pellet throw.</summary>
     internal static class Baselard
     {
-        // Big Bang's blast kicks at 3.5 fading 0.12 a frame: ≈ 3.5² / (2·0.12) ≈ 51 units. Half that distance at the
-        // same fade is a strength of 3.5 / √2 (the distance goes with the square of it).
-        private const float KickStrength = 2.475f;    // ≈ 25 units
-        private const float KickDecay    = 0.12f;     // the blast's own fade: the throw reads the same, only shorter
+        // Big Bang's blast kicks at 3.5 fading 0.12 a frame: ≈ 3.5² / (2·0.12) ≈ 51 units. A third of that distance at
+        // the same fade is a strength of 3.5 / √3 (the distance goes with the square of it).
+        internal const float KickStrength = 2.02f;    // ≈ 17 units (the Claymore, and both spheres, throw with the same)
+        internal const float KickDecay    = 0.12f;     // the blast's own fade: the throw reads the same, only shorter
         private const int   TickMs       = 100;
 
         public static void HeavyHandEffect()

@@ -24,6 +24,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread darkCloudThread = new Thread(new ThreadStart(DarkCloud.GuardCrushEffect));
         private static Thread kitchenKnifeThread = new Thread(new ThreadStart(KitchenKnife.SpringsBlessingEffect));
         private static Thread baselardThread = new Thread(new ThreadStart(Baselard.HeavyHandEffect));
+        private static Thread claymoreThread = new Thread(new ThreadStart(Claymore.GreatswordEffect));
         private static Thread gladiusThread = new Thread(new ThreadStart(Gladius.JacketHunterEffect));
         private static Thread crysKnifeThread = new Thread(new ThreadStart(CrysKnife.CrystalAffinityEffect));
         private static Thread angelGearThread = new Thread(new ThreadStart(AngelGear.GuardianReflectorEffect));
@@ -325,6 +326,16 @@ namespace Dark_Cloud_Improved_Version
                     {
                         baselardThread = new Thread(new ThreadStart(Baselard.HeavyHandEffect));
                         baselardThread.Start();
+                    }
+                    break;
+
+                case Items.claymore:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    if (!claymoreThread.IsAlive)
+                    {
+                        claymoreThread = new Thread(new ThreadStart(Claymore.GreatswordEffect));
+                        claymoreThread.Start();
                     }
                     break;
 

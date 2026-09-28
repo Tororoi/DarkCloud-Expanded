@@ -4378,7 +4378,7 @@ namespace Dark_Cloud_Improved_Version
                 // tree-walk only for ids not in the table or with no dcol1 frame (e.g. id 277).
                 if (ToanWeapons.TryGetValue(wid, out WeaponData wd) && wd.Dcol1.HasValue)
                 {
-                    _weaponDcol1Z = Math.Abs(wd.Dcol1.Value);
+                    _weaponDcol1Z = Math.Abs(wd.Dcol1.Value) * BladeFactor(wid);
                     WhirlVisualScale = _weaponDcol1Z / WhirlwindVisualRadius;
                 }
             }
@@ -4490,9 +4490,13 @@ namespace Dark_Cloud_Improved_Version
             float y = Memory.ReadFloat(name + WeaponModel.DcolNameToLocalX + 4);
             float z = Memory.ReadFloat(name + WeaponModel.DcolNameToLocalZ);
             if (Math.Abs(x) > 0.5f || Math.Abs(y) > 0.5f || z < 0.1f || z > 40f) { _whirlDcolBackoff = 8; return; } // sane (0,0,Z)
-            _weaponDcol1Z = z;
-            WhirlVisualScale = z / WhirlwindVisualRadius;
+            _weaponDcol1Z = z * BladeFactor(GetEquippedWeaponId());
+            WhirlVisualScale = _weaponDcol1Z / WhirlwindVisualRadius;
         }
+
+        /// <summary>How much longer than its model a weapon's blade is in Toan's hand (the Claymore is scaled up), so the whirl
+        /// visual is sized to the blade as swung.</summary>
+        static float BladeFactor(int wid) => wid == Items.claymore ? Claymore.BladeScale : 1f;
 
         static bool IsRamPtr(int p) => (uint)p >= 0x80000 && (uint)p < Memory.EeRamSize;
 

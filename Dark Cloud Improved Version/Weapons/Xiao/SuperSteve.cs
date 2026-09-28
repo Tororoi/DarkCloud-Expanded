@@ -624,8 +624,9 @@ namespace Dark_Cloud_Improved_Version
                 if (lastSphere == Items.swordofzeus && sphere != Items.swordofzeus) ZeusShot.Stop();
                 ZeusShot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.swordofzeus);
 
-                // Heavy Hand (Baselard): every pellet throws its enemy as the sword's hits do.
-                Baselard.DriveSphere(active && sphere == Items.baselard);
+                // Heavy Hand (Baselard) and the Claymore's throw: every pellet throws its enemy as the sword's hits do (the
+                // Claymore's size stays with the sword).
+                Baselard.DriveSphere(active && (sphere == Items.baselard || sphere == Items.claymore));
 
                 // Curses (full inherit): curse Xiao. Not pause-gated — mirrors the Toan loops.
                 Evilcise.Drive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);
