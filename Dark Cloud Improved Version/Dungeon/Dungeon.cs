@@ -156,6 +156,7 @@ namespace Dark_Cloud_Improved_Version
                     currentFloor = Memory.ReadByte(Addresses.checkFloor);
 
                     //Check if the player has entered a new floor
+                    ShotReactionAudit.Tick();                                       // DIAGNOSTIC: the shot config table against vanilla
                     if (currentFloor != prevFloor)
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Floor changed!");
