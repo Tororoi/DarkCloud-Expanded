@@ -484,6 +484,9 @@ namespace Dark_Cloud_Improved_Version
             /// CodeCaves.PelletContact — the pellet's slot, what it met (3 an enemy, 1 a wall) and the point (an enemy's hit-sphere centre)
             /// — on the engine's own frame (step__5CSHOT's contact call at 0x1ABD88 lands here).</summary>
             internal const uint PelletContact = Host + 0x700;  // 0x1B4EC0, 96 B → 0x1B4F20
+            /// <summary>ElfWeaponPatches.PatchGemDamage: a thrown gem's burst damage (30 × (dungeon + 1)) multiplied by
+            /// CodeCaves.GemDamageFactor on its way into the burst (the item-throw step's SetDmg call for a gem lands here); 0 = vanilla.</summary>
+            internal const uint GemDamage     = Host + 0x760;  // 0x1B4F20, 32 B → 0x1B4F40
         }
 
         /// <summary>A cave INSIDE a dead main-ELF function: the body of DebugInfomationDraw (0x1B3780, 3,952 B), the developers'
@@ -1069,7 +1072,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ContactCounter = 0x00, ContactSlot = 0x04, ContactKind = 0x08, ContactX = 0x0C, ContactH = 0x10, ContactY = 0x14;
         internal const int  ContactEnemy = 3, ContactWall = 1;
 
-        // ── FREE: 0x21FAF9B0 .. 0x21FB0000 (0x650 B) ────────────────────────────────────────────────────
+        /// <summary>GEM DAMAGE FACTOR (the gem-damage cave, DebugIfCave.GemDamage): a thrown gem's burst damage is multiplied by this
+        /// integer as the throw sets it; 0 (fresh memory) = vanilla. The Crysknife's "Crystal Affinity" writes 2 while it is in hand.</summary>
+        internal const long GemDamageFactor      = 0x21FAF9B0;
+        internal const uint GemDamageFactorGuest = 0x01FAF9B0;
+
+        // ── FREE: 0x21FAF9C0 .. 0x21FB0000 (0x640 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

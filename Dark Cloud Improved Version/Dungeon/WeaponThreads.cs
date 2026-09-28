@@ -25,6 +25,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread kitchenKnifeThread = new Thread(new ThreadStart(KitchenKnife.SpringsBlessingEffect));
         private static Thread baselardThread = new Thread(new ThreadStart(Baselard.HeavyHandEffect));
         private static Thread gladiusThread = new Thread(new ThreadStart(Gladius.JacketHunterEffect));
+        private static Thread crysKnifeThread = new Thread(new ThreadStart(CrysKnife.CrystalAffinityEffect));
         private static Thread angelGearThread = new Thread(new ThreadStart(AngelGear.GuardianReflectorEffect));
         private static Thread superSteveThread = new Thread(new ThreadStart(SuperSteve.SphereInheritanceEffect));
         private static Thread matadorThread = new Thread(new ThreadStart(Matador.ChargingBullEffect));
@@ -327,6 +328,16 @@ namespace Dark_Cloud_Improved_Version
                     }
                     break;
 
+                case Items.crystalknife:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    if (!crysKnifeThread.IsAlive)
+                    {
+                        crysKnifeThread = new Thread(new ThreadStart(CrysKnife.CrystalAffinityEffect));
+                        crysKnifeThread.Start();
+                    }
+                    break;
+
                 case Items.gladius:
                     BoneRapier.SkeletonKeyEffect(false);
 
@@ -404,6 +415,11 @@ namespace Dark_Cloud_Improved_Version
                     {
                         gladiusThread = new Thread(new ThreadStart(Gladius.JacketHunterEffect));
                         gladiusThread.Start();
+                    }
+                    if (!crysKnifeThread.IsAlive && CrysKnife.Wielded())   // Crystal Affinity, for a Crysknife sphere (its circle passive is ownership's, not the sphere's)
+                    {
+                        crysKnifeThread = new Thread(new ThreadStart(CrysKnife.CrystalAffinityEffect));
+                        crysKnifeThread.Start();
                     }
                     break;
 

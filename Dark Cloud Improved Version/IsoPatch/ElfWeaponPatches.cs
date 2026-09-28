@@ -235,6 +235,40 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(HookAddr), ours);
         }
 
+        /// <summary>A thrown gem's burst damage under a mod factor. CMainItemModel::Step, landing a thrown elemental gem (items
+        /// 161–165), computes 30 × (selectMapNo + 1), moves it to a1 and calls <c>SetDmg__12CSHOT_EFFECT(slot, damage)</c> on the
+        /// gem's Maseki burst (0x1D52D4; the Holy Water burst's call at 0x1D51F0 is left alone). That call becomes `jal GemDamage`:
+        /// <code>
+        ///   lui t0,HI / lw t0,LO(GemDamageFactor) / beq t0,zero,go / nop / mult a1,t0 / mflo a1 / go: j SetDmg / nop
+        /// </code>
+        /// a1 multiplied by the factor when the word is set; a zero word — fresh memory — is vanilla.</summary>
+        internal static void PatchGemDamage(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint HookAddr = 0x001D52D4, SetDmg = 0x001AE310;
+            uint cave = CodeCaves.DebugIfCave.GemDamage;
+            uint word = CodeCaves.GemDamageFactorGuest, whi = (word + 0x8000) >> 16, wlo = (word - (whi << 16)) & 0xFFFFu;
+            uint[] words =
+            {
+                0x3C080000u | whi,                              // 0 lui   t0,HI(GemDamageFactor)
+                0x8D080000u | wlo,                              // 1 lw    t0,LO(t0)
+                0x11000003u,                                    // 2 beq   t0,zero,go (+3 → index 6)
+                0x00000000u,                                    // 3   nop
+                0x00A80018u,                                    // 4 mult  a1,t0                         the damage × the factor
+                0x00002812u,                                    // 5 mflo  a1
+                0x08000000u | ((SetDmg >> 2) & 0x03FFFFFFu),    // 6 go: j SetDmg__12CSHOT_EFFECT         ra still the step's
+                0x00000000u,                                    // 7   nop
+            };
+            if (cave + (uint)words.Length * 4 > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                throw new IOException("The gem-damage cave does not fit its host (DebugInfomationIF).");
+            for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+            uint cur = RdU32(fs, ElfOff(HookAddr)), ours = Jal(cave);
+            if (cur != Jal(SetDmg) && cur != ours)
+                throw new IOException($"Gem damage site 0x{HookAddr:X} is not vanilla `jal SetDmg__12CSHOT_EFFECT` — unmodified Dark Cloud (USA) ISO expected.");
+            if (RdU32(fs, ElfOff(HookAddr + 4)) != 0 || RdU32(fs, ElfOff(HookAddr - 4)) != 0x70402E28u)   // its delay slot; `moveq a1,v0`: the damage into a1
+                throw new IOException("CMainItemModel::Step is not laid out as expected around the gem's SetDmg.");
+            WrU32(fs, ElfOff(HookAddr), ours);
+        }
+
         /// <summary>The Sun Sword's blade under its own ambient (SolarBlade): the mask-tint cave's BODY is generic — it adds
         /// Mailbox.CatCapeTint to the ambient, calls the DrawVu1 in t9, restores — only its two 3-word entries name the skinned
         /// class's overloads. A weapon model's mesh is a CVisualVu1, so these two entries load THAT class's overloads and jump
