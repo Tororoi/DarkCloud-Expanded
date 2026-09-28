@@ -52,7 +52,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
         private static Thread mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
         private static Thread herculesWrathThread = new Thread(new ThreadStart(CustomUngagaEffects.HerculesWrathEffect));
-        private static Thread babelSpearThread = new Thread(new ThreadStart(CustomUngagaEffects.BabelSpearEffect));
+        private static Thread babelSpearThread = new Thread(new ThreadStart(BabelsSpear.CurseOfBabelEffect));
         private static Thread cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.AbsorbEffect));
         private static Thread supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
         private static Thread starBreakerThread = new Thread(new ThreadStart(CustomOsmondEffects.ShootingStarsEffect));
@@ -670,7 +670,7 @@ namespace Dark_Cloud_Improved_Version
                 case Items.babelsspear:
                     if (!babelSpearThread.IsAlive)
                     {
-                        babelSpearThread = new Thread(new ThreadStart(CustomUngagaEffects.BabelSpearEffect));
+                        babelSpearThread = new Thread(new ThreadStart(BabelsSpear.CurseOfBabelEffect));
                         babelSpearThread.Start();
                     }
                     break;

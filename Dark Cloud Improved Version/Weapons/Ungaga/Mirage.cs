@@ -357,7 +357,7 @@ namespace Dark_Cloud_Improved_Version
 
                         // Angel Gear's shield ring OWNS the per-slot table while it is up (Mirage and Angel
                         // Gear can never be wielded simultaneously) — stand down, resume when it releases.
-                        if (!AngelGear.RingActive)
+                        if (!AngelGear.RingActive && !BabelsSpear.OwnsTable)   // …as does Babel's Spear while its confusion runs
                             WriteTable();   // fills the per-slot table both _GET_POSITION and _GET_DISTANCE now read
                         // PNACH gate flag: 1 = clone drawn → NOP the chara-loop gates; 2 = in a dungeon w/o a decoy
                         // → RESTORE the vanilla gates (they don't auto-revert). 0 (town) is set below so the shared

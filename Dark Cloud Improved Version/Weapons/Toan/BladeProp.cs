@@ -53,7 +53,7 @@ namespace Dark_Cloud_Improved_Version
         /// weapon's model (<paramref name="rootGuest"/> 0) pointing straight down, or the model rooted at
         /// <paramref name="rootGuest"/> as it is authored (<paramref name="pointDown"/> false). False if the slot or cave is
         /// in use, or there is no model yet.</summary>
-        internal static bool Spawn(float scale, uint rootGuest = 0, bool pointDown = true)
+        internal static bool Spawn(float scale, uint rootGuest = 0, bool pointDown = true, bool pointUp = false)
         {
             if (Active) return true;
             if (SlingshotProp.Active || CharacterClone.IsActive)
@@ -61,6 +61,7 @@ namespace Dark_Cloud_Improved_Version
             _scale = scale; _fromWeapon = rootGuest == 0;
             if (!CopyTree(rootGuest) || !CopyRigidMesh() || !RegisterSlot()) return false;
             if (pointDown) BakeDownward();
+            else if (pointUp) BakeUpward();
             Active = true;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{(_fromWeapon ? "blade" : "model")} copy up (x{scale}, slot {Slot}, root 0x{_rootGuest:X}); the original untouched");
             return true;
@@ -347,6 +348,18 @@ namespace Dark_Cloud_Improved_Version
             // R_x(+90°): y → z, z → −y — row1' = row2, row2' = −row1. (The other sign hung it point-UP: the
             // sword's authored grip already carries a half-turn, so the quarter-turn goes the other way.)
             float[] o = { m[0], m[1], m[2],  m[6], m[7], m[8],  -m[3], -m[4], -m[5] };
+            for (int i = 0; i < 9; i++) Memory.WriteFloat(r + CFrameVu1.LocalMatrix + (i / 3) * 0x10 + (i % 3) * 4, o[i]);
+            Memory.WriteInt(r + CFrameVu1.WorldCacheA, 0);
+        }
+
+        /// <summary>The other quarter-turn: the weapon's blade axis (+Z) turned to point straight UP — Babel's Spear rising
+        /// out of the ground. R_x(−90°): row1' = −row2, row2' = row1.</summary>
+        private static void BakeUpward()
+        {
+            long r = Memory.ToMmu(_rootGuest);
+            float[] m = new float[9];
+            for (int i = 0; i < 9; i++) m[i] = Memory.ReadFloat(r + CFrameVu1.LocalMatrix + (i / 3) * 0x10 + (i % 3) * 4);
+            float[] o = { m[0], m[1], m[2],  -m[6], -m[7], -m[8],  m[3], m[4], m[5] };
             for (int i = 0; i < 9; i++) Memory.WriteFloat(r + CFrameVu1.LocalMatrix + (i / 3) * 0x10 + (i % 3) * 4, o[i]);
             Memory.WriteInt(r + CFrameVu1.WorldCacheA, 0);
         }

@@ -10,33 +10,6 @@ namespace Dark_Cloud_Improved_Version
 
         private static Random random = new Random();
 
-        // ── Babel's Spear ──────────────────────────────────────────────────────────────────
-        /// <summary>
-        /// Triggers Babel Spear effect: Chance on hit to apply stop to all enemies.
-        /// </summary>
-        public static void BabelSpearEffect()
-        {
-            int hit = ReusableFunctions.GetRecentDamageDealtByPlayer();
-
-            bool hasHit = hit > -1 && ReusableFunctions.GetDamageSourceCharacterID() == Player.UngagaId;
-
-            if (hasHit)
-            {
-                int procChance = random.Next(100);
-
-                //Chance to apply stop (6%)
-                if (procChance < 6)
-                {
-                    for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
-                        if (Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) == 2)
-                            Memory.WriteUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.FreezeTimer), 300); //Stop duration (300 = 5 seconds)
-                }
-            }
-
-            //Reset the damage and source values
-            ReusableFunctions.ClearRecentDamageAndDamageSource();
-        }
-
         // ── Cactus "Absorb" ────────────────────────────────────────────────────────────────
         private static readonly HashSet<int> CactusImmuneNameTags = new()
         {
