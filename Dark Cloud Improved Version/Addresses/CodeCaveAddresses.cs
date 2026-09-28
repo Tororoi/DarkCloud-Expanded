@@ -1077,7 +1077,14 @@ namespace Dark_Cloud_Improved_Version
         internal const long GemDamageFactor      = 0x21FAF9B0;
         internal const uint GemDamageFactorGuest = 0x01FAF9B0;
 
-        // ── FREE: 0x21FAF9C0 .. 0x21FB0000 (0x640 B) ────────────────────────────────────────────────────
+        /// <summary>Babel's Spear: a confused enemy with nothing to go after wanders — its target-pointer entry names one of
+        /// these, its own (x, height, y, 1) quadword the mod moves every few seconds. 16 slots × 16 B, quadword-aligned
+        /// (the redirect copies it with sceVu0CopyVector).</summary>
+        internal const long BabelWander      = 0x21FAF9C0;
+        internal const uint BabelWanderGuest = 0x01FAF9C0;
+        internal const int  BabelWanderStride = 16;
+
+        // ── FREE: 0x21FAFAC0 .. 0x21FB0000 (0x540 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

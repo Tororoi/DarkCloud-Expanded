@@ -18,7 +18,10 @@ step), which `Step__10CCharacter` reads every frame. The five combo entries of T
 | 39 | 847–857 | 0.3 | 0.4 |
 | 40 | 856–884 | 0.3 | 0.4 |
 
-Every entry is checked against its frame range before a write, so a list that is not Toan's (an ally out, a reload)
+Writes happen only in walking mode (`Addresses.dungeonMode` 1) and only once the same list address has been seen on two
+consecutive ticks — a write during a floor load, when the character's list pointer can still name a block the loader has
+freed and is refilling, once landed in the weapon model being built (Toan's sword came up huge and garbled until it was
+rebuilt). Every entry is checked against its frame range before a write, so a list that is not Toan's (an ally out)
 is never touched; a step holding neither stock nor the raised figure is left alone. The list address is remembered
 so the steps go back to 0.3 on unequip, on an ally swap, or when the list moves.
 

@@ -14,6 +14,11 @@ namespace Dark_Cloud_Improved_Version
     /// hits on windows 2–4 frames wide and the chain inputs on windows exactly 1 frame wide, so a step of 0.6 still lands in
     /// every one of them (as does 0.4); a step above 1.0 could skip a chain window, so the factor stays under that.
     ///
+    /// The list is reached through the character's own pointer, so it is written only in WALKING mode (Addresses.dungeonMode 1)
+    /// and only once the same list has been seen on two consecutive ticks: a write during a floor load, when the pointer can
+    /// still name a block the loader has freed and is refilling, once landed in the weapon model being built (Toan's sword
+    /// came up huge and garbled until it was rebuilt).
+    ///
     /// Super Steve carrying its SynthSphere draws and shoots faster the same way (<see cref="DriveSphere"/>): Xiao's c04b
     /// draw entry (11) is raised ×1.6 and the shoot (13) to a step of 0.95; the hold (12, a zero-step loop) is left alone. The
     /// draw hands over inside [end − 2, end], a two-frame window, so a step of 1.12 still lands. ⚠ The shoot must never
@@ -55,6 +60,8 @@ namespace Dark_Cloud_Improved_Version
 
         private static long _list;         // MMU address of the Mot_List Toan's steps were raised in (0 = none)
         private static long _sphereList;   // …and Xiao's, for the sphere
+        private static long _seenList;     // the list found on the previous tick: written only when seen twice running
+        private const byte  WalkingMode = 1;   // Addresses.dungeonMode: on the floor, nothing loading
 
         public static void SwiftStrikesEffect()
         {
@@ -87,7 +94,9 @@ namespace Dark_Cloud_Improved_Version
         /// has the old one put back first. Returns the number of steps written this tick.</summary>
         private static int Drive(Swing[] set, ref long held, string tag)
         {
+            if (Memory.ReadByte(Addresses.dungeonMode) != WalkingMode) return 0;   // a load or a menu: the pointer is not to be trusted
             long list = MotionListOf(set);
+            if (list != _seenList) { _seenList = list; return 0; }                  // first sight: settle a tick before writing
             if (list == 0) return 0;
             if (held != 0 && list != held) SetSteps(held, set, fast: false);   // the list moved: the old one back to stock
             held = list;
