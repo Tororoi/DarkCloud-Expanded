@@ -25,6 +25,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread kitchenKnifeThread = new Thread(new ThreadStart(KitchenKnife.SpringsBlessingEffect));
         private static Thread baselardThread = new Thread(new ThreadStart(Baselard.HeavyHandEffect));
         private static Thread claymoreThread = new Thread(new ThreadStart(Claymore.GreatswordEffect));
+        private static Thread shamshirThread = new Thread(new ThreadStart(Shamshir.SwiftStrikesEffect));
         private static Thread gladiusThread = new Thread(new ThreadStart(Gladius.JacketHunterEffect));
         private static Thread crysKnifeThread = new Thread(new ThreadStart(CrysKnife.CrystalAffinityEffect));
         private static Thread angelGearThread = new Thread(new ThreadStart(AngelGear.GuardianReflectorEffect));
@@ -336,6 +337,16 @@ namespace Dark_Cloud_Improved_Version
                     {
                         claymoreThread = new Thread(new ThreadStart(Claymore.GreatswordEffect));
                         claymoreThread.Start();
+                    }
+                    break;
+
+                case Items.shamshir:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    if (!shamshirThread.IsAlive)
+                    {
+                        shamshirThread = new Thread(new ThreadStart(Shamshir.SwiftStrikesEffect));
+                        shamshirThread.Start();
                     }
                     break;
 

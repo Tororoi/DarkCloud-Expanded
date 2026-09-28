@@ -628,6 +628,9 @@ namespace Dark_Cloud_Improved_Version
                 // Claymore's size stays with the sword).
                 Baselard.DriveSphere(active && (sphere == Items.baselard || sphere == Items.claymore));
 
+                // Swift Strikes (Shamshir): her draw plays ×1.6 faster and her shoot at the fastest step that still fires.
+                Shamshir.DriveSphere(active && sphere == Items.shamshir);
+
                 // Curses (full inherit): curse Xiao. Not pause-gated — mirrors the Toan loops.
                 Evilcise.Drive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);
                 Maneater.Drive(sphere == Items.maneater, xiaoCurse, rec, ssManeater);
@@ -726,6 +729,7 @@ namespace Dark_Cloud_Improved_Version
             Evilcise.Drive(false, xiaoCurse, ssEvilcise);
             Maneater.Drive(false, xiaoCurse, 0, ssManeater);
             SuperSteve.DriveSmallSword(false);
+            Shamshir.DriveSphere(false);
             SuperSteve.DriveTsukikage(false);
             SuperSteve.DriveHeavensCloud(false);   // resets the flash latches
             SuperSteve.DriveAgasSword(false);
