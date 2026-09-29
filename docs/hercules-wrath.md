@@ -9,10 +9,10 @@ keep guarding 5 s more:
 |---|---|
 | dim | `SolarLighting.BeginDim` / `DimTo(0.35 × charge)` — Big Bang's prime darkness; held while primed |
 | body tint | the dim's own white (`SolarLighting.TintEnemies`: enemies and the active character, up to 30 at a dim of 0.5), and the Mirage clone (`CharacterClone.BodyTint`) |
-| spear | gold (150, 130, 50) on an exponential ramp (e^(4f)−1)/(e^4−1) to full at 5 s: the real blade through `SolarBlade` (the Sun Sword's vtable-copy lever, frame `w09_` of c10w09), the clone's weapon slot through `CharacterClone.WeaponTint` |
+| spear | gold (150, 130, 50) on an exponential ramp (e^(4f)−1)/(e^4−1) to full at 5 s: through `SolarBlade` (the Sun Sword's vtable-copy lever, frame `w09_` of c10w09) — the clone's spear too, since its rigid weapon visuals are SHARED with the real spear's (a slot tint on top of that doubled the gold) |
 | release early | guard let go before level 2: gold cleared, dim ended (the Mirage decoy stays) |
 | primed | charge-complete flash; the dim holds until the next swing reaches frame 677 of Ungaga's attack motion (the end of his first swing's 674–677 hit window) for as long as a Mirage decoy stands — a new decoy cast keeps it primed; if the last one dissolves unused, the gold and the dim fall away with its dissolve (`Mirage.DecoyOutroAlpha`) and the strike is gone. The decoy lasts 18 s for Hercules' Wrath (12 for the Mirage), latched at each cast |
-| clone | drawn by the dungeon's chara-slot loop, which the scene dim does not reach: its dim scalar (+0xCF0) follows the dim instead (`CharacterClone.SceneLight` = 1 − dim × 0.85) |
+| clone | drawn by the chara-slot draw (Draw__12CNPCharacter), which adds a slot's tint to the ambient and then calls Draw__10CCharacter, which adds it again: the chara-slot pass also misses the room's darkening, so the clone takes the scene's light fraction d as its own dim (`CharacterClone.SceneLight`), and every tint written to its slots is t / (1 + d) — (A + x)·d + x = A·d + t, Ungaga's |
 
 The swing plays s78's cutscene sparkle `e508_ex` ON THE MIRAGE (`Mirage.DecoyPosition`); the blast is centred there. The ISO patch copies it onto the dead
 `dun\effect\zibaku_r.chr` with `zibaku_r.cfg` exposed (`BorrowedShotBakes`). It is borrowed into the SECOND main-character
@@ -27,9 +27,9 @@ sub-shot stays on the mirage.
 
 | frame | what |
 |---|---|
-| 21 (motion 1 starts) | the spear's gold fades out over 21 → 36 |
 | 21 → 36 | `SolarLighting.DimRamp(0.35, u)`: the exponential plunge to black |
 | 36 | `BigBang.PlantFalloff(…, reachScale: 2)` (Big Bang's multipliers on rings of 20 / 50 / 80 / 100: 4× / 3× / 2× / 1× attack), `WeaponWhp.Drain(herculeswrath, 20)` (Big Bang's blast cost), `Mirage.Dispel()` (the decoy gone at once, under the flash), `SunSword.ZeusFlash.ArmLighting()` + `SolarLighting.Flash()` — the bolt's white, easing back over 2 s |
+| 60 → 68 | the sparkle (`SetFade`) and the spear's gold (held full until here) fade out together; the sub-shot ends at 68 |
 
 Nothing of Ungaga's steps `SolarLighting.Tick`, so the ultimate's loop does, every 16 ms, and restores the light on exit.
 If the sparkle is not entered on a floor, the swing blasts at once.

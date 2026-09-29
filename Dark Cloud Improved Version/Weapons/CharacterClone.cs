@@ -761,20 +761,27 @@ namespace Dark_Cloud_Improved_Version
             return head;
         }
 
-        /// <summary>An ambient add another ability lays on the clone's body (the dark's white while the room dims — SolarLighting)
-        /// and on its weapon (Hercules' Wrath's charge gold, matching the real spear), on top of the ghost tint. RGB, 0–255.</summary>
-        internal static readonly float[] BodyTint = new float[3], WeaponTint = new float[3];
-        /// <summary>The scene's light as a fraction of its own (1 = untouched): the clone is drawn by the dungeon's chara-slot loop,
-        /// which does not take the scene lighting SolarLighting darkens, so while the room dims the clone's dim scalar (+0xCF0) is
-        /// held at this instead — else it stood at full light beside a darkened Ungaga, spear and all.</summary>
+        /// <summary>An ambient add another ability lays on the clone (the dark's white while the room dims — SolarLighting), on top of
+        /// the ghost tint, body and weapon slot alike: the real weapon draws inside the player's own draw, under his tint. A tint on
+        /// the weapon MESH itself (SolarBlade's gold) needs nothing here: the clone's rigid weapon visuals are SHARED with the real
+        /// weapon's (see GraftWeapon), so the blade lever's private vtable already tints the clone's spear the same. RGB, 0–255.</summary>
+        internal static readonly float[] BodyTint = new float[3];
+        /// <summary>The scene's light as a fraction of its own (1 = untouched), taken as the clone's dim (+0xCF0 on the weapon slot;
+        /// the body's through the step's own DimOn/DimFloor, since the step rewrites +0xCF0 on a stepped slot): the chara-slot pass
+        /// does not see the darkening SolarLighting writes, so without it the clone stood lit beside a dimmed Ungaga (with nothing
+        /// active the two match exactly).</summary>
         internal static float SceneLight = 1f;
 
         /// <summary>Re-assert the ghost's ambient-ADD tint (+0xCE0 RGB) on a chara slot — brighter + blue — plus the add
-        /// <paramref name="extra"/> an ability has asked for.</summary>
+        /// <paramref name="extra"/> an ability has asked for, at HALF: a chara slot is drawn by Draw__12CNPCharacter (0x156540),
+        /// which adds +0xCE0 to the ambient and then calls Draw__10CCharacter, which adds it AGAIN — so a slot shows twice its
+        /// tint, where the player (drawn by Draw__10CCharacter alone) shows it once. The first add is scaled by the slot's dim d and
+        /// the second is not — (A + x)·d + x — so for Ungaga's A·d + t the slot takes x = t / (1 + d): half at no dim.</summary>
         private static void WriteGhostTint(long charaSlot, float[] extra)
         {
+            float k = 1f / (1f + SceneLight);
             Memory.WriteVec3(charaSlot + CCharacter.CharaTint,
-                (GhostSilhouette ? GhostTintR : 0f) + extra[0], (GhostSilhouette ? GhostTintG : 0f) + extra[1], (GhostSilhouette ? GhostTintB : 0f) + extra[2]);
+                (GhostSilhouette ? GhostTintR : 0f) + extra[0] * k, (GhostSilhouette ? GhostTintG : 0f) + extra[1] * k, (GhostSilhouette ? GhostTintB : 0f) + extra[2] * k);
         }
 
         private static void MaintainInternal()
@@ -825,7 +832,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteInt  (wslot + DungeonCharaDraw.CharaActive, 1);
                 Memory.WriteFloat(wslot + CCharacter.NpcOpacity,  op);   // same envelope as the body — fade together
                 Memory.WriteFloat(wslot + CCharacter.DimFactor,   (GhostSilhouette ? GhostDim : 1.0f) * SceneLight);   // ...and the same ghost dim
-                WriteGhostTint(wslot, WeaponTint);
+                WriteGhostTint(wslot, BodyTint);          // the weapon under the body's tint, as the real one is under the player's
                 Memory.WriteInt  (wslot + DungeonCharaDraw.CharaMotionA, 0);
                 Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)WeaponCharaSlot * 4, 1);
                 Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)WeaponCharaSlot * 4, 1);

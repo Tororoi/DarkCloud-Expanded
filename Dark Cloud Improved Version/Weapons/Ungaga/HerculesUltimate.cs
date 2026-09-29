@@ -7,8 +7,8 @@ namespace Dark_Cloud_Improved_Version
     /// Hercules' Wrath inherits: the guard pose held Mirage.GuardChargeMs); keep holding the guard <see cref="ChargeSeconds"/> more
     /// to charge level 2: the room dims
     /// as Big Bang's does (SolarLighting, <see cref="PrimeDim"/>), the enemies, Ungaga and his Mirage clone take the dark's white
-    /// (SolarLighting's own, up to 30), and the spear goes gold (<see cref="Gold"/>) on an exponential curve — the real one through
-    /// the blade-tint lever the Sun Sword uses (SolarBlade, its mesh frame `w09__m`), the clone's through its weapon slot's tint.
+    /// (SolarLighting's own, up to 30), and the spear goes gold (<see cref="Gold"/>) on an exponential curve — both through the
+    /// blade-tint lever the Sun Sword uses (SolarBlade, its mesh frame `w09__m`): the clone's spear shares the real one's visual.
     /// Released early, it all falls away. Full, it is PRIMED and the dim holds — for as long as a Mirage decoy stands (a new one
     /// cast keeps it primed); when the last one dissolves unused, the gold and the dim fall away with it. The next swing plays the
     /// sparkle ON THE MIRAGE (Mirage.DecoyPosition), and the blast is centred there
@@ -19,8 +19,8 @@ namespace Dark_Cloud_Improved_Version
     /// frame <see cref="FadeFrom"/> to <see cref="FadeTo"/>, where the mod ends the sub-shot (motion 2 is never played;
     /// the config still declares it as the muzzle motion, so the engine's own retire window, frames 95–96, is never reached
     /// early). Every mesh of the sparkle is an unlit additive frame (`__czapp…`), drawn in its frame's constant colour
-    /// (CFrame +0xD0..+0xDC, 128), so that colour scaled to 0 fades it (<see cref="SetFade"/>). From motion 1 the spear's
-    /// gold fades; from frame <see cref="DarkFrom"/> to <see cref="BlastFrame"/> the room plunges to black; at frame
+    /// (CFrame +0xD0..+0xDC, 128), so that colour scaled to 0 fades it (<see cref="SetFade"/>). The spear's gold holds full
+    /// through motion 1 and fades back to the plain spear with the sparkle, frame <see cref="FadeFrom"/> to <see cref="FadeTo"/>; from frame <see cref="DarkFrom"/> to <see cref="BlastFrame"/> the room plunges to black; at frame
     /// <see cref="BlastFrame"/> Big Bang's blast lands on the enemy (its falloff, multiplier and weapon-HP cost) and the light
     /// flashes as the Sword of Zeus's bolt does, easing back to normal over two seconds.</summary>
     internal static class HerculesUltimate
@@ -37,7 +37,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  BlastReach    = 2f;                       // Big Bang's falloff rings (10/25/40/50 at 4×/3×/2×/1× attack) ×2
         // e508_ex's KEYs: 0 = 2–16 @0.3, 1 = 21–80 @0.7, 2 = 81–96 (the fade).
         private const float  M0Start = 2f, M0End = 16f, M1Start = 21f, M1End = 80f;
-        private const float  FadeFrom = 60f, FadeTo = 68f;             // motion 1 fades out across these frames; the sparkle ends at FadeTo
+        private const float  FadeFrom = 60f, FadeTo = 68f;             // motion 1 and the spear's gold fade out across these frames; the sparkle ends at FadeTo
         // The strike leaves on this frame of Ungaga's swing (his motion cursor, PlayerAction.AnimFrameCursor): his first combo
         // swing's hit window is 674–677 (UngagaKey_Play), the next swing starts at 686.
         private const float  StrikeFrame = 677f, StrikeWindowEnd = 686f;
@@ -144,17 +144,10 @@ namespace Dark_Cloud_Improved_Version
 
         private static float Curve(float f) => (float)((Math.Exp(GoldCurve * f) - 1.0) / (Math.Exp(GoldCurve) - 1.0));
 
-        /// <summary>The spear's gold at <paramref name="k"/> (0..1): the real blade, and the clone's weapon to match.</summary>
-        private static void SetGold(float k)
-        {
-            SolarBlade.Set(k, ModelCode, BladeFrame, 0, Gold);
-            for (int i = 0; i < 3; i++) CharacterClone.WeaponTint[i] = Gold[i] * k;
-        }
-        private static void ClearGold()
-        {
-            SolarBlade.Clear();
-            for (int i = 0; i < 3; i++) CharacterClone.WeaponTint[i] = 0f;
-        }
+        /// <summary>The spear's gold at <paramref name="k"/> (0..1) through the blade lever — which tints the clone's spear as well:
+        /// the clone's rigid weapon visuals are the real spear's own (shared), private vtable and all.</summary>
+        private static void SetGold(float k) => SolarBlade.Set(k, ModelCode, BladeFrame, 0, Gold);
+        private static void ClearGold() => SolarBlade.Clear();
 
         /// <summary>The clone's spear tip, or the mirage's spot when the clone's weapon cannot be read.</summary>
         private static (float x, float h, float y) SpearTip()
@@ -227,10 +220,11 @@ namespace Dark_Cloud_Improved_Version
                 {
                     float u = Math.Max(0f, Math.Min(1f, (frame - DarkFrom) / (BlastFrame - DarkFrom)));
                     SolarLighting.DimRamp(PrimeDim, u);                                // the plunge to black, frame 21 → 36
-                    SetGold(1f - u);                                                   // the spear's gold fades from motion 1
                     if (frame >= BlastFrame) Blast();
                 }
-                if (frame >= FadeFrom) SetFade(1f - Math.Max(0f, Math.Min(1f, (frame - FadeFrom) / (FadeTo - FadeFrom))));
+                float v = 1f - Math.Max(0f, Math.Min(1f, (frame - FadeFrom) / (FadeTo - FadeFrom)));
+                SetGold(v);                                                            // the spear's gold holds full, then fades with the sparkle
+                if (frame >= FadeFrom) SetFade(v);
                 if (frame >= FadeTo || frame >= M1End - Lead || status == 3)
                 {   // faded out: the sub-shot ended here (no motion 2)
                     if (!_blasted) Blast();
@@ -249,7 +243,6 @@ namespace Dark_Cloud_Improved_Version
             BigBang.PlantFalloff(x, h, y, reachScale: BlastReach);                  // Big Bang's rings at twice the reach: 20 / 50 / 80 / 100
             WeaponWhp.Drain(Items.herculeswrath, BlastWhp, Tag + "ultimate ");
             Mirage.Dispel();                                                         // the strike takes the mirage with it
-            ClearGold();
             SunSword.ZeusFlash.ArmLighting();
             SolarLighting.Flash();
             Console.WriteLine(Tag + $"blast at ({x:F0},{h:F0},{y:F0})");
