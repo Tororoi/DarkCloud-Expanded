@@ -418,13 +418,31 @@ def mdt_triangles(m):
 
 
 # ---------------------------------------------------------------- textures
-def tim2_rgba(block):
+def unswizzle8(data, w, h):
+    """PSMT8 pixel data laid out in the GS's 32-bit block order back to a plain row-major 8-bit image."""
+    out = bytearray(w * h)
+    for y in range(h):
+        for x in range(w):
+            bl = (y & ~0xF) * w + (x & ~0xF) * 2
+            ss = (((y + 2) >> 2) & 1) * 4
+            py = (((y & ~3) >> 1) + (y & 1)) & 7
+            cl = py * w * 2 + ((x + ss) & 7) * 4
+            bn = ((y >> 1) & 1) + ((x >> 2) & 2)
+            out[y * w + x] = data[bl + cl + bn]
+    return bytes(out)
+
+
+def tim2_rgba(block, swizzled=False):
     """(w, h, rgba bytes) from a TIM2 picture. 8-bit indexed only, which is every character texture on the disc.
 
     The 256-colour CLUT is stored in the PS2's CSM1 block order, so entries have to be un-swizzled before use — bits 3 and 4
     of the index swap. Reading it straight gives a picture with the right colours in the wrong places; measured on the cat's
     face texture, neighbouring pixels differ by 34 taken straight and 24 un-swizzled, which is how you can tell without
-    looking at it."""
+    looking at it.
+
+    `swizzled`: the PIXEL data is in the GS's PSMT8 block order too, and is put back row-major first. That is the case for
+    every picture in an `IM2\0` bank (Goro's, the Dark Genie's, most effect textures) and for none in an `IMG\0` bank —
+    measured over 750 textures by comparing neighbour-pixel roughness both ways (2026-09-28); pass the bank's magic."""
     if block[:4] != b'TIM2':
         raise ValueError('not a TIM2')
     pic = 0x10
@@ -434,6 +452,8 @@ def tim2_rgba(block):
     if colors != 256:
         raise ValueError(f'{colors}-colour TIM2 is not supported (8-bit indexed only)')
     px = block[pic + hdr_sz: pic + hdr_sz + img_sz]
+    if swizzled and w % 16 == 0 and h % 16 == 0:
+        px = unswizzle8(px, w, h)
     cl = block[pic + hdr_sz + img_sz: pic + hdr_sz + img_sz + clut_sz]
     unsw = lambda k: (k & ~0x18) | ((k & 0x08) << 1) | ((k & 0x10) >> 1)
     pal = []

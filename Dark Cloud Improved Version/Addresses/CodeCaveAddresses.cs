@@ -487,6 +487,26 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>ElfWeaponPatches.PatchGemDamage: a thrown gem's burst damage (30 × (dungeon + 1)) multiplied by
             /// CodeCaves.GemDamageFactor on its way into the burst (the item-throw step's SetDmg call for a gem lands here); 0 = vanilla.</summary>
             internal const uint GemDamage     = Host + 0x760;  // 0x1B4F20, 32 B → 0x1B4F40
+            /// <summary>ElfWeaponPatches.PatchSecondEffect: the dungeon loop's step and draw of the LIVE main-character effect
+            /// (dun 0x1DB8740 / 0x1DAEB90, `lw a0,-0x6304(gp); jal Step/Draw__12CSHOT_EFFECT`) land here: the live instance as
+            /// before, then the SECOND instance (0x01E97BC0) as well while CodeCaves.SecondEffectLive is set — an effect an
+            /// ability borrowed into it beside the character's own (Babel's Spear's shockwave) is stepped and drawn.</summary>
+            internal const uint SecondEffectStep = Host + 0x780;  // 0x1B4F40, 64 B → 0x1B4F80
+            internal const uint SecondEffectDraw = Host + 0x7C0;  // 0x1B4F80, 64 B → 0x1B4FC0
+            /// <summary>ElfWeaponPatches.PatchBladeSpin: chained after the blade-fall cave (whose two exits jump here instead of
+            /// the WHP bill), once a dungeon frame: chara slot 3's yaw += CodeCaves.BladeSpin (radians a frame; 0 = off), wrapped
+            /// to ±π — the engine's own frame turns the judgement blade / Babel's spear copy.</summary>
+            internal const uint BladeSpin        = Host + 0x800;  // 0x1B4FC0, 112 B → 0x1B5030
+            /// <summary>tools/stubs/spear_block.s (ElfWeaponPatches.PatchSpearBlock): Step__12CMonstorUnit's `jal MoveChecMonster` (main
+            /// 0x1DE344) lands here — the engine's enemy-versus-enemy block, then the same test against CodeCaves.SpearBlock's sphere
+            /// while it is armed: a unit heading into it is turned along it at the same speed, sliding round (Babel's risen spear is solid).</summary>
+            internal const uint SpearBlock       = Host + 0x870;  // 0x1B5030, 392 B → 0x1B51B8
+            /// <summary>ElfWeaponPatches.PatchUngagaNoDrain: CheckDmg's two weapon-HP drain calls (main 0x1DB388 for a landed hit,
+            /// 0x1DAE94 for a guarded one) land here. An entry of Ungaga's (owner 4) planted by his charge EFFECT (class word +0x38
+            /// non-zero — his swings plant 0) or marked by the mod (+0x9C == CodeCaves.NoDrainMark: Babel's spikes) bills nothing;
+            /// everything else goes on to SwordDmgCheck1 as before. The charge's own per-shot bill (0.8, in UngagaKey_Play) stays.</summary>
+            internal const uint NoDrainLanded    = Host + 0xA00;  // 0x1B51C0, 72 B → 0x1B5208 (the entry at *NowColData + s6)
+            internal const uint NoDrainGuarded   = Host + 0xA50;  // 0x1B5210, 72 B → 0x1B5258 (the entry at *NowColData + s1)
         }
 
         /// <summary>A cave INSIDE a dead main-ELF function: the body of DebugInfomationDraw (0x1B3780, 3,952 B), the developers'
@@ -1084,7 +1104,24 @@ namespace Dark_Cloud_Improved_Version
         internal const uint BabelWanderGuest = 0x01FAF9C0;
         internal const int  BabelWanderStride = 16;
 
-        // ── FREE: 0x21FAFAC0 .. 0x21FB0000 (0x540 B) ────────────────────────────────────────────────────
+        /// <summary>1 while the SECOND main-character effect instance (CharaMainEffectCrash) holds a sub-shot an ability wants
+        /// stepped and drawn beside the live one (the second-effect caves read it every frame); 0 otherwise.</summary>
+        internal const long SecondEffectLive      = 0x21FAFAC0;
+        internal const uint SecondEffectLiveGuest = 0x01FAFAC0;
+        /// <summary>Radians added to chara slot 3's yaw every dungeon frame by the blade-spin cave (0 = still).</summary>
+        internal const long BladeSpin      = 0x21FAFAD0;
+        internal const uint BladeSpinGuest = 0x01FAFAD0;
+        /// <summary>Written at a collision entry's +0x9C (a word Set__14CCollisionData never writes) to tell the no-drain caves the
+        /// hit is Ungaga's and costs no weapon HP; the mod clears it when it withdraws the entry.</summary>
+        internal const uint NoDrainMark = 0x4B495053;   // "SPIK"
+        internal const int  NoDrainMarkOff = 0x9C;
+
+        /// <summary>A solid column for enemies (the spear-block cave): +0 flag (0 = off), +4 x, +8 height (unused), +0xC y, +0x10 radius.</summary>
+        internal const long SpearBlock      = 0x21FAFAE0;
+        internal const uint SpearBlockGuest = 0x01FAFAE0;
+        internal const int  SpearBlockFlag = 0x0, SpearBlockX = 0x4, SpearBlockH = 0x8, SpearBlockY = 0xC, SpearBlockR = 0x10;
+
+        // ── FREE: 0x21FAFB00 .. 0x21FB0000 (0x500 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

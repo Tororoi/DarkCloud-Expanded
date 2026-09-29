@@ -242,6 +242,107 @@ namespace Dark_Cloud_Improved_Version
         ///   lui t0,HI / lw t0,LO(GemDamageFactor) / beq t0,zero,go / nop / mult a1,t0 / mflo a1 / go: j SetDmg / nop
         /// </code>
         /// a1 multiplied by the factor when the word is set; a zero word — fresh memory — is vanilla.</summary>
+        /// <summary>The second main-character effect instance stepped and drawn beside the live one while
+        /// CodeCaves.SecondEffectLive is set: two caves in DebugInfomationIF's body, each `Fn(a0 = the live instance, as the
+        /// site loaded it)` then, flag set, `Fn(0x01E97BC0)`. DunPatches points the dungeon loop's two `jal` sites at them.</summary>
+        internal static void PatchSecondEffect(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Step = 0x001AC180, Draw = 0x001ABF20, Second = 0x01E97BC0;
+            uint flag = CodeCaves.SecondEffectLiveGuest, fhi = (flag + 0x8000) >> 16, flo = (flag - (fhi << 16)) & 0xFFFFu;
+            uint[] Cave(uint fn) => new[]
+            {
+                0x27BDFFF0u,                                    //  0 addiu sp,sp,-0x10
+                0xAFBF0000u,                                    //  1 sw    ra,0(sp)
+                0x0C000000u | ((fn >> 2) & 0x03FFFFFFu),        //  2 jal   Fn                (a0 = the live instance, as the site loaded it)
+                0x00000000u,                                    //  3   nop
+                0x3C080000u | fhi,                              //  4 lui   t0,HI(SecondEffectLive)
+                0x8D080000u | flo,                              //  5 lw    t0,LO(t0)
+                0x11000005u,                                    //  6 beq   t0,zero,done      (+5 → index 12)
+                0x00000000u,                                    //  7   nop
+                0x3C040000u | (Second >> 16),                   //  8 lui   a0,HI(the second instance)
+                0x34840000u | (Second & 0xFFFFu),               //  9 ori   a0,a0,LO
+                0x0C000000u | ((fn >> 2) & 0x03FFFFFFu),        // 10 jal   Fn
+                0x00000000u,                                    // 11   nop
+                0x8FBF0000u,                                    // 12 done: lw ra,0(sp)
+                0x27BD0010u,                                    // 13 addiu sp,sp,0x10
+                0x03E00008u,                                    // 14 jr    ra
+                0x00000000u,                                    // 15   nop
+            };
+            foreach (var (cave, fn) in new[] { (CodeCaves.DebugIfCave.SecondEffectStep, Step), (CodeCaves.DebugIfCave.SecondEffectDraw, Draw) })
+            {
+                uint[] words = Cave(fn);
+                if (cave + (uint)words.Length * 4 > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                    throw new IOException("The second-effect caves do not fit their host (DebugInfomationIF).");
+                for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+            }
+        }
+
+        /// <summary>The spear-block cave (CodeCaves.DebugIfCave.SpearBlock, tools/stubs/spear_block.s) written into DebugInfomationIF's
+        /// body and Step__12CMonstorUnit's `jal MoveChecMonster` (main 0x1DE344) pointed at it.</summary>
+        internal static void PatchSpearBlock(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint HookAddr = 0x001DE344, MoveChecMonster = 0x001DD140;
+            uint cave = CodeCaves.DebugIfCave.SpearBlock;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.spearBlock.bin")
+                ?? throw new IOException("Embedded EE function missing: spearBlock.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            bool callsMove = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4) if (U32(b, i) == Jal(MoveChecMonster)) callsMove = true;
+            if (b.Length % 4 != 0 || b.Length < 0x80 || U32(b, 0) != 0x27BDFFE0u || !callsMove)
+                throw new IOException($"spearBlock.bin malformed ({b.Length} B) or stale — reassemble its .s (it must call MoveChecMonster).");
+            if (cave + (uint)b.Length > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                throw new IOException("spearBlock.bin overruns DebugInfomationIF's span.");
+            for (int i = 0; i < b.Length; i += 4) WrU32(fs, ElfOff(cave + (uint)i), U32(b, i));
+            uint cur = RdU32(fs, ElfOff(HookAddr)), ours = Jal(cave);
+            if (cur != Jal(MoveChecMonster) && cur != ours)
+                throw new IOException($"Step__12CMonstorUnit's site 0x{HookAddr:X} is not vanilla `jal MoveChecMonster` — unmodified Dark Cloud (USA) ISO expected.");
+            if (RdU32(fs, ElfOff(HookAddr + 4)) != 0) throw new IOException("Step__12CMonstorUnit is not laid out as expected around MoveChecMonster (delay slot).");
+            WrU32(fs, ElfOff(HookAddr), ours);
+        }
+
+        /// <summary>Ungaga's weapon-HP rebalance: CheckDmg's two drain calls (a landed hit 0x1DB388, a guarded one 0x1DAE94) go
+        /// through a cave that bills nothing for an entry of Ungaga's (owner 4) that his charge EFFECT planted (+0x38 non-zero; his
+        /// swings plant 0) or the mod marked (+0x9C == CodeCaves.NoDrainMark), and tail-jumps to SwordDmgCheck1 otherwise. The
+        /// call's own a0 / f12 are untouched; t0–t2 are free across a call.</summary>
+        internal static void PatchUngagaNoDrain(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint SwordDmgCheck1 = 0x01DB9B30;
+            uint mhi = CodeCaves.NoDrainMark >> 16, mlo = CodeCaves.NoDrainMark & 0xFFFFu;
+            uint[] Cave(uint entryReg) => new[]
+            {
+                0x8F880000u | 0x9DF0u,                      //  0 lw    t0,-0x6210(gp)          NowColData
+                0x01000021u | (entryReg << 16) | (8u << 11),//  1 addu  t0,t0,entryReg          the entry
+                0x8D090058u,                                //  2 lw    t1,0x58(t0)             its owner
+                0x240A0004u,                                //  3 li    t2,4                    Ungaga
+                0x152A0009u,                                //  4 bne   t1,t2,go (+9 → 14)
+                0x00000000u,                                //  5   nop
+                0x8D090038u,                                //  6 lw    t1,0x38(t0)             the class word: his charge effect's
+                0x15200008u,                                //  7 bne   t1,zero,skip (+8 → 16)
+                0x00000000u,                                //  8   nop
+                0x8D090000u | (uint)CodeCaves.NoDrainMarkOff,//  9 lw   t1,0x9C(t0)             the mod's mark
+                0x3C0A0000u | mhi,                          // 10 lui   t2,HI(mark)
+                0x354A0000u | mlo,                          // 11 ori   t2,t2,LO(mark)
+                0x112A0003u,                                // 12 beq   t1,t2,skip (+3 → 16)
+                0x00000000u,                                // 13   nop                         (no jump in a delay slot)
+                MipsAsm.J(SwordDmgCheck1),                  // 14 go: j SwordDmgCheck1 (ra is the caller's)
+                0x00000000u,                                // 15   nop
+                0x03E00008u,                                // 16 skip: jr ra
+                0x00000000u,                                // 17   nop
+            };
+            foreach (var (cave, site, reg) in new[] { (CodeCaves.DebugIfCave.NoDrainLanded, 0x001DB388u, 22u /*s6*/), (CodeCaves.DebugIfCave.NoDrainGuarded, 0x001DAE94u, 17u /*s1*/) })
+            {
+                uint[] w = Cave(reg);
+                if (cave + (uint)w.Length * 4 > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                    throw new IOException("The no-drain caves do not fit their host (DebugInfomationIF).");
+                for (int i = 0; i < w.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), w[i]);
+                uint cur = RdU32(fs, ElfOff(site)), ours = Jal(cave);
+                if (cur != Jal(SwordDmgCheck1) && cur != ours)
+                    throw new IOException($"CheckDmg's drain call 0x{site:X} is not vanilla `jal SwordDmgCheck1` — unmodified Dark Cloud (USA) ISO expected.");
+                WrU32(fs, ElfOff(site), ours);
+            }
+        }
+
         internal static void PatchGemDamage(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint HookAddr = 0x001D52D4, SetDmg = 0x001AE310;
@@ -450,7 +551,7 @@ namespace Dark_Cloud_Improved_Version
                 0xE5010000u | Lo(CodeCaves.BladeFallVy),            // 18 swc1  f1,vy(t0)
                 0x3C0B0000u | shi,                                  // 19 lui   t3,HI(slot pos)
                 0xE5600000u | SLo(4),                               // 20 swc1  f0,y(t3)               the copy's height, this frame
-                MipsAsm.J(CodeCaves.DebugInfoCave.WhpBill),         // 21 j     WhpBill (the chain's tail, which returns through ra)
+                MipsAsm.J(CodeCaves.DebugIfCave.BladeSpin),         // 21 j     BladeSpin (then the WHP bill, the chain's tail)
                 0x00000000u,                                        // 22   nop
                 0x240A0003u,                                        // 23 follow: li t2,3
                 0x152A0000u | 15,                                   // 24 bne   t1,t2,ret (+15 → index 40)
@@ -469,11 +570,57 @@ namespace Dark_Cloud_Improved_Version
                 0xE5600000u | SLo(0),                               // 37 swc1  f0,x(t3)
                 0xE5620000u | SLo(4),                               // 38 swc1  f2,y(t3)
                 0xE5610000u | SLo(8),                               // 39 swc1  f1,z(t3)
-                MipsAsm.J(CodeCaves.DebugInfoCave.WhpBill),         // 40 ret: j WhpBill (the chain's tail, which returns through ra)
+                MipsAsm.J(CodeCaves.DebugIfCave.BladeSpin),         // 40 ret: j BladeSpin (then the WHP bill, the chain's tail)
                 0x00000000u,                                        // 41   nop
             };
             if (cave + (uint)words.Length * 4 > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
                 throw new IOException("The blade-fall cave does not fit its host (DebugInfomationDraw).");
+            for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+        }
+
+        /// <summary>The BLADE SPIN cave (CodeCaves.DebugIfCave.BladeSpin): the blade-fall cave's two exits land here, once a dungeon
+        /// frame. CodeCaves.BladeSpin non-zero → chara slot 3's yaw (+0x64) += it, wrapped to ±π (the engine's angle-to-matrix
+        /// diverges past that); then on to the WHP bill, the chain's tail. f0/f2–f5 and t0/t1/t3–t5 are scratch here as in the
+        /// caves before it.</summary>
+        internal static void PatchBladeSpin(FileStream fs, Func<uint, long> ElfOff)
+        {
+            uint cave = CodeCaves.DebugIfCave.BladeSpin, w = CodeCaves.BladeSpinGuest;
+            uint hi = (w + 0x8000u) >> 16, lo = (w - (hi << 16)) & 0xFFFFu;
+            uint yaw = (uint)(DungeonCharaDraw.CharaArray - 0x20000000L) + (uint)(BladeProp.Slot * DungeonCharaDraw.CharaStride) + (uint)CCharacter.CharRot + 4;
+            uint yhi = (yaw + 0x8000u) >> 16, ylo = (yaw - (yhi << 16)) & 0xFFFFu;
+            uint[] words =
+            {
+                0x3C080000u | hi,            //  0 lui   t0,HI(spin)
+                0xC5000000u | lo,            //  1 lwc1  f0,LO(t0)              the radians a frame
+                0x44090000u,                 //  2 mfc1  t1,f0
+                0x11200016u,                 //  3 beq   t1,zero,out (+22 → index 26)
+                0x00000000u,                 //  4   nop
+                0x3C0B0000u | yhi,           //  5 lui   t3,HI(slot 3 yaw)
+                0xC5620000u | ylo,           //  6 lwc1  f2,LO(t3)              the yaw
+                0x46001080u,                 //  7 add.s f2,f2,f0
+                0x3C0C4049u,                 //  8 lui   t4,0x4049
+                0x358C0FDBu,                 //  9 ori   t4,t4,0x0FDB           π
+                0x448C1800u,                 // 10 mtc1  t4,f3
+                0x3C0D40C9u,                 // 11 lui   t5,0x40C9
+                0x35AD0FDBu,                 // 12 ori   t5,t5,0x0FDB           2π
+                0x448D2000u,                 // 13 mtc1  t5,f4
+                0x46021834u,                 // 14 c.lt.s f3,f2                 π < yaw ?
+                0x00000000u,                 // 15   nop
+                0x45000002u,                 // 16 bc1f  +2 (→ index 19)
+                0x00000000u,                 // 17   nop
+                0x46041081u,                 // 18 sub.s f2,f2,f4               yaw −= 2π
+                0x46001947u,                 // 19 neg.s f5,f3                  −π
+                0x46051034u,                 // 20 c.lt.s f2,f5                 yaw < −π ?
+                0x00000000u,                 // 21   nop
+                0x45000002u,                 // 22 bc1f  +2 (→ index 25)
+                0x00000000u,                 // 23   nop
+                0x46041080u,                 // 24 add.s f2,f2,f4               yaw += 2π
+                0xE5620000u | ylo,           // 25 store: swc1 f2,LO(t3)
+                MipsAsm.J(CodeCaves.DebugInfoCave.WhpBill),   // 26 out: j WhpBill (the chain's tail, which returns through ra)
+                0x00000000u,                 // 27   nop
+            };
+            if (cave + (uint)words.Length * 4 > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                throw new IOException("The blade-spin cave does not fit its host (DebugInfomationIF).");
             for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
         }
 

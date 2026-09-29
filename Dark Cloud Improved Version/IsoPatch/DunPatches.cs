@@ -59,6 +59,11 @@ namespace Dark_Cloud_Improved_Version
             // vertical speed) → `jal` the lunge-gravity step cave (ElfWeaponPatches.PatchLungeGravity), which does both with the
             // gravity scaled by (1 + CodeCaves.LungeGravityExtra). ra is the process's own, reloaded by its epilogue.
             new(0x01DB3638, 0xC7808080, MipsAsm.Jal(CodeCaves.DebugInfoCave.LungeGravityStep), "lunge gravity → step cave (jal)"),
+            // The dungeon loop's step and draw of the LIVE main-character effect (`lw a0,-0x6304(gp); jal Step/Draw__12CSHOT_EFFECT`)
+            // → the second-effect caves (ElfWeaponPatches.PatchSecondEffect): the live instance as before, then the second one
+            // while CodeCaves.SecondEffectLive is set.
+            new(0x01DB8740, 0x0C06B060, MipsAsm.Jal(CodeCaves.DebugIfCave.SecondEffectStep), "second effect: live-instance step → cave (jal)"),
+            new(0x01DAEB90, 0x0C06AFC8, MipsAsm.Jal(CodeCaves.DebugIfCave.SecondEffectDraw), "second effect: live-instance draw → cave (jal)"),
             new(0x01DB363C, 0x46001001, 0x00000000, "lunge gravity: the displaced sub.s (now the cave's delay slot)"),
             // The lock-on reach factor table (six floats by character, dun 0x1DC1B20; SetNearLockOnTarget and setTargetCursor each
             // copy it to the stack with `lui v0,0x1DC; addiu v0,v0,0x1B20; lq/ld`) → the mod's copy in runtime data

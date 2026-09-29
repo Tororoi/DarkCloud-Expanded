@@ -250,6 +250,7 @@ WHP -= (1.5 − 0.01 × Endurance) × factor  +  0.1 × monster.whpCost   // +0x
   `ChargedShotWhp` writes the charge's factor while the shot is held — the game's own drain does the rest.
 - **Serpent Sword** (item 268) takes **no WHP damage** until game flag 0x30 is set
   (its story event).
+- **Ungaga (mod rebalance):** his charge fires its effect (c10a_ex) as a shot every 30 frames while held and `UngagaKey_Play` bills `SwordDmgCheck1(0.8)` per shot fired — kept; the hits that shot LANDS (owner 4, entry +0x38 = 1.0 — his swings plant 0) cost nothing, through the no-drain caves on CheckDmg's two drain calls (0x1DB388 landed, 0x1DAE94 guarded; `ElfWeaponPatches.PatchUngagaNoDrain`), which also skip any entry the mod marks at +0x9C (Babel's spikes).
 - Toan's CHARGE attacks bill at the attack's START, landing or not: `ToanKey_Play` calls `SwordDmgCheck1(2.0)` as the
   lunge begins (0x242A70) and `SwordDmgCheck1(3.0)` as the whirlwind does (0x242B64).
 - Mod: an ability's own cost (a Zeus bolt, a Big Bang blast, a flash-bang) is POSTED to the engine rather than

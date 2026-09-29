@@ -153,6 +153,13 @@ namespace Dark_Cloud_Improved_Version
         internal static uint PinnedTo => Active ? _pinned : 0u;
         private static uint _pinned;
 
+        /// <summary>The copy's height alone (the slot's position Y) — for a caller whose x/y and yaw the engine's caves own.</summary>
+        internal static void SetHeight(float h)
+        {
+            if (!Active) return;
+            Memory.WriteFloat(SlotAddr() + CCharacter.CharPos + 4, h);
+        }
+
         /// <summary>Visibility 0..1 (the slot's NpcOpacity, 0..128).</summary>
         internal static void Alpha(float a)
         {

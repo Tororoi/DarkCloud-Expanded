@@ -122,6 +122,7 @@ namespace Dark_Cloud_Improved_Version
             PatchStrideScale(fs, ElfOff);                // Toan's stride on motion 33 × CodeCaves.StrideScale (the dun hook is in DunPatches)
             PatchCameraPin(fs, ElfOff);                  // the camera held at a world height while CodeCaves.CameraPin is set (the dun hook is in DunPatches)
             PatchBladeFall(fs, ElfOff);                  // the judgement blade's fall stepped by the engine once a frame (chained after the camera pin)
+            PatchBladeSpin(fs, ElfOff);                  // …then chara slot 3's yaw turned by CodeCaves.BladeSpin a frame (Babel's spear), before the WHP bill
             PatchWhpBill(fs, ElfOff);                    // a weapon-HP bill the mod posts (CodeCaves.WhpBill) taken by the engine's own drain — SwordDmgCheck1 — once a frame (the chain's tail)
             PatchLungeGravity(fs, ElfOff);               // the charge lunge's gravity × (1 + CodeCaves.LungeGravityExtra): the seed cave + its main hook (the dun hook is in DunPatches)
             PatchSolarBladeTint(fs, ElfOff);              // the Sun Sword's blade too (SolarBlade): the rigid-mesh class's DrawVu1, into the mask cave's body
@@ -133,6 +134,9 @@ namespace Dark_Cloud_Improved_Version
             PatchPelletPlant(fs, ElfOff);                 // a player pellet whose damage word is negative plants nothing on contact — it just ends (ZeusShot's bolt pellets)
             PatchPelletContact(fs, ElfOff);               // every player pellet contact recorded (slot, enemy or wall, the point) for the mod, on the engine's frame
             PatchGemDamage(fs, ElfOff);                   // a thrown gem's burst damage × CodeCaves.GemDamageFactor (the Crysknife doubles it)
+            PatchSecondEffect(fs, ElfOff);                // the second main-character effect instance stepped and drawn beside the live one on demand (Babel's Spear)
+            PatchSpearBlock(fs, ElfOff);
+            PatchUngagaNoDrain(fs, ElfOff);               // Ungaga's charge-effect hits and Babel's spikes cost no weapon HP (the charge's per-shot bill stays)                  // a solid column enemies cannot walk through, while armed (Babel's risen spear)
             PatchSteelLevelUp(fs, ElfOff);                // the Steel Slingshot's level-ups: endurance and max WHP grow twice as much
             PatchCircleEffects(fs, ElfOff);               // the magic circles, every magnitude from CodeCaves.CircleTable (the cave over DebugInfomationIF; the dun hook is in DunPatches)
             PatchCallRequest(fs, ElfOff);                 // a native call the mod posts (CodeCaves.CallRequest), made from the camera pass once a frame (the chain's tail)

@@ -244,7 +244,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!Entered(fx)) return false;
             byte[] cfg = fx.Cfg;
-            long inst = ShotEffectPack.CharaMainEffect;
+            long inst = fx.Instance;
             int count = Memory.ReadInt(inst + ShotEffectPack.OffCount);
             if (count < 1 || count > ShotEffectPack.SubShots) return false;
             int j = -1;
@@ -283,7 +283,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteByte  (inst + ShotEffectPack.OffLatch + j, damage > 0 ? (byte)0 : PlantReload);   // no damage → never plants
             Memory.WriteInt   (inst + ShotEffectPack.OffLastIdx, j);
             Memory.WriteUShort(inst + ShotEffectPack.OffActive + j * 2, 1);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{fx.Name} burst from the main-character effect #{j}: damage {damage}, scale {scale:F2} at ({x:F0},{h:F0},{y:F0})");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{fx.Name} burst from {(inst == ShotEffectPack.CharaMainEffect ? "the main-character effect" : "the second instance")} #{j}: damage {damage}, scale {scale:F2} at ({x:F0},{h:F0},{y:F0})");
             return true;
         }
 
@@ -292,9 +292,10 @@ namespace Dark_Cloud_Improved_Version
         /// motions (the .chr's KEY ordinals; −1 = none) — any effect container (a species' under <see cref="EffectDir"/>, a
         /// character's under <see cref="WepEffDir"/>), whether or not the game itself uses it. The container's cfg record must
         /// be named <paramref name="name"/>.cfg: the loader asks for it by that name.</summary>
-        internal static BorrowedEffect CustomConfig(int templateIndex, string name, short muzzleMotion, short flyMotion, short impactMotion, short expireMotion, string dir = EffectDir)
+        internal static BorrowedEffect CustomConfig(int templateIndex, string name, short muzzleMotion, short flyMotion, short impactMotion, short expireMotion, string dir = EffectDir,
+                                                    long instance = ShotEffectPack.CharaMainEffect)
         {
-            string key = $"{dir}{name}/{templateIndex}/{muzzleMotion},{flyMotion},{impactMotion},{expireMotion}";
+            string key = $"{dir}{name}/{templateIndex}/{muzzleMotion},{flyMotion},{impactMotion},{expireMotion}@{instance:X}";
             if (_effects.TryGetValue(key, out var fx)) return fx;
             BorrowedEffect t = TableConfig(templateIndex);
             if (t == null) return null;
@@ -305,7 +306,7 @@ namespace Dark_Cloud_Improved_Version
             BitConverter.GetBytes(flyMotion).CopyTo(c, ShotEffectPack.CfgFlyMotion);
             BitConverter.GetBytes(impactMotion).CopyTo(c, ShotEffectPack.CfgImpactMotion);
             BitConverter.GetBytes(expireMotion).CopyTo(c, ShotEffectPack.CfgExpireMotion);
-            fx = new BorrowedEffect(c, dir + name + ".chr");
+            fx = new BorrowedEffect(c, dir + name + ".chr", instance: instance);
             _effects[key] = fx;
             return fx;
         }
