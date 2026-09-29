@@ -597,7 +597,8 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        private static void HoldReach()
+        /// <summary>Ungaga's lock-on reach ×2 (Babel's Spear, and Hercules' Wrath beside it — HerculesWrath's thread holds it too).</summary>
+        internal static void HoldReach()
         {
             if ((uint)Memory.ReadInt(DunPatches.LockOnTableHookAddrMmu) != DunPatches.LockOnTableWord0) return;   // table patch not in this ISO
             if (Memory.ReadFloat(ReachEntry) == Reach) return;
@@ -605,7 +606,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(ReachEntry, Reach);
             if (!_reachHeld) { _reachHeld = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"lock-on reach ×{ReachFactor:F1}"); }
         }
-        private static void ReleaseReach()
+        internal static void ReleaseReach()
         {
             if (!_reachHeld) return;
             _reachHeld = false;

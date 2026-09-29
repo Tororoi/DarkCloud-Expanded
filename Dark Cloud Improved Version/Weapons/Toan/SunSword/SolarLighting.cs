@@ -191,6 +191,8 @@ namespace Dark_Cloud_Improved_Version
         {
             float v = EnemyTintMax * Math.Max(0f, Math.Min(1f, dim / EnemyTintFullDim));
             // …and Toan, the same white, unless a charge's own tint is on him (the cyan ramp, the primed white)
+            CharacterClone.BodyTint[0] = CharacterClone.BodyTint[1] = CharacterClone.BodyTint[2] = v;   // …and Ungaga's clone, when one is out
+            CharacterClone.SceneLight = 1f - Math.Max(0f, Math.Min(1f, dim)) * (1f - DimKeep);           // …which also takes the dark itself (its draw does not)
             if (ToanTintOwned || ChargeTint.Active) _toanTint = float.NaN;
             else if (float.IsNaN(_toanTint) || Math.Abs(v - _toanTint) >= 1f || (v == 0f && _toanTint != 0f))
             { Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint, v, v, v); _toanTint = v; }

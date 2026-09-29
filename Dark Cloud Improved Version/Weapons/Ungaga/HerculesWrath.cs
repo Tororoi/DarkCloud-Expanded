@@ -57,8 +57,12 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (_origCfg != 0 && _tier != t.Value) Restore();                                        // another form of the line: from scratch
                 if (Player.CurrentCharacterNum() == Player.UngagaId && Player.CheckDunIsWalkingMode()) Apply(t.Value);
+                int w = Player.Weapon.GetCurrentWeaponId();
+                if (w == Items.herculeswrath) BabelsSpear.HoldReach();                                   // Babel's Spear's lock-on reach, shared
+                else if (w != Items.babelsspear) BabelsSpear.ReleaseReach();                             // (Babel's own thread holds it for Babel)
                 Thread.Sleep(TickMs);
             }
+            if (Player.Weapon.GetCurrentWeaponId() != Items.babelsspear) BabelsSpear.ReleaseReach();
             Restore();
         }
 

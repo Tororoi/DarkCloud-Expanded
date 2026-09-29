@@ -28,6 +28,8 @@ namespace Dark_Cloud_Improved_Version
             // Babel's Spear's confusion area: the Dark Genie's small beam recoloured cyan/blue at 0.3 of its alpha, on the dead
             // zibaku_f name — the genie's own c17_beem_s entry keeps its pink.
             ("zibaku_f",     @"dun\monstor\c17_beem_s.chr",   "info.cfg",     null, true, 0.3f),
+            // Hercules' Wrath's ultimate: a cutscene sparkle (s78's e508_ex) on the dead zibaku_r name.
+            ("zibaku_r",     @"gedit\s78\chara\e508_ex.chr",  "e508_ex.cfg",  null, false, 1f),
         };
 
         /// <summary>Every palette in the container's `.img` banks recoloured (8-bit TIM2: the 256 × RGBA CLUT after the picture

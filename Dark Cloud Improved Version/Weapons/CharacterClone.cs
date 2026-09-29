@@ -88,6 +88,31 @@ namespace Dark_Cloud_Improved_Version
         private static uint _cloneRootGuest;  // guest addr of the deep-copied clone root (node pool slot 0)
         private static int  _cloneNodeCount;  // nodes in the last deep copy
         private static uint _weaponRootGuest; // copied weapon tree root (guest); 0 = no weapon grafted
+
+        /// <summary>The world position of a bone of the clone's WEAPON, found by its name word (and 5th name byte) in the copied
+        /// weapon tree — its world matrix, which the engine refreshes each time it draws the clone. False when no weapon is grafted
+        /// or the bone is not in it.</summary>
+        internal static bool WeaponBoneWorld(uint nameWord, byte fifth, out float x, out float h, out float y)
+        {
+            x = h = y = 0f;
+            if (!IsActive || _weaponRootGuest == 0) return false;
+            long node = FindBone(Memory.ToMmu(_weaponRootGuest), nameWord, fifth, 0);
+            if (node == 0) return false;
+            long w = node + CFrameVu1.WorldMatrix + 0x30;
+            x = Memory.ReadFloat(w); h = Memory.ReadFloat(w + 4); y = Memory.ReadFloat(w + 8);
+            return true;
+        }
+        private static long FindBone(long node, uint nameWord, byte fifth, int depth)
+        {
+            if (depth > 16) return 0;
+            if (Memory.ReadUInt(node + CFrameVu1.Name) == nameWord && Memory.ReadByte(node + CFrameVu1.Name + 4) == fifth) return node;
+            for (uint c = Memory.ReadGuestPtr(node + CFrameVu1.RootChild); Memory.IsValidGuest(c); c = Memory.ReadGuestPtr(Memory.ToMmu(c) + CFrameVu1.RootSibling))
+            {
+                long hit = FindBone(Memory.ToMmu(c), nameWord, fifth, depth + 1);
+                if (hit != 0) return hit;
+            }
+            return 0;
+        }
         private static uint _wpnObjPtr;       // the live weapon object (iGpffff9d00) — source of the grip transform
         private static int  _meshesCopied;    // # software-skinned meshes given independent copies this spawn
         private static readonly System.Collections.Generic.List<(long player, long clone)> _chanMap = new();  // motion-channel frame-sync map
@@ -125,7 +150,7 @@ namespace Dark_Cloud_Improved_Version
             // the PNACH chara-loop patch (jal ShadowStep→ClothStep while the scene-gate flag is set), so they simulate.
             uint clothListGuest = ClothEnabled ? CopyCloth() : (uint)CodeCaves.ClothStubGuest;
             BitConverter.GetBytes(clothListGuest).CopyTo(buf, CCharacter.ClothList);
-            BitConverter.GetBytes(GhostSilhouette ? GhostDim : 1.0f).CopyTo(buf, CCharacter.DimFactor);
+            BitConverter.GetBytes((GhostSilhouette ? GhostDim : 1.0f) * SceneLight).CopyTo(buf, CCharacter.DimFactor);
             // PIN the clone to the guard-loop motion instead of whatever the player was mid-doing at spawn. The
             // engine's chara-step (unlocked via the PNACH step-gate NOP) reads +0xC68 every frame → SetMotionEX,
             // so a stale/transition capture would stick. Force motion 9 and set the clean-restart flag (+0xC64
@@ -341,6 +366,10 @@ namespace Dark_Cloud_Improved_Version
             byte[] wtf = Memory.ReadBytesBatch(Memory.ToMmu(_wpnObjPtr) + CCharacter.CharPos, 0x90);   // +0x10..+0xA0 TRS
             if (wtf != null) wtf.CopyTo(cslot, CCharacter.CharPos);
             BitConverter.GetBytes(_weaponRootGuest).CopyTo(cslot, CCharacter.CharModel);               // +0xbc = weapon tree
+            // No cloth: the copy took the BODY's cloth list, so the weapon slot drew the clone's cloth a second time — under the
+            // weapon's own tint. The weapon props' empty list instead (16 zero bytes = "no cloth").
+            Memory.WriteBytesBatch(CodeCaves.ClothStub, new byte[16]);
+            BitConverter.GetBytes((uint)CodeCaves.ClothStubGuest).CopyTo(cslot, CCharacter.ClothList);
             for (int s = 0; s < CCharacter.MotionSlots; s++)                                            // rigid: no motion
                 BitConverter.GetBytes(0).CopyTo(cslot, CCharacter.MotionSlotBase + s * 4);
             Memory.WriteBytesBatch(dst, cslot);
@@ -732,12 +761,20 @@ namespace Dark_Cloud_Improved_Version
             return head;
         }
 
-        /// <summary>Re-assert the ghost's ambient-ADD tint (+0xCE0 RGB) on a chara slot — brighter + blue.</summary>
-        private static void WriteGhostTint(long charaSlot)
+        /// <summary>An ambient add another ability lays on the clone's body (the dark's white while the room dims — SolarLighting)
+        /// and on its weapon (Hercules' Wrath's charge gold, matching the real spear), on top of the ghost tint. RGB, 0–255.</summary>
+        internal static readonly float[] BodyTint = new float[3], WeaponTint = new float[3];
+        /// <summary>The scene's light as a fraction of its own (1 = untouched): the clone is drawn by the dungeon's chara-slot loop,
+        /// which does not take the scene lighting SolarLighting darkens, so while the room dims the clone's dim scalar (+0xCF0) is
+        /// held at this instead — else it stood at full light beside a darkened Ungaga, spear and all.</summary>
+        internal static float SceneLight = 1f;
+
+        /// <summary>Re-assert the ghost's ambient-ADD tint (+0xCE0 RGB) on a chara slot — brighter + blue — plus the add
+        /// <paramref name="extra"/> an ability has asked for.</summary>
+        private static void WriteGhostTint(long charaSlot, float[] extra)
         {
-            Memory.WriteFloat(charaSlot + CCharacter.CharaTint,     GhostSilhouette ? GhostTintR : 0f);
-            Memory.WriteFloat(charaSlot + CCharacter.CharaTint + 4, GhostSilhouette ? GhostTintG : 0f);
-            Memory.WriteFloat(charaSlot + CCharacter.CharaTint + 8, GhostSilhouette ? GhostTintB : 0f);
+            Memory.WriteVec3(charaSlot + CCharacter.CharaTint,
+                (GhostSilhouette ? GhostTintR : 0f) + extra[0], (GhostSilhouette ? GhostTintG : 0f) + extra[1], (GhostSilhouette ? GhostTintB : 0f) + extra[2]);
         }
 
         private static void MaintainInternal()
@@ -759,8 +796,12 @@ namespace Dark_Cloud_Improved_Version
             float op = (GhostSilhouette ? GhostOpacity : 128f) * _alpha;   // fade in/out envelope (haze is NOT gated by it)
             Memory.WriteInt  (slot + DungeonCharaDraw.CharaActive, 1);
             Memory.WriteFloat(slot + CCharacter.NpcOpacity,  op);
-            Memory.WriteFloat(slot + CCharacter.DimFactor,   GhostSilhouette ? GhostDim : 1.0f);   // re-assert like opacity/tint (spawn-only would drift)
-            WriteGhostTint(slot);
+            // The body slot is STEPPED, and Step__10CCharacter moves +0xCF0 every frame (toward 1, or down to +0xCFC while +0xC9C
+            // is set): a direct write here fought it and flickered. The step's own dim is driven instead.
+            float bodyLight = (GhostSilhouette ? GhostDim : 1.0f) * SceneLight;
+            Memory.WriteFloat(slot + CCharacter.DimFloor, bodyLight);
+            Memory.WriteInt  (slot + CCharacter.DimOn,    bodyLight < 0.999f ? 1 : 0);
+            WriteGhostTint(slot, BodyTint);
             Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)_cloneSlot * 4, 1);   // draw loop draws it
             Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)_cloneSlot * 4, Held ? 1 : 0);   // step loop STEPS it (DespawnClone set this to 1; must clear on re-cast or physics only works once)
 
@@ -783,8 +824,8 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUInt (wslot + CCharacter.CharModel,   _weaponRootGuest);
                 Memory.WriteInt  (wslot + DungeonCharaDraw.CharaActive, 1);
                 Memory.WriteFloat(wslot + CCharacter.NpcOpacity,  op);   // same envelope as the body — fade together
-                Memory.WriteFloat(wslot + CCharacter.DimFactor,   GhostSilhouette ? GhostDim : 1.0f);   // ...and the same ghost dim
-                WriteGhostTint(wslot);
+                Memory.WriteFloat(wslot + CCharacter.DimFactor,   (GhostSilhouette ? GhostDim : 1.0f) * SceneLight);   // ...and the same ghost dim
+                WriteGhostTint(wslot, WeaponTint);
                 Memory.WriteInt  (wslot + DungeonCharaDraw.CharaMotionA, 0);
                 Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)WeaponCharaSlot * 4, 1);
                 Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)WeaponCharaSlot * 4, 1);

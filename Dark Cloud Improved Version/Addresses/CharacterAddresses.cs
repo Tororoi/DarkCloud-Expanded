@@ -232,7 +232,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int  MotionId       = 0xC68;   // current motion id; Step__10CCharacter early-outs when < 0 → pose FROZEN
         internal const int  CharaTint      = 0xCE0;   // float3 ambient ADD (tint)
         internal const int  NpcOpacity     = 0xCEC;   // model opacity 0..128; Draw folds it into ambient alpha (must be > 0 to draw)
-        internal const int  DimFactor      = 0xCF0;   // < 1.0 dims the model
+        internal const int  DimFactor      = 0xCF0;   // < 1.0 dims the model. ⚠ Step__10CCharacter rewrites it EVERY frame of a stepped
+                                                      // character: toward 1.0 while DimOn is 0, down to DimFloor while it is set,
+                                                      // 0x2A18C0 a frame — so on a stepped slot, drive those two, not this
+        internal const int  DimOn          = 0xC9C;   // int — nonzero: the step eases DimFactor down to DimFloor
+        internal const int  DimFloor       = 0xCFC;   // float — where it stops
         internal const int  LightFrom      = 0xD00;   // point-light slots — zero them so the light loop skips
         internal const int  LightTo        = 0xD60;
     }

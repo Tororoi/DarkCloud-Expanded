@@ -18,14 +18,40 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class Mirage
     {
-        private const double DecoySeconds = 12.0;
+        private const double MirageSeconds = 12.0, HerculesSeconds = 18.0;   // the decoy's life: the Mirage's, and Hercules' Wrath's longer one
+        private static double DecoySeconds = MirageSeconds;                  // latched at each cast (PlaceDecoyAt) from the weapon or sphere that cast it
+
+        /// <summary>Hercules' Wrath (Ungaga's, or Super Steve's sphere of it) is the one casting.</summary>
+        private static bool HerculesCasts()
+        {
+            int ch = Player.CurrentCharacterNum();
+            if (ch == Player.UngagaId) return Player.Weapon.GetCurrentWeaponId() == Items.herculeswrath;
+            if (ch == Player.XiaoId) return Player.Weapon.GetCurrentWeaponId() == Items.supersteve && SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.herculeswrath;
+            return false;
+        }
+
+        /// <summary>For Hercules' Wrath's ultimate: a decoy is up (a hand-off counts), where it stands, and how far its clone has
+        /// dissolved at the END of its life (1 until the last fade, then down to 0 — the fade-in and a hand-off do not count).</summary>
+        internal static bool  DecoyUp => _decoyActive;
+        internal static bool  InHandoff => _handoff;
+        internal static (float x, float h, float y) DecoyPosition => (_dx, _dz, _dy);
+        internal static float DecoyOutroAlpha
+        {
+            get
+            {
+                if (!_decoyActive) return 0f;
+                if (_handoff) return 1f;
+                double outT = (_decoyDeadline - GameClock.Now).TotalSeconds - HazeRampSeconds;
+                return (float)Math.Clamp(outT / FadeSeconds, 0.0, 1.0);
+            }
+        }
         private const int    FastTickMs   = 25;    // table maintenance cadence while armed + in a dungeon
         private const int    IdleTickMs   = 150;
         // Guard-hold motions. Ungaga AND Xiao both use 9 (guard loop) / 33 (guard move) — see
         // docs/character-motion-table.md — so the same trigger and hold-pose work for either wielder.
-        private const int    GuardLoopMotion = 9;   // guard-hold loop (spawn here, not on guard-enter)
-        private const int    GuardMoveMotion = 33;  // guard-while-moving; the hold pose oscillates 9<->33 under R1
-        private const int    GuardChargeMs   = 250; // hold the guard pose this long before the flash + decoy fire
+        internal const int   GuardLoopMotion = 9;   // guard-hold loop (spawn here, not on guard-enter)
+        internal const int   GuardMoveMotion = 33;  // guard-while-moving; the hold pose oscillates 9<->33 under R1
+        internal const int   GuardChargeMs   = 250; // hold the guard pose this long before the flash + decoy fire (level 1; Hercules' Wrath's ultimate is level 2)
 
         // ── What MIRAGE chooses (as opposed to what the game dictates) ───────────────────────────────
         // Engine struct layouts live in CCharacter/CFrameVu1/CCloth/...; cave addresses AND their capacities
@@ -123,6 +149,15 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Tear the decoy + clone + shimmer down. Used on expiry, weapon swap, floor exit, party swap.</summary>
+        /// <summary>Hercules' Wrath's ultimate lands on the mirage: the decoy dispelled at once (under the strike's flash) — clone,
+        /// shimmer and every lure gone; the enemies turn back to the player.</summary>
+        internal static void Dispel()
+        {
+            if (!_decoyActive && !CharacterClone.IsActive) return;
+            EndDecoy();
+            Console.WriteLine("[Mirage] dispelled by the strike");
+        }
+
         private static void EndDecoy()
         {
             _decoyActive = false; _handoff = false; _aggroHoldUntil = default; _decoyChar = -1;
@@ -419,6 +454,7 @@ namespace Dark_Cloud_Improved_Version
             if (refreshAggro) RefreshAggro();
             _decoyActive = true;
             _decoyChar = Player.CurrentCharacterNum();   // the clone is bound to THIS character's model
+            DecoySeconds = HerculesCasts() ? HerculesSeconds : MirageSeconds;
             _decoyDeadline = GameClock.Now.AddSeconds(DecoySeconds);   // timer + haze ramp start HERE
             if (spawnClone)
             {

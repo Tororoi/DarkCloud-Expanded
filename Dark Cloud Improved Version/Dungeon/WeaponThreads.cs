@@ -52,6 +52,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
         private static Thread mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
         private static Thread herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
+        private static Thread herculesUltimateThread = new Thread(new ThreadStart(HerculesUltimate.UltimateEffect));
         private static Thread babelSpearThread = new Thread(new ThreadStart(BabelsSpear.CurseOfBabelEffect));
         private static Thread cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.AbsorbEffect));
         private static Thread supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
@@ -664,6 +665,11 @@ namespace Dark_Cloud_Improved_Version
                     {
                         herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
                         herculesWrathThread.Start();
+                    }
+                    if (!herculesUltimateThread.IsAlive)   // its own: the ultimate
+                    {
+                        herculesUltimateThread = new Thread(new ThreadStart(HerculesUltimate.UltimateEffect));
+                        herculesUltimateThread.Start();
                     }
                     break;
 
