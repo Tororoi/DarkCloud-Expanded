@@ -1121,7 +1121,12 @@ namespace Dark_Cloud_Improved_Version
         internal const uint SpearBlockGuest = 0x01FAFAE0;
         internal const int  SpearBlockFlag = 0x0, SpearBlockX = 0x4, SpearBlockH = 0x8, SpearBlockY = 0xC, SpearBlockR = 0x10;
 
-        // ── FREE: 0x21FAFB00 .. 0x21FB0000 (0x500 B) ────────────────────────────────────────────────────
+        /// <summary>Hercules' Wrath: a copy of Ungaga's charge-effect config (BT_SHOT_EFFECT, 0x70 B) with every phase's hit radius
+        /// doubled; the main-character instance is pointed at it while the spear is his.</summary>
+        internal const long HerculesCfg      = 0x21FAFB00;
+        internal const uint HerculesCfgGuest = 0x01FAFB00;
+
+        // ── FREE: 0x21FAFB80 .. 0x21FB0000 (0x480 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

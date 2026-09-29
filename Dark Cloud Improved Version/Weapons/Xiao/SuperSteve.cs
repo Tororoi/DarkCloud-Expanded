@@ -636,6 +636,10 @@ namespace Dark_Cloud_Improved_Version
                 // repair powder upgraded at the sphere's sword's form; the originals back when the sphere goes.
                 Sax.DriveSphere(sphere, active);
 
+                // The Halberd line's charge (Halberd / Scorpion / Mirage / Cactus / Hercules' Wrath / Terra Sword / Babel's Spear): a
+                // 0.5 s held shot fires a pellet at the sphere's form — bigger, faster, 1.5× the attack.
+                HerculesWrath.DriveSphere(sphere, active);
+
                 // Swift Strikes (Shamshir / Dusack / 7 Branch Sword / Atlamillia Sword / Chronicle Sword): her draw plays ×1.6 faster and
                 // her shoot at the fastest step that still fires.
                 Shamshir.DriveSphere(active && Shamshir.Grants(sphere));
@@ -740,6 +744,7 @@ namespace Dark_Cloud_Improved_Version
             SuperSteve.DriveSmallSword(false);
             Shamshir.DriveSphere(false);
             Dusack.DriveSphere(false);
+            HerculesWrath.DriveSphere(0, false);
             Sax.DriveSphere(0, false);
             SuperSteve.DriveTsukikage(false);
             SuperSteve.DriveHeavensCloud(false);   // resets the flash latches

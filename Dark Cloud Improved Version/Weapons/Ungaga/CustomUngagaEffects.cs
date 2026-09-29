@@ -88,32 +88,6 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── Hercules' Wrath ────────────────────────────────────────────────────────────────
-        /// <summary>
-        /// Triggers Hercules Wrath effect: Chance on getting hit to gain Stamina.
-        /// </summary>
-        public static void HerculesWrathEffect()
-        {
-            //Check Ungaga's HP
-            ushort formerHP = Memory.ReadUShort(Player.Ungaga.hp);
-
-            Thread.Sleep(100);
-
-            //Re-check Ungaga's HP
-            ushort currentHP = Memory.ReadUShort(Player.Ungaga.hp);
-
-            if (currentHP < formerHP)
-            {
-                //Declare the scale for the chance to base on (0 - 100)
-                int procChance = random.Next(100);
-
-                //Check for the chance to take effect (30 = 30%)
-                if (procChance < 30)
-                {
-                    //Give the Stamina effect for 30 seconds (1800 = 30 sec)
-                    Player.Ungaga.SetStatus("stamina", 1800);
-                }
-            }
-        }
 
     }
 }

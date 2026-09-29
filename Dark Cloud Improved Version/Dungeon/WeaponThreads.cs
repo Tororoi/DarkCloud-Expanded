@@ -51,7 +51,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread frozenTunaThread = new Thread(new ThreadStart(CustomGoroEffects.ColdStorageEffect));
         private static Thread infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
         private static Thread mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
-        private static Thread herculesWrathThread = new Thread(new ThreadStart(CustomUngagaEffects.HerculesWrathEffect));
+        private static Thread herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
         private static Thread babelSpearThread = new Thread(new ThreadStart(BabelsSpear.CurseOfBabelEffect));
         private static Thread cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.AbsorbEffect));
         private static Thread supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
@@ -662,7 +662,7 @@ namespace Dark_Cloud_Improved_Version
                 case Items.herculeswrath:
                     if (!herculesWrathThread.IsAlive)
                     {
-                        herculesWrathThread = new Thread(new ThreadStart(CustomUngagaEffects.HerculesWrathEffect));
+                        herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
                         herculesWrathThread.Start();
                     }
                     break;
@@ -673,6 +673,11 @@ namespace Dark_Cloud_Improved_Version
                         babelSpearThread = new Thread(new ThreadStart(BabelsSpear.CurseOfBabelEffect));
                         babelSpearThread.Start();
                     }
+                    if (!herculesWrathThread.IsAlive)   // the Halberd line's charge
+                    {
+                        herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
+                        herculesWrathThread.Start();
+                    }
                     break;
 
                 case Items.cactus:
@@ -681,7 +686,45 @@ namespace Dark_Cloud_Improved_Version
                         cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.AbsorbEffect));
                         cactusThread.Start();
                     }
+                    if (!herculesWrathThread.IsAlive)   // the Halberd line's charge
+                    {
+                        herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
+                        herculesWrathThread.Start();
+                    }
                     break;
+
+                case Items.halberd:
+                    if (!herculesWrathThread.IsAlive)   // the Halberd line's charge
+                    {
+                        herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
+                        herculesWrathThread.Start();
+                    }
+                    break;
+
+                case Items.scorpion:
+                    if (!herculesWrathThread.IsAlive)   // the Halberd line's charge
+                    {
+                        herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
+                        herculesWrathThread.Start();
+                    }
+                    break;
+
+                case Items.mirage:
+                    if (!herculesWrathThread.IsAlive)   // the Halberd line's charge
+                    {
+                        herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
+                        herculesWrathThread.Start();
+                    }
+                    break;
+
+                case Items.terrasword:
+                    if (!herculesWrathThread.IsAlive)   // the Halberd line's charge
+                    {
+                        herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
+                        herculesWrathThread.Start();
+                    }
+                    break;
+
                 default:
                     break;
             }
