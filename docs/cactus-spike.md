@@ -12,3 +12,19 @@
 
 Shares slot 3 / the WeaponCave with the Mirage clone and every other `BladeProp` user (never co-wielded). No ISO change of its own:
 it rides the blade-fall, blade-spin and spear-block caves Babel's Spear already needs.
+
+## Super Steve (a Cactus sphere) — the palm
+
+Xiao holding Super Steve with a Cactus SynthSphere has Desert Bloom too (`CactusSpike.Wielded`; the thread starts from Xiao's
+Super Steve case in `WeaponThreads`), with the same guard, smoke, timing, squash and stretch (as ratios of full size: 1/30 out,
+3.4/3 at the peak), collision and life — but NO damage (it only blocks: Xiao fights from range) — but the copy is Muska Lacka's oasis palm, not Ungaga's weapon:
+
+| | |
+|---|---|
+| model | georama part 12 "木" (`gedit\e04\mapinfo.cfg` GRD_PARTS 12): sub-file `e04t01` of `gedit\e04\scene.scn` (the scene directory: 0x30-byte entries from 0x10, offset/size at +0x10/+0x14); its first `MDS\0` block up to the second (the collision block `e04t01_a`), 6,864 B, offsets block-relative. Trunk `cyl283__s` (node at z 8, base ring centred there, radius 5.8, leaning to z 13.6, y 0 … 50) and fronds `ha__a7ft` (y 31 … 69.3), upright |
+| textures | `e04b04` (trunk; its UVs use the right half) and `e04b10` (fronds) from the building bank `e04b01.img` in `gedit\e04\img.pak` (IM2, 256² 8-bit, 66.6 KB each) — un-swizzled, resampled (nearest texel) to 64², CLUT kept, in a two-entry `IMG` bank of ~10.5 KB. TIM2 total-size field = header + 4 × image, the files' own convention |
+| where | the item-model cash (`PalmModel` over `CashModel`, the Bomb's loader generalised), label 30000 (SetCashModel only stores the id). A cash entry's allocator is 0x9C5 units = 40,016 B (dun GameInit): model + built frames + texture bank must fit — the full-size palm textures would not |
+| size | 0.5× (69.3 tall at 1× → 34.7), the whole tree out, turned −90° from Xiao's facing (`Form.Turn`); its trunk base (model z 8, turned and scaled with the copy) set on the spot; column r = 4 (the trunk is 5.8 × 0.5 = 2.9; a little wider) |
+| textures kept | `PalmModel.KeepTextures` every tick the copy is up (its entries tagged into the clone slot's block 0x1D and re-sent — the Bomb's scheme); released on take-down; `Forget` when the thread ends (a floor change empties the cash) |
+
+No ISO change: the files are read off the ISO at runtime, once a session.

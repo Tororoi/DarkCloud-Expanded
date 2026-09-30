@@ -503,6 +503,11 @@ namespace Dark_Cloud_Improved_Version
                         superSteveThread = new Thread(new ThreadStart(SuperSteve.SphereInheritanceEffect));
                         superSteveThread.Start();
                     }
+                    if (!cactusSpikeThread.IsAlive && CactusSpike.Wielded())   // Desert Bloom, for a Cactus sphere (the palm)
+                    {
+                        cactusSpikeThread = new Thread(new ThreadStart(CactusSpike.SpikeEffect));
+                        cactusSpikeThread.Start();
+                    }
                     if (!herculesUltimateThread.IsAlive && HerculesUltimate.Wielded())   // Hercules' Wrath's ultimate, for its sphere
                     {
                         herculesUltimateThread = new Thread(new ThreadStart(HerculesUltimate.UltimateEffect));
