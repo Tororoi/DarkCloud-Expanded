@@ -59,6 +59,7 @@ STUBS = [
     ('steel_level_up.s',         'steelLevelUp.bin',         0x1B42E0),    # main ELF: DebugInfomationDraw's body, after pelletSprite (ElfPatches.PatchSteelLevelUp)
     ('circle_effects.s',         'circleEffects.bin',        0x1B47C8),    # main ELF: DebugInfomationIF's body + 8 (ElfWeaponPatches.PatchCircleEffects); dun.bin's Run_TrapCircle jumps here
     ('spear_block.s',            'spearBlock.bin',           0x1B5030),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchSpearBlock): a solid sphere for enemies (Babel's spear)
+    ('player_spear_block.s',     'playerSpearBlock.bin',     0x1B5260),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchSpearBlock): the same sphere, solid to the player
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]

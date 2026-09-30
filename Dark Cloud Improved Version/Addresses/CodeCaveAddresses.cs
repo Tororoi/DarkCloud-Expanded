@@ -507,6 +507,10 @@ namespace Dark_Cloud_Improved_Version
             /// everything else goes on to SwordDmgCheck1 as before. The charge's own per-shot bill (0.8, in UngagaKey_Play) stays.</summary>
             internal const uint NoDrainLanded    = Host + 0xA00;  // 0x1B51C0, 72 B → 0x1B5208 (the entry at *NowColData + s6)
             internal const uint NoDrainGuarded   = Host + 0xA50;  // 0x1B5210, 72 B → 0x1B5258 (the entry at *NowColData + s1)
+            /// <summary>tools/stubs/player_spear_block.s (ElfWeaponPatches.PatchSpearBlock, hooked by DunPatches): the player's move's two
+            /// `jal MoveCheck__12CMonstorUnitFPfPfi` (dun 0x1DB39AC / 0x1DB3E58) land here — the engine's player-versus-enemy block,
+            /// then CodeCaves.SpearBlock's sphere while it is armed: velocity into the column is dropped, the part along it kept.</summary>
+            internal const uint PlayerSpearBlock = Host + 0xAA0;  // 0x1B5260, 232 B → 0x1B5348
         }
 
         /// <summary>A cave INSIDE a dead main-ELF function: the body of DebugInfomationDraw (0x1B3780, 3,952 B), the developers'

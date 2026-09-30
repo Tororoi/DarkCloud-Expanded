@@ -31,6 +31,9 @@
     <EmbeddedResource Include="Resources\isoPatch\spearBlock.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.spearBlock.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\playerSpearBlock.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.playerSpearBlock.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\circleEffects.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.circleEffects.bin</LogicalName>
     </EmbeddedResource>

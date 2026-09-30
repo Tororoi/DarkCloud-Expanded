@@ -277,8 +277,9 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>The spear-block cave (CodeCaves.DebugIfCave.SpearBlock, tools/stubs/spear_block.s) written into DebugInfomationIF's
-        /// body and Step__12CMonstorUnit's `jal MoveChecMonster` (main 0x1DE344) pointed at it.</summary>
+        /// <summary>The spear-block caves written into DebugInfomationIF's body: the enemies' (CodeCaves.DebugIfCave.SpearBlock,
+        /// tools/stubs/spear_block.s) with Step__12CMonstorUnit's `jal MoveChecMonster` (main 0x1DE344) pointed at it, and the
+        /// player's (DebugIfCave.PlayerSpearBlock, tools/stubs/player_spear_block.s), whose hooks are the overlay's (DunPatches).</summary>
         internal static void PatchSpearBlock(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint HookAddr = 0x001DE344, MoveChecMonster = 0x001DD140;
@@ -299,6 +300,21 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException($"Step__12CMonstorUnit's site 0x{HookAddr:X} is not vanilla `jal MoveChecMonster` — unmodified Dark Cloud (USA) ISO expected.");
             if (RdU32(fs, ElfOff(HookAddr + 4)) != 0) throw new IOException("Step__12CMonstorUnit is not laid out as expected around MoveChecMonster (delay slot).");
             WrU32(fs, ElfOff(HookAddr), ours);
+
+            // The player's side (tools/stubs/player_spear_block.s): the cave here; its two hooks are in the overlay (DunPatches).
+            const uint PlayerMoveCheck = 0x001DC820;
+            uint pcave = CodeCaves.DebugIfCave.PlayerSpearBlock;
+            using var pst = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.playerSpearBlock.bin")
+                ?? throw new IOException("Embedded EE function missing: playerSpearBlock.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var pms = new MemoryStream(); pst.CopyTo(pms); byte[] pb = pms.ToArray();
+            bool callsPlayer = false;
+            for (int i = 0; i + 4 <= pb.Length; i += 4) if (U32(pb, i) == Jal(PlayerMoveCheck)) callsPlayer = true;
+            if (pb.Length % 4 != 0 || pb.Length < 0x80 || U32(pb, 0) != 0x27BDFFE0u || !callsPlayer)
+                throw new IOException($"playerSpearBlock.bin malformed ({pb.Length} B) or stale — reassemble its .s (it must call MoveCheck__12CMonstorUnit).");
+            if (pcave + (uint)pb.Length > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                throw new IOException("playerSpearBlock.bin overruns DebugInfomationIF's span.");
+            for (int i = 0; i < pb.Length; i += 4) WrU32(fs, ElfOff(pcave + (uint)i), U32(pb, i));
         }
 
         /// <summary>Ungaga's weapon-HP rebalance: CheckDmg's two drain calls (a landed hit 0x1DB388, a guarded one 0x1DAE94) go

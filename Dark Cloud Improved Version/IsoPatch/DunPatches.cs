@@ -116,6 +116,10 @@ namespace Dark_Cloud_Improved_Version
             // Mirage haze: the draw loop's raster pass → the haze cave, which performs the pass and then draws one raster at
             // the clone's root (ElfPatches.PatchMirageHazeDraw writes the cave).
             new(MirageHazeHookAddr, MirageHazeHookOrig, MirageHazeHookNew, "mirage haze hook (jal DrawRaster__11CDungeonMap → cave)"),
+            // Babel's spear, solid to the player: the player's move's two player-versus-enemy blocks → the spear cave, which makes the
+            // engine's call and then slides the velocity along the spear (ElfWeaponPatches.PatchSpearBlock writes the cave).
+            new(PlayerSpearHookA, PlayerMoveCheckCall, PlayerSpearHookNew, "player spear block (jal MoveCheck__12CMonstorUnit → cave, walled floors)"),
+            new(PlayerSpearHookB, PlayerMoveCheckCall, PlayerSpearHookNew, "player spear block (jal MoveCheck__12CMonstorUnit → cave, placed-parts floors)"),
             // Super Steve's sphere icon: the HUD's status pass → the icon cave, which performs it and then draws the sphere
             // weapon's icon over Steve (ElfWeaponPatches.PatchSuperSteveIconDraw writes the cave).
             new(SsIconHookAddr, SsIconHookOrig, SsIconHookNew, "super steve icon hook (jal topStatusInfo → cave)"),
@@ -162,6 +166,10 @@ namespace Dark_Cloud_Improved_Version
         internal const uint MirageHazeHookOrig = 0x0C071184;                                   // jal 0x1C4610 DrawRaster__11CDungeonMap
         internal const uint MirageHazeHookNew  = 0x0C000000u | (CodeCaves.ElfCave.MirageHazeDraw >> 2);
         internal const long MirageHazeHookAddrMmu = 0x20000000L + MirageHazeHookAddr;
+
+        internal const uint PlayerSpearHookA = 0x01DB39AC, PlayerSpearHookB = 0x01DB3E58;         // the player's move: jal MoveCheck__12CMonstorUnitFPfPfi (delay slot nop)
+        internal const uint PlayerMoveCheckCall = 0x0C077208;                                      // jal 0x1DC820
+        internal const uint PlayerSpearHookNew  = 0x0C000000u | (CodeCaves.DebugIfCave.PlayerSpearBlock >> 2);
 
         internal const uint XiaoShotWhpSiteA = 0x01DBCC58, XiaoShotWhpSiteB = 0x01DBCDD0;   // the two `lui v0,0x3f80` feeding SwordDmgCheck1 in BattleActionPlay_Jinn
         // `lui v0,HI; addiu v0,v0,LO` of the guest address, LO sign-extended (the table sits at 0x1FAF480 = 0x1FB0000 − 0xB80)
