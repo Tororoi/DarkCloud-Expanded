@@ -34,6 +34,31 @@ sub-shot stays on the mirage.
 Nothing of Ungaga's steps `SolarLighting.Tick`, so the ultimate's loop does, every 16 ms, and restores the light on exit.
 If the sparkle is not entered on a floor, the swing blasts at once.
 
+## Super Steve's sphere
+
+Xiao holding Super Steve with a Hercules' Wrath SynthSphere has the ultimate too (`HerculesUltimate.Wielded`; the thread
+starts from Xiao's Super Steve case in `WeaponThreads`). Everything is Ungaga's — level 1 is the sphere's Mirage (18 s
+decoy), level 2 the 5 s dim and gold, primed while a decoy stands — except:
+
+| | Ungaga | Xiao |
+|---|---|---|
+| gold on | c10w09 frame `w09_` | the whole Super Steve rig c04w13 (as the Solar Shot whitens it) |
+| strike | the swing reaching frame 677 | the FIRST pellet fired while primed (pellets already out at prime are ignored) |
+| motion 0 at | the clone's spear tip (`dcol0`) | where that pellet died: the engine's contact point (`PelletContacts`, enemy or wall), else its last position (end of range); one still out after 3 s strikes where it is |
+| motion 1 / blast at | tip x/y as motion 0 ends, mirage height | the pellet's death x/y, on the FLOOR there (`DungeonFloor.HeightAt`: the highest upward-facing collision triangle under it at or below the pellet's height + 10; the mirage's height if none is found) |
+| blast WHP (20) | Hercules' Wrath | Super Steve |
+
+Once the pellet has left, the strike goes ahead even if the decoy fades during its flight.
+
 ## The Halberd line's charge (`Weapons/Ungaga/HerculesWrath.cs`)
 
 Ungaga's charge effect c10a_ex at the line's form — see the class summary and the memory note.
+
+## Floor height (`Dungeon/DungeonFloor.cs`)
+
+Mirrors `setCollisionData` (0x1C0FC0): the 3×3 tiles around the point (gather mode +0xBDEC = 1), or the placed-parts list
+(+0x640 active, +0x5A0 position, +0x600 rotation), each part's collision frame placed at tile × 160 and turned r × −90°
+(r = tile rotation + part rotation base, wrapped `>3 → −3`, `3 → −1`) with the engine's RotMatrixY (row 0 = (cos, 0, −sin),
+row 2 = (sin, 0, cos), row vectors). Each collision node's ready CCPolys (collision object +0x34 array, +0x38 count, stride
+0x70) go to the world by local × parent (GetLWMatrix 0x1281B0). Not yet confirmed in game: the rotation sign on a rotated,
+non-flat part — the strike logs the floor it found beside the pellet's and the mirage's heights.

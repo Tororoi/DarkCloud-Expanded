@@ -22,7 +22,12 @@ namespace Dark_Cloud_Improved_Version
     /// (CFrame +0xD0..+0xDC, 128), so that colour scaled to 0 fades it (<see cref="SetFade"/>). The spear's gold holds full
     /// through motion 1 and fades back to the plain spear with the sparkle, frame <see cref="FadeFrom"/> to <see cref="FadeTo"/>; from frame <see cref="DarkFrom"/> to <see cref="BlastFrame"/> the room plunges to black; at frame
     /// <see cref="BlastFrame"/> Big Bang's blast lands on the enemy (its falloff, multiplier and weapon-HP cost) and the light
-    /// flashes as the Sword of Zeus's bolt does, easing back to normal over two seconds.</summary>
+    /// flashes as the Sword of Zeus's bolt does, easing back to normal over two seconds.
+    /// <br/>SUPER STEVE with a Hercules' Wrath sphere has it as well, the same but for the strike: Xiao's Mirage is the sphere's
+    /// (Mirage.cs), the gold is on her slingshot (c04w13, as the Solar Shot whitens it), and the strike is the FIRST PELLET she
+    /// fires while primed — motion 0 plays where it dies (the enemy or wall it met — the engine's contact record,
+    /// PelletContacts — or the end of its range), motion 1 on the floor under that spot (DungeonFloor: floors differ in height
+    /// across a dungeon; the mirage's height when none is found), and the blast there; its weapon-HP cost is Super Steve's.</summary>
     internal static class HerculesUltimate
     {
         private const string Tag = "[Hercules] ";
@@ -48,9 +53,10 @@ namespace Dark_Cloud_Improved_Version
         private const float  DarkFrom = 21f, BlastFrame = 36f;
         private const float  Lead = 0.5f;                              // frames before a clip's end to move on (the cursor parks short of it)
         private const string EffectName = "zibaku_r";
+        private const double MissSeconds = 3.0;                        // a primed pellet still out this long strikes where it is
         private static DateTime _guardSince;                           // when the guard pose began (default = not guarding)
 
-        private enum Phase { Idle, Charging, Primed, Playing }
+        private enum Phase { Idle, Charging, Primed, Flying, Playing }
         private static Phase    _phase = Phase.Idle;
         private static DateTime _chargeStart;
         private static float    _px, _ph, _py;                        // the mirage's spot
@@ -59,12 +65,28 @@ namespace Dark_Cloud_Improved_Version
         private static int      _sub = -1, _key = -1;
         private static bool     _blasted;
         private static int      _lastAction;
+        private static bool     _xiao;                                // Super Steve's sphere is the one wielding it (latched per charge)
+        private static float    _sx, _sh, _sy;                        // Xiao's strike point: where her primed pellet died
+        private static float    _fh;                                  // the floor's height under it: her motion 1 and blast height
+        private static int      _slot = -1;                           // her primed pellet while it flies
+        private static DateTime _firedAt;
+        private static int      _contactSeen = PelletContacts.Fresh;
+        private static readonly bool[] _seen = new bool[PlayerShotPool.SlotCount];
 
-        /// <summary>The effect this weapon wants in the SECOND main-character instance: the sparkle, whenever Hercules' Wrath is in
-        /// Ungaga's hands. Every phase radius zeroed: the effect is the visual only (the blast is the hit).</summary>
+        /// <summary>Hercules' Wrath in the active character's hands: Ungaga's, or Super Steve's with its sphere attached.</summary>
+        internal static bool Wielded()
+        {
+            int ch = Player.CurrentCharacterNum();
+            if (ch == Player.UngagaId) return Player.Weapon.GetCurrentWeaponId() == Items.herculeswrath;
+            if (ch == Player.XiaoId) return Player.Weapon.GetCurrentWeaponId() == Items.supersteve && SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.herculeswrath;
+            return false;
+        }
+
+        /// <summary>The effect this weapon wants in the SECOND main-character instance: the sparkle, whenever Hercules' Wrath is
+        /// wielded (<see cref="Wielded"/>). Every phase radius zeroed: the effect is the visual only (the blast is the hit).</summary>
         internal static BorrowedEffect WantedShot()
         {
-            if (Player.CurrentCharacterNum() != Player.UngagaId || Player.Weapon.GetCurrentWeaponId() != Items.herculeswrath) return null;
+            if (!Wielded()) return null;
             if (_fx == null)
             {
                 _fx = BorrowedShots.CustomConfig(5, EffectName, muzzleMotion: 2, flyMotion: -1, impactMotion: -1, expireMotion: -1,
@@ -77,13 +99,13 @@ namespace Dark_Cloud_Improved_Version
 
         public static void UltimateEffect()
         {
-            Console.WriteLine(Tag + $"ultimate: keep guarding {ChargeSeconds:F0} s past the Mirage to prime; the next swing brings it down");
+            _xiao = Player.CurrentCharacterNum() == Player.XiaoId;
+            Console.WriteLine(Tag + $"ultimate: keep guarding {ChargeSeconds:F0} s past the Mirage to prime; the next " + (_xiao ? "pellet" : "swing") + " brings it down");
             try
             {
-                while (Player.Weapon.GetCurrentWeaponId() == Items.herculeswrath && Player.InDungeonFloor())
+                while (Wielded() && Player.InDungeonFloor())
                 {
-                    if (Player.CurrentCharacterNum() != Player.UngagaId) { Cancel("ally out"); Thread.Sleep(100); continue; }
-                    if (!Player.CheckDunIsPausedOrMenu()) { Step(); SolarLighting.Tick(); }   // the flash's ease is stepped here: nothing of Ungaga's else does
+                    if (!Player.CheckDunIsPausedOrMenu()) { Step(); SolarLighting.Tick(); }   // the flash's ease is stepped here: nothing of the wielder's else does
                     Thread.Sleep(TickMs);
                 }
             }
@@ -124,7 +146,7 @@ namespace Dark_Cloud_Improved_Version
                     float f = (float)Math.Min(1.0, (GameClock.Now - _chargeStart).TotalSeconds / ChargeSeconds);
                     SolarLighting.DimTo(PrimeDim * f);
                     SetGold(Curve(f));
-                    if (f >= 1f) { _phase = Phase.Primed; Player.FlashChargeComplete(); Console.WriteLine(Tag + "primed"); }
+                    if (f >= 1f) { _phase = Phase.Primed; NewPellet(); Player.FlashChargeComplete(); Console.WriteLine(Tag + "primed"); }   // pellets already out are not the strike
                     break;
                 }
                 case Phase.Primed:
@@ -133,9 +155,15 @@ namespace Dark_Cloud_Improved_Version
                     float k = Mirage.DecoyOutroAlpha;                                // 1 while it stands; its dissolve at the end
                     SolarLighting.DimTo(PrimeDim * k);
                     SetGold(k);
-                    if (swingStart && k > 0f) Unleash();
+                    if (_xiao) { int slot = NewPellet(); if (slot >= 0 && k > 0f) Fire(slot); }
+                    else if (swingStart && k > 0f) Unleash();
                     break;
                 }
+                case Phase.Flying:
+                    SolarLighting.DimTo(PrimeDim);
+                    SetGold(1f);
+                    Track();
+                    break;
                 case Phase.Playing:
                     Play();
                     break;
@@ -146,12 +174,78 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The spear's gold at <paramref name="k"/> (0..1) through the blade lever — which tints the clone's spear as well:
         /// the clone's rigid weapon visuals are the real spear's own (shared), private vtable and all.</summary>
-        private static void SetGold(float k) => SolarBlade.Set(k, ModelCode, BladeFrame, 0, Gold);
+        private static void SetGold(float k)
+        {
+            if (_xiao) SolarBlade.Set(k, SolarShot.WeaponModel, 0, 0, Gold);        // the whole slingshot, as the Solar Shot whitens it
+            else SolarBlade.Set(k, ModelCode, BladeFrame, 0, Gold);
+        }
         private static void ClearGold() => SolarBlade.Clear();
 
-        /// <summary>The clone's spear tip, or the mirage's spot when the clone's weapon cannot be read.</summary>
+        /// <summary>Where motion 0 plays: Xiao's — where her primed pellet died; Ungaga's — the clone's spear tip, or the mirage's
+        /// spot when the clone's weapon cannot be read.</summary>
         private static (float x, float h, float y) SpearTip()
-            => CharacterClone.WeaponBoneWorld(TipWord, TipDigit, out float x, out float h, out float y) ? (x, h, y) : (_px, _ph, _py);
+        {
+            if (_xiao) return (_sx, _sh, _sy);
+            return CharacterClone.WeaponBoneWorld(TipWord, TipDigit, out float x, out float h, out float y) ? (x, h, y) : (_px, _ph, _py);
+        }
+
+        /// <summary>The first pellet to appear since the last look (a new live pool slot), or −1.</summary>
+        private static int NewPellet()
+        {
+            long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
+            if (!Memory.IsValidGuest(pool)) return -1;
+            int found = -1;
+            for (int i = 0; i < PlayerShotPool.SlotCount; i++)
+            {
+                bool live = Memory.ReadInt(PlayerShotPool.FlagAddr(pool, i)) != 0;
+                if (live && !_seen[i]) { _seen[i] = true; if (found < 0) found = i; }
+                else if (!live) _seen[i] = false;
+            }
+            return found;
+        }
+
+        /// <summary>Xiao's primed pellet has left: followed until it dies.</summary>
+        private static void Fire(int slot)
+        {
+            long pa = PlayerShotPool.PosAddr((uint)Memory.ReadInt(PlayerShotPool.BasePtr), slot);
+            _sx = Memory.ReadFloat(pa); _sh = Memory.ReadFloat(pa + 4); _sy = Memory.ReadFloat(pa + 8);
+            _slot = slot; _firedAt = GameClock.Now; _phase = Phase.Flying;
+            PelletContacts.Sync(ref _contactSeen);                                 // only contacts from here on are this pellet's
+            Console.WriteLine(Tag + $"primed pellet: slot {slot}");
+        }
+
+        /// <summary>The primed pellet in flight: the strike where it dies — the engine's contact point on an enemy or a wall, else
+        /// where it was last seen (the end of its range); one still out after <see cref="MissSeconds"/> strikes where it is.</summary>
+        private static void Track()
+        {
+            if (PelletContacts.Poll(ref _contactSeen, out var c) && c.Slot == _slot)
+            {
+                _sx = c.X; _sh = c.H; _sy = c.Y;
+                Console.WriteLine(Tag + $"pellet met " + (c.Enemy ? "an enemy" : "a wall") + $" at ({c.X:F0},{c.H:F0},{c.Y:F0})");
+                Strike(); return;
+            }
+            long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
+            bool live = Memory.IsValidGuest(pool) && Memory.ReadInt(PlayerShotPool.FlagAddr(pool, _slot)) != 0;
+            if (live)
+            {
+                long pa = PlayerShotPool.PosAddr(pool, _slot);
+                _sx = Memory.ReadFloat(pa); _sh = Memory.ReadFloat(pa + 4); _sy = Memory.ReadFloat(pa + 8);
+                if ((GameClock.Now - _firedAt).TotalSeconds < MissSeconds) return;
+            }
+            Console.WriteLine(Tag + $"pellet ended at ({_sx:F0},{_sh:F0},{_sy:F0})");
+            Strike();
+        }
+        private static void Strike()
+        {
+            _slot = -1;
+            MiragePos();
+            if (DungeonFloor.HeightAt(_sx, _sy, _sh, out float fh)) { _fh = fh; Console.WriteLine(Tag + $"floor under the pellet at height {fh:F1} (pellet {_sh:F1}, mirage {_ph:F1})"); }
+            else { _fh = _ph; Console.WriteLine(Tag + "no floor found under the pellet — the mirage's height"); }
+            Unleash();
+        }
+
+        /// <summary>Motion 1's (and the blast's) height: the floor under Xiao's strike point, or Ungaga's mirage's height.</summary>
+        private static float GroundH => _xiao ? _fh : _ph;
 
         /// <summary>The mirage's spot, while one stands (kept from the last one when it has gone).</summary>
         private static void MiragePos()
@@ -173,7 +267,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteInt(CodeCaves.SecondEffectLive, 1);
                 SetClip(0, M0Start, -1f);
                 _phase = Phase.Playing;
-                Console.WriteLine(Tag + $"unleashed on the mirage at ({_px:F0},{_ph:F0},{_py:F0})");
+                Console.WriteLine(Tag + (_xiao ? $"unleashed where the pellet died ({sx:F0},{sh:F0},{sy:F0})" : $"unleashed on the mirage at ({_px:F0},{_ph:F0},{_py:F0})"));
                 return;
             }
             Console.WriteLine(Tag + "sparkle not entered on this floor — the blast at once");
@@ -205,7 +299,7 @@ namespace Dark_Cloud_Improved_Version
             }
             MiragePos();
             if (_key == 0) { var (tx, th, ty) = SpearTip(); Memory.WriteVec3(o + ShotEffectPack.ObjPos, tx, th, ty); }   // motion 0 rides the clone's spear tip
-            else Memory.WriteVec3(o + ShotEffectPack.ObjPos, _hx, _ph, _hy);                                            // motion 1: the tip's last spot across the ground, the mirage's height
+            else Memory.WriteVec3(o + ShotEffectPack.ObjPos, _hx, GroundH, _hy);                                        // motion 1: the strike point across the ground, at GroundH
             float frame = Memory.ReadFloat(o + ShotEffectPack.ObjFrame);
             int status = Memory.ReadInt(o + CharacterMotion.MotionStatusOffset);
             if (_key == 0 && (frame >= M0End - Lead || status == 3))
@@ -239,9 +333,9 @@ namespace Dark_Cloud_Improved_Version
         {
             _blasted = true;
             MiragePos();
-            float x = _key >= 1 ? _hx : _px, h = _ph, y = _key >= 1 ? _hy : _py;   // where motion 1 plays (the mirage's spot if it never got there)
+            float x = _key >= 1 ? _hx : _xiao ? _sx : _px, h = GroundH, y = _key >= 1 ? _hy : _xiao ? _sy : _py;   // where motion 1 plays (else its strike point: the mirage's spot, or where Xiao's pellet died)
             BigBang.PlantFalloff(x, h, y, reachScale: BlastReach);                  // Big Bang's rings at twice the reach: 20 / 50 / 80 / 100
-            WeaponWhp.Drain(Items.herculeswrath, BlastWhp, Tag + "ultimate ");
+            WeaponWhp.Drain((ushort)(_xiao ? Items.supersteve : Items.herculeswrath), BlastWhp, Tag + "ultimate ");
             Mirage.Dispel();                                                         // the strike takes the mirage with it
             SunSword.ZeusFlash.ArmLighting();
             SolarLighting.Flash();
@@ -292,7 +386,7 @@ namespace Dark_Cloud_Improved_Version
             if (_phase == Phase.Playing && _sub >= 0 && _fx != null) Memory.WriteUShort(_fx.Instance + ShotEffectPack.OffActive + _sub * 2, 0);
             if (!_blasted || _phase != Phase.Playing) { ClearGold(); SolarLighting.EndDim(); }
             Memory.WriteInt(CodeCaves.SecondEffectLive, 0);
-            _sub = -1; _key = -1; _phase = Phase.Idle;
+            _sub = -1; _key = -1; _slot = -1; _phase = Phase.Idle;
             Console.WriteLine(Tag + "ultimate off: " + why);
         }
     }

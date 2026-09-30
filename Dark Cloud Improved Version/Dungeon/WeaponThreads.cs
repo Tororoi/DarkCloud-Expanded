@@ -502,6 +502,11 @@ namespace Dark_Cloud_Improved_Version
                         superSteveThread = new Thread(new ThreadStart(SuperSteve.SphereInheritanceEffect));
                         superSteveThread.Start();
                     }
+                    if (!herculesUltimateThread.IsAlive && HerculesUltimate.Wielded())   // Hercules' Wrath's ultimate, for its sphere
+                    {
+                        herculesUltimateThread = new Thread(new ThreadStart(HerculesUltimate.UltimateEffect));
+                        herculesUltimateThread.Start();
+                    }
                     if (!boneNoRevivalThread.IsAlive)   // the bone key's no-revival, for a Bone Rapier / Bone Slingshot sphere (the thread checks)
                     {
                         boneNoRevivalThread = new Thread(new ThreadStart(BoneRapier.GravediggerEffect));

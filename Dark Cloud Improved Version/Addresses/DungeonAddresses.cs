@@ -328,6 +328,29 @@ namespace Dark_Cloud_Improved_Version
         internal const int  PolySecRecords    = 0x18;
         internal const int  PolyRecordStride  = 0x14;
 
+        // setCollisionData's gather mode (+0xBDEC): 1 = the tile grid above; otherwise a list of placed parts — each parts-table
+        // entry whose +0x1B0 (+0x640 from the instance) is non-zero, placed at its own +0x110 vector (+0x5A0) and rotated by its
+        // (int) float +0x170 (+0x600) plus the rotation base, wrapped as above.
+        internal const int  GatherModeOffset  = 0xBDEC;
+        internal const int  PlacedActive      = 0x640;
+        internal const int  PlacedPos         = 0x5A0;
+        internal const int  PlacedRot         = 0x600;
+        // The collision object's ready-built CCPolys (PickUpNearPoly__13CCollisionMDT 0x1256C0): array ptr +0x34, count +0x38,
+        // stride 0x70 — v0/v1/v2 float4 (x, height, y) at +0/+0x10/+0x20, in the frame's local space.
+        internal const int  ColObjPolys       = 0x34;
+        internal const int  ColObjPolyCount   = 0x38;
+        internal const int  ColPolyStride     = 0x70;
+        // A CFrame's local matrix (GetLWMatrix__6CFrame 0x1281B0): the base 4×4 at +0x1D0 (row-vector, rows 0–2 the basis, row 3
+        // the translation) — as is while +0x24C is 0; once SetRotation/SetPosition have run, the basis rows scaled by +0x210,
+        // turned by the X/Y/Z angles at +0x230 (when +0x248 bit 0), and the position +0x220 added to the translation (bit 1:
+        // the base translation is kept out of the turn). The world matrix is local × the parent's (+0x110).
+        internal const int  FrameMatrix       = 0x1D0;
+        internal const int  FrameScale        = 0x210;
+        internal const int  FramePos          = 0x220;
+        internal const int  FrameRot          = 0x230;
+        internal const int  FrameRotFlags     = 0x248;
+        internal const int  FrameComposed     = 0x24C;
+
         // Dynamic door objects (setCollisionData's second gather loop): 0x18 slots @instance+0xB660,
         // stride 0x40 — int active flag at +0, float3 position at +0x10. All doors share ONE collision
         // CFrame (ptr @instance+0xBC6C) that the engine only TRANSLATES per door (no rotation is set).
