@@ -52,6 +52,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
         private static Thread mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
         private static Thread herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
+        private static Thread cactusSpikeThread = new Thread(new ThreadStart(CactusSpike.SpikeEffect));
         private static Thread herculesUltimateThread = new Thread(new ThreadStart(HerculesUltimate.UltimateEffect));
         private static Thread babelSpearThread = new Thread(new ThreadStart(BabelsSpear.CurseOfBabelEffect));
         private static Thread cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.AbsorbEffect));
@@ -696,6 +697,11 @@ namespace Dark_Cloud_Improved_Version
                     {
                         cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.AbsorbEffect));
                         cactusThread.Start();
+                    }
+                    if (!cactusSpikeThread.IsAlive)   // its guard: the cactus rising ahead
+                    {
+                        cactusSpikeThread = new Thread(new ThreadStart(CactusSpike.SpikeEffect));
+                        cactusSpikeThread.Start();
                     }
                     if (!herculesWrathThread.IsAlive)   // the Halberd line's charge
                     {

@@ -19,7 +19,7 @@ namespace Dark_Cloud_Improved_Version
     /// frame <see cref="FadeFrom"/> to <see cref="FadeTo"/>, where the mod ends the sub-shot (motion 2 is never played;
     /// the config still declares it as the muzzle motion, so the engine's own retire window, frames 95–96, is never reached
     /// early). Every mesh of the sparkle is an unlit additive frame (`__czapp…`), drawn in its frame's constant colour
-    /// (CFrame +0xD0..+0xDC, 128), so that colour scaled to 0 fades it (<see cref="SetFade"/>). The spear's gold holds full
+    /// (CFrame +0xD0..+0xDC, 128), so that colour scaled to 0 fades it (<see cref="SubShotFade"/>). The spear's gold holds full
     /// through motion 1 and fades back to the plain spear with the sparkle, frame <see cref="FadeFrom"/> to <see cref="FadeTo"/>; from frame <see cref="DarkFrom"/> to <see cref="BlastFrame"/> the room plunges to black; at frame
     /// <see cref="BlastFrame"/> Big Bang's blast lands on the enemy (its falloff, multiplier and weapon-HP cost) and the light
     /// flashes as the Sword of Zeus's bolt does, easing back to normal over two seconds.
@@ -342,35 +342,11 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(Tag + $"blast at ({x:F0},{h:F0},{y:F0})");
         }
 
-        /// <summary>The sparkle's brightness 0..1: every frame of the sub-shot's model at <paramref name="k"/> × its constant
-        /// colour (CFrame +0xD0..+0xDC, 128 on an unlit frame) — for these additive meshes, its opacity. Walks the model tree
-        /// from the sub-shot's root (+0xBC) by its child (+0x138) / sibling (+0x13C) links.</summary>
-        private const float UnlitFull = 128f;
+        /// <summary>The sparkle's brightness 0..1 (SubShotFade: its unlit additive frames' constant colour).</summary>
         private static void SetFade(float k)
         {
             if (_sub < 0 || _fx == null) return;
-            uint root = Memory.ReadGuestPtr(Obj + CCharacter.CharModel);
-            if (Memory.IsValidGuest(root)) Fade(Memory.ToMmu(root), UnlitFull * k, 0);
-        }
-        private static void Fade(long node, float v, int depth)
-        {
-            if (depth > 16) return;
-            for (long n = node; ; )
-            {
-                if (Memory.ReadByte(n + CFrameVu1.UnlitFlag) != 0)        // an unlit frame (SetFrameAttr `c`: +0xC4 = 1)
-                    Memory.WriteBytesBatch(n + CFrameVu1.UnlitColourR, Quad(v));
-                uint c = Memory.ReadGuestPtr(n + CFrameVu1.RootChild);
-                if (Memory.IsValidGuest(c)) Fade(Memory.ToMmu(c), v, depth + 1);
-                uint s = Memory.ReadGuestPtr(n + CFrameVu1.RootSibling);
-                if (!Memory.IsValidGuest(s) || depth == 0) break;                  // the root has no siblings of its own
-                n = Memory.ToMmu(s);
-            }
-        }
-        private static byte[] Quad(float v)
-        {
-            var b = new byte[16];
-            for (int i = 0; i < 4; i++) BitConverter.GetBytes(v).CopyTo(b, i * 4);
-            return b;
+            SubShotFade.Set(Obj, k);
         }
 
         private static void Finish()

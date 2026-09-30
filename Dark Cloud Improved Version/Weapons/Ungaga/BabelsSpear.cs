@@ -328,6 +328,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteFloat(CodeCaves.SpearBlock + CodeCaves.SpearBlockH, _ground);
                 Memory.WriteFloat(CodeCaves.SpearBlock + CodeCaves.SpearBlockY, _sy);
                 Memory.WriteFloat(CodeCaves.SpearBlock + CodeCaves.SpearBlockR, BlockRadius);
+                Memory.WriteFloat(CodeCaves.SpearBlock + CodeCaves.SpearBlockTop, _ground + Exposed);   // enemy shots stop below the tip
                 Memory.WriteInt  (CodeCaves.SpearBlock + CodeCaves.SpearBlockFlag, 1);
                 _risen = true;
             }
@@ -405,7 +406,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── the turning spikes ──
-        private const float SpikeShare   = 0.1f;   // a spike's hit: a tenth of the spear's
+        private const float SpikeShare   = 1f / 6f;   // a spike's hit: a sixth of the spear's
         private const float SpikeStepDeg = 60f;    // the six spikes: every 60° of turn another passes any given point
         private const float SpikeReach   = 2f;     // a body sphere this far past the spear's solid column counts as touching
         private static int   _spinTick = -1;

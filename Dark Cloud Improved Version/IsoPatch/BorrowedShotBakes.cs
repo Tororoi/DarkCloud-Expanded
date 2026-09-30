@@ -30,6 +30,8 @@ namespace Dark_Cloud_Improved_Version
             ("zibaku_f",     @"dun\monstor\c17_beem_s.chr",   "info.cfg",     null, true, 0.3f),
             // Hercules' Wrath's ultimate: a cutscene sparkle (s78's e508_ex) on the dead zibaku_r name.
             ("zibaku_r",     @"gedit\s78\chara\e508_ex.chr",  "e508_ex.cfg",  null, false, 1f),
+            // The Cactus spike's rise: a cutscene poof of smoke (e03's e228ex) on the dead zibaku_t name.
+            ("zibaku_t",     @"gedit\e03\chara\e228ex.chr",   "e228ex.cfg",   null, false, 1f),
         };
 
         /// <summary>Every palette in the container's `.img` banks recoloured (8-bit TIM2: the 256 × RGBA CLUT after the picture

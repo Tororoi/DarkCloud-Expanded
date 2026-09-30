@@ -279,7 +279,9 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The spear-block caves written into DebugInfomationIF's body: the enemies' (CodeCaves.DebugIfCave.SpearBlock,
         /// tools/stubs/spear_block.s) with Step__12CMonstorUnit's `jal MoveChecMonster` (main 0x1DE344) pointed at it, and the
-        /// player's (DebugIfCave.PlayerSpearBlock, tools/stubs/player_spear_block.s), whose hooks are the overlay's (DunPatches).</summary>
+        /// player's (DebugIfCave.PlayerSpearBlock, tools/stubs/player_spear_block.s), whose hooks are the overlay's (DunPatches), and
+        /// the enemy shots' (DebugIfCave.ShotSpearBlock, tools/stubs/shot_spear_block.s) with Step__12CSHOT_EFFECT's `jal checkCollision`
+        /// (main 0x1AC3E8) pointed at it.</summary>
         internal static void PatchSpearBlock(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint HookAddr = 0x001DE344, MoveChecMonster = 0x001DD140;
@@ -315,6 +317,26 @@ namespace Dark_Cloud_Improved_Version
             if (pcave + (uint)pb.Length > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
                 throw new IOException("playerSpearBlock.bin overruns DebugInfomationIF's span.");
             for (int i = 0; i < pb.Length; i += 4) WrU32(fs, ElfOff(pcave + (uint)i), U32(pb, i));
+
+            // Enemy shots (tools/stubs/shot_spear_block.s): Step__12CSHOT_EFFECT's `jal checkCollision` → the cave.
+            const uint ShotHookAddr = 0x001AC3E8, CheckCollision = 0x001AB740;
+            uint scave = CodeCaves.DebugIfCave.ShotSpearBlock;
+            using var sst = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.shotSpearBlock.bin")
+                ?? throw new IOException("Embedded EE function missing: shotSpearBlock.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var sms = new MemoryStream(); sst.CopyTo(sms); byte[] sb = sms.ToArray();
+            bool callsCheck = false;
+            for (int i = 0; i + 4 <= sb.Length; i += 4) if (U32(sb, i) == Jal(CheckCollision)) callsCheck = true;
+            if (sb.Length % 4 != 0 || sb.Length < 0x80 || U32(sb, 0) != 0x27BDFFD0u || !callsCheck)
+                throw new IOException($"shotSpearBlock.bin malformed ({sb.Length} B) or stale — reassemble its .s (it must call checkCollision).");
+            if (scave + (uint)sb.Length > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                throw new IOException("shotSpearBlock.bin overruns DebugInfomationIF's span.");
+            for (int i = 0; i < sb.Length; i += 4) WrU32(fs, ElfOff(scave + (uint)i), U32(sb, i));
+            uint scur = RdU32(fs, ElfOff(ShotHookAddr)), sours = Jal(scave);
+            if (scur != Jal(CheckCollision) && scur != sours)
+                throw new IOException($"Step__12CSHOT_EFFECT's site 0x{ShotHookAddr:X} is not vanilla `jal checkCollision` — unmodified Dark Cloud (USA) ISO expected.");
+            if (RdU32(fs, ElfOff(ShotHookAddr + 4)) != 0) throw new IOException("Step__12CSHOT_EFFECT is not laid out as expected around checkCollision (delay slot).");
+            WrU32(fs, ElfOff(ShotHookAddr), sours);
         }
 
         /// <summary>Ungaga's weapon-HP rebalance: CheckDmg's two drain calls (a landed hit 0x1DB388, a guarded one 0x1DAE94) go

@@ -511,6 +511,10 @@ namespace Dark_Cloud_Improved_Version
             /// `jal MoveCheck__12CMonstorUnitFPfPfi` (dun 0x1DB39AC / 0x1DB3E58) land here — the engine's player-versus-enemy block,
             /// then CodeCaves.SpearBlock's sphere while it is armed: velocity into the column is dropped, the part along it kept.</summary>
             internal const uint PlayerSpearBlock = Host + 0xAA0;  // 0x1B5260, 232 B → 0x1B5348
+            /// <summary>tools/stubs/shot_spear_block.s (ElfWeaponPatches.PatchSpearBlock): Step__12CSHOT_EFFECT's `jal checkCollision`
+            /// (main 0x1AC3E8) lands here — the engine's test, then, for a shot that is not the player's (victim mask ≠ 2) and met
+            /// nothing, CodeCaves.SpearBlock's column (floor − 2 … top): a wall hit where the shot stands.</summary>
+            internal const uint ShotSpearBlock   = Host + 0xB90;  // 0x1B5350, 268 B → 0x1B545C
         }
 
         /// <summary>A cave INSIDE a dead main-ELF function: the body of DebugInfomationDraw (0x1B3780, 3,952 B), the developers'
@@ -1123,7 +1127,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>A solid column for enemies (the spear-block cave): +0 flag (0 = off), +4 x, +8 height (unused), +0xC y, +0x10 radius.</summary>
         internal const long SpearBlock      = 0x21FAFAE0;
         internal const uint SpearBlockGuest = 0x01FAFAE0;
-        internal const int  SpearBlockFlag = 0x0, SpearBlockX = 0x4, SpearBlockH = 0x8, SpearBlockY = 0xC, SpearBlockR = 0x10;
+        internal const int  SpearBlockFlag = 0x0, SpearBlockX = 0x4, SpearBlockH = 0x8, SpearBlockY = 0xC, SpearBlockR = 0x10, SpearBlockTop = 0x14;   // H = the floor; Top = the column's top (enemy shots stop below it)
 
         /// <summary>Hercules' Wrath: a copy of Ungaga's charge-effect config (BT_SHOT_EFFECT, 0x70 B) with every phase's hit radius
         /// doubled; the main-character instance is pointed at it while the spear is his.</summary>

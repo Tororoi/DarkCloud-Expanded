@@ -160,6 +160,15 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(SlotAddr() + CCharacter.CharPos + 4, h);
         }
 
+        /// <summary>The copy's whole-object scale (the slot's CObject scale, which the draw re-applies every frame) — for a copy
+        /// that grows in place; <see cref="Place"/> keeps it from then on.</summary>
+        internal static void SetScale(float scale)
+        {
+            if (!Active) return;
+            _scale = scale; _placedScale = scale;
+            Memory.WriteVec3(SlotAddr() + CCharacter.CharScale, scale, scale, scale);
+        }
+
         /// <summary>Visibility 0..1 (the slot's NpcOpacity, 0..128).</summary>
         internal static void Alpha(float a)
         {
