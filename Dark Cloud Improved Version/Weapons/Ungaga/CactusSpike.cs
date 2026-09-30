@@ -4,7 +4,7 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Cactus — its guard raises a giant copy of the cactus out of the ground <see cref="AheadDistance"/> in front of Ungaga,
+    /// <summary>Cactus — "Desert Bloom": its guard raises a giant copy of the cactus out of the ground <see cref="AheadDistance"/> in front of Ungaga,
     /// point up with only its top showing, as Babel's Spear raises its spear (<see cref="BabelsSpear"/>, whose pieces this reuses):
     /// the guard pose held as long as the Mirage's clone takes to appear (Mirage.GuardChargeMs) summons it, one per hold; a new hold
     /// while one stands takes that one down at once and raises it anew at the new spot, as a new Mirage cast replaces the
@@ -28,7 +28,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  AheadDistance  = 10f;
         private const float  SpawnScale     = 0.1f;    // it emerges this small…
         private const float  Scale          = 3f;      // …then grows to this in place…
-        private const float  PeakScale      = 3.2f;    // …overshooting to this first (a touch of squash and stretch)
+        private const float  PeakScale      = 3.4f;    // …overshooting to this first (a touch of squash and stretch)
         private const float  TipZ           = 11.7f;   // the mesh's tip along its axis (c10w13: −9.7 … 11.7)
         private const float  ExposedModelZ  = 6.8f;    // the top that stands above the floor, in the model's units (z 4.9 … 11.7)
         private const float  Exposed        = ExposedModelZ * Scale;
