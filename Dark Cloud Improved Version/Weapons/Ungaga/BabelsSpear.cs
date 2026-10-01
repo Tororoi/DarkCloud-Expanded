@@ -471,10 +471,10 @@ namespace Dark_Cloud_Improved_Version
         private static float SpikeShare   => F.SpikeShare;     // a spike's hit: a share of the weapon's attack (the spear ⅙, Steve's hands ½)
         private static float SpikeStepDeg => F.SpikeStepDeg;   // the turn between passes at any point (the spear's six spikes 60°, Steve's two hands 180°)
         private const float SpikeReach   = 2f;     // a body sphere this far past the spear's solid column counts as touching
-        // Steve's hands: the ends of the fork in the mesh's own space (c04w13__m: the arms end around ±0.95 across, 2.0 up the
-        // length — z 1.6 … 2.5 — just behind the face, x −0.15), and how near a hit sphere's edge must be to one (2D).
-        private static readonly (float x, float y, float z)[] Hands = { (-0.15f, -0.95f, 2.0f), (-0.15f, 0.95f, 2.0f) };
-        private const float HandReach = 8f;
+        // Steve's hands: the ends of the fork, in the frame of the fork's centre bone eff30 (c04w13: the arms end ±0.96 either
+        // side of it along its own z, at the length it sits at), and how near a hit sphere's surface must be to one (3D).
+        private static readonly (float x, float y, float z)[] Hands = { (-0.04f, 0.03f, -0.96f), (-0.04f, 0.03f, 0.96f) };
+        private const float HandReach = 6f;
         private static int   _spinTick = -1;
         private static float _fadeK = 1f;          // the spear's visibility 0..1, which the confused enemies' tint follows
 
@@ -487,11 +487,11 @@ namespace Dark_Cloud_Improved_Version
             int tick = (int)(turning * SpinDegPerSec / SpikeStepDeg);
             if (tick == _spinTick) return;
             _spinTick = tick;
-            var hands = new System.Collections.Generic.List<(float x, float y)>();
+            var hands = new System.Collections.Generic.List<(float x, float h, float y)>();
             if (F.HandSpikes)
             {
                 foreach (var hp in Hands)
-                    if (SlingshotProp.MeshPointWorld(hp.x, hp.y, hp.z, out float hx, out _, out float hy)) hands.Add((hx, hy));
+                    if (SlingshotProp.MuzzlePointWorld(hp.x, hp.y, hp.z, out float hx, out float hh, out float hy)) hands.Add((hx, hh, hy));
                 if (hands.Count == 0) return;                                  // not drawn yet: no hands to catch with
             }
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
@@ -501,7 +501,7 @@ namespace Dark_Cloud_Improved_Version
                 if (F.HandSpikes)
                 {
                     bool caught = false;
-                    foreach (var (hx, hy) in hands) if (BigBang.NearestHitSphereEdge(s, a, hx, hy) <= HandReach) { caught = true; break; }
+                    foreach (var hp in hands) if (SphereEdge3D(s, hp) <= HandReach) { caught = true; break; }
                     if (!caught) continue;
                     Hit(s, SpikeShare, 0f, "caught by Steve's hand", drains: false);
                     continue;
@@ -509,6 +509,26 @@ namespace Dark_Cloud_Improved_Version
                 if (BigBang.NearestHitSphereEdge(s, a, _sx, _sy) > BlockRadius + SpikeReach) continue;
                 Hit(s, SpikeShare, 0f, "spike caught", drains: false);
             }
+        }
+
+        /// <summary>How near <paramref name="p"/> is to an enemy's body in 3D: the least distance from it to the surface of any of
+        /// the enemy's active hit spheres (centre distance − radius; negative inside one) — the spheres this frame placed (within 80
+        /// of the unit across the ground; stale ones are skipped, as the strike does). MaxValue with none.</summary>
+        private static float SphereEdge3D(int slot, (float x, float h, float y) p)
+        {
+            long b = BodyCollision.SlotBase(slot), up = EnemyAddresses.CharObjects.PosAddr(slot);
+            float ux = Memory.ReadFloat(up), uy = Memory.ReadFloat(up + 8), best = float.MaxValue;
+            for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
+            {
+                if (Memory.ReadInt(b + BodyCollision.ActiveArray + part * BodyCollision.BodyPartStride) == 0) continue;
+                long c = b + BodyCollision.CentreArray + part * BodyCollision.CentreStride;
+                float cx = Memory.ReadFloat(c), ch = Memory.ReadFloat(c + 4), cy = Memory.ReadFloat(c + 8);
+                if (Math.Abs(cx - ux) > 80f || Math.Abs(cy - uy) > 80f) continue;
+                float r = Memory.ReadFloat(b + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride);
+                float dx = cx - p.x, dh = ch - p.h, dy = cy - p.y;
+                best = Math.Min(best, (float)Math.Sqrt(dx * dx + dh * dh + dy * dy) - r);
+            }
+            return best;
         }
 
         // ── confusion ──

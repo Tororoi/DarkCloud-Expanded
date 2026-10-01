@@ -253,25 +253,21 @@ namespace Dark_Cloud_Improved_Version
             return !(float.IsNaN(x) || float.IsNaN(h) || float.IsNaN(y)) && !(x == 0f && h == 0f && y == 0f);
         }
 
-        /// <summary>A point of the copy's MESH (its geometry node's own space — the model's MDT coordinates) in world space,
-        /// through the node's world matrix as the engine last drew it (row vectors: p · M); false until drawn.</summary>
-        internal static bool MeshPointWorld(float lx, float ly, float lz, out float x, out float h, out float y)
+        /// <summary>A point in the frame of the copy's eff30 (the fork's centre bone, which the engine poses every frame) in world
+        /// space, through that bone's world matrix as last drawn (row vectors: p · M, its scale included); false until drawn. (The
+        /// skinned mesh node's own matrix is not kept current for the copy — a point taken through it lost the turn and collapsed
+        /// across the fork.)</summary>
+        internal static bool MuzzlePointWorld(float lx, float ly, float lz, out float x, out float h, out float y)
         {
             x = h = y = 0f;
-            if (!Active) return false;
-            for (int i = 0; i < _nodeCount; i++)
-            {
-                long n = CodeCaves.WeaponCave + (long)i * CFrameVu1.NodeStride;
-                if (!Memory.IsValidGuest(Memory.ReadGuestPtr(n + CFrameVu1.GeomPtr))) continue;
-                byte[] b = Memory.ReadBytesBatch(n + CFrameVu1.WorldMatrix, 0x40);
-                if (b == null) return false;
-                float M(int k) => BitConverter.ToSingle(b, k * 4);
-                x = lx * M(0) + ly * M(4) + lz * M(8)  + M(12);
-                h = lx * M(1) + ly * M(5) + lz * M(9)  + M(13);
-                y = lx * M(2) + ly * M(6) + lz * M(10) + M(14);
-                return !(float.IsNaN(x) || float.IsNaN(h) || float.IsNaN(y)) && !(M(12) == 0f && M(13) == 0f && M(14) == 0f);
-            }
-            return false;
+            if (!Active || !Memory.IsValidGuest(_muzzleGuest)) return false;
+            byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(_muzzleGuest) + CFrameVu1.WorldMatrix, 0x40);
+            if (b == null) return false;
+            float M(int k) => BitConverter.ToSingle(b, k * 4);
+            x = lx * M(0) + ly * M(4) + lz * M(8)  + M(12);
+            h = lx * M(1) + ly * M(5) + lz * M(9)  + M(13);
+            y = lx * M(2) + ly * M(6) + lz * M(10) + M(14);
+            return !(float.IsNaN(x) || float.IsNaN(h) || float.IsNaN(y)) && !(M(12) == 0f && M(13) == 0f && M(14) == 0f);
         }
 
         /// <summary>The copy's eff30 in world space — the fork's muzzle, where her own pellets leave from.</summary>

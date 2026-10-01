@@ -55,8 +55,10 @@ model units out: 1.6 units sunk), placed along the wielder's facing (the spear t
 the column's top).
 
 Super Steve's spikes are its HANDS: every 180° of turn (two per rotation, 0.75 s at 240°/s) each live enemy whose nearest hit
-sphere's edge is within 8 (2D) of either hand takes HALF the weapon's attack (the spear: every 60°, a sixth, against the
-column). The hands are the fork's ends in the mesh's own space, (−0.15, ±0.95, 2.0) on c04w13__m, taken to the world each tick
-through the copy's mesh-node world matrix as the engine last drew it (`SlingshotProp.MeshPointWorld`), so they follow the spin.
+sphere's SURFACE is within 6 (3D) of either hand takes HALF the weapon's attack (the spear: every 60°, a sixth, against the
+column). The hands are the fork's ends in the frame of the fork's centre bone eff30, (−0.04, 0.03, ±0.96) on c04w13, taken to the world
+each tick through that bone's world matrix as the engine last posed it (`SlingshotProp.MuzzlePointWorld`), so they follow the
+spin. (The skinned mesh node's own world matrix is not kept current for the copy: hands taken through it collapsed onto one
+point, 8 out along the slingshot's length.) The catch is 3D: the hand's distance to the surface of the nearest active hit sphere.
 
 Super Steve's solid column is radius 2 (its feet, 0.46 from the centre at 1×, × 4) — the spear's is 8. The player is held at r + 6, an enemy at r + its own move radius, an enemy shot at r + its radius.
