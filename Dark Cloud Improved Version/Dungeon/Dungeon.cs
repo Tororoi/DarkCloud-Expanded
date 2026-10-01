@@ -119,6 +119,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         WeaponThreads.Launch();
                         CheckActiveItems();
+                        TestWeaponGrant.Tick();   // TEMP: the Partisan for testing — remove once tested
                     }
 
                     //Check if player is inside the weapon customize menu

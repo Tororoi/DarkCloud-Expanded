@@ -6,14 +6,21 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>DeSanga: every enemy the active character kills while it is the equipped weapon heals it <see cref="HealPerKill"/>
     /// WHP — the weapon record's current WHP (+0x10, float) raised up to its maximum (+0x0C). A kill is an enemy slot's HP crossing
     /// to 0 while it is still in its death animation, credited to the active character (the slot's killer id) — Macho Sword's
-    /// kill test.</summary>
+    /// kill test. Super Steve carrying a DeSanga SynthSphere has it too, healing Super Steve (<see cref="Wielded"/>).</summary>
     internal static class DeSanga
     {
         private const string Tag = "[DeSanga] ";
         private const float  HealPerKill = 5f;
         private const int    TickMs = 16;
 
-        internal static bool Wielded() => Player.CurrentCharacterNum() == Player.UngagaId && Player.Weapon.GetCurrentWeaponId() == Items.desanga;
+        /// <summary>Ungaga with DeSanga, or Xiao with Super Steve and a DeSanga sphere.</summary>
+        internal static bool Wielded()
+        {
+            int ch = Player.CurrentCharacterNum();
+            if (ch == Player.UngagaId) return Player.Weapon.GetCurrentWeaponId() == Items.desanga;
+            if (ch == Player.XiaoId) return Player.Weapon.GetCurrentWeaponId() == Items.supersteve && SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.desanga;
+            return false;
+        }
 
         public static void KillHealEffect()
         {

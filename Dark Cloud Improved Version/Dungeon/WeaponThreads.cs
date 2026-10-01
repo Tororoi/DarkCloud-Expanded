@@ -52,6 +52,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
         private static Thread mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
         private static Thread herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
+        private static Thread partisanThread = new Thread(new ThreadStart(Partisan.QuickSwingEffect));
         private static Thread deSangaThread = new Thread(new ThreadStart(DeSanga.KillHealEffect));
         private static Thread javelinThread = new Thread(new ThreadStart(Javelin.MarineEffect));
         private static Thread scorpionVenomThread = new Thread(new ThreadStart(ScorpionVenom.VenomEffect));
@@ -506,6 +507,11 @@ namespace Dark_Cloud_Improved_Version
                         superSteveThread = new Thread(new ThreadStart(SuperSteve.SphereInheritanceEffect));
                         superSteveThread.Start();
                     }
+                    if (!deSangaThread.IsAlive && DeSanga.Wielded())   // every kill heals the weapon 5 WHP, for a DeSanga sphere
+                    {
+                        deSangaThread = new Thread(new ThreadStart(DeSanga.KillHealEffect));
+                        deSangaThread.Start();
+                    }
                     if (!javelinThread.IsAlive && Javelin.Wielded())   // marine enemies defenseless and worth double ABS, for a Javelin sphere
                     {
                         javelinThread = new Thread(new ThreadStart(Javelin.MarineEffect));
@@ -738,6 +744,14 @@ namespace Dark_Cloud_Improved_Version
                     {
                         herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
                         herculesWrathThread.Start();
+                    }
+                    break;
+
+                case Items.partisan:
+                    if (!partisanThread.IsAlive)   // the combo swings a third faster (Shamshir's factor)
+                    {
+                        partisanThread = new Thread(new ThreadStart(Partisan.QuickSwingEffect));
+                        partisanThread.Start();
                     }
                     break;
 

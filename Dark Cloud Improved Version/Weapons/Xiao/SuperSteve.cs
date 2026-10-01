@@ -640,9 +640,9 @@ namespace Dark_Cloud_Improved_Version
                 // 0.5 s held shot fires a pellet at the sphere's form — bigger, faster, 1.5× the attack.
                 HerculesWrath.DriveSphere(sphere, active);
 
-                // Swift Strikes (Shamshir / Dusack / 7 Branch Sword / Atlamillia Sword / Chronicle Sword): her draw plays ×1.6 faster and
-                // her shoot at the fastest step that still fires.
-                Shamshir.DriveSphere(active && Shamshir.Grants(sphere));
+                // Swift Strikes (Shamshir / Dusack / 7 Branch Sword / Atlamillia Sword / Chronicle Sword) and the Partisan's quick combo:
+                // her draw plays ×1.6 faster and her shoot at the fastest step that still fires.
+                Shamshir.DriveSphere(active && (Shamshir.Grants(sphere) || sphere == Items.partisan));
 
                 // Curses (full inherit): curse Xiao. Not pause-gated — mirrors the Toan loops.
                 Evilcise.Drive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);

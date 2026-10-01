@@ -795,11 +795,17 @@ def build_model(spec, kf_stride=1, tri_keep=1.0, skeleton_only=False):
         nodes = read_skeleton(mds)
         _MESH_DIM_CACHE.clear()
         full_meshes = []
+        # The pack's own skinning when the cfg names it — MOTION 0, "x.mot", "x.bbp", "x.wgt": the real per-vertex weights,
+        # against the skin's own bind pose (Ungaga's differs from his rest pose on 63 of 67 joints); else the auto-skin.
+        wm = re.search(rb'MOTION\s+\d+\s*,\s*"[^"]+"\s*,\s*"([^"]*)"\s*,\s*"([^"]+\.wgt)"', cfg.payload)
+        weights = load_weights(pack, wm.group(2).decode('latin1')) if wm else None
+        bind = load_bind_pose(pack, wm.group(1).decode('latin1'), nodes) if wm and wm.group(1) else None
         if not skeleton_only:
             for n in nodes:
                 if n['meshoff']:
                     try:
-                        mm = build_mesh(mds, n, nodes)
+                        per = weights.get(n['i']) if weights else None
+                        mm = build_mesh_weighted(mds, n, nodes, per, bind_world=bind) if per else build_mesh(mds, n, nodes)
                         if mm:
                             full_meshes.append(mm)
                     except Exception as e:                 # skip an unparseable chunk, keep the rest
