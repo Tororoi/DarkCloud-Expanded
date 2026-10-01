@@ -503,6 +503,11 @@ namespace Dark_Cloud_Improved_Version
                         superSteveThread = new Thread(new ThreadStart(SuperSteve.SphereInheritanceEffect));
                         superSteveThread.Start();
                     }
+                    if (!babelSpearThread.IsAlive && BabelsSpear.Wielded())   // Curse of Babel, for a Babel's Spear sphere (Super Steve itself rises)
+                    {
+                        babelSpearThread = new Thread(new ThreadStart(BabelsSpear.CurseOfBabelEffect));
+                        babelSpearThread.Start();
+                    }
                     if (!cactusSpikeThread.IsAlive && CactusSpike.Wielded())   // Desert Bloom, for a Cactus sphere (the palm)
                     {
                         cactusSpikeThread = new Thread(new ThreadStart(CactusSpike.SpikeEffect));

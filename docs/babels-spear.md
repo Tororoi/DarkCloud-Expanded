@@ -11,9 +11,9 @@ old on-hit "stop" proc is gone. Research that led here: `game_data/docs/babels-s
 | piece | how |
 |---|---|
 | charge | R1 held in Ungaga's guard poses (motions 9 / 33, the Mirage's) for `GuardChargeMs` 1000, then `FlashChargeComplete` and the summon; one per guard hold; no charging while a spear stands or fades (the cooldown) |
-| target | `PlayerAction.LockOnTargetSlot` if live; else the nearest live enemy within 60; else a spot 15 ahead of Ungaga (no strike, no confusion) |
+| target | `PlayerAction.LockOnTargetSlot` if live; else the nearest live enemy within 60; else a spot 15 ahead of the wielder (no strike, no confusion). The copy rises at the target's ROOT and FOLLOWS it across the ground while it rises (`Follow`: the slot's x/y and the beam's spot set to the target's root each tick; the rise cave keeps the height), until the tip strikes it — then it stays where it is (also once fully risen without a strike, or if the target dies) |
 | spear | `BladeProp.Spawn(5, pointUp: true)` — the equipped weapon's engine-drawn copy in chara slot 3, baked with `BakeUpward` (R_x −90°). The c10w10 mesh runs −9.6 … +16.0 on its axis (tip at 16, dcol0). Root height = ground − 16·5 + h, h from −4 (tip buried) to +50 (exposed: the model's tip from z 6 to 16, 10 units at 5×). The rise and the spin are the ENGINE's frames, not mod ticks (20 Hz placement read as choppy): from effect frame 10 to 13 (0 → 0.5 s at 0.1) the blade-fall cave integrates the slot's height with v0 = 2D/T up and g = v0/T of deceleration (T = 30 frames), which reach zero together at the top — fast off the mark, slow to settle; the stop test is disarmed with a stop far below and the mod writes the exact top once when T is up. Then the blade-spin cave (`ElfWeaponPatches.PatchBladeSpin`, chained after the blade-fall cave) adds `CodeCaves.BladeSpin` = 240°/s ÷ 60 to the slot's yaw every frame, wrapped to ±π (past that the engine's angle-to-matrix diverged). At 20 s the vanish clip plays (3.67 s at 0.1); from its frame 60 (2.0 s in) the spear fades out over the last 1.67 s ( opacity — taking the slot down while drawn showed a stretched frame), then comes down; also down on maintain failure or unequip |
-| strike | planted the tick the rising tip (the blade-fall cave's running Y + 16·4) reaches the underside of the target's lowest active hit sphere, with the sphere still over the spear (edge within 6 of the axis); a target that left or died is not struck. One `CollisionPool.PlayerHitEntry` at the target's body (Big Bang's `BodyCentre`), damage = the weapon's attack, kick words at the spear's position, strength 2.475 fading 0.12 (≈ 25 units), kick type 2 |
+| strike | planted the tick the rising tip (the blade-fall cave's running Y + 16·4) reaches the underside of the target's lowest active hit sphere, with the sphere still over the spear (edge within 6 of the axis); a target that left or died is not struck. One `CollisionPool.PlayerHitEntry` at the target's body (Big Bang's `BodyCentre`), damage = the weapon's attack, kick words at the WIELDER's position (thrown away from the player), at the Baselard's strength 2.02 fading 0.12 (≈ 17 units), kick type 2 |
 | confusion | the target, then every enemy within 300 of the spear — at the summon and every tick after while it stands and fades, so newcomers are confused too — until the spear has fully faded (20 s + the vanish clip). Rides the Mirage's per-slot target-pointer table (`CodeCaves.PtrTable`, read by the cold-hosted `_GET_POSITION` / `_GET_DISTANCE`): a confused slot's entry points, every tick, at the live position of the NEAREST candidate in the confusion area — another live enemy's `CharObjects` position (guest address), or the player global while the player is inside the area. With no candidate it points at the slot's own wander quadword (`CodeCaves.BabelWander`, 16 × 16 B in the free data band): a random spot within 40 of it, renewed every 4 s or once reached. Requires `Mirage.Armed` |
 | table ownership | `BabelsSpear.OwnsTable` while any slot is confused; Mirage's loop skips its per-tick `WriteTable()` then (as it does for Angel Gear's ring). `Release` puts the player pointer back |
 | friendly fire | each tick, every OPEN attack entry a confused enemy planted (owner slot·5 + 200, +0x70 == +0x74) is tested against every other live enemy's body spheres (`BigBang.NearestHitSphereEdge`); on contact a 1-unit hit entry is planted on the victim's body: the attack's damage, reaction (+0x4C) and kick (+0x80..+0x98), owner −1, +0x60/+0x68 −1, +0x64/+0x6C 0. One per attacker-victim pair per 0.5 s; withdrawn after 3 ticks if unconsumed. The attacker's own entry is never widened (mask 1): its swing sphere overlaps its own body, and CheckDmg has no owner exclusion — +0x5C is not one (any value but −1 makes the entry non-damaging for everyone) |
@@ -35,3 +35,28 @@ old on-hit "stop" proc is gone. Research that led here: `game_data/docs/babels-s
   `_GET_DISTANCE`). First test: Rockanoff wandered in random directions — the victim choice then included the player at
   even odds and re-rolled every 2 s; now enemies only, 6 s. If it persists, the redirected read may not be the one its
   chase uses.
+
+## Super Steve (a Babel's Spear sphere)
+
+Xiao holding Super Steve with a Babel's Spear SynthSphere has all of Curse of Babel (`BabelsSpear.Wielded`; the thread starts
+from Xiao's Super Steve case in `WeaponThreads`): the 1 s guard charge (her guard poses are the same 9 / 33), the copy rising
+under the target with its ease, the strike and kick, the confusion and friendly fire, the spin and the spikes, the blue
+confusion-area beam (`zibaku_f`, second instance), the solid column (enemies, the player, enemy shots), and lock-on reach ×2 —
+raised on HER entry of the lock-on factor table (`HoldReach` now raises the active character's and hands it back on a switch).
+
+The copy is Super Steve itself, not a spear: her slingshot's visual is software-skinned, which `BladeProp` cannot copy, so it
+is `SlingshotProp.SpawnStatue` — the Matador's world-rooted copy (same chara slot 3 the blade-fall and blade-spin caves drive),
+without the pouch re-centring. Upright is the projectile's own pose (`CopyTree`'s orientation bake with `ProjectilePreset`
+5 — fork up — the root's rotation folded into its children); nothing more is turned. Measured in game: a world-rooted copy
+KEEPS its root's 3×3 under the slot's yaw, so a −90° turn written on the root (or its children) laid it down, and the
+shield's preset (7) stood it upside down, as the Matador's note already said. The slot's yaw is left free, so the spin cave turns it about
+the vertical. c04w13 upright: handle's end −1.85, fork tips +2.49 about the root. `StatueForm`: 4× (17.4 tall), its confusion-area beam at 0.7 scale, out once risen but for Steve's black feet (3.94 of 4.34
+model units out: 1.6 units sunk), placed along the wielder's facing (the spear too: symmetric either way), tinted as the spear is (50 grey). Everything else keys off the form (`RootHeight`, the tip for the strike,
+the column's top).
+
+Super Steve's spikes are its HANDS: every 180° of turn (two per rotation, 0.75 s at 240°/s) each live enemy whose nearest hit
+sphere's edge is within 8 (2D) of either hand takes HALF the weapon's attack (the spear: every 60°, a sixth, against the
+column). The hands are the fork's ends in the mesh's own space, (−0.15, ±0.95, 2.0) on c04w13__m, taken to the world each tick
+through the copy's mesh-node world matrix as the engine last drew it (`SlingshotProp.MeshPointWorld`), so they follow the spin.
+
+Super Steve's solid column is radius 2 (its feet, 0.46 from the centre at 1×, × 4) — the spear's is 8. The player is held at r + 6, an enemy at r + its own move radius, an enemy shot at r + its radius.

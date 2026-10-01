@@ -573,11 +573,33 @@ def load_weights(pack, wgt_name):
     return out
 
 
-def build_mesh_weighted(mds, node, nodes, per_vertex, textured=False):
+def load_bind_pose(pack, bbp_name, nodes):
+    """The SKIN's bind pose from the pack's `.bbp` (the MOTION line's third name; most rigs leave it empty): one row-vector
+    4×4 per node, 64 B each, holding that node's LOCAL matrix in the pose the skin was weighted in — which need not be the
+    .mds rest pose (the moonship's sails: bone `1_1` binds at a 21° turn with no offset, its rest pose is a 90° turn and a
+    tilt). Returns each node's bind WORLD matrix (local × parent's, a zero matrix read as the rest local), or None when
+    the record is missing or does not match the rig."""
+    rec = pack.find(bbp_name) if bbp_name else None
+    if rec is None or len(rec.payload) < len(nodes) * 64:
+        return None
+    b = rec.payload
+    by_i = {n['i']: n for n in nodes}
+    world = {}
+    for n in sorted(nodes, key=lambda n: n['i']):
+        loc = [list(struct.unpack_from('<4f', b, n['i'] * 64 + r * 16)) for r in range(4)]
+        if all(v == 0.0 for row in loc for v in row):
+            loc = mat_from_rt(n['R'], n['T'])
+        par = n['parent']
+        world[n['i']] = mat_mul(loc, world[par]) if par >= 0 and par in world else loc
+    return [world[n['i']] for n in sorted(nodes, key=lambda n: n['i'])] if len(world) == len(by_i) else None
+
+
+def build_mesh_weighted(mds, node, nodes, per_vertex, textured=False, bind_world=None):
     """Like build_mesh, but with the pack's REAL weights for this mesh (top two influences per vertex, renormalised);
     vertices the .wgt leaves out ride the owner node. With `textured`, also carries what it takes to draw the thing with its
     own textures: per-CORNER uv pairs (MDT records are (position, uv, normal), so UVs do not belong to vertices) and the
-    triangles sorted into runs, one per texture."""
+    triangles sorted into runs, one per texture. `bind_world` (load_bind_pose): the skin's own bind pose, used instead of
+    the rest pose to put each vertex into its bones' frames."""
     m = parse_mdt(mds, node['meshoff'])
     local_pos = [v[:3] for v in m.pos]
     if textured:
@@ -598,7 +620,8 @@ def build_mesh_weighted(mds, node, nodes, per_vertex, textured=False):
     if not tris:
         return None
     owner = node['i']
-    ow = node['world']
+    ow = bind_world[owner] if bind_world else node['world']
+    inv = (lambda b: rigid_inv(bind_world[b])) if bind_world else (lambda b: nodes[b]['invworld'])
     infl0_bone, infl0_pos, infl1_bone, infl1_pos, w0 = [], [], [], [], []
     for vi, v in enumerate(local_pos):
         vm = xform_pt(ow, v)
@@ -611,8 +634,8 @@ def build_mesh_weighted(mds, node, nodes, per_vertex, textured=False):
         (b0, wa) = infl[0]
         (b1, wb) = infl[1] if len(infl) > 1 else (b0, 0.0)
         tot = wa + wb
-        infl0_bone.append(b0); infl0_pos.append(xform_pt(nodes[b0]['invworld'], vm))
-        infl1_bone.append(b1); infl1_pos.append(xform_pt(nodes[b1]['invworld'], vm))
+        infl0_bone.append(b0); infl0_pos.append(xform_pt(inv(b0), vm))
+        infl1_bone.append(b1); infl1_pos.append(xform_pt(inv(b1), vm))
         w0.append(wa / tot if tot > 0 else 1.0)
     out = {'node': owner, 'skin': True, 'nv': len(local_pos), 'tris': tris,
            'b0': infl0_bone, 'p0': infl0_pos, 'b1': infl1_bone, 'p1': infl1_pos, 'w0': w0}

@@ -153,6 +153,15 @@ namespace Dark_Cloud_Improved_Version
         internal static uint PinnedTo => Active ? _pinned : 0u;
         private static uint _pinned;
 
+        /// <summary>The copy's ground position alone (the slot's position X and Y) — its height and yaw left to whoever owns them.</summary>
+        internal static void SetXY(float x, float y)
+        {
+            if (!Active) return;
+            long s = SlotAddr();
+            Memory.WriteFloat(s + CCharacter.CharPos, x);
+            Memory.WriteFloat(s + CCharacter.CharPos + 8, y);
+        }
+
         /// <summary>The copy's height alone (the slot's position Y) — for a caller whose x/y and yaw the engine's caves own.</summary>
         internal static void SetHeight(float h)
         {

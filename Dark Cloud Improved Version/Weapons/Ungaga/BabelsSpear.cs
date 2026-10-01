@@ -5,7 +5,8 @@ using System.Threading;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>Babel's Spear — "Curse of Babel": a five-second guard charge raises a giant copy of the spear out of the ground
-    /// under the locked-on enemy, point up, most of it still buried. The enemy above it is struck and thrown off it, and it
+    /// under the locked-on enemy — following it across the ground while it rises, until the tip strikes it — point up, most of it
+    /// still buried. The enemy above it is struck and thrown off it, and it
     /// and every enemy within <see cref="ConfusionRadius"/> of the spear are CONFUSED for as long as the spear stands
     /// (<see cref="SpearSeconds"/> plus its fade: the confusion ends when the spear has fully faded), as is any enemy that comes within that radius while it stands (Ungaga locks on from twice as
     /// far while the spear is his, <see cref="ReachFactor"/>): tinted a light blue, each
@@ -45,14 +46,18 @@ namespace Dark_Cloud_Improved_Version
     ///    charge-attack effect (c10a_ex, the first instance) is left in place — and played as a
     ///    sub-shot the spear drives: its KEY 0 (rise, frames 10–28) as the spear emerges — fully up as the clip reaches frame
     ///    <see cref="EmergeAtFrame"/> —, KEY 1 (loop, 28–48) while it stands, KEY 2 (vanish, 48–70) while it fades — all at
-    ///    <see cref="ShockRate"/> frames a tick, which is what the spear's own timing is derived from. Drawn at its authored size (<see cref="ShockScale"/>): it marks the spot, not the
-    ///    area's edge.</summary>
+    ///    <see cref="ShockRate"/> frames a tick, which is what the spear's own timing is derived from. Drawn at its authored size for the spear, 0.7 for Super Steve (<see cref="ShockScale"/>): it marks the spot, not the
+    ///    area's edge.
+    /// SUPER STEVE with a Babel's Spear sphere has all of it (<see cref="Wielded"/>; Xiao's lock-on entry takes the reach): the
+    /// copy is Super Steve itself (<see cref="SlingshotProp.SpawnStatue"/> — her slingshot is a skinned model, which BladeProp
+    /// cannot copy — in the same chara slot 3 the rise and spin caves drive), <see cref="StatueForm"/>: stood upright at 4×, its beam at 0.7 of the spear's,
+    /// and out of the ground once risen but for Steve's black feet, placed along Xiao's facing; what catches enemies as it turns is Steve's two HANDS (the fork's ends).</summary>
     internal static class BabelsSpear
     {
         private const string Tag = "[Babel] ";
         private const int    TickMs           = 50;
         private const int    GuardChargeMs    = 1000;   // hold the guard this long to summon; not again until the spear has fully faded
-        private const int    GuardLoopMotion  = 9, GuardMoveMotion = 33;   // Ungaga's guard-hold poses (the Mirage's)
+        private const int    GuardLoopMotion  = 9, GuardMoveMotion = 33;   // the guard-hold poses (the Mirage's; Ungaga's and Xiao's alike)
         private const float  SpearSeconds     = 20f;
         // The beam's KEY windows (c17_beem_s info.cfg) at ShockRate: rise 10–28, loop 28–48, vanish 48–70.
         private const float  ShockRate        = 0.1f;
@@ -63,24 +68,34 @@ namespace Dark_Cloud_Improved_Version
         private const float  EmergeSeconds      = (EmergeEndFrame - EmergeStartFrame) / ShockRate / 60f;   // 0.5 s (30 frames)
         // Its opacity is the ISO's: the zibaku_f copy's palette alphas are halved in the bake (BorrowedShotBakes) — the sub-shot's
         // opacity word did not reach a shot effect's draw.
-        private const float  BlockRadius      = 8f;      // the risen spear as a solid column for enemies (the shaft is ~2 wide at 4×): the spear-block cave
+        private static float BlockRadius => F.BlockRadius;   // the risen copy as a solid column (the spear-block caves: enemies, the player, enemy shots)
         private const float  VanishSeconds    = (ShockVanishEnd - ShockVanishStart) / ShockRate / 60f;  // 3.67 s: the vanish clip, after the spear's time
         private const float  FadeStartFrame   = 60f;                                                    // the vanish clip's frame the spear starts fading at
         private const float  FadeStartSeconds = (FadeStartFrame - ShockVanishStart) / ShockRate / 60f;  // 2.0 s into the vanish
         private const float  FadeSeconds      = (ShockVanishEnd - FadeStartFrame) / ShockRate / 60f;    // 1.67 s: gone as the vanish clip ends
-        private const float  ShockScale       = 1f;      // as authored (a sideways scale to the area's edge read as size, not range)
-        // Lock-on: Ungaga's entry in the lock-on factor table (the same data the Cross Hinder and the Flamingo drive), ×2 while the spear is his.
+        private static float ShockScale => F.ShockScale;   // the beam's size: the spear's as authored (a sideways scale to the area's edge read as size, not range)
+        // Lock-on: the wielder's entry in the lock-on factor table (the same data the Cross Hinder and the Flamingo drive), ×2 while it is theirs.
         private const float ReachFactor = 2.0f;
-        private static readonly long  ReachEntry = CodeCaves.LockOnFactorTable + Player.UngagaId * 4;
-        private static readonly float Reach      = CodeCaves.LockOnFactorVanilla[Player.UngagaId] * ReachFactor;
-        private static bool _reachHeld;
+        private static int   _reachChar = -1;              // whose lock-on entry the reach was raised on (−1 = none)
         private const int    ShockTemplate    = 5;       // a stock config's shape; the name and motions are replaced (Big Bang's choice)
         private const string ShockName        = "zibaku_f", ShockDir = BorrowedShots.EffectDir;   // the beam's cyan/blue copy on the dead zibaku_f name (BorrowedShotBakes)
         private const float  SpinDegPerSec    = 240f;
-        private const float  Scale            = 5f;     // the copy's size; the spear is 25.6 long unscaled
-        private const float  TipZ             = 16.0f;  // the mesh's tip along its axis (c10w10: −9.6 … 16.0)
-        private const float  ExposedModelZ    = 10f;    // the length of the tip that stands above the ground once risen, in the MODEL's units (z 6 … 16)
-        private const float  Exposed          = ExposedModelZ * Scale;   // …and in the world's, at the copy's size
+        /// <summary>What rises: its size, the model's top above its root along the rise axis, how much of the model stands
+        /// above the ground once risen (model units), its turn from the wielder's facing as it is placed, the confusion-area
+        /// beam's size, how its spikes catch, and the solid column's radius (the spear's shaft ~2 wide at 5× plus room: 8; Super
+        /// Steve's base, its feet 0.46 from the centre: 2 at 4×).</summary>
+        private sealed record Form(string Name, float Scale, float TipZ, float ExposedModelZ, float Yaw, float ShockScale,
+                                   float SpikeStepDeg, float SpikeShare, bool HandSpikes, float BlockRadius);
+        private static readonly Form SpearForm  = new("spear", 5f, 16.0f, 10f, 0f, 1f, 60f, 1f / 6f, false, 8f);    // six spikes: one passes a point every 60°, a sixth of the attack      // c10w10: −9.6 … 16.0 along its axis; z 6 … 16 out (25.6 long unscaled)
+        // c04w13 upright: handle's end −1.85, fork tips +2.49 (4.34 long); all of it out but Steve's black feet, sunk 0.4 (1.6 units at
+        // 4×) into the ground; placed along the wielder's facing.
+        private static readonly Form StatueForm = new("Super Steve", 4f, 2.49f, 3.94f, 0f, 0.7f, 180f, 0.5f, true, 2f);   // two hands: one passes a point every 180°, half the attack; column = its feet (0.46 × 4)
+        private static Form F = SpearForm;
+        private static bool _xiao;                            // Super Steve's sphere is the wielder (latched per thread)
+        private static float Scale         => F.Scale;
+        private static float TipZ          => F.TipZ;
+        private static float ExposedModelZ => F.ExposedModelZ;
+        private static float Exposed       => ExposedModelZ * Scale;   // …in the world's units, at the copy's size
         private const float  Buried           = 4f;     // how far below the ground the tip starts
         private const float  ConfusionRadius  = 300f;
         private const float  WanderSeconds    = 4f;     // a wandering enemy's spot renewed this often…
@@ -91,8 +106,8 @@ namespace Dark_Cloud_Improved_Version
         private const int    ShellLifeTicks   = 3;      // ticks a planted hit stays before it is withdrawn
         private const int    ShellPoolReserve = 16;     // free pool entries always left to the engine
         private const float  StrikeRadius     = 6f;
-        private const float  KickStrength     = 2.475f, KickDecay = 0.12f;   // ≈ 25 units, away from the spear
-        private const float  NoLockReach      = 60f;    // no lock: the nearest enemy within this, else the spear rises ahead of Ungaga
+        private const float  KickDecay        = 0.12f;  // a kick's fade when none is named (the strike's is the Baselard's)
+        private const float  NoLockReach      = 60f;    // no lock: the nearest enemy within this, else the copy rises ahead of the wielder
         private const float  AheadDistance    = 15f;
         // Light blue, as the unit's ambient add (scene ambient ≈ 128 is neutral): kept dim.
         private const float  TintR = 12f, TintG = 50f, TintB = 84f;
@@ -108,15 +123,14 @@ namespace Dark_Cloud_Improved_Version
         private static DateTime _shockReport;
 
         /// <summary>The effect this weapon wants in the SECOND main-character instance: the Dark Genie's shockwave, whenever
-        /// Babel's Spear is in Ungaga's hands. Handed to BorrowedShots.Start as a provider. Every phase radius is zeroed: the effect is
+        /// Curse of Babel is wielded (<see cref="Wielded"/>). Handed to BorrowedShots.Start as a provider. Every phase radius is zeroed: the effect is
         /// the visual only. The config's MUZZLE motion is the VANISH clip: Step__12CSHOT_EFFECT retires a phase-0 sub-shot
         /// the frame its cursor sits within one frame below the muzzle motion's END, whichever clip is playing — with KEY 0
         /// (end 40) there, the loop clip's own first frame killed it. With the vanish (end 70) declared, the rise and the loop
         /// (frames 10–50) never reach the window, and the vanish ends the sub-shot by itself when it gets there.</summary>
         internal static BorrowedEffect WantedShot()
         {
-            if (Player.CurrentCharacterNum() != Player.UngagaId) return null;
-            if (Player.Weapon.GetCurrentWeaponId() != Items.babelsspear) return null;
+            if (!Wielded()) return null;
             if (_shock == null)
             {
                 _shock = BorrowedShots.CustomConfig(ShockTemplate, ShockName, muzzleMotion: ShockVanish, flyMotion: -1, impactMotion: -1, expireMotion: -1, dir: ShockDir,
@@ -141,13 +155,45 @@ namespace Dark_Cloud_Improved_Version
         private static bool _guardLatched; private static DateTime _guardSince;
         private static DateTime _lastReport;   // DIAGNOSTIC: the confused enemies' state, once a second
 
+        /// <summary>Curse of Babel's wielder: Ungaga with Babel's Spear, or Xiao with Super Steve and a Babel's Spear sphere.</summary>
+        internal static bool Wielded()
+        {
+            int ch = Player.CurrentCharacterNum();
+            if (ch == Player.UngagaId) return Player.Weapon.GetCurrentWeaponId() == Items.babelsspear;
+            if (ch == Player.XiaoId) return Player.Weapon.GetCurrentWeaponId() == Items.supersteve && SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.babelsspear;
+            return false;
+        }
+
+        // ── the copy: Babel's spear (BladeProp) or Super Steve (SlingshotProp's statue) ──
+        private static float _copyAlpha = 1f;
+        private static bool CopySpawn()
+            => _xiao ? SlingshotProp.SpawnStatue(Scale, new[] { SpearTint, SpearTint, SpearTint }, 1f)
+                     : BladeProp.Spawn(Scale, 0, pointDown: false, pointUp: true);
+        private static void CopyPlace(float x, float h, float y)
+        {   // turned relative to the wielder: their facing at the summon plus the form's turn
+            float yaw = Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY) + F.Yaw;
+            if (_xiao) SlingshotProp.PlaceProjectile(x, h, y, yaw); else { BladeProp.Place(x, h, y, yaw); BladeProp.Tint(SpearTint, SpearTint, SpearTint); }
+        }
+        private static void CopySetHeight(float h) { if (_xiao) SlingshotProp.SetHeight(h); else BladeProp.SetHeight(h); }
+        private static void CopySetXY(float x, float y) { if (_xiao) SlingshotProp.SetXY(x, y); else BladeProp.SetXY(x, y); }
+        private static void CopyAlpha(float a) { _copyAlpha = a; if (!_xiao) BladeProp.Alpha(a); }
+        private static bool CopyMaintain()
+        {
+            if (!_xiao) return BladeProp.Maintain();
+            SlingshotProp.Maintain(_copyAlpha);                                      // re-asserts the slot every tick, the fade with it
+            return SlingshotProp.Active;
+        }
+        private static void CopyDespawn() { if (_xiao) SlingshotProp.Despawn(); else BladeProp.Despawn(); }
+
         public static void CurseOfBabelEffect()
         {
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"curse of Babel: hold the guard {GuardChargeMs / 1000} s → the spear rises under the target for {SpearSeconds:F0} s; confusion within {ConfusionRadius:F0}");
+            _xiao = Player.CurrentCharacterNum() == Player.XiaoId;
+            F = _xiao ? StatueForm : SpearForm;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"curse of Babel: hold the guard {GuardChargeMs / 1000} s → the copy rises under the target for {SpearSeconds:F0} s; confusion within {ConfusionRadius:F0}");
             for (int s = 0; s < _victim.Length; s++) _victim[s] = -3;
             try
             {
-                while (Player.CurrentCharacterNum() == Player.UngagaId && Player.Weapon.GetCurrentWeaponId() == Items.babelsspear && Player.InDungeonFloor())
+                while (Wielded() && Player.InDungeonFloor())
                 {
                     HoldReach();
                     if (!Player.CheckDunIsPausedOrMenu())
@@ -184,14 +230,13 @@ namespace Dark_Cloud_Improved_Version
             if (_up) TakeDown();
             int target = Target(out float x, out float y, out float ground);
             _sx = x; _sy = y; _ground = ground; _riseStarted = _risen = _struck = false; _target = target; _fadeK = 1f; _spinTick = -1;
-            if (!BladeProp.Spawn(Scale, 0, pointDown: false, pointUp: true)) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no spear copy (slot or cave busy)"); return; }
+            if (!CopySpawn()) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"no {F.Name} copy (slot or cave busy)"); return; }
             Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
             Memory.WriteFloat(CodeCaves.BladeSpin, 0f);
-            BladeProp.Place(_sx, RootHeight(0f), _sy, 0f);                                    // buried, still: the caves move it from here
-            BladeProp.Tint(SpearTint, SpearTint, SpearTint);
-            BladeProp.Alpha(1f);
+            CopyPlace(_sx, RootHeight(0f), _sy);                                               // buried, still: the caves move it from here
+            CopyAlpha(1f);
             _up = true; _summoned = GameClock.Now; _confusionEnd = _summoned.AddSeconds(SpearSeconds + VanishSeconds);   // the confusion outlasts the spear by the vanish: gone when it has fully faded
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the spear rises at ({_sx:F0},{_sy:F0}) ground {_ground:F0}" + (target >= 0 ? $" under enemy slot {target}" : " ahead of Ungaga") + $"; target redirect {(Mirage.Armed ? "armed" : "NOT ARMED — confusion cannot steer")}");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the {F.Name} rises at ({_sx:F0},{_sy:F0}) ground {_ground:F0}" + (target >= 0 ? $" under enemy slot {target}" : " ahead of the wielder") + $"; target redirect {(Mirage.Armed ? "armed" : "NOT ARMED — confusion cannot steer")}");
             if (target >= 0) Confuse(target);                                                  // the strike waits for the tip to reach it (TipStrike)
             ConfuseWithinRadius();
             ShockStart();
@@ -268,8 +313,8 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>The locked-on enemy, else the nearest live one within reach; its position and ground height out. −1 with
-        /// a spot ahead of Ungaga when there is none.</summary>
+        /// <summary>The locked-on enemy, else the nearest live one within reach; its root's position and ground height out. −1
+        /// with a spot ahead of the wielder when there is none.</summary>
         private static int Target(out float x, out float y, out float ground)
         {
             float px = Memory.ReadFloat(Addresses.dunPositionX), ph = Memory.ReadFloat(Addresses.dunPositionZ), py = Memory.ReadFloat(Addresses.dunPositionY);
@@ -302,7 +347,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static void DriveSpear()
         {
-            if (!BladeProp.Maintain()) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the copy did not maintain — down"); _up = false; return; }
+            if (!CopyMaintain()) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the copy did not maintain — down"); _up = false; return; }
             double age = (GameClock.Now - _summoned).TotalSeconds;
             if (age >= SpearSeconds + VanishSeconds) { TakeDown(); return; }
             ShockDrive(age);
@@ -318,11 +363,12 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteInt  (CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFalling);
                 _riseStarted = true;
             }
+            if (_riseStarted && !_struck && !_risen) Follow();
             if (_riseStarted && !_struck) TipStrike();
             if (!_risen && age >= EmergeStartSeconds + EmergeSeconds)
             {   // risen: the integrator off (its velocity is at zero), the exact top written once, the spin begins, and it is solid
                 Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
-                BladeProp.SetHeight(RootHeight(1f));
+                CopySetHeight(RootHeight(1f));
                 Memory.WriteFloat(CodeCaves.BladeSpin, (float)(SpinDegPerSec * Math.PI / 180.0 / 60.0));
                 Memory.WriteFloat(CodeCaves.SpearBlock + CodeCaves.SpearBlockX, _sx);
                 Memory.WriteFloat(CodeCaves.SpearBlock + CodeCaves.SpearBlockH, _ground);
@@ -334,7 +380,7 @@ namespace Dark_Cloud_Improved_Version
             }
             double fadeAt = SpearSeconds + FadeStartSeconds;                                                  // its time up, the vanish plays; from its frame 60 the spear fades out with it
             _fadeK = age < fadeAt ? 1f : (float)Math.Max(0.0, 1.0 - (age - fadeAt) / FadeSeconds);
-            BladeProp.Alpha(_fadeK);                                                                          // the confused enemies' tint fades with it (DriveConfusion)
+            CopyAlpha(_fadeK);                                                                                // the confused enemies' tint fades with it (DriveConfusion)
             if (_risen) SpinContacts(age);
             ConfuseWithinRadius();                                                                           // through the fade too: the confusion lasts until the spear has fully faded
         }
@@ -346,7 +392,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.BladeSpin, 0f);
             Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
             Memory.WriteInt(CodeCaves.SpearBlock + CodeCaves.SpearBlockFlag, 0);                     // passable again
-            BladeProp.Despawn();
+            CopyDespawn();
             _up = false;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the spear sinks away");
         }
@@ -378,12 +424,27 @@ namespace Dark_Cloud_Improved_Version
             Strike(_target);
         }
 
-        /// <summary>One player-hit sphere on the target's body at the weapon's attack, thrown away from the spear.</summary>
-        private static void Strike(int slot) => Hit(slot, 1f, KickStrength, "struck", drains: true);
+        /// <summary>One player-hit sphere on the target's body at the weapon's attack, thrown away from the WIELDER as hard as the
+        /// Baselard throws (its kick strength and fade).</summary>
+        private static void Strike(int slot)
+        {
+            float px = Memory.ReadFloat(Addresses.dunPositionX), ph = Memory.ReadFloat(Addresses.dunPositionZ), py = Memory.ReadFloat(Addresses.dunPositionY);
+            Hit(slot, 1f, Baselard.KickStrength, "struck", drains: true, kickFrom: (px, ph, py), kickDecay: Baselard.KickDecay);
+        }
+
+        /// <summary>While it rises and has not struck, the copy keeps under its target: the slot's x/y (and the beam's spot) set to
+        /// the target's root each tick, its height the rise cave's. Gone or dead, it stays where it is.</summary>
+        private static void Follow()
+        {
+            if (_target < 0 || !Enemies.IsLive(_target)) return;
+            long p = EnemyAddresses.CharObjects.PosAddr(_target);
+            _sx = Memory.ReadFloat(p); _sy = Memory.ReadFloat(p + 8);
+            CopySetXY(_sx, _sy);
+        }
 
         /// <summary>One player-hit sphere on an enemy's body: <paramref name="share"/> of the weapon's attack, thrown away from the
         /// spear at <paramref name="kick"/> (0 = no throw). Withdrawn after ShellLifeTicks if the engine did not take it.</summary>
-        private static void Hit(int slot, float share, float kick, string what, bool drains)
+        private static void Hit(int slot, float share, float kick, string what, bool drains, (float x, float h, float y)? kickFrom = null, float kickDecay = KickDecay)
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0 || CollisionPool.FreeCount(pool) <= ShellPoolReserve) return;
@@ -395,8 +456,9 @@ namespace Dark_Cloud_Improved_Version
             void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
             if (kick > 0f)
             {
-                F(0x80, _sx); F(0x84, _ground); F(0x88, _sy);             // the kick comes from the spear
-                F(0x90, kick); F(0x94, KickDecay);
+                var (kx, kh, ky) = kickFrom ?? (_sx, _ground, _sy);      // the kick comes from there (the spear, unless named)
+                F(0x80, kx); F(0x84, kh); F(0x88, ky);
+                F(0x90, kick); F(0x94, kickDecay);
                 BitConverter.GetBytes(2).CopyTo(e, 0x98);                // kick type 2: thrown away from it
             }
             if (!drains) BitConverter.GetBytes(CodeCaves.NoDrainMark).CopyTo(e, CodeCaves.NoDrainMarkOff);   // the no-drain cave bills nothing for it
@@ -406,9 +468,13 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── the turning spikes ──
-        private const float SpikeShare   = 1f / 6f;   // a spike's hit: a sixth of the spear's
-        private const float SpikeStepDeg = 60f;    // the six spikes: every 60° of turn another passes any given point
+        private static float SpikeShare   => F.SpikeShare;     // a spike's hit: a share of the weapon's attack (the spear ⅙, Steve's hands ½)
+        private static float SpikeStepDeg => F.SpikeStepDeg;   // the turn between passes at any point (the spear's six spikes 60°, Steve's two hands 180°)
         private const float SpikeReach   = 2f;     // a body sphere this far past the spear's solid column counts as touching
+        // Steve's hands: the ends of the fork in the mesh's own space (c04w13__m: the arms end around ±0.95 across, 2.0 up the
+        // length — z 1.6 … 2.5 — just behind the face, x −0.15), and how near a hit sphere's edge must be to one (2D).
+        private static readonly (float x, float y, float z)[] Hands = { (-0.15f, -0.95f, 2.0f), (-0.15f, 0.95f, 2.0f) };
+        private const float HandReach = 8f;
         private static int   _spinTick = -1;
         private static float _fadeK = 1f;          // the spear's visibility 0..1, which the confused enemies' tint follows
 
@@ -421,10 +487,26 @@ namespace Dark_Cloud_Improved_Version
             int tick = (int)(turning * SpinDegPerSec / SpikeStepDeg);
             if (tick == _spinTick) return;
             _spinTick = tick;
+            var hands = new System.Collections.Generic.List<(float x, float y)>();
+            if (F.HandSpikes)
+            {
+                foreach (var hp in Hands)
+                    if (SlingshotProp.MeshPointWorld(hp.x, hp.y, hp.z, out float hx, out _, out float hy)) hands.Add((hx, hy));
+                if (hands.Count == 0) return;                                  // not drawn yet: no hands to catch with
+            }
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
                 if (!Enemies.IsLive(s)) continue;
-                if (BigBang.NearestHitSphereEdge(s, EnemyAddresses.FloorSlots.SlotAddr(s, 0), _sx, _sy) > BlockRadius + SpikeReach) continue;
+                long a = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+                if (F.HandSpikes)
+                {
+                    bool caught = false;
+                    foreach (var (hx, hy) in hands) if (BigBang.NearestHitSphereEdge(s, a, hx, hy) <= HandReach) { caught = true; break; }
+                    if (!caught) continue;
+                    Hit(s, SpikeShare, 0f, "caught by Steve's hand", drains: false);
+                    continue;
+                }
+                if (BigBang.NearestHitSphereEdge(s, a, _sx, _sy) > BlockRadius + SpikeReach) continue;
                 Hit(s, SpikeShare, 0f, "spike caught", drains: false);
             }
         }
@@ -598,20 +680,28 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>Ungaga's lock-on reach ×2 (Babel's Spear, and Hercules' Wrath beside it — HerculesWrath's thread holds it too).</summary>
+        /// <summary>The active character's lock-on reach ×2 (Curse of Babel, Ungaga's or Super Steve's; Hercules' Wrath's thread holds
+        /// Ungaga's too). A character switch hands the raised entry back first.</summary>
         internal static void HoldReach()
         {
             if ((uint)Memory.ReadInt(DunPatches.LockOnTableHookAddrMmu) != DunPatches.LockOnTableWord0) return;   // table patch not in this ISO
-            if (Memory.ReadFloat(ReachEntry) == Reach) return;
+            int ch = Player.CurrentCharacterNum();
+            if (ch < 0 || ch >= CodeCaves.LockOnFactorVanilla.Length) return;
+            if (_reachChar >= 0 && _reachChar != ch) ReleaseReach();
+            long entry = CodeCaves.LockOnFactorTable + ch * 4;
+            float reach = CodeCaves.LockOnFactorVanilla[ch] * ReachFactor;
+            if (Memory.ReadFloat(entry) == reach) return;
             Memory.WriteInt(CodeCaves.LockOnFactorTable + CodeCaves.LockOnFactorOwner, 1);   // ours: the PNACH stops re-seeding
-            Memory.WriteFloat(ReachEntry, Reach);
-            if (!_reachHeld) { _reachHeld = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"lock-on reach ×{ReachFactor:F1}"); }
+            Memory.WriteFloat(entry, reach);
+            if (_reachChar != ch) { _reachChar = ch; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"lock-on reach ×{ReachFactor:F1} (character {ch})"); }
         }
         internal static void ReleaseReach()
         {
-            if (!_reachHeld) return;
-            _reachHeld = false;
-            if (Memory.ReadFloat(ReachEntry) == Reach) Memory.WriteFloat(ReachEntry, CodeCaves.LockOnFactorVanilla[Player.UngagaId]);
+            if (_reachChar < 0) return;
+            long entry = CodeCaves.LockOnFactorTable + _reachChar * 4;
+            float reach = CodeCaves.LockOnFactorVanilla[_reachChar] * ReachFactor;
+            if (Memory.ReadFloat(entry) == reach) Memory.WriteFloat(entry, CodeCaves.LockOnFactorVanilla[_reachChar]);
+            _reachChar = -1;
         }
 
         private static void End()

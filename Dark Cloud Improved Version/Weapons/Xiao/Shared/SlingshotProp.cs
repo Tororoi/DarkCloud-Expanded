@@ -136,6 +136,44 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
+        /// <summary>The copy as a STATUE (Super Steve's Curse of Babel): world-rooted like the projectile, but left whole — no
+        /// pouch re-path, not re-centred on the pouch. Upright is the projectile's own pose (<see cref="ProjectilePreset"/>: fork up,
+        /// the root's rotation folded into its children) — nothing more is turned: a world-rooted copy KEEPS its root's 3×3 under the
+        /// slot's yaw, so a turn written there laid it down, and the shield's preset stood it upside down. The slot position is
+        /// the model origin. Placed with <see cref="PlaceProjectile"/> / <see cref="SetHeight"/>; its
+        /// yaw is left to whoever turns slot 3 (the blade-spin cave). Drawn under <paramref name="tint"/> over <paramref name="dim"/>.</summary>
+        internal static bool SpawnStatue(float scale, float[] tint, float dim)
+        {
+            if (Active) return true;
+            _projectile = true; _tint = tint; _dim = dim;
+            _scale = scale; _up = 0f; _ahead = 0f; _pull = 0f;
+            _orbit = 0f;
+            Memory.WriteInt(CodeCaves.Mailbox.PropFollowSlot, 0);                   // no pellet carries it: the Matador's follower off
+            if (!CopyTree() || !CopyMesh() || !RegisterSlot()) return false;
+            long s = SlotAddr();
+            Memory.WriteVec3(s + CCharacter.CharRot, 0f, 0f, 0f);
+            _key = KeyIdle;
+            Active = true;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"statue copy up (x{scale}, slot {Slot}), upright; her slingshot untouched");
+            return true;
+        }
+
+        /// <summary>A world-rooted copy's ground position alone (the slot's position X and Y) — its height and yaw left as they are.</summary>
+        internal static void SetXY(float x, float y)
+        {
+            if (!Active || !_projectile) return;
+            long s = SlotAddr();
+            Memory.WriteFloat(s + CCharacter.CharPos, x);
+            Memory.WriteFloat(s + CCharacter.CharPos + 8, y);
+        }
+
+        /// <summary>A world-rooted copy's height alone (the slot's position Y) — its x/y and yaw left as they are.</summary>
+        internal static void SetHeight(float h)
+        {
+            if (!Active || !_projectile) return;
+            Memory.WriteFloat(SlotAddr() + CCharacter.CharPos + 4, h);
+        }
+
         /// <summary>Wanted orbit bearing (radians) relative to her facing: the copy sits <c>ahead</c>
         /// units out along it and faces along it. 0 = straight in front of her. The orbit thread
         /// eases the live bearing (<see cref="Orbit"/>) toward it at frame rate.</summary>
@@ -213,6 +251,27 @@ namespace Dark_Cloud_Improved_Version
             h = Memory.ReadFloat(n + CFrameVu1.WorldMatrix + 0x34);
             y = Memory.ReadFloat(n + CFrameVu1.WorldMatrix + 0x38);
             return !(float.IsNaN(x) || float.IsNaN(h) || float.IsNaN(y)) && !(x == 0f && h == 0f && y == 0f);
+        }
+
+        /// <summary>A point of the copy's MESH (its geometry node's own space — the model's MDT coordinates) in world space,
+        /// through the node's world matrix as the engine last drew it (row vectors: p · M); false until drawn.</summary>
+        internal static bool MeshPointWorld(float lx, float ly, float lz, out float x, out float h, out float y)
+        {
+            x = h = y = 0f;
+            if (!Active) return false;
+            for (int i = 0; i < _nodeCount; i++)
+            {
+                long n = CodeCaves.WeaponCave + (long)i * CFrameVu1.NodeStride;
+                if (!Memory.IsValidGuest(Memory.ReadGuestPtr(n + CFrameVu1.GeomPtr))) continue;
+                byte[] b = Memory.ReadBytesBatch(n + CFrameVu1.WorldMatrix, 0x40);
+                if (b == null) return false;
+                float M(int k) => BitConverter.ToSingle(b, k * 4);
+                x = lx * M(0) + ly * M(4) + lz * M(8)  + M(12);
+                h = lx * M(1) + ly * M(5) + lz * M(9)  + M(13);
+                y = lx * M(2) + ly * M(6) + lz * M(10) + M(14);
+                return !(float.IsNaN(x) || float.IsNaN(h) || float.IsNaN(y)) && !(M(12) == 0f && M(13) == 0f && M(14) == 0f);
+            }
+            return false;
         }
 
         /// <summary>The copy's eff30 in world space — the fork's muzzle, where her own pellets leave from.</summary>
