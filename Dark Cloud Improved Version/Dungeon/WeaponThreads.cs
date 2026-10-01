@@ -52,6 +52,9 @@ namespace Dark_Cloud_Improved_Version
         private static Thread infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
         private static Thread mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
         private static Thread herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
+        private static Thread deSangaThread = new Thread(new ThreadStart(DeSanga.KillHealEffect));
+        private static Thread javelinThread = new Thread(new ThreadStart(Javelin.MarineEffect));
+        private static Thread scorpionVenomThread = new Thread(new ThreadStart(ScorpionVenom.VenomEffect));
         private static Thread cactusSpikeThread = new Thread(new ThreadStart(CactusSpike.SpikeEffect));
         private static Thread herculesUltimateThread = new Thread(new ThreadStart(HerculesUltimate.UltimateEffect));
         private static Thread babelSpearThread = new Thread(new ThreadStart(BabelsSpear.CurseOfBabelEffect));
@@ -503,6 +506,16 @@ namespace Dark_Cloud_Improved_Version
                         superSteveThread = new Thread(new ThreadStart(SuperSteve.SphereInheritanceEffect));
                         superSteveThread.Start();
                     }
+                    if (!javelinThread.IsAlive && Javelin.Wielded())   // marine enemies defenseless and worth double ABS, for a Javelin sphere
+                    {
+                        javelinThread = new Thread(new ThreadStart(Javelin.MarineEffect));
+                        javelinThread.Start();
+                    }
+                    if (!scorpionVenomThread.IsAlive && ScorpionVenom.Wielded())   // Scorpion's venom, for a Scorpion sphere
+                    {
+                        scorpionVenomThread = new Thread(new ThreadStart(ScorpionVenom.VenomEffect));
+                        scorpionVenomThread.Start();
+                    }
                     if (!babelSpearThread.IsAlive && BabelsSpear.Wielded())   // Curse of Babel, for a Babel's Spear sphere (Super Steve itself rises)
                     {
                         babelSpearThread = new Thread(new ThreadStart(BabelsSpear.CurseOfBabelEffect));
@@ -728,11 +741,32 @@ namespace Dark_Cloud_Improved_Version
                     }
                     break;
 
+                case Items.desanga:
+                    if (!deSangaThread.IsAlive)   // every kill heals the weapon 5 WHP
+                    {
+                        deSangaThread = new Thread(new ThreadStart(DeSanga.KillHealEffect));
+                        deSangaThread.Start();
+                    }
+                    break;
+
+                case Items.javelin:
+                    if (!javelinThread.IsAlive)   // marine enemies defenseless and worth double ABS
+                    {
+                        javelinThread = new Thread(new ThreadStart(Javelin.MarineEffect));
+                        javelinThread.Start();
+                    }
+                    break;
+
                 case Items.scorpion:
                     if (!herculesWrathThread.IsAlive)   // the Halberd line's charge
                     {
                         herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
                         herculesWrathThread.Start();
+                    }
+                    if (!scorpionVenomThread.IsAlive)   // its poison landing cures the wielder and feeds the weapon
+                    {
+                        scorpionVenomThread = new Thread(new ThreadStart(ScorpionVenom.VenomEffect));
+                        scorpionVenomThread.Start();
                     }
                     break;
 
