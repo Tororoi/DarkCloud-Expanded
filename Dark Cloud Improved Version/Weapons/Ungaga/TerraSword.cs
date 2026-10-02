@@ -4,15 +4,18 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Terra Sword — a five-second guard charge (<see cref="ChargeSeconds"/>) primes it, the sword turning green
-    /// (<see cref="Tint"/>) as it charges and holding it while primed; the next swing made while LOCKED ON drops a boulder on the
-    /// target. The sword's green fades over <see cref="TintFadeSeconds"/> from that swing; a swing with no lock leaves it primed.
+    /// <summary>Terra Sword — a five-second guard charge (<see cref="ChargeSeconds"/>), the sword turning green (<see cref="Tint"/>)
+    /// as it charges, drops a boulder on the LOCKED-ON enemy the moment it is full; with no lock it stays primed (still green) and
+    /// drops as soon as one is held. The green holds through the fall and fades over <see cref="TintFadeSeconds"/> from the impact.
     ///
     /// The boulder is Master Utan's (<see cref="IwaModel"/>, in the item-model cash) drawn by <see cref="BladeProp"/> in chara slot 3.
     /// It appears <see cref="DropHeight"/> above the ground under the target — above any ceiling — and falls from rest under
-    /// <see cref="Gravity"/> (0.6 of the judgement blade's; ~1.4 s for the full drop) on the engine's frames (the blade-fall cave: vy
+    /// <see cref="Gravity"/> (~2.4 s for the full drop, ~424 u/s at the impact) on the engine's frames (the blade-fall cave: vy
     /// += g, y −= vy, landed at its stop height). Until it lands, every tick puts it over the target's root and sets the stop
-    /// height from the floor under it (DungeonFloor), so it tracks the target across the ground and down steps and ramps.
+    /// height from the floor under it (DungeonFloor), so it tracks the target across the ground and down steps and ramps. It grows
+    /// from nothing to full size over the first <see cref="GrowDrop"/> units of the drop, and its round shadow on the floor under
+    /// the target grows over the first <see cref="ShadowGrowDrop"/> — the warning of where it lands. Both grow from a 2 ms loop of
+    /// their own (<see cref="GrowLoop"/>) that follows the cave's fall height, so the steps keep pace with the engine's frames.
     ///
     /// Where it lands:
     ///  · one blast — every live enemy whose hit spheres come within <see cref="BlastRadius"/> (the rock's reference radius 21
@@ -38,9 +41,14 @@ namespace Dark_Cloud_Improved_Version
         private const string ModelCode       = "c10w08";
         private const uint   BladeFrame      = 0x77303163;          // 'c','1','0','w' — the Terra Sword's mesh frame, c10w08__m
         // The fall.
-        private const float  DropHeight      = 300f;                // the rock's bottom this far above the ground under the target
-        private const double Gravity         = 0.6 * 500.0;         // units/s² — 0.6 of the judgement blade's (BigBang, 500)
+        private const float  DropHeight      = 500f;                // the rock's bottom this far above the ground under the target
+        // units/s²: the impact speed of a 300 u drop under 0.6 of the judgement blade's 500 (√(2·300·300) ≈ 424 u/s), from DropHeight: v²/(2·h)
+        private const double Gravity         = 2.0 * 300.0 * 300.0 / (2.0 * DropHeight);   // 180
         private const float  Sink            = 4f;                  // how far the resting rock sits into the ground
+        private const float  GrowDrop        = 150f;                // the rock grows from nothing to full size over this much of the drop
+        private const float  ShadowGrowDrop  = 300f;                // …its shadow over this much
+        private const int    GrowTickMs      = 2;                   // the growth's own cadence: well inside a frame, so each frame's height is caught as it lands
+        private const float  MinScale        = 0.01f;               // "nothing": a zero scale is a singular matrix
         private const float  ShadowLift      = 0.3f;                // the shadow frame this far above the floor (off its surface)
         private const float  ShadowDrop      = 12.8f;               // the point handed to the draw sits this far below the frame — the player's own (DrawShadow__10CCharacter, 0x2A1888)
         // The impact.
@@ -69,10 +77,9 @@ namespace Dark_Cloud_Improved_Version
         private enum Phase { Idle, Charging, Primed }
         private static Phase    _phase = Phase.Idle;
         private static DateTime _guardSince, _tintFadeFrom;
-        private static bool     _swinging;
-        private static bool     _rockUp, _falling;
+        private static volatile bool _rockUp, _falling;
         private static int      _target = -1;
-        private static float    _x, _y, _ground, _yaw;
+        private static float    _x, _y, _ground, _yaw, _start;
         private static DateTime _landed, _lastStuck;
         private static readonly List<(int idx, int ticks)> _shells = new();
         private static BorrowedEffect _shock;
@@ -121,15 +128,11 @@ namespace Dark_Cloud_Improved_Version
         // ── the charge and the trigger ──
         private static void Step()
         {
-            int action = Memory.ReadInt(PlayerAction.ChargeActionState);
-            bool swinging = action >= PlayerAction.ActionComboFirst && action <= PlayerAction.ActionComboLast;
-            bool swingStart = swinging && !_swinging;
-            _swinging = swinging;
             switch (_phase)
             {
                 case Phase.Idle:
                     FadeTint();
-                    if (GuardHeld() > 0) { _phase = Phase.Charging; _tintFadeFrom = default; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "charging"); }
+                    if (GuardHeld() > 0 && !_falling) { _phase = Phase.Charging; _tintFadeFrom = default; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "charging"); }
                     break;
                 case Phase.Charging:
                 {
@@ -137,16 +140,15 @@ namespace Dark_Cloud_Improved_Version
                     if (held <= 0) { _phase = Phase.Idle; SolarBlade.Clear(); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "guard released before the charge was full"); break; }
                     float f = (float)Math.Min(1.0, held / ChargeSeconds);
                     SolarBlade.Set(f, ModelCode, BladeFrame, 0, Tint);
-                    if (f >= 1f) { _phase = Phase.Primed; Player.FlashChargeComplete(); IwaModel.Root(); IwaModel.ShadowRoot(); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "primed"); }   // the rock and its shadow loaded into the cash now, ready for the swing
+                    if (f >= 1f) { _phase = Phase.Primed; Player.FlashChargeComplete(); IwaModel.Root(); IwaModel.ShadowRoot(); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "primed"); }   // the rock and its shadow loaded into the cash now
                     break;
                 }
                 case Phase.Primed:
                     SolarBlade.Set(1f, ModelCode, BladeFrame, 0, Tint);
-                    if (swingStart && PlayerAction.LockHeld(out int slot) && slot < EnemyAddresses.FloorSlots.Count && Enemies.IsLive(slot))
+                    if (PlayerAction.LockHeld(out int slot) && slot < EnemyAddresses.FloorSlots.Count && Enemies.IsLive(slot))
                     {
-                        _phase = Phase.Idle; _tintFadeFrom = GameClock.Now;
-                        _guardSince = default;
-                        Drop(slot);
+                        _phase = Phase.Idle; _guardSince = default;
+                        Drop(slot);                                                            // the green holds until the impact
                     }
                     break;
             }
@@ -164,9 +166,10 @@ namespace Dark_Cloud_Improved_Version
             return (GameClock.Now - _guardSince).TotalSeconds;
         }
 
-        /// <summary>After the trigger: the green out over TintFadeSeconds, then the blade's own colour.</summary>
+        /// <summary>From the impact: the green out over TintFadeSeconds, then the blade's own colour; held full while the rock falls.</summary>
         private static void FadeTint()
         {
+            if (_falling) { SolarBlade.Set(1f, ModelCode, BladeFrame, 0, Tint); return; }
             if (_tintFadeFrom == default) return;
             double t = (GameClock.Now - _tintFadeFrom).TotalSeconds / TintFadeSeconds;
             if (t >= 1.0) { SolarBlade.Clear(); _tintFadeFrom = default; return; }
@@ -178,13 +181,13 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_rockUp) TakeDown();
             uint root = IwaModel.Root();
-            if (root == 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no rock model in the item cash — nothing falls"); return; }
+            if (root == 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no rock model in the item cash — nothing falls"); _tintFadeFrom = GameClock.Now; return; }
             _target = slot;
             TargetGround();
             _yaw = Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
-            if (!BladeProp.Spawn(1f, root, pointDown: false)) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no rock copy (slot or cave busy)"); return; }
+            if (!BladeProp.Spawn(MinScale, root, pointDown: false)) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no rock copy (slot or cave busy)"); _tintFadeFrom = GameClock.Now; return; }
             Memory.WriteFloat(CodeCaves.BladeSpin, 0f);
-            float start = RestHeight() + DropHeight + Sink;                                     // its bottom DropHeight above the ground
+            float start = _start = RestHeight() + DropHeight + Sink;                            // its bottom DropHeight above the ground
             BladeProp.Place(_x, start, _y, _yaw);
             BladeProp.Alpha(1f);
             Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallY, start);
@@ -193,6 +196,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallStop, RestHeight());
             Memory.WriteInt  (CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFalling);
             _rockUp = true; _falling = true;
+            _lastFallY = float.NaN;
+            new Thread(GrowLoop) { IsBackground = true, Name = "TerraSwordGrow" }.Start();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the boulder drops on enemy slot {slot} at ({_x:F0},{_y:F0}) ground {_ground:F1}");
         }
 
@@ -220,13 +225,13 @@ namespace Dark_Cloud_Improved_Version
                     BladeProp.SetXY(_x, _y);
                     Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallStop, RestHeight());
                 }
-                Shadow(true);
+                Shadow(true, null);                                                            // its scale is GrowLoop's while it falls
                 return;
             }
             double age = (GameClock.Now - _landed).TotalSeconds;
             if (age >= RestSeconds + FadeSeconds) { TakeDown(); return; }
             BladeProp.Alpha(age < RestSeconds ? 1f : (float)Math.Max(0.0, 1.0 - (age - RestSeconds) / FadeSeconds));
-            Shadow(age < RestSeconds);                                                         // gone as the rock starts to fade
+            Shadow(age < RestSeconds, 1f);                                                     // gone as the rock starts to fade
             if ((GameClock.Now - _lastStuck).TotalSeconds >= StuckSeconds) { _lastStuck = GameClock.Now; StuckHits(); }
         }
 
@@ -235,18 +240,14 @@ namespace Dark_Cloud_Improved_Version
             _falling = false; _landed = GameClock.Now; _lastStuck = GameClock.Now;
             Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
             BladeProp.SetHeight(RestHeight());
+            BladeProp.SetScale(1f);
+            _tintFadeFrom = GameClock.Now;                                                     // the sword's green fades from here
             Solid();
             Blast();
             ShockPlay();
             GamePad.Rumble(RumbleStrength, RumbleFrames);
             WeaponWhp.Drain((ushort)Items.terrasword, ImpactWhp, Tag + "impact ");
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"impact at ({_x:F0},{_ground:F0},{_y:F0})");
-            uint sr = IwaModel.ShadowRoot();
-            if (sr != 0)
-            {   // DIAGNOSTIC: where the engine last put the shadow frame (its world translation) and the cave's flag
-                long f = Memory.ToMmu(sr);
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"shadow frame 0x{sr:X} world ({Memory.ReadFloat(f + CFrameVu1.WorldMatrix + 0x30):F0},{Memory.ReadFloat(f + CFrameVu1.WorldMatrix + 0x34):F0},{Memory.ReadFloat(f + CFrameVu1.WorldMatrix + 0x38):F0}), visual 0x{Memory.ReadGuestPtr(f + CFrameVu1.GeomPtr):X}, flag {Memory.ReadInt(CodeCaves.RockShadow)}, hook {(Memory.ReadUInt(DunPatches.RockShadowHookAddrMmu) == DunPatches.RockShadowHookNew ? "in" : "NOT in")} this ISO");
-            }
         }
 
         /// <summary>The resting rock as a solid column: enemies, the player and enemy shots (the spear-block caves).</summary>
@@ -329,7 +330,7 @@ namespace Dark_Cloud_Improved_Version
             if (!_rockUp) return;
             Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
             Memory.WriteInt(CodeCaves.SpearBlock + CodeCaves.SpearBlockFlag, 0);                      // passable again
-            Shadow(false);
+            Shadow(false, 0f);
             BladeProp.Despawn();
             IwaModel.ReleaseTextures();
             _rockUp = _falling = false; _target = -1;
@@ -339,7 +340,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The rock's shadow (the ISO's rock-shadow cave, in the dungeon's shadow pass): the rock's SHADOW model
         /// (IwaModel.ShadowRoot — a lit mesh drawn in shadow mode comes out garbled) placed over the rock and drawn by
         /// MGDrawShadowFast, projected straight down onto the floor under it. Re-asserted every tick while on; one write off.</summary>
-        private static void Shadow(bool on)
+        private static void Shadow(bool on, float? scale)
         {
             uint root = on && BladeProp.Active ? IwaModel.ShadowRoot() : 0u;
             if (root == 0)
@@ -350,7 +351,7 @@ namespace Dark_Cloud_Improved_Version
             // The shadow frame over the rock (nothing else places it), written as CFrame's SetScale / SetRotation / SetPosition do
             // (what DrawShadowMonstor calls before its draw): the TRS fields, the TRS-dirty flag, the world cache dropped.
             long f = Memory.ToMmu(root);
-            Memory.WriteVec3(f + CFrameVu1.TrsScaleX, 1f, 1f, 1f);
+            if (scale is float sc) Memory.WriteVec3(f + CFrameVu1.TrsScaleX, sc, sc, sc);
             Memory.WriteVec3(f + CFrameVu1.EulerX, 0f, 0f, 0f);
             Memory.WriteVec3(f + CFrameVu1.TrsPosX, _x, _ground + ShadowLift, _y);                 // on the floor, as a character's shadow frame sits at its feet
             Memory.WriteInt (f + 0x23C, 0);                                                   // SetRotation's own clears
@@ -371,6 +372,34 @@ namespace Dark_Cloud_Improved_Version
             _shadowOn = true;
         }
         private static bool _shadowOn;
+
+        /// <summary>While the rock falls: every GrowTickMs the cave's fall height is read and, when a new frame has moved it, the rock's
+        /// scale (nothing → full over GrowDrop) and its shadow's (nothing → full over ShadowGrowDrop) written from it — the regular tick
+        /// leaves both alone meanwhile. Ends with the fall.</summary>
+        private static void GrowLoop()
+        {
+            while (_falling && _rockUp)
+            {
+                float y = Memory.ReadFloat(CodeCaves.BladeFall + CodeCaves.BladeFallY);
+                if (y != _lastFallY)
+                {
+                    _lastFallY = y;
+                    float fallen = _start - y;
+                    BladeProp.SetScale(Math.Clamp(fallen / GrowDrop, MinScale, 1f));
+                    uint root = IwaModel.ShadowRoot();
+                    if (root != 0)
+                    {
+                        float sc = Math.Clamp(fallen / ShadowGrowDrop, MinScale, 1f);
+                        long f = Memory.ToMmu(root);
+                        Memory.WriteVec3(f + CFrameVu1.TrsScaleX, sc, sc, sc);
+                        Memory.WriteInt (f + CFrameVu1.DirtyTrs, 1);
+                        Memory.WriteInt (f + CFrameVu1.WorldCacheA, 0);
+                    }
+                }
+                Thread.Sleep(GrowTickMs);
+            }
+        }
+        private static float _lastFallY = float.NaN;
 
         // ── the shockwave ──
         private static long ShockObj => _shock.Instance + ShotEffectPack.OffObj + _sub * ShotEffectPack.ObjStride;
@@ -416,7 +445,7 @@ namespace Dark_Cloud_Improved_Version
             foreach (var (idx, _) in _shells) if (pool != 0) { Memory.WriteInt(pool + idx * CollisionPool.Stride + CodeCaves.NoDrainMarkOff, 0); CollisionPool.Deactivate(pool, idx); }
             _shells.Clear();
             SolarBlade.Clear();
-            _phase = Phase.Idle; _guardSince = default; _tintFadeFrom = default; _swinging = false;
+            _phase = Phase.Idle; _guardSince = default; _tintFadeFrom = default;
             IwaModel.Forget();                                                        // a floor change empties the cash: loaded again when next wanted
         }
     }

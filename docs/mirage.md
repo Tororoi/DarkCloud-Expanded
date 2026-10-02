@@ -40,3 +40,12 @@ The clone's slot is marked in `DungeonCharaDraw.StepSkipTable` while the game ho
 freezes its motion, cloth and shadow without touching its channel; `MaintainInternal` keeps the mark. The decoy
 timer, hand-off fade and aggro hold read `GameClock`, so they stand still on their own. The PNACH gate flag's value 3
 ("decoy up but paused") predates this and is no longer written.
+
+## Lock-on reach ×2 — the Mirage line's
+
+The Mirage, and every weapon built up from it — the Terra Sword, Hercules' Wrath, Babel's Spear — locks on from twice as far:
+the active character's entry of the lock-on factor table (`CodeCaves.LockOnFactorTable`, the same data the Cross Hinder and the
+Flamingo drive) is held at 2× the vanilla factor (`Mirage.HoldReach` / `ReleaseReach`) from the Mirage loop, which runs on every
+floor, while Ungaga holds one of them or Xiao holds Super Steve with one of their spheres; a character switch hands the raised
+entry back first. Needs the ISO's lock-on table patch (`DunPatches.LockOnTableWord0`).
+

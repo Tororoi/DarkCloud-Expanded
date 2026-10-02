@@ -9,7 +9,7 @@ namespace Dark_Cloud_Improved_Version
     /// still buried. The enemy above it is struck and thrown off it, and it
     /// and every enemy within <see cref="ConfusionRadius"/> of the spear are CONFUSED for as long as the spear stands
     /// (<see cref="SpearSeconds"/> plus its fade: the confusion ends when the spear has fully faded), as is any enemy that comes within that radius while it stands (Ungaga locks on from twice as
-    /// far while the spear is his, <see cref="ReachFactor"/>): tinted a light blue, each
+    /// far while the spear is his — the Mirage's reach, <see cref="Mirage.HoldReach"/>): tinted a light blue, each
     /// goes after the NEAREST thing inside the area — another enemy, or the player while the player is in it — and its swings
     /// hurt other enemies; with nothing in the area to go after it wanders. Once risen the spear turns slowly on the spot, and
     /// fades out over <see cref="FadeSeconds"/> when its time is up.
@@ -74,9 +74,6 @@ namespace Dark_Cloud_Improved_Version
         private const float  FadeStartSeconds = (FadeStartFrame - ShockVanishStart) / ShockRate / 60f;  // 2.0 s into the vanish
         private const float  FadeSeconds      = (ShockVanishEnd - FadeStartFrame) / ShockRate / 60f;    // 1.67 s: gone as the vanish clip ends
         private static float ShockScale => F.ShockScale;   // the beam's size: the spear's as authored (a sideways scale to the area's edge read as size, not range)
-        // Lock-on: the wielder's entry in the lock-on factor table (the same data the Cross Hinder and the Flamingo drive), ×2 while it is theirs.
-        private const float ReachFactor = 2.0f;
-        private static int   _reachChar = -1;              // whose lock-on entry the reach was raised on (−1 = none)
         private const int    ShockTemplate    = 5;       // a stock config's shape; the name and motions are replaced (Big Bang's choice)
         private const string ShockName        = "zibaku_f", ShockDir = BorrowedShots.EffectDir;   // the beam's cyan/blue copy on the dead zibaku_f name (BorrowedShotBakes)
         private const float  SpinDegPerSec    = 240f;
@@ -195,7 +192,6 @@ namespace Dark_Cloud_Improved_Version
             {
                 while (Wielded() && Player.InDungeonFloor())
                 {
-                    HoldReach();
                     if (!Player.CheckDunIsPausedOrMenu())
                     {
                         Charge();
@@ -700,33 +696,8 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>The active character's lock-on reach ×2 (Curse of Babel, Ungaga's or Super Steve's; Hercules' Wrath's thread holds
-        /// Ungaga's too). A character switch hands the raised entry back first.</summary>
-        internal static void HoldReach()
-        {
-            if ((uint)Memory.ReadInt(DunPatches.LockOnTableHookAddrMmu) != DunPatches.LockOnTableWord0) return;   // table patch not in this ISO
-            int ch = Player.CurrentCharacterNum();
-            if (ch < 0 || ch >= CodeCaves.LockOnFactorVanilla.Length) return;
-            if (_reachChar >= 0 && _reachChar != ch) ReleaseReach();
-            long entry = CodeCaves.LockOnFactorTable + ch * 4;
-            float reach = CodeCaves.LockOnFactorVanilla[ch] * ReachFactor;
-            if (Memory.ReadFloat(entry) == reach) return;
-            Memory.WriteInt(CodeCaves.LockOnFactorTable + CodeCaves.LockOnFactorOwner, 1);   // ours: the PNACH stops re-seeding
-            Memory.WriteFloat(entry, reach);
-            if (_reachChar != ch) { _reachChar = ch; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"lock-on reach ×{ReachFactor:F1} (character {ch})"); }
-        }
-        internal static void ReleaseReach()
-        {
-            if (_reachChar < 0) return;
-            long entry = CodeCaves.LockOnFactorTable + _reachChar * 4;
-            float reach = CodeCaves.LockOnFactorVanilla[_reachChar] * ReachFactor;
-            if (Memory.ReadFloat(entry) == reach) Memory.WriteFloat(entry, CodeCaves.LockOnFactorVanilla[_reachChar]);
-            _reachChar = -1;
-        }
-
         private static void End()
         {
-            ReleaseReach();
             TakeDown();
             { long pool = CollisionPool.Resolve(); foreach (var (idx, _) in _shells) if (pool != 0) { Memory.WriteInt(pool + idx * CollisionPool.Stride + CodeCaves.NoDrainMarkOff, 0); CollisionPool.Deactivate(pool, idx); } _shells.Clear(); }
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++) if (_confusedUntil[s] != default) Release(s);

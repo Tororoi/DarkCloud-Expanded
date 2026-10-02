@@ -42,7 +42,7 @@ Xiao holding Super Steve with a Babel's Spear SynthSphere has all of Curse of Ba
 from Xiao's Super Steve case in `WeaponThreads`): the 1 s guard charge (her guard poses are the same 9 / 33), the copy rising
 under the target with its ease, the strike and kick, the confusion and friendly fire, the spin and the spikes, the blue
 confusion-area beam (`zibaku_f`, second instance), the solid column (enemies, the player, enemy shots), and lock-on reach ×2 —
-raised on HER entry of the lock-on factor table (`HoldReach` now raises the active character's and hands it back on a switch).
+raised on HER entry of the lock-on factor table (`Mirage.HoldReach` raises the active character's and hands it back on a switch).
 
 The copy is Super Steve itself, not a spear: her slingshot's visual is software-skinned, which `BladeProp` cannot copy, so it
 is `SlingshotProp.SpawnStatue` — the Matador's world-rooted copy (same chara slot 3 the blade-fall and blade-spin caves drive),
