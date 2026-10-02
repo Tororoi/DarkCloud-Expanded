@@ -21,10 +21,12 @@ namespace Dark_Cloud_Improved_Version
     /// The copy is <see cref="BladeProp"/>'s (untinted: it draws in the room's own light), in one of two <see cref="Form"/>s:
     ///  · UNGAGA's (<see cref="CactusForm"/>): the equipped Cactus, baked point-up — c10w13 runs −9.7 … +11.7 along its axis (the
     ///    tip, dcol0, at 11.68) — at 3×, 6.8 model units of its top above the floor;
-    ///  · SUPER STEVE's with a Cactus sphere (<see cref="PalmForm"/>): Muska Lacka's oasis palm (<see cref="PalmModel"/>, in the
-    ///    item-model cash — not Ungaga's weapon, and none of Xiao's own memory), authored upright, the whole tree out (69.3 tall),
-    ///    at 0.5×, turned −90° from Xiao's facing; its trunk base (model z 8) is set on the spot, the offset turned and scaled with it.
-    ///    It hurts nothing: solid to enemies, the player and enemy shots, it is a wall for a ranged fighter to shoot from behind.
+    ///  · SUPER STEVE's with a Cactus sphere (<see cref="TreesForm"/>): Queens' two trees and their grass, whole (<see cref="QueensTrees"/>,
+    ///    in the item-model cash — not Ungaga's weapon, and none of Xiao's own memory), authored upright, all of it out (74.3 tall),
+    ///    at 0.7×, turned +90° from Xiao's facing, the grass square's centre (model −6, −1) on the spot — the part's root is at the
+    ///    model's origin and a copy's root translation is the chara slot's position, so the offset is the root's, turned and scaled.
+    ///    It hurts nothing and casts no shadow: solid to enemies, the player and enemy shots, it is a wall for a ranged fighter to
+    ///    shoot from behind.
     /// The scales run in the same proportions (a thirtieth of full size out, 3.4 / 3 at the peak).</summary>
     internal static class CactusSpike
     {
@@ -36,11 +38,14 @@ namespace Dark_Cloud_Improved_Version
         private const float  Buried         = 4f;      // how far below the floor the tip starts
 
         /// <summary>What rises: its model, full size, the model's top along the rise axis, how much of that stands above the floor,
-        /// where its base sits along the model's own z (set on the spot), the solid column's radius at full size, and its turn
-        /// about the vertical from the wielder's facing.</summary>
-        private sealed record Form(string Name, float Scale, float Top, float ExposedModel, float BaseZ, float BlockRadius, bool Palm, float Turn);
-        private static readonly Form CactusForm = new("cactus", 3f,   11.7f, 6.8f,  0f, 6f, false, 0f);                   // ±2.5 across at 1×: ±7.5 with its arms at 3×
-        private static readonly Form PalmForm   = new("palm",   0.5f, 69.3f, 69.3f, 8f, 4f, true, (float)(-Math.PI / 2));  // the trunk is 5.8 at 1× (2.9 at 0.5×): a little wider to stand behind; turned a quarter the other way from the facing
+        /// where its base sits along the model's own z (set on the spot), the solid column's radius at full size, its turn
+        /// about the vertical from the wielder's facing, and its round shadow's radius and centre along the model's z (model units).</summary>
+        private sealed record Form(string Name, float Scale, float Top, float ExposedModel, float BaseX, float BaseZ, float BlockRadius, bool Trees, float Turn,
+                                   float ShadowRadius, float ShadowZ);
+        private static readonly Form CactusForm = new("cactus", 3f,   11.7f, 6.8f,  0f, 0f, 6f, false, 0f, 1.8f, 0f);         // ±2.5 across at 1× with its arms (±7.5 at 3×); the shadow its body's 1.8 (spikes 2.25–2.75 left out)
+        // Queens' two trees and their grass, whole: centred on the spot by the grass square's centre (model −6, −1); the column covers
+        // both trunks (their bases 21.5 model units apart, ~15 at 0.7×, about the spot); turned a quarter from the facing; no shadow.
+        private static readonly Form TreesForm  = new("Queens trees", 0.7f, 74.3f, 74.3f, -6f, -1f, 9.5f, true, (float)(Math.PI / 2), 0f, 0f);
         private static Form F = CactusForm;
         private static bool _xiao;
         private static float SpawnScale => F.Scale * SpawnRatio;
@@ -69,6 +74,7 @@ namespace Dark_Cloud_Improved_Version
         private const int    ShellPoolReserve = 16;    // free pool entries always left to the engine
 
         private static bool     _up, _emerged, _peaked, _risen;
+        private static float    _curScale;                     // the copy's scale now (its shadow follows it)
         private static DateTime _summoned, _lastHit;
         private static float    _sx, _sy, _ground, _yaw;
         private static bool     _guardLatched; private static DateTime _guardSince;
@@ -103,17 +109,23 @@ namespace Dark_Cloud_Improved_Version
 
         public static void SpikeEffect()
         {
-            _xiao = Player.CurrentCharacterNum() == Player.XiaoId;
-            F = _xiao ? PalmForm : CactusForm;
+            int ch = Player.CurrentCharacterNum();
+            _xiao = ch == Player.XiaoId;
+            F = _xiao ? TreesForm : CactusForm;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"guard {Mirage.GuardChargeMs} ms → a {F.Name} rises {AheadDistance:F0} ahead for {StandSeconds:F0} s");
             try
             {
-                while (Wielded() && Player.InDungeonFloor())
+                // Ends the moment the active character changes — checked every tick, a menu open or not: the copy's slot was
+                // cloned from this character's objects, and an ally switch reloads them under it (drawn behind the menu, it read
+                // freed memory and reset the game). A Cactus sphere on Super Steve keeps Wielded() true across the switch, so the
+                // character is what is watched; the thread starts again for the new one, with its own form.
+                while (Wielded() && Player.InDungeonFloor() && Player.CurrentCharacterNum() == ch)
                 {
+                    GroundShadow.Guard();                                                   // its shadow off the moment play stops (menus load over its memory)
                     if (!Player.CheckDunIsPausedOrMenu())
                     {
                         Charge();
-                        if (_up) { Drive(); if (_xiao && _up) PalmModel.KeepTextures(); }   // the palm's textures re-sent through the copy's pass
+                        if (_up) { Drive(); if (_xiao && _up) QueensTrees.KeepTextures(); }   // the trees' textures re-sent through the copy's pass
                         RetireShells();
                     }
                     Thread.Sleep(TickMs);
@@ -144,10 +156,11 @@ namespace Dark_Cloud_Improved_Version
             _ground = DungeonFloor.HeightAt(_sx, _sy, ph + 20f, out float fh) ? fh : ph;   // the floor there (a step or a ramp ahead), else his
             _emerged = _peaked = _risen = false;
             uint root = 0;
-            if (F.Palm && (root = PalmModel.Root()) == 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no palm model in the item cash — nothing rises"); return; }
-            if (!BladeProp.Spawn(SpawnScale, root, pointDown: false, pointUp: !F.Palm)) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"no {F.Name} copy (slot or cave busy)"); return; }
+            if (F.Trees && (root = QueensTrees.Root()) == 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no Queens trees model in the item cash — nothing rises"); return; }
+            if (!BladeProp.Spawn(SpawnScale, root, pointDown: false, pointUp: !F.Trees)) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"no {F.Name} copy (slot or cave busy)"); return; }
             Memory.WriteFloat(CodeCaves.BladeSpin, 0f);                                     // it never turns
             var (rx, ry) = RootXY(SpawnScale);
+            _curScale = SpawnScale;
             BladeProp.Place(rx, RootHeight(0f, SpawnScale), ry, CopyYaw);
             BladeProp.Alpha(1f);
             // The rise, on the engine's frames (Babel's): the blade-fall cave steps y −= vy, vy += g each frame; v0 = 2D/T and
@@ -169,13 +182,28 @@ namespace Dark_Cloud_Improved_Version
         /// so the growth keeps the top where the floor cuts it.</summary>
         private static float RootHeight(float t, float s) => _ground - F.Top * s + (-Buried + (F.ExposedModel * s + Buried) * t);
 
-        /// <summary>The copy's root across the ground at scale <paramref name="s"/>: its base (model z BaseZ, turned with the facing
-        /// the copy is placed at, CopyYaw: local +z → (sin, cos)) set on the spot.</summary>
+        /// <summary>The copy's root across the ground at scale <paramref name="s"/>: the model point (BaseX, BaseZ) — the form's centre —
+        /// turned with the facing the copy is placed at (CopyYaw; the engine's RotMatrixY: local +x → (cos, −sin), local +z → (sin, cos)
+        /// across the ground) and set on the spot.</summary>
         private static (float x, float y) RootXY(float s)
-            => (_sx - (float)Math.Sin(CopyYaw) * F.BaseZ * s, _sy - (float)Math.Cos(CopyYaw) * F.BaseZ * s);
+        {
+            float c = (float)Math.Cos(CopyYaw), sn = (float)Math.Sin(CopyYaw);
+            return (_sx - (c * F.BaseX + sn * F.BaseZ) * s, _sy - (-sn * F.BaseX + c * F.BaseZ) * s);
+        }
 
-        /// <summary>The copy's yaw: the wielder's facing at the summon plus the form's turn.</summary>
-        private static float CopyYaw => _yaw + F.Turn;
+        /// <summary>The copy's yaw: the wielder's facing at the summon plus the form's turn, wrapped to ±π — the engine's
+        /// angle-to-matrix diverges past that (the blade-spin cave wraps for the same reason), and a facing past π/2 plus the trees'
+        /// quarter turn landed there, turning about a quarter of the summons wrong.</summary>
+        private static float CopyYaw
+        {
+            get
+            {
+                float y = _yaw + F.Turn;
+                while (y >  MathF.PI) y -= 2 * MathF.PI;
+                while (y < -MathF.PI) y += 2 * MathF.PI;
+                return y;
+            }
+        }
 
         private static void Drive()
         {
@@ -205,12 +233,14 @@ namespace Dark_Cloud_Improved_Version
                     if (u >= 1f) _risen = true;
                 }
                 BladeProp.SetScale(sc);
+                _curScale = sc;
                 var (rx, ry) = RootXY(sc);
                 BladeProp.Place(rx, RootHeight(1f, sc), ry, CopyYaw);
                 if (_risen) Solid();
             }
             BladeProp.Alpha(age < StandSeconds ? 1f : (float)Math.Max(0.0, 1.0 - (age - StandSeconds) / FadeSeconds));
-            if (_risen && !F.Palm && (GameClock.Now - _lastHit).TotalSeconds >= HitSeconds)   // the palm only blocks: Xiao fights from range
+            if (age < StandSeconds) Shadow(); else GroundShadow.Hide();                          // gone as it starts to fade
+            if (_risen && !F.Trees && (GameClock.Now - _lastHit).TotalSeconds >= HitSeconds)   // the trees only block: Xiao fights from range
             {
                 _lastHit = GameClock.Now;
                 for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
@@ -220,6 +250,15 @@ namespace Dark_Cloud_Improved_Version
                     Hit(s);
                 }
             }
+        }
+
+        /// <summary>Its round shadow on the floor (GroundShadow): the form's radius at the copy's scale now, centred at the form's shadow
+        /// point along its model z, turned and scaled with the copy; none for a form without one.</summary>
+        private static void Shadow()
+        {
+            if (F.ShadowRadius <= 0f) return;                                                    // none (Queens' trees)
+            float d = (F.ShadowZ - F.BaseZ) * _curScale;
+            GroundShadow.Show(_sx + (float)Math.Sin(CopyYaw) * d, _ground, _sy + (float)Math.Cos(CopyYaw) * d, F.ShadowRadius * _curScale);
         }
 
         /// <summary>Grown and settled: the column armed (enemies, the player and enemy shots) at the full size.</summary>
@@ -327,8 +366,9 @@ namespace Dark_Cloud_Improved_Version
             if (!_up) return;
             Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
             Memory.WriteInt(CodeCaves.SpearBlock + CodeCaves.SpearBlockFlag, 0);             // passable again
+            GroundShadow.Hide();
             BladeProp.Despawn();
-            if (_xiao) PalmModel.ReleaseTextures();                                          // the palm's textures back in the cash's own block
+            if (_xiao) QueensTrees.ReleaseTextures();                                        // the trees' textures back in the cash's own block
             _up = false; _emerged = _peaked = _risen = false;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the {F.Name} is gone");
         }
@@ -340,7 +380,8 @@ namespace Dark_Cloud_Improved_Version
             foreach (var (idx, _) in _shells) if (pool != 0) { Memory.WriteInt(pool + idx * CollisionPool.Stride + CodeCaves.NoDrainMarkOff, 0); CollisionPool.Deactivate(pool, idx); }
             _shells.Clear();
             _guardLatched = false; _guardSince = default;
-            if (_xiao) PalmModel.Forget();                                                   // a floor change empties the cash: loaded again when next wanted
+            if (_xiao) QueensTrees.Forget();
+            GroundShadow.Forget();                                                   // a floor change empties the cash: loaded again when next wanted
         }
     }
 }

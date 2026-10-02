@@ -184,13 +184,16 @@ namespace Dark_Cloud_Improved_Version
 
         public static void CurseOfBabelEffect()
         {
-            _xiao = Player.CurrentCharacterNum() == Player.XiaoId;
+            int ch = Player.CurrentCharacterNum();
+            _xiao = ch == Player.XiaoId;
             F = _xiao ? StatueForm : SpearForm;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"curse of Babel: hold the guard {GuardChargeMs / 1000} s → the copy rises under the target for {SpearSeconds:F0} s; confusion within {ConfusionRadius:F0}");
             for (int s = 0; s < _victim.Length; s++) _victim[s] = -3;
             try
             {
-                while (Wielded() && Player.InDungeonFloor())
+                // Ends the moment the active character changes, a menu open or not (Desert Bloom's reason: the copy's slot was cloned
+                // from this character's objects, which an ally switch reloads under it; a sphere keeps Wielded() true across it).
+                while (Wielded() && Player.InDungeonFloor() && Player.CurrentCharacterNum() == ch)
                 {
                     if (!Player.CheckDunIsPausedOrMenu())
                     {
@@ -198,7 +201,7 @@ namespace Dark_Cloud_Improved_Version
                         if (_up) DriveSpear();
                         DriveConfusion();
                     }
-                    Thread.Sleep(TickMs);
+                    for (int t = 0; t < TickMs && Player.CurrentCharacterNum() == ch; t += 10) Thread.Sleep(10);   // the tick, cut short by a switch
                 }
             }
             finally { End(); }

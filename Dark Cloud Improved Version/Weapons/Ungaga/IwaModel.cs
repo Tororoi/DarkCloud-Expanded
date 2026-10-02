@@ -26,59 +26,30 @@ namespace Dark_Cloud_Improved_Version
 
         internal static uint Root() => M.Root();
         internal static void Forget() => M.Forget();
-        /// <summary>The rock's shadow: a flat disc of the rock's radius (<see cref="ShadowDisc"/>) loaded as a SHADOW model (CVisualShadow,
-        /// in the rock's own cash entry), drawn straight down under it. 0 when it cannot be had.</summary>
-        internal static uint ShadowRoot() { var (mds, _) = Files(); return mds == null ? 0 : M.ShadowRoot(_disc ??= ShadowDisc(mds), ShadowNeedUnits); }
-        private static byte[] _disc;
-        private const int DiscSegments = 16;
-        // Room asked of the allocator: ~96 B (6 units) of shadow VU data per triangle (both faces), and 2 KB for the frame, the
-        // visual and the batches' headers. The rock's 128² texture and its model leave ~445 units in its entry.
-        private const int ShadowNeedUnits = DiscSegments * 2 * 6 + 0x80;
-
-        /// <summary>A one-node MDS of a flat disc, radius <see cref="Radius"/>, in the rock's own frame (iwa.mds's header and node,
-        /// its MDT rebuilt): a centre and DiscSegments rim points at y 0, a triangle fan wound both ways (one face survives whichever
-        /// way the shadow program culls), one UV and one up normal, the rock's materials kept.</summary>
-        private static byte[] ShadowDisc(byte[] mds)
-        {
-            const int NodeEnd = 0x80;                                                   // MDS header 0x10 + one 0x70 node; the MDT follows
-            var m = MdtCarve.MdtParse(mds, NodeEnd);
-            m.pos = new List<float[]> { new[] { 0f, 0f, 0f, 1f } };
-            for (int i = 0; i < DiscSegments; i++)
-            {
-                double a = 2 * Math.PI * i / DiscSegments;
-                m.pos.Add(new[] { (float)(Math.Sin(a) * Radius), 0f, (float)(Math.Cos(a) * Radius), 1f });
-            }
-            m.uv = new List<float[]> { new[] { 0f, 0f, 0f, 0f } };
-            m.norm = new List<float[]> { new[] { 0f, 1f, 0f, 0f } };
-            m.hasCol = false; m.col = null;
-            int stride = 3;
-            var recs = new List<int[]>();
-            void Tri(int a, int b, int c) { foreach (int v in new[] { a, b, c }) { var r = new int[stride]; r[0] = v; recs.Add(r); } }
-            for (int i = 0; i < DiscSegments; i++)
-            {
-                int a = 1 + i, b = 1 + (i + 1) % DiscSegments;
-                Tri(0, a, b); Tri(0, b, a);
-            }
-            m.subs = new List<(int prim, int mat, List<int[]> recs)> { (3, 0, recs) };
-            byte[] mdt = MdtCarve.MdtBuild(m);
-            IsoBytes.U32(mdt, 0x14, (uint)m.uv.Count);                                  // the count words MdtBuild keeps verbatim
-            IsoBytes.U32(mdt, 0x2C, (uint)m.norm.Count);
-            var outb = new byte[NodeEnd + mdt.Length];
-            Array.Copy(mds, outb, NodeEnd);
-            Array.Copy(mdt, 0, outb, NodeEnd, mdt.Length);
-            return outb;
-        }
         internal static void KeepTextures() => M.KeepTextures(CashModel.WeaponPassBlock);
         internal static void ReleaseTextures() => M.ReleaseTextures();
+        /// <summary>iwa.mds as the pack has it (GroundShadow's disc borrows its header, node and materials); null when unreadable.</summary>
+        internal static byte[] ModelBytes() { var (mds, _) = Files(); return mds; }
+
+        private static byte[] _texBlock; private static bool _texSwizzled;
+
+        /// <summary>An IMG bank of d02b10 alone at <paramref name="n"/>² — the texture GroundShadow's disc (iwa's materials) is loaded with.</summary>
+        internal static byte[] StandInBank(int n)
+        {
+            Files();
+            if (_texBlock == null) return null;
+            return CatPackBakes.Bank.Build(new[] { (byte)'I', (byte)'M', (byte)'G', (byte)0 },
+                                           new List<(string, byte[])> { (Texture, CashModel.ResampleTim8(_texBlock, _texSwizzled, n)) });
+        }
 
         private static byte[] _fullPx, _fullClut;
         private static int _fullW, _fullH;
 
         /// <summary>The full d02b10, row-major, and its CLUT — the picture the stand-in's entry is pointed at.</summary>
-        private static (string, int, int, byte[], byte[]) Full()
+        private static List<(string, int, int, byte[], byte[])> Full()
         {
             Files();
-            return (Texture, _fullW, _fullH, _fullPx, _fullClut);
+            return _fullPx == null ? null : new List<(string, int, int, byte[], byte[])> { (Texture, _fullW, _fullH, _fullPx, _fullClut) };
         }
 
         private static (byte[] mds, byte[] img) Files()
@@ -92,6 +63,7 @@ namespace Dark_Cloud_Improved_Version
                     _mds = (pack.Find(Model) ?? throw new IOException(Pack + " lacks " + Model)).Payload;
                     var bank = new CatPackBakes.Bank((pack.Find(Bank) ?? throw new IOException(Pack + " lacks " + Bank)).Payload);
                     bool swizzled = bank.Magic[2] == (byte)'2';
+                    _texBlock = bank.Block(Texture); _texSwizzled = swizzled;
                     (_fullW, _fullH, _fullPx, _fullClut) = CashModel.ReadTim8(bank.Block(Texture), swizzled);
                     _img = CatPackBakes.Bank.Build(new[] { (byte)'I', (byte)'M', (byte)'G', (byte)0 },
                                                    new System.Collections.Generic.List<(string, byte[])> { (Texture, CashModel.ResampleTim8(bank.Block(Texture), swizzled, TexSize)) });

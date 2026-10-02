@@ -43,6 +43,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int   Slot     = 3;               // the clone-weapon chara slot (texgroup 0x1D)
         private const int    CharCopy = 0xD60;           // the draw-relevant part of a CCharacter (CharacterClone's safe cut)
         private const int    MaxNodes = 8;               // WeaponCave: 0x1400 / 0x270
+        // A bigger tree (a georama part: Queens' trees are 16 nodes) goes to the TOP of the clone's node pool instead — free whenever a
+        // copy can be up (Spawn refuses while CharacterClone is; the Divine Beast cat, the pool's other user, is Xiao's with its own
+        // weapon, never beside a copy). The cat and a clone fill the pool from the bottom.
+        private const int    LargeNodes = 24;
+        private static long  LargeTreeCave => CodeCaves.NodePool + (long)(CodeCaves.MaxNodes - LargeNodes) * CFrameVu1.NodeStride;
+        private static long  _treeCave = CodeCaves.WeaponCave;   // where the copied tree is (MMU)
 
         private static uint  _rootGuest, _liveRoot, _playerRoot;
         private static int   _nodeCount;
@@ -259,7 +265,7 @@ namespace Dark_Cloud_Improved_Version
                 uint n = work.Pop();
                 if (!Memory.IsValidGuest(n) || !seen.Add(n)) continue;
                 if (n < min) min = n; if (n > max) max = n;
-                if (seen.Count > MaxNodes) { Console.WriteLine(Tag + "weapon tree too large"); return false; }
+                if (seen.Count > LargeNodes) { Console.WriteLine(Tag + "model tree too large"); return false; }
                 for (uint c = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.RootChild);
                      Memory.IsValidGuest(c);
                      c = Memory.ReadGuestPtr(Memory.ToMmu(c) + CFrameVu1.RootSibling))
@@ -268,11 +274,12 @@ namespace Dark_Cloud_Improved_Version
             if ((max - min) % CFrameVu1.NodeStride != 0) { Console.WriteLine(Tag + "span not node-aligned"); return false; }
             _nodeCount = (int)((max - min) / CFrameVu1.NodeStride) + 1;
             int blockSize = _nodeCount * CFrameVu1.NodeStride;
-            if (blockSize > CodeCaves.WeaponCaveSize) { Console.WriteLine(Tag + "weapon tree exceeds the WeaponCave"); return false; }
+            _treeCave = blockSize <= CodeCaves.WeaponCaveSize ? CodeCaves.WeaponCave : LargeTreeCave;
+            if (blockSize > LargeNodes * CFrameVu1.NodeStride) { Console.WriteLine(Tag + "model tree exceeds the large-tree cave"); return false; }
             byte[] block = Memory.ReadBytesBatch(Memory.ToMmu(min), blockSize);
             if (block == null) return false;
 
-            uint rootOff = _liveRoot - min, caveG = (uint)CodeCaves.WeaponCaveGuest;
+            uint rootOff = _liveRoot - min, caveG = (uint)(_treeCave - 0x20000000L);
             for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
             {
                 foreach (int link in new[] { CFrameVu1.RootChild, CFrameVu1.RootSibling, CFrameVu1.Parent })
@@ -285,9 +292,9 @@ namespace Dark_Cloud_Improved_Version
                 BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheB);
             }
             BitConverter.GetBytes(0).CopyTo(block, (int)rootOff + CFrameVu1.Parent); // WORLD-rooted
-            Memory.WriteBytesBatch(CodeCaves.WeaponCave, block);
+            Memory.WriteBytesBatch(_treeCave, block);
             _rootGuest = caveG + rootOff;
-            Console.WriteLine(Tag + $"weapon tree copied ({_nodeCount} nodes) → 0x{_rootGuest:X}, world-rooted");
+            Console.WriteLine(Tag + $"tree copied ({_nodeCount} nodes) → 0x{_rootGuest:X}{(_treeCave == CodeCaves.WeaponCave ? "" : " (the large-tree cave)")}, world-rooted");
             return true;
         }
 
@@ -302,7 +309,7 @@ namespace Dark_Cloud_Improved_Version
             int copied = 0;
             for (int i = 0; i < _nodeCount; i++)
             {
-                long node = CodeCaves.WeaponCave + (long)i * CFrameVu1.NodeStride;
+                long node = _treeCave + (long)i * CFrameVu1.NodeStride;
                 uint vis = Memory.ReadGuestPtr(node + CFrameVu1.GeomPtr);
                 if (!Memory.IsValidGuest(vis)) continue;
                 long visM = Memory.ToMmu(vis);

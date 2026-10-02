@@ -9,22 +9,30 @@
 | solid | once risen: the spear-block mailbox (`CodeCaves.SpearBlock`, r = 6, top = floor + 20.4), so enemies and the player slide round it and enemy shots stop at it (the three spear-block caves) |
 | damage | Babel's spike rate: every 0.25 s, each live enemy whose nearest hit sphere is within 6 + 2 of the axis takes ⅙ of the weapon's attack, no throw, marked `NoDrainMark` (no weapon HP) |
 | life | stands 10 s from the summon, then `BladeProp.Alpha` 1 → 0 over 0.5 s; solid and hurting until it is taken down |
+| shadow | a round shadow on the floor (`GroundShadow`, docs/terra-sword.md) from the summon until the fade starts, the form's radius at the copy's scale as it grows: the cactus 1.8 per 1× (5.4 at 3×: its body's column, the spikes at 2.25–2.75 left out) on the spot; Queens' trees cast none |
 
 Shares slot 3 / the WeaponCave with the Mirage clone and every other `BladeProp` user (never co-wielded). No ISO change of its own:
 it rides the blade-fall, blade-spin and spear-block caves Babel's Spear already needs.
 
-## Super Steve (a Cactus sphere) — the palm
+## Super Steve (a Cactus sphere) — Queens' trees
 
 Xiao holding Super Steve with a Cactus SynthSphere has Desert Bloom too (`CactusSpike.Wielded`; the thread starts from Xiao's
 Super Steve case in `WeaponThreads`), with the same guard, smoke, timing, squash and stretch (as ratios of full size: 1/30 out,
-3.4/3 at the peak), collision and life — but NO damage (it only blocks: Xiao fights from range) — but the copy is Muska Lacka's oasis palm, not Ungaga's weapon:
+3.4/3 at the peak), collision and life — but NO damage (it only blocks: Xiao fights from range) and NO shadow — and the copy is
+Queens' georama trees, whole, not Ungaga's weapon:
 
 | | |
 |---|---|
-| model | georama part 12 "木" (`gedit\e04\mapinfo.cfg` GRD_PARTS 12): sub-file `e04t01` of `gedit\e04\scene.scn` (the scene directory: 0x30-byte entries from 0x10, offset/size at +0x10/+0x14); its first `MDS\0` block up to the second (the collision block `e04t01_a`), 6,864 B, offsets block-relative. Trunk `cyl283__s` (node at z 8, base ring centred there, radius 5.8, leaning to z 13.6, y 0 … 50) and fronds `ha__a7ft` (y 31 … 69.3), upright |
-| textures | `e04b04` (trunk; its UVs use the right half) and `e04b10` (fronds) from the building bank `e04b01.img` in `gedit\e04\img.pak` (IM2, 256² 8-bit, 66.6 KB each) — un-swizzled, resampled (nearest texel) to 64², CLUT kept, in a two-entry `IMG` bank of ~10.5 KB. TIM2 total-size field = header + 4 × image, the files' own convention |
-| where | the item-model cash (`PalmModel` over `CashModel`, the Bomb's loader generalised), label 30000 (SetCashModel only stores the id). A cash entry's allocator is 0x9C5 units = 40,016 B (dun GameInit): model + built frames + texture bank must fit — the full-size palm textures would not |
-| size | 0.5× (69.3 tall at 1× → 34.7), the whole tree out, turned −90° from Xiao's facing (`Form.Turn`); its trunk base (model z 8, turned and scaled with the copy) set on the spot; column r = 4 (the trunk is 5.8 × 0.5 = 2.9; a little wider) |
-| textures kept | `PalmModel.KeepTextures` every tick the copy is up (its entries tagged into the clone slot's block 0x1D and re-sent — the Bomb's scheme); released on take-down; `Forget` when the thread ends (a floor change empties the cash) |
+| model | georama part 12 (`gedit\e03\mapinfo.cfg` GRD_PARTS 12): sub-file `e03t01` of `gedit\e03\scene.scn` (the scene directory: 0x30-byte entries from 0x10, offset/size at +0x10/+0x14); its first `MDS\0` block up to the second (the collision block), 16,304 B, offsets block-relative. 16 nodes under the root `null4` (at the origin): trunk `cyl28__s` (0, 8), 51 tall + crown `ha__a7f`; trunk `cyl283__s` (−10, −11), 72.5 tall + crown `ha2__a7f`; grass sprites `k1__a40by` … `k10__a40by`; the grass square `grid__a7f` (y 0.1, x −31 … 19, z −26 … 24, centred (−6, −1)) has its mesh DROPPED in the build (its node-table mesh offset +0x28 zeroed: an empty frame, every index kept) — textured to match Queens' ground, it looked wrong on a dungeon floor |
+| copy | 16 nodes are more than BladeProp's 8-node WeaponCave: a tree over 8 nodes is copied into the TOP 24 nodes of the clone's node pool (`CodeCaves.NodePool`, 96 nodes) — free whenever a copy can be up (Spawn refuses while CharacterClone is; the Divine Beast cat fills it from the bottom and never coexists with a copy) |
+| textures | `e03b04` (trees + sprites; `e03b10` was the dropped grass square's) from the building bank `e03b01.img` in `gedit\e03\img.pak` (IM2, 256² 8-bit): an 8×8 stand-in goes through SetCashModel and its entry is pointed at the full 256² picture at read buffer +0x320000 (`CashModel.FullTexture`, docs/terra-sword.md) |
+| where | the item-model cash (`QueensTrees` over `CashModel`), label 30000. A cash entry's allocator is 0x9C5 units = 40,016 B; the trees take ~37 KB (estimate), so `CashModel` checks an estimate (texture bank + 0x270/node + 0x80/mesh + VU ≈ 16 B × records × streams + 64 per sub-mesh, ×1.15) before SetCashModel and refuses a model that would not fit — an overrun hangs the game in `Alloc` |
+| size | 0.7× (74.3 tall at 1× → 52), all of it out, turned +90° from Xiao's facing (the copy's yaw WRAPPED to ±π: the engine's angle-to-matrix diverges past it, so a facing past π/2 plus the quarter turn came out wrong — about a quarter of the summons); the grass square's centre (model −6, −1) set on the spot — the part's root is at the origin and a copy's root translation is the chara slot's position, so the root is offset by that point, turned (RotMatrixY: local +x → (cos, −sin), +z → (sin, cos)) and scaled; column r = 9.5 (the trunks' bases ~15 apart at 0.7×, about the spot) |
+| textures kept | `QueensTrees.KeepTextures` every tick the copy is up (its entries tagged into the clone slot's block 0x1D and re-sent); released on take-down; `Forget` when the thread ends |
 
 No ISO change: the files are read off the ISO at runtime, once a session.
+
+**An ally switch ends it at once.** The thread exits the moment the active character changes — checked every tick, a menu open
+or not — and its teardown unregisters the copy: chara slot 3 was cloned from that character's objects, which the switch reloads,
+and a copy still drawn behind the menu read freed memory and reset the game (a Cactus sphere on Super Steve keeps `Wielded()`
+true across the switch). The thread starts again for the new character with its own form. Babel's Spear does the same.

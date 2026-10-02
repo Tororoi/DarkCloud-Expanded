@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>A model loaded into the game's own item-model cash so that a copy of it can be drawn (BladeProp) or grafted:
-    /// the Bomb (BombModel), Muska Lacka's palm (PalmModel). The game loads an active item's model from the item menu — the
+    /// the Bomb (BombModel), Queens' trees (QueensTrees). The game loads an active item's model from the item menu — the
     /// two files into the menu's read buffer, then SetCashModel, which allocates, uploads the texture block and builds the
     /// frames — and that is exactly what is done here, from the mod: the files written into the dungeon loader's read buffer
     /// (idle between floor loads; the menu's buffer exists only while a menu is open), SetCashModel called through the
@@ -21,10 +21,12 @@ namespace Dark_Cloud_Improved_Version
         internal CashModel(string tag, int itemKey, string what, Func<(byte[] mds, byte[] img)> files)
         { Tag = tag; _key = itemKey; _what = what; _files = files; }
 
-        /// <summary>A texture too big for the cash entry (whose allocator holds the texture bank's copy): the model is loaded with a
-        /// small stand-in of the same name, then that entry is pointed at the full picture, kept outside the cash (see
-        /// <see cref="ApplyFullTexture"/>). Name, width, height (powers of two), 8-bit row-major pixels, and the 1 KB CLUT.</summary>
-        internal Func<(string name, int w, int h, byte[] pixels, byte[] clut)> FullTexture;
+        /// <summary>Textures too big for the cash entry (whose allocator holds the texture bank's copy): the model is loaded with small
+        /// stand-ins of the same names, then those entries are pointed at the full pictures, kept outside the cash (see
+        /// <see cref="ApplyFullTexture"/>). Each: name, width, height (powers of two), 8-bit row-major pixels, the 1 KB CLUT.</summary>
+        internal Func<List<(string name, int w, int h, byte[] pixels, byte[] clut)>> FullTexture;
+        /// <summary>Where in the dungeon loader's read buffer this model's full textures are kept (each model its own span).</summary>
+        internal int FullOffset = 0x300000;
 
         private uint _root;                                 // the cash root last loaded (0 = none)
         private int  _cash = -1;
@@ -61,6 +63,8 @@ namespace Dark_Cloud_Improved_Version
             if (!Memory.IsValidGuest(buf)) buf = Memory.ReadGuestPtr(ItemModels.MenuBufferPtr);
             if (!Memory.IsValidGuest(buf) || mds.Length > ItemModels.MenuBufferImgOffset) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"no read buffer (0x{buf:X}) or the model is too big ({mds.Length} B)"); return 0; }
             if (Player.CheckDunIsPausedOrMenu()) return 0;                                 // a menu may be reading into it
+            int need = EstimateUnits(mds, img), cap = Memory.ReadInt(ItemModels.CashAllocBase + ItemModels.CashAllocCap);
+            if (need > cap) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the {_what} would not fit a cash entry (~{need} of {cap} units) — not loaded (an overrun hangs the game)"); return 0; }
             Memory.WriteBytesBatch(Memory.ToMmu(buf), mds);
             Memory.WriteBytesBatch(Memory.ToMmu(buf) + ItemModels.MenuBufferImgOffset, img);
             if (!NativeCall.Invoke(ItemModels.SetCashModel, out _, self, (uint)_key, buf, buf + (uint)ItemModels.MenuBufferImgOffset, (uint)img.Length))
@@ -80,19 +84,19 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>A SHADOW model of <paramref name="mds"/> (LoadMDSFile kind 8: CVisualShadow visuals, what MGDrawShadowFast
-        /// draws) in this model's own cash allocator, once per load of the model; 0 when the model is not loaded or the
-        /// allocator lacks <paramref name="needUnits"/> free (an overrun would hang the game).</summary>
+        /// draws) in this model's own cash allocator, once per load of the model; 0 when the model is not loaded or the allocator
+        /// lacks <paramref name="needUnits"/> free (an overrun would hang the game).</summary>
         internal uint ShadowRoot(byte[] mds, int needUnits)
         {
             if (Root() == 0) return 0;
             if (_shadowFor == _root) return _shadow;
+            if (Player.CheckDunIsPausedOrMenu()) return 0;                                 // the read buffer carries the source for one frame
             _shadowFor = _root; _shadow = 0;
             long alloc = ItemModels.CashAllocBase + (long)_cash * ItemModels.CashAllocStride;
             int used = Memory.ReadInt(alloc + ItemModels.CashAllocUsed), cap = Memory.ReadInt(alloc + ItemModels.CashAllocCap);
             if (cap - used < needUnits) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"no room for the {_what}'s shadow in cash {_cash} ({cap - used} of {needUnits} units free)"); return 0; }
             uint buf = Memory.ReadGuestPtr(ShotEffectPack.ReadBufferPtr);
-            if (!Memory.IsValidGuest(buf)) buf = Memory.ReadGuestPtr(ItemModels.MenuBufferPtr);
-            if (!Memory.IsValidGuest(buf) || mds.Length > ItemModels.MenuBufferImgOffset || Player.CheckDunIsPausedOrMenu()) { _shadowFor = 0; return 0; }
+            if (!Memory.IsValidGuest(buf) || mds.Length > ItemModels.MenuBufferImgOffset) { _shadowFor = 0; return 0; }
             Memory.WriteBytesBatch(Memory.ToMmu(buf), mds);
             if (!NativeCall.Invoke(ItemModels.LoadMDSFile, out uint root, buf, (uint)(alloc - 0x20000000L), ItemModels.MdsKindShadow, 0, 0, timeoutMs: 1500) || !Memory.IsValidGuest(root))
             { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the {_what}'s shadow model did not load (0x{root:X})"); _shadowFor = 0; return 0; }
@@ -102,11 +106,31 @@ namespace Dark_Cloud_Improved_Version
         }
         private uint _shadow, _shadowFor;
 
+        /// <summary>A safe-side estimate of what SetCashModel will take from the entry's allocator (16-byte units): the texture bank's
+        /// copy, a 0x270 frame per node, a visual (with its 64-byte alignment) per mesh, and per sub-mesh ~16 B per record per stream
+        /// of VU data + 64 (the budget viewer's figure), padded 15% — the rock's estimates ~33.5 KB against the ~32.9 KB it takes.</summary>
+        private static int EstimateUnits(byte[] mds, byte[] img)
+        {
+            int nodes = (int)IsoBytes.U32(mds, 8), table = (int)IsoBytes.U32(mds, 0xC), meshes = 0;
+            double vu = 0;
+            for (int i = 0; i < nodes; i++)
+            {
+                int meshOff = (int)IsoBytes.U32(mds, table + i * 0x70 + 0x28);
+                if (meshOff <= 0 || meshOff + 0x40 > mds.Length) continue;
+                meshes++;
+                var m = MdtCarve.MdtParse(mds, meshOff);
+                int stride = m.hasCol ? 4 : 3;
+                foreach (var sub in m.subs) vu += sub.recs.Count * stride * 16 + 64;
+            }
+            double bytes = img.Length + nodes * CFrameVu1.NodeStride + meshes * 0x80 + vu * 1.15 + 0x100;
+            return (int)Math.Ceiling(bytes / 16);
+        }
+
         /// <summary>Forget the load (a floor change empties the cash). The texture window's reservation is handed back when the
         /// manager's cursor still stands on it; kept (and reused by the next load) when something was handed out below it.</summary>
         internal void Forget()
         {
-            ReleaseTextures(); _root = 0; _cash = -1; _placedRoot = 0; _shadow = 0; _shadowFor = 0; _fullFor = 0; _fullPixels = 0; _windowMin = 0;
+            ReleaseTextures(); _root = 0; _cash = -1; _placedRoot = 0; _shadow = 0; _shadowFor = 0; _fullFor = 0; _full.Clear(); _windowMin = 0;
             if (_winBase != 0 && Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor) == _winBase)
             { Memory.WriteUInt(TextureManager.Base + TextureManager.Cursor, _cursorSaved); _winBase = 0; _winSize = 0; }
         }
@@ -129,7 +153,7 @@ namespace Dark_Cloud_Improved_Version
             _placedRoot = _root;
             long blk = TextureManager.Base + TextureManager.Blocks + (long)(CashBlockBase + _cash) * TextureManager.BlockStride;
             uint bBase = Memory.ReadUInt(blk + TextureManager.BlkBase), bTop = Memory.ReadUInt(blk + TextureManager.BlkTop);
-            if (bTop > bBase && bTop - bBase < _windowMin) bTop = bBase + _windowMin;          // the full texture runs past the stand-in's block
+            if (bTop > bBase && bTop - bBase < _windowMin) bTop = bBase + _windowMin;          // the full textures run past the stand-ins' block
             if (bTop <= bBase || bTop - bBase > 0x800) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cash block 0x{CashBlockBase + _cash:X} window 0x{bBase:X}..0x{bTop:X} — the texture stays where it is"); return; }
             uint size = bTop - bBase;
             uint cursor = Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor);
@@ -196,67 +220,94 @@ namespace Dark_Cloud_Improved_Version
         // width +2, height +4, bytes per texel +6 (u16), the level-0 pixels at +0x38 (mipmaps +0x3C…, 0 here), the CLUT at +0x48,
         // a swizzled flag at +0x4C, and its VRAM placement from the TEX0 word (+0x28: TBP, TBW bits 14–19, TW 26–29, TH 30–33, CBP
         // from bit 37). So the stand-in's entry is re-pointed at the full picture — kept high in the dungeon loader's read buffer
-        // (about 4 MB, idle through a floor; the cash loads use only its first 0xFA10 + an image) — and its sizes and TEX0
+        // (about 4 MB; idle in play, but MENUS load into it — the party screen streams ally models over this span — so the data is
+        // written again after any pause or menu, see KeepTextures; the cash loads use only its first 0xFA10 + an image) — and its sizes and TEX0
         // rewritten, CBP just past the pixels; the model's packet gets the same TEX0 (swept), and PlaceTextures then reserves a
         // window that big above every block. Every tick a copy is drawn the data is checked and re-written if anything overwrote it.
-        private const int FullOffset = 0x300000;                  // from the read buffer's start
-        private uint _fullFor, _fullPixels, _fullClut, _windowMin;
-        private byte[] _fullPx, _fullCl;
+        private uint _fullFor, _windowMin;
+        private DateTime _lastKeep;
+        private const int KeepGapMs = 100;                         // the users tick every 16 ms: a longer gap was a pause or a menu
+        private readonly List<(uint pixels, uint clut, byte[] px, byte[] cl)> _full = new();
 
         private void ApplyFullTexture()
         {
             if (FullTexture == null || _root == 0 || _cash < 0 || _fullFor == _root) return;
-            _fullFor = _root;
-            var (name, w, h, px, clut) = FullTexture();
-            if (px == null || clut == null || px.Length != w * h || clut.Length != 0x400) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no full texture to apply — the stand-in stays"); return; }
+            _fullFor = _root; _full.Clear(); _windowMin = 0;
+            var list = FullTexture();
+            if (list == null || list.Count == 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no full textures to apply — the stand-ins stay"); return; }
             uint buf = Memory.ReadGuestPtr(ShotEffectPack.ReadBufferPtr);
-            if (!Memory.IsValidGuest(buf)) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no read buffer for the full texture — the stand-in stays"); return; }
-            long e = 0;
+            if (!Memory.IsValidGuest(buf)) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no read buffer for the full textures — the stand-ins stay"); return; }
+            long blk = TextureManager.Base + TextureManager.Blocks + (long)(CashBlockBase + _cash) * TextureManager.BlockStride;
+            uint bBase = Memory.ReadUInt(blk + TextureManager.BlkBase);
+            uint dst = buf + (uint)FullOffset, vram = 0;                                   // read-buffer cursor; VRAM offset from the block's base
+            var moves = new List<(ulong, ulong)>();
+            foreach (var (name, w, h, px, clut) in list)
+            {
+                if (px == null || clut == null || px.Length != w * h || clut.Length != 0x400) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"full `{name}` malformed — its stand-in stays"); continue; }
+                long e = FindEntry(name);
+                if (e == 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"texture `{name}` not found in cash block 0x{CashBlockBase + _cash:X} — its stand-in stays"); continue; }
+                uint pixels = dst, clutAt = dst + (uint)px.Length;
+                dst = (clutAt + 0x400 + 0x7F) & ~0x7Fu;
+                _full.Add((pixels, clutAt, px, clut));
+                ulong t = (ulong)Memory.ReadUInt(e + TextureManager.EntryTex0) | ((ulong)Memory.ReadUInt(e + TextureManager.EntryTex0 + 4) << 32);
+                uint pixBlocks = (uint)(w * h) >> 8, tbp = bBase + vram;                       // 256-byte GS blocks; each texture page-aligned
+                vram = (vram + pixBlocks + 4 + WindowAlign - 1) & ~(WindowAlign - 1);           // its pixels, then its CLUT
+                int lw = 0, lh = 0; while ((1 << lw) < w) lw++; while ((1 << lh) < h) lh++;
+                ulong n = t & ~(TextureManager.Tex0AddrMask | (0x3FUL << 14) | (0xFUL << 26) | (0xFUL << 30) | ((ulong)TextureManager.Tex0AddrMask << TextureManager.Tex0CbpShift));
+                n |= (tbp & TextureManager.Tex0AddrMask) | ((ulong)Math.Max(1, w / 64) << 14) | ((ulong)lw << 26) | ((ulong)lh << 30)
+                   | ((ulong)((tbp + pixBlocks) & TextureManager.Tex0AddrMask) << TextureManager.Tex0CbpShift);
+                Memory.WriteUShort(e + 2, (ushort)w);
+                Memory.WriteUShort(e + 4, (ushort)h);
+                Memory.WriteUInt(e + TextureManager.EntryPixels, pixels);
+                for (int lv = 1; lv < 4; lv++) Memory.WriteUInt(e + TextureManager.EntryPixels + lv * 4, 0);
+                Memory.WriteUInt(e + TextureManager.EntryClut, clutAt);
+                Memory.WriteUInt(e + TextureManager.EntryTex0, (uint)n); Memory.WriteUInt(e + TextureManager.EntryTex0 + 4, (uint)(n >> 32));
+                moves.Add((t, n));
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"full {w}×{h} `{name}` applied: pixels 0x{pixels:X}, CLUT 0x{clutAt:X}; TEX0 0x{t:X} → 0x{n:X}");
+            }
+            if (_full.Count == 0) return;
+            WriteFullData();
+            var (patched, visuals) = SweepModel(moves);
+            _windowMin = vram;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{_full.Count} full texture(s) at read buffer +0x{FullOffset:X}; {patched} register word(s) in {visuals} visual(s); window 0x{_windowMin:X} blocks");
+        }
+
+        /// <summary>This model's texture entry named <paramref name="name"/> (in its cash block), or 0.</summary>
+        private long FindEntry(string name)
+        {
             int count = Math.Min(TextureManager.MaxEntries, Memory.ReadInt(TextureManager.Base + TextureManager.Count) + 1);
-            for (int i = 0; i < count && e == 0; i++)
+            for (int i = 0; i < count; i++)
             {
                 long c = TextureManager.Base + TextureManager.Entries + (long)i * TextureManager.EntryStride;
                 if (Memory.ReadUShort(c + TextureManager.EntryBlock) != CashBlockBase + _cash) continue;
                 byte[] nb = Memory.ReadBytesBatch(c + TextureManager.EntryName, 16);
-                if (nb != null && System.Text.Encoding.ASCII.GetString(nb).Split('\0')[0] == name) e = c;
+                if (nb != null && System.Text.Encoding.ASCII.GetString(nb).Split('\0')[0] == name) return c;
             }
-            if (e == 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"texture `{name}` not found in cash block 0x{CashBlockBase + _cash:X} — the stand-in stays"); return; }
-            _fullPx = px; _fullCl = clut;
-            _fullPixels = buf + FullOffset; _fullClut = _fullPixels + (uint)px.Length;
-            WriteFullData();
-            ulong t = (ulong)Memory.ReadUInt(e + TextureManager.EntryTex0) | ((ulong)Memory.ReadUInt(e + TextureManager.EntryTex0 + 4) << 32);
-            uint tbp = (uint)(t & TextureManager.Tex0AddrMask), pixBlocks = (uint)(w * h) >> 8;   // 256-byte GS blocks
-            int lw = 0, lh = 0; while ((1 << lw) < w) lw++; while ((1 << lh) < h) lh++;
-            ulong n = t & ~((0x3FUL << 14) | (0xFUL << 26) | (0xFUL << 30) | ((ulong)TextureManager.Tex0AddrMask << TextureManager.Tex0CbpShift));
-            n |= ((ulong)Math.Max(1, w / 64) << 14) | ((ulong)lw << 26) | ((ulong)lh << 30) | ((ulong)((tbp + pixBlocks) & TextureManager.Tex0AddrMask) << TextureManager.Tex0CbpShift);
-            Memory.WriteUShort(e + 2, (ushort)w);
-            Memory.WriteUShort(e + 4, (ushort)h);
-            Memory.WriteUInt(e + TextureManager.EntryPixels, _fullPixels);
-            for (int lv = 1; lv < 4; lv++) Memory.WriteUInt(e + TextureManager.EntryPixels + lv * 4, 0);
-            Memory.WriteUInt(e + TextureManager.EntryClut, _fullClut);
-            Memory.WriteUInt(e + TextureManager.EntryTex0, (uint)n); Memory.WriteUInt(e + TextureManager.EntryTex0 + 4, (uint)(n >> 32));
-            var (patched, visuals) = SweepModel(new List<(ulong, ulong)> { (t, n) });
-            _windowMin = (pixBlocks + 4 + WindowAlign - 1) & ~(WindowAlign - 1);                 // the pixels and the CLUT, page-aligned
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"full {w}×{h} `{name}` applied: pixels 0x{_fullPixels:X}, CLUT 0x{_fullClut:X} (read buffer +0x{FullOffset:X}); TEX0 0x{t:X} → 0x{n:X}, {patched} register word(s) in {visuals} visual(s); window 0x{_windowMin:X} blocks");
+            return 0;
         }
 
         private void WriteFullData()
         {
-            Memory.WriteBytesBatch(Memory.ToMmu(_fullPixels), _fullPx);
-            Memory.WriteBytesBatch(Memory.ToMmu(_fullClut), _fullCl);
+            foreach (var (pixels, clut, px, cl) in _full)
+            {
+                Memory.WriteBytesBatch(Memory.ToMmu(pixels), px);
+                Memory.WriteBytesBatch(Memory.ToMmu(clut), cl);
+            }
         }
 
-        /// <summary>The full texture's data still where the entry points (its first and last 16 bytes and the CLUT's first 16); re-written
-        /// when something has overwritten it.</summary>
+        /// <summary>The full textures' data still where the entries point (each one's first and last 16 bytes and its CLUT's first 16);
+        /// re-written when something has overwritten it.</summary>
         private void CheckFullData()
         {
-            if (_fullPixels == 0 || _fullPx == null) return;
-            byte[] a = Memory.ReadBytesBatch(Memory.ToMmu(_fullPixels), 16), z = Memory.ReadBytesBatch(Memory.ToMmu(_fullPixels) + _fullPx.Length - 16, 16), c = Memory.ReadBytesBatch(Memory.ToMmu(_fullClut), 16);
-            if (a == null || z == null || c == null) return;
-            bool ok = a.AsSpan().SequenceEqual(_fullPx.AsSpan(0, 16)) && z.AsSpan().SequenceEqual(_fullPx.AsSpan(_fullPx.Length - 16)) && c.AsSpan().SequenceEqual(_fullCl.AsSpan(0, 16));
-            if (ok) return;
-            WriteFullData();
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the full texture's data was overwritten in the read buffer — written again");
+            foreach (var (pixels, clut, px, cl) in _full)
+            {
+                byte[] a = Memory.ReadBytesBatch(Memory.ToMmu(pixels), 16), z = Memory.ReadBytesBatch(Memory.ToMmu(pixels) + px.Length - 16, 16), c = Memory.ReadBytesBatch(Memory.ToMmu(clut), 16);
+                if (a == null || z == null || c == null) return;
+                if (a.AsSpan().SequenceEqual(px.AsSpan(0, 16)) && z.AsSpan().SequenceEqual(px.AsSpan(px.Length - 16)) && c.AsSpan().SequenceEqual(cl.AsSpan(0, 16))) continue;
+                WriteFullData();
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "a full texture's data was overwritten in the read buffer — written again");
+                return;
+            }
         }
 
         /// <summary>Every 64-bit word in [addr, addr+size) equal to a moved TEX0 rewritten to its new value (4-byte steps).</summary>
@@ -323,7 +374,10 @@ namespace Dark_Cloud_Improved_Version
                 if (_bound.Count > 0) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{_bound.Count} texture(s) of the {_what} tagged into block 0x{block:X} while a copy is drawn through it");
             }
             if (_bound.Count > 0) Memory.WriteUInt(TextureManager.Base + TextureManager.Blocks + (long)_boundBlock * TextureManager.BlockStride + TextureManager.BlkLoaded, 0);
-            CheckFullData();
+            // After any gap in the upkeep (a menu or a pause: menus load into the read buffer, over the full textures) the data is
+            // written again whole; otherwise spot-checked.
+            if ((DateTime.UtcNow - _lastKeep).TotalMilliseconds > KeepGapMs) WriteFullData(); else CheckFullData();
+            _lastKeep = DateTime.UtcNow;
             Tick();
         }
         /// <summary>Every tick the sphere is on: the cash's block re-sent whenever its own pass runs (a thrown Bomb drawn by the game).</summary>

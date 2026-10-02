@@ -49,8 +49,6 @@ namespace Dark_Cloud_Improved_Version
         private const float  ShadowGrowDrop  = 300f;                // …its shadow over this much
         private const int    GrowTickMs      = 2;                   // the growth's own cadence: well inside a frame, so each frame's height is caught as it lands
         private const float  MinScale        = 0.01f;               // "nothing": a zero scale is a singular matrix
-        private const float  ShadowLift      = 0.3f;                // the shadow frame this far above the floor (off its surface)
-        private const float  ShadowDrop      = 12.8f;               // the point handed to the draw sits this far below the frame — the player's own (DrawShadow__10CCharacter, 0x2A1888)
         // The impact.
         private const float  ReferenceRadius = 21f;                 // the rock's
         private const float  BlastRadius     = ReferenceRadius + 5f;
@@ -112,6 +110,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 while (Wielded() && Player.InDungeonFloor())
                 {
+                    GroundShadow.Guard();                                                   // its shadow off the moment play stops (menus load over its memory)
                     if (!Player.CheckDunIsPausedOrMenu())
                     {
                         Step();
@@ -140,7 +139,7 @@ namespace Dark_Cloud_Improved_Version
                     if (held <= 0) { _phase = Phase.Idle; SolarBlade.Clear(); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "guard released before the charge was full"); break; }
                     float f = (float)Math.Min(1.0, held / ChargeSeconds);
                     SolarBlade.Set(f, ModelCode, BladeFrame, 0, Tint);
-                    if (f >= 1f) { _phase = Phase.Primed; Player.FlashChargeComplete(); IwaModel.Root(); IwaModel.ShadowRoot(); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "primed"); }   // the rock and its shadow loaded into the cash now
+                    if (f >= 1f) { _phase = Phase.Primed; Player.FlashChargeComplete(); IwaModel.Root(); GroundShadow.Root(); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "primed"); }   // the rock and its shadow loaded into the cash now
                     break;
                 }
                 case Phase.Primed:
@@ -337,41 +336,13 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the boulder is gone");
         }
 
-        /// <summary>The rock's shadow (the ISO's rock-shadow cave, in the dungeon's shadow pass): the rock's SHADOW model
-        /// (IwaModel.ShadowRoot — a lit mesh drawn in shadow mode comes out garbled) placed over the rock and drawn by
-        /// MGDrawShadowFast, projected straight down onto the floor under it. Re-asserted every tick while on; one write off.</summary>
+        /// <summary>The rock's round shadow on the floor under it (GroundShadow), <paramref name="scale"/> of the rock's radius (null
+        /// leaves it to GrowLoop while the rock falls). Re-asserted every tick while on.</summary>
         private static void Shadow(bool on, float? scale)
         {
-            uint root = on && BladeProp.Active ? IwaModel.ShadowRoot() : 0u;
-            if (root == 0)
-            {
-                if (_shadowOn) { Memory.WriteInt(CodeCaves.RockShadow + CodeCaves.RockShadowFlag, 0); _shadowOn = false; }
-                return;
-            }
-            // The shadow frame over the rock (nothing else places it), written as CFrame's SetScale / SetRotation / SetPosition do
-            // (what DrawShadowMonstor calls before its draw): the TRS fields, the TRS-dirty flag, the world cache dropped.
-            long f = Memory.ToMmu(root);
-            if (scale is float sc) Memory.WriteVec3(f + CFrameVu1.TrsScaleX, sc, sc, sc);
-            Memory.WriteVec3(f + CFrameVu1.EulerX, 0f, 0f, 0f);
-            Memory.WriteVec3(f + CFrameVu1.TrsPosX, _x, _ground + ShadowLift, _y);                 // on the floor, as a character's shadow frame sits at its feet
-            Memory.WriteInt (f + 0x23C, 0);                                                   // SetRotation's own clears
-            Memory.WriteInt (f + CFrameVu1.WorldCacheB, 0);
-            Memory.WriteInt (f + 0x248, Memory.ReadInt(f + 0x248) | 1);
-            Memory.WriteInt (f + CFrameVu1.DirtyTrs, 1);
-            Memory.WriteInt (f + CFrameVu1.WorldCacheA, 0);
-            var b = new byte[0x30];
-            BitConverter.GetBytes(1).CopyTo(b, CodeCaves.RockShadowFlag);
-            BitConverter.GetBytes(root).CopyTo(b, CodeCaves.RockShadowFrame);
-            BitConverter.GetBytes(_x).CopyTo(b, CodeCaves.RockShadowPlane);
-            BitConverter.GetBytes(_ground + ShadowLift - ShadowDrop).CopyTo(b, CodeCaves.RockShadowPlane + 4);
-            BitConverter.GetBytes(_y).CopyTo(b, CodeCaves.RockShadowPlane + 8);
-            BitConverter.GetBytes(1f).CopyTo(b, CodeCaves.RockShadowPlane + 12);
-            BitConverter.GetBytes(1f).CopyTo(b, CodeCaves.RockShadowDir + 4);                 // (0, 1, 0, 0): straight down, the engine's own
-            Memory.WriteBytesBatch(CodeCaves.RockShadow + 4, b.AsSpan(4).ToArray());          // frame and vectors first…
-            Memory.WriteInt(CodeCaves.RockShadow + CodeCaves.RockShadowFlag, 1);              // …the flag last
-            _shadowOn = true;
+            if (on && BladeProp.Active) GroundShadow.Show(_x, _ground, _y, scale is float sc ? sc * IwaModel.Radius : null);
+            else GroundShadow.Hide();
         }
-        private static bool _shadowOn;
 
         /// <summary>While the rock falls: every GrowTickMs the cave's fall height is read and, when a new frame has moved it, the rock's
         /// scale (nothing → full over GrowDrop) and its shadow's (nothing → full over ShadowGrowDrop) written from it — the regular tick
@@ -386,15 +357,7 @@ namespace Dark_Cloud_Improved_Version
                     _lastFallY = y;
                     float fallen = _start - y;
                     BladeProp.SetScale(Math.Clamp(fallen / GrowDrop, MinScale, 1f));
-                    uint root = IwaModel.ShadowRoot();
-                    if (root != 0)
-                    {
-                        float sc = Math.Clamp(fallen / ShadowGrowDrop, MinScale, 1f);
-                        long f = Memory.ToMmu(root);
-                        Memory.WriteVec3(f + CFrameVu1.TrsScaleX, sc, sc, sc);
-                        Memory.WriteInt (f + CFrameVu1.DirtyTrs, 1);
-                        Memory.WriteInt (f + CFrameVu1.WorldCacheA, 0);
-                    }
+                    GroundShadow.SetRadius(Math.Clamp(fallen / ShadowGrowDrop, MinScale, 1f) * IwaModel.Radius);
                 }
                 Thread.Sleep(GrowTickMs);
             }
@@ -446,7 +409,8 @@ namespace Dark_Cloud_Improved_Version
             _shells.Clear();
             SolarBlade.Clear();
             _phase = Phase.Idle; _guardSince = default; _tintFadeFrom = default;
-            IwaModel.Forget();                                                        // a floor change empties the cash: loaded again when next wanted
+            IwaModel.Forget();
+            GroundShadow.Forget();                                                        // a floor change empties the cash: loaded again when next wanted
         }
     }
 }
