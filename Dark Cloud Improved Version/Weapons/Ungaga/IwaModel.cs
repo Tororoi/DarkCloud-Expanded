@@ -8,8 +8,9 @@ namespace Dark_Cloud_Improved_Version
     /// the Terra Sword's falling rock (TerraSword). Both files are built from the pack once a session, off the ISO:
     ///  · the MODEL is iwa.mds whole (5,968 B): one rigid mesh `iwa`, its root at the rock's centre, ±20.4 on every axis;
     ///  · its TEXTURE is d02b10 of iwa.img — 256×256 8-bit (66.6 KB, more than a cash entry's 40,016-byte allocator takes with the
-    ///    model), so the bank handed to the cash holds it resampled to <see cref="TexSize"/>² (the Bomb's own size), CLUT kept,
-    ///    row-major under the IMG magic (the source bank is IM2: PSMT8 block order, un-swizzled).</summary>
+    ///    model), so the bank handed to the cash holds a stand-in resampled to <see cref="TexSize"/>² (the Bomb's own size), CLUT
+    ///    kept, row-major under the IMG magic (the source bank is IM2: PSMT8 block order, un-swizzled); once loaded, the entry is
+    ///    pointed at the full 256² picture kept outside the cash (<see cref="CashModel.FullTexture"/>).</summary>
     internal static class IwaModel
     {
         private const string Tag = "[IwaModel] ";
@@ -19,7 +20,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The rock's radius about its root (the mesh's extent, every axis).</summary>
         internal const float Radius = 20.4f;
 
-        private static readonly CashModel M = new CashModel(Tag, CashKey, "rock", Files);
+        private static readonly CashModel M = new CashModel(Tag, CashKey, "rock", Files) { FullTexture = Full };
         private static byte[] _mds, _img;
         private static bool _built, _failed;
 
@@ -70,6 +71,16 @@ namespace Dark_Cloud_Improved_Version
         internal static void KeepTextures() => M.KeepTextures(CashModel.WeaponPassBlock);
         internal static void ReleaseTextures() => M.ReleaseTextures();
 
+        private static byte[] _fullPx, _fullClut;
+        private static int _fullW, _fullH;
+
+        /// <summary>The full d02b10, row-major, and its CLUT — the picture the stand-in's entry is pointed at.</summary>
+        private static (string, int, int, byte[], byte[]) Full()
+        {
+            Files();
+            return (Texture, _fullW, _fullH, _fullPx, _fullClut);
+        }
+
         private static (byte[] mds, byte[] img) Files()
         {
             if (!_built && !_failed)
@@ -81,6 +92,7 @@ namespace Dark_Cloud_Improved_Version
                     _mds = (pack.Find(Model) ?? throw new IOException(Pack + " lacks " + Model)).Payload;
                     var bank = new CatPackBakes.Bank((pack.Find(Bank) ?? throw new IOException(Pack + " lacks " + Bank)).Payload);
                     bool swizzled = bank.Magic[2] == (byte)'2';
+                    (_fullW, _fullH, _fullPx, _fullClut) = CashModel.ReadTim8(bank.Block(Texture), swizzled);
                     _img = CatPackBakes.Bank.Build(new[] { (byte)'I', (byte)'M', (byte)'G', (byte)0 },
                                                    new System.Collections.Generic.List<(string, byte[])> { (Texture, CashModel.ResampleTim8(bank.Block(Texture), swizzled, TexSize)) });
                     _built = true;

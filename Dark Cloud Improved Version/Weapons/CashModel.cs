@@ -21,6 +21,11 @@ namespace Dark_Cloud_Improved_Version
         internal CashModel(string tag, int itemKey, string what, Func<(byte[] mds, byte[] img)> files)
         { Tag = tag; _key = itemKey; _what = what; _files = files; }
 
+        /// <summary>A texture too big for the cash entry (whose allocator holds the texture bank's copy): the model is loaded with a
+        /// small stand-in of the same name, then that entry is pointed at the full picture, kept outside the cash (see
+        /// <see cref="ApplyFullTexture"/>). Name, width, height (powers of two), 8-bit row-major pixels, and the 1 KB CLUT.</summary>
+        internal Func<(string name, int w, int h, byte[] pixels, byte[] clut)> FullTexture;
+
         private uint _root;                                 // the cash root last loaded (0 = none)
         private int  _cash = -1;
         private DateTime _lastTry;
@@ -37,12 +42,12 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < ItemModels.CashCount; i++)
             {
                 uint r = Memory.ReadGuestPtr(m + ItemModels.CashRootOffset + i * 4);
-                if (Memory.IsValidGuest(r) && Memory.ReadInt(m + ItemModels.CashItemOffset + i * 4) == _key) { _root = r; _cash = i; PlaceTextures(); return r; }
+                if (Memory.IsValidGuest(r) && Memory.ReadInt(m + ItemModels.CashItemOffset + i * 4) == _key) { _root = r; _cash = i; ApplyFullTexture(); PlaceTextures(); return r; }
             }
             if ((DateTime.UtcNow - _lastTry).TotalSeconds < 2) return 0;              // a failed load is not retried every tick
             _lastTry = DateTime.UtcNow;
             uint loaded = Load(self, m);
-            if (loaded != 0) PlaceTextures();
+            if (loaded != 0) { ApplyFullTexture(); PlaceTextures(); }
             return loaded;
         }
 
@@ -101,7 +106,7 @@ namespace Dark_Cloud_Improved_Version
         /// manager's cursor still stands on it; kept (and reused by the next load) when something was handed out below it.</summary>
         internal void Forget()
         {
-            ReleaseTextures(); _root = 0; _cash = -1; _placedRoot = 0; _shadow = 0; _shadowFor = 0;
+            ReleaseTextures(); _root = 0; _cash = -1; _placedRoot = 0; _shadow = 0; _shadowFor = 0; _fullFor = 0; _fullPixels = 0; _windowMin = 0;
             if (_winBase != 0 && Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor) == _winBase)
             { Memory.WriteUInt(TextureManager.Base + TextureManager.Cursor, _cursorSaved); _winBase = 0; _winSize = 0; }
         }
@@ -124,6 +129,7 @@ namespace Dark_Cloud_Improved_Version
             _placedRoot = _root;
             long blk = TextureManager.Base + TextureManager.Blocks + (long)(CashBlockBase + _cash) * TextureManager.BlockStride;
             uint bBase = Memory.ReadUInt(blk + TextureManager.BlkBase), bTop = Memory.ReadUInt(blk + TextureManager.BlkTop);
+            if (bTop > bBase && bTop - bBase < _windowMin) bTop = bBase + _windowMin;          // the full texture runs past the stand-in's block
             if (bTop <= bBase || bTop - bBase > 0x800) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cash block 0x{CashBlockBase + _cash:X} window 0x{bBase:X}..0x{bTop:X} — the texture stays where it is"); return; }
             uint size = bTop - bBase;
             uint cursor = Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor);
@@ -157,6 +163,13 @@ namespace Dark_Cloud_Improved_Version
             if (moves.Count == 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"texture already in its window 0x{_winBase:X}..0x{_winBase + size:X}"); return; }
             // The model's own packet (and, for a skinned mesh, its MDT) carries the same register word: patched in place, so every
             // copy taken from it and every node grafted onto it draws from the window.
+            var (patched, visuals) = SweepModel(moves);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"texture moved 0x{bBase:X}..0x{bTop:X} -> 0x{_winBase:X}..0x{_winBase + size:X} (above every block; cursor 0x{_cursorSaved:X} -> 0x{_winBase:X}); {moves.Count} entr{(moves.Count == 1 ? "y" : "ies")}, {patched} register word(s) in {visuals} visual(s)");
+        }
+
+        /// <summary>Every visual of the model (its VU packet, a skinned one's second packet and MDT) swept for the moved TEX0 words.</summary>
+        private (int patched, int visuals) SweepModel(List<(ulong oldT, ulong newT)> moves)
+        {
             int patched = 0, visuals = 0;
             foreach (uint node in Nodes(_root))
             {
@@ -176,7 +189,74 @@ namespace Dark_Cloud_Improved_Version
                     if (mdtSz > 0 && mdtSz < 0x40000) patched += Sweep(Memory.ToMmu(mdt), mdtSz, moves);
                 }
             }
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"texture moved 0x{bBase:X}..0x{bTop:X} -> 0x{_winBase:X}..0x{_winBase + size:X} (above every block; cursor 0x{_cursorSaved:X} -> 0x{_winBase:X}); {moves.Count} entr{(moves.Count == 1 ? "y" : "ies")}, {patched} register word(s) in {visuals} visual(s)");
+            return (patched, visuals);
+        }
+
+        // ── THE FULL TEXTURE, OUTSIDE THE CASH. The texture manager uploads an entry (ReloadTexture 0x133070) from its own fields:
+        // width +2, height +4, bytes per texel +6 (u16), the level-0 pixels at +0x38 (mipmaps +0x3C…, 0 here), the CLUT at +0x48,
+        // a swizzled flag at +0x4C, and its VRAM placement from the TEX0 word (+0x28: TBP, TBW bits 14–19, TW 26–29, TH 30–33, CBP
+        // from bit 37). So the stand-in's entry is re-pointed at the full picture — kept high in the dungeon loader's read buffer
+        // (about 4 MB, idle through a floor; the cash loads use only its first 0xFA10 + an image) — and its sizes and TEX0
+        // rewritten, CBP just past the pixels; the model's packet gets the same TEX0 (swept), and PlaceTextures then reserves a
+        // window that big above every block. Every tick a copy is drawn the data is checked and re-written if anything overwrote it.
+        private const int FullOffset = 0x300000;                  // from the read buffer's start
+        private uint _fullFor, _fullPixels, _fullClut, _windowMin;
+        private byte[] _fullPx, _fullCl;
+
+        private void ApplyFullTexture()
+        {
+            if (FullTexture == null || _root == 0 || _cash < 0 || _fullFor == _root) return;
+            _fullFor = _root;
+            var (name, w, h, px, clut) = FullTexture();
+            if (px == null || clut == null || px.Length != w * h || clut.Length != 0x400) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no full texture to apply — the stand-in stays"); return; }
+            uint buf = Memory.ReadGuestPtr(ShotEffectPack.ReadBufferPtr);
+            if (!Memory.IsValidGuest(buf)) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no read buffer for the full texture — the stand-in stays"); return; }
+            long e = 0;
+            int count = Math.Min(TextureManager.MaxEntries, Memory.ReadInt(TextureManager.Base + TextureManager.Count) + 1);
+            for (int i = 0; i < count && e == 0; i++)
+            {
+                long c = TextureManager.Base + TextureManager.Entries + (long)i * TextureManager.EntryStride;
+                if (Memory.ReadUShort(c + TextureManager.EntryBlock) != CashBlockBase + _cash) continue;
+                byte[] nb = Memory.ReadBytesBatch(c + TextureManager.EntryName, 16);
+                if (nb != null && System.Text.Encoding.ASCII.GetString(nb).Split('\0')[0] == name) e = c;
+            }
+            if (e == 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"texture `{name}` not found in cash block 0x{CashBlockBase + _cash:X} — the stand-in stays"); return; }
+            _fullPx = px; _fullCl = clut;
+            _fullPixels = buf + FullOffset; _fullClut = _fullPixels + (uint)px.Length;
+            WriteFullData();
+            ulong t = (ulong)Memory.ReadUInt(e + TextureManager.EntryTex0) | ((ulong)Memory.ReadUInt(e + TextureManager.EntryTex0 + 4) << 32);
+            uint tbp = (uint)(t & TextureManager.Tex0AddrMask), pixBlocks = (uint)(w * h) >> 8;   // 256-byte GS blocks
+            int lw = 0, lh = 0; while ((1 << lw) < w) lw++; while ((1 << lh) < h) lh++;
+            ulong n = t & ~((0x3FUL << 14) | (0xFUL << 26) | (0xFUL << 30) | ((ulong)TextureManager.Tex0AddrMask << TextureManager.Tex0CbpShift));
+            n |= ((ulong)Math.Max(1, w / 64) << 14) | ((ulong)lw << 26) | ((ulong)lh << 30) | ((ulong)((tbp + pixBlocks) & TextureManager.Tex0AddrMask) << TextureManager.Tex0CbpShift);
+            Memory.WriteUShort(e + 2, (ushort)w);
+            Memory.WriteUShort(e + 4, (ushort)h);
+            Memory.WriteUInt(e + TextureManager.EntryPixels, _fullPixels);
+            for (int lv = 1; lv < 4; lv++) Memory.WriteUInt(e + TextureManager.EntryPixels + lv * 4, 0);
+            Memory.WriteUInt(e + TextureManager.EntryClut, _fullClut);
+            Memory.WriteUInt(e + TextureManager.EntryTex0, (uint)n); Memory.WriteUInt(e + TextureManager.EntryTex0 + 4, (uint)(n >> 32));
+            var (patched, visuals) = SweepModel(new List<(ulong, ulong)> { (t, n) });
+            _windowMin = (pixBlocks + 4 + WindowAlign - 1) & ~(WindowAlign - 1);                 // the pixels and the CLUT, page-aligned
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"full {w}×{h} `{name}` applied: pixels 0x{_fullPixels:X}, CLUT 0x{_fullClut:X} (read buffer +0x{FullOffset:X}); TEX0 0x{t:X} → 0x{n:X}, {patched} register word(s) in {visuals} visual(s); window 0x{_windowMin:X} blocks");
+        }
+
+        private void WriteFullData()
+        {
+            Memory.WriteBytesBatch(Memory.ToMmu(_fullPixels), _fullPx);
+            Memory.WriteBytesBatch(Memory.ToMmu(_fullClut), _fullCl);
+        }
+
+        /// <summary>The full texture's data still where the entry points (its first and last 16 bytes and the CLUT's first 16); re-written
+        /// when something has overwritten it.</summary>
+        private void CheckFullData()
+        {
+            if (_fullPixels == 0 || _fullPx == null) return;
+            byte[] a = Memory.ReadBytesBatch(Memory.ToMmu(_fullPixels), 16), z = Memory.ReadBytesBatch(Memory.ToMmu(_fullPixels) + _fullPx.Length - 16, 16), c = Memory.ReadBytesBatch(Memory.ToMmu(_fullClut), 16);
+            if (a == null || z == null || c == null) return;
+            bool ok = a.AsSpan().SequenceEqual(_fullPx.AsSpan(0, 16)) && z.AsSpan().SequenceEqual(_fullPx.AsSpan(_fullPx.Length - 16)) && c.AsSpan().SequenceEqual(_fullCl.AsSpan(0, 16));
+            if (ok) return;
+            WriteFullData();
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the full texture's data was overwritten in the read buffer — written again");
         }
 
         /// <summary>Every 64-bit word in [addr, addr+size) equal to a moved TEX0 rewritten to its new value (4-byte steps).</summary>
@@ -243,6 +323,7 @@ namespace Dark_Cloud_Improved_Version
                 if (_bound.Count > 0) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{_bound.Count} texture(s) of the {_what} tagged into block 0x{block:X} while a copy is drawn through it");
             }
             if (_bound.Count > 0) Memory.WriteUInt(TextureManager.Base + TextureManager.Blocks + (long)_boundBlock * TextureManager.BlockStride + TextureManager.BlkLoaded, 0);
+            CheckFullData();
             Tick();
         }
         /// <summary>Every tick the sphere is on: the cash's block re-sent whenever its own pass runs (a thrown Bomb drawn by the game).</summary>
@@ -262,6 +343,20 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>One 8-bit TIM2 picture resampled to <paramref name="n"/>² (nearest texel: 8-bit indices cannot be blended), row-major: the header kept but for its sizes, the CLUT kept whole.
         /// TIM2 picture header (after the 16-byte file header): total +0 (header + 4 × image size in every file of this game), CLUT size +4, image size +8, header size +0xC (u16),
         /// image type +0x13 (5 = 8-bit), width +0x14, height +0x16 (u16); the pixels follow the header, the CLUT the pixels.</summary>
+        /// <summary>An 8-bit TIM2 picture whole: its size, its pixels row-major (un-swizzled from the GS block order when
+        /// <paramref name="swizzled"/>), and its CLUT bytes as the file has them.</summary>
+        internal static (int w, int h, byte[] pixels, byte[] clut) ReadTim8(byte[] tim, bool swizzled)
+        {
+            const int pic = 0x10;
+            if (tim.Length < pic + 0x30 || tim[0] != 'T' || tim[1] != 'I' || tim[2] != 'M' || tim[3] != '2') throw new System.IO.IOException("not a TIM2 picture");
+            int clutSz = (int)IsoBytes.U32(tim, pic + 4), imgSz = (int)IsoBytes.U32(tim, pic + 8), hdrSz = IsoBytes.U16(tim, pic + 0xC);
+            int w = IsoBytes.U16(tim, pic + 0x14), h = IsoBytes.U16(tim, pic + 0x16);
+            if (tim[pic + 0x13] != 5 || imgSz != w * h) throw new System.IO.IOException($"not an 8-bit picture ({w}×{h}, {imgSz} B)");
+            byte[] px = tim.AsSpan(pic + hdrSz, imgSz).ToArray();
+            if (swizzled) px = Unswizzle8(px, w, h);
+            return (w, h, px, tim.AsSpan(pic + hdrSz + imgSz, clutSz).ToArray());
+        }
+
         internal static byte[] ResampleTim8(byte[] tim, bool swizzled, int n)
         {
             const int pic = 0x10;
