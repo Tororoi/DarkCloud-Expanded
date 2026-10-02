@@ -62,6 +62,9 @@ STUBS = [
     ('player_spear_block.s',     'playerSpearBlock.bin',     0x1B5260),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchSpearBlock): the same sphere, solid to the player
     ('shot_spear_block.s',       'shotSpearBlock.bin',       0x1B5350),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchSpearBlock): the same column stops enemy shots
     ('rock_shadow.s',            'rockShadow.bin',           0x1B5460),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchRockShadow): the Terra Sword boulder's shadow
+    ('fall_drive.s',             'fallDrive.bin',            0x1B54B0),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchFallDrive): the blade fall's mode 4
+    ('guard_crush.s',            'guardCrush.bin',           0x1B4650),    # main ELF: DebugInfomationDraw's free tail (ElfWeaponPatches.PatchGuardCrush): crush-marked hits pass guard windows
+    ('follow.s',                 'follow.bin',               0x1B4690),    # main ELF: DebugInfomationDraw's free tail (ElfWeaponPatches.PatchFollow): a point carried with a unit
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]

@@ -83,3 +83,11 @@ its own damage as anywhere — the confusion shelters the summoner from nothing 
 as a SIGNED byte `< 1`, so a hold must be ≤ 0x7F). (Zeroing `OffWait` instead
 — the Angel Gear's end of flight — leads to phase 3, the EXPIRY, which most configs lack: those shots simply vanished.)
 
+## The shared confusion
+
+The confusion — targets through the Mirage's pointer table, wandering, the tint, the swings' and shots' friendly fire — lives in
+`Weapons/Ungaga/Confusion.cs`, shared with Super Steve's Terra Sword sphere (docs/terra-sword.md). Babel's Spear configures it with
+its area (the spear's 300 circle, moved while the spear follows its target), its light-blue tint (× the spear's fade) and no
+provoking, and ticks it from its loop. Planted friendly hits live 150 ms (time, not ticks: the users tick at 50 and 16 ms). The
+Mirage loop stands down on `Confusion.OwnsTable`.
+

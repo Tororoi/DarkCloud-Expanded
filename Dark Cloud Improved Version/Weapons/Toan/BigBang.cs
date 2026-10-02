@@ -988,8 +988,10 @@ namespace Dark_Cloud_Improved_Version
         /// <see cref="Falloff"/> step for that enemy's distance, its kick from the blast. The Sword of Zeus's bolt
         /// plants the same blast at its strike point; <paramref name="noKickSlot"/> is the enemy it struck directly,
         /// which takes the hit where it stands (a zero-strength kick: the reaction without the shove), and its steps
-        /// are scaled by <paramref name="damageScale"/> (the bolt's blast is half the blade's).</summary>
-        internal static void PlantFalloff(float x, float h, float y, int noKickSlot = -1, float damageScale = 1f, float kickScale = 1f, float reachScale = 1f)
+        /// are scaled by <paramref name="damageScale"/> (the bolt's blast is half the blade's). With <paramref name="guardBreak"/>
+        /// each entry carries CodeCaves.CrushMark: it passes every guard window (the ISO's guard-crush cave) and — the mark sharing
+        /// the no-drain mark's high half — bills Ungaga no weapon HP per hit (Hercules' Wrath's strike, which bills its own once).</summary>
+        internal static void PlantFalloff(float x, float h, float y, int noKickSlot = -1, float damageScale = 1f, float kickScale = 1f, float reachScale = 1f, bool guardBreak = false)
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
@@ -1019,6 +1021,7 @@ namespace Dark_Cloud_Improved_Version
                 F(0x80, x); F(0x84, h); F(0x88, y);                        // the kick still comes from the blast
                 F(0x90, s == noKickSlot ? 0f : KickStrength * kickScale); F(0x94, KickDecay);
                 BitConverter.GetBytes(2).CopyTo(e, 0x98);                 // kick type 2: thrown away from the blast
+                if (guardBreak) BitConverter.GetBytes(CodeCaves.CrushMark).CopyTo(e, CodeCaves.NoDrainMarkOff);   // no guard stops it (the ISO's guard-crush cave)
                 CollisionPool.Plant(pool, slot, e);
                 _shells.Add((slot, ShellLifeTicks));
                 planted++;
@@ -1027,23 +1030,26 @@ namespace Dark_Cloud_Improved_Version
                 $"[BigBang] falloff blast: {planted} sphere(s) on {inRange} enem" + (inRange == 1 ? "y" : "ies") + $" within {Falloff[0].radius * reachScale:F0}");
         }
 
-        /// <summary>The enemy's largest live body sphere (centre and radius), the surest thing a hit sphere of the same
-        /// size at the same place will touch; its root and a plain radius where none is active.</summary>
+        /// <summary>The enemy's largest live body sphere placed this frame (centre and radius), the surest thing a hit sphere of the
+        /// same size at the same place will touch; its root and a plain radius where none is (a sphere left far from its unit —
+        /// not posed this frame — would put the hit where the enemy no longer is).</summary>
         internal static void BodyCentre(int slot, long a, out float cx, out float ch, out float cy, out float cr)
         {
             long b = BodyCollision.SlotBase(slot);
             cx = Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(slot)); cy = Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(slot) + 8);
             ch = UnitHeight(slot) + BodyRadiusFallback;
             cr = BodyRadiusFallback;
-            float best = 0f;
+            float ux = cx, uy = cy, best = 0f;
             for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
             {
                 if (Memory.ReadInt(b + BodyCollision.ActiveArray + part * BodyCollision.BodyPartStride) == 0) continue;
                 float r = Memory.ReadFloat(b + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride);
                 if (r <= best) continue;
                 long c = b + BodyCollision.CentreArray + part * BodyCollision.CentreStride;
+                float sx = Memory.ReadFloat(c), sh = Memory.ReadFloat(c + 4), sy = Memory.ReadFloat(c + 8);
+                if (Math.Abs(sx - ux) > UnposedSphere || Math.Abs(sy - uy) > UnposedSphere) continue;   // not this frame's placement: a hit there lands on nothing
                 best = r; cr = r;
-                cx = Memory.ReadFloat(c); ch = Memory.ReadFloat(c + 4); cy = Memory.ReadFloat(c + 8);
+                cx = sx; ch = sh; cy = sy;
             }
         }
         private const float BodyRadiusFallback = 10f;
@@ -1103,8 +1109,9 @@ namespace Dark_Cloud_Improved_Version
             for (int i = _shells.Count - 1; i >= 0; i--)
             {
                 var (slot, ticks) = _shells[i];
-                if (--ticks > 0) { _shells[i] = (slot, ticks); continue; }
-                if (pool != 0) CollisionPool.Deactivate(pool, slot);
+                bool spent = pool != 0 && !CollisionPool.IsActive(pool, slot);                  // the engine is done with it: its mark must not ride on into the entry's next use
+                if (--ticks > 0 && !spent) { _shells[i] = (slot, ticks); continue; }
+                if (pool != 0) { Memory.WriteInt(pool + slot * CollisionPool.Stride + CodeCaves.NoDrainMarkOff, 0); CollisionPool.Deactivate(pool, slot); }   // the mark goes with it (Set never writes +0x9C)
                 _shells.RemoveAt(i);
             }
         }

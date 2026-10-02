@@ -165,7 +165,7 @@ namespace Dark_Cloud_Improved_Version
             const uint HookAddr = GuardBypassHookAddr;         // `addu at,v0,at`, feeding `lh v0,0x550(at)`
             uint jump = J(CaveAddr);
             uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4));
-            bool vanilla = cur0 == 0x00410821u && cur1 == 0x84220550u, ours = (cur0 == jump || Array.Exists(GuardBypassPreviousCaves, c => cur0 == J(c))) && cur1 == 0;
+            bool vanilla = cur0 == 0x00410821u && cur1 == 0x84220550u, ours = (cur0 == jump || cur0 == J(CodeCaves.DebugInfoCave.GuardCrush) || cur0 == J(CodeCaves.DebugIfCave.GuardCrushFirst) || Array.Exists(GuardBypassPreviousCaves, c => cur0 == J(c))) && cur1 == 0;   // the guard-crush cave sits in front of it (PatchGuardCrush re-aims the hook after this)
             if (!(vanilla || ours) || RdU32(fs, ElfOff(HookAddr - 4)) != 0x3C010006u || RdU32(fs, ElfOff(HookAddr + 8)) != 0x104000D1u)
                 throw new IOException($"Guard-window hook site 0x{HookAddr:X} is not vanilla `lui at,0x6; addu at,v0,at; lh v0,0x550(at); beq v0,zero` — unmodified Dark Cloud (USA) ISO expected.");
             // the cave bytes themselves go into dun.bin (DunPatches.Caves); only the hook is main-ELF

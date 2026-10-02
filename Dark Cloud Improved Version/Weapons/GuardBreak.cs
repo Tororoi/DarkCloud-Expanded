@@ -21,12 +21,27 @@ namespace Dark_Cloud_Improved_Version
         private static readonly ushort[]  _species = new ushort[EnemyAddresses.FloorSlots.Count];
         private static readonly bool[]    _captured = new bool[EnemyAddresses.FloorSlots.Count];
         private static byte _lastFloor = 0xFF;
+        private static void NewFloor()
+        {
+            byte floor = Memory.ReadByte(Addresses.checkFloor);
+            if (floor != _lastFloor) { _lastFloor = floor; Array.Clear(_captured, 0, _captured.Length); }
+        }
+
+        /// <summary>The slot's guard flags as its species armed them, the first time it is seen (re-captured for another species).</summary>
+        private static void Capture(int slot)
+        {
+            ushort species = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.EnemySpeciesId));
+            if (_captured[slot] && _species[slot] == species) return;
+            for (int w = 0; w < EnemyAddresses.GuardWindows.WindowCount; w++)
+                _snap[slot, w] = Memory.ReadUShort(EnemyAddresses.GuardWindows.FlagAddr(slot, w));
+            _species[slot] = species;
+            _captured[slot] = true;
+        }
 
         /// <summary>On: every live enemy's guard windows are held at zero. Off: each slot's captured flags are put back.</summary>
         internal static void Drive(bool breakGuard)
         {
-            byte floor = Memory.ReadByte(Addresses.checkFloor);
-            if (floor != _lastFloor) { _lastFloor = floor; Array.Clear(_captured, 0, _captured.Length); }
+            NewFloor();
 
             for (int slot = 0; slot < EnemyAddresses.FloorSlots.Count; slot++)
             {
@@ -35,14 +50,7 @@ namespace Dark_Cloud_Improved_Version
                     _captured[slot] = false;   // slot went inactive — re-capture whoever spawns next
                     continue;
                 }
-                ushort species = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.EnemySpeciesId));
-                if (!_captured[slot] || _species[slot] != species)
-                {
-                    for (int w = 0; w < EnemyAddresses.GuardWindows.WindowCount; w++)
-                        _snap[slot, w] = Memory.ReadUShort(EnemyAddresses.GuardWindows.FlagAddr(slot, w));
-                    _species[slot] = species;
-                    _captured[slot] = true;
-                }
+                Capture(slot);
                 for (int w = 0; w < EnemyAddresses.GuardWindows.WindowCount; w++)
                 {
                     ushort want = breakGuard ? (ushort)0 : _snap[slot, w];

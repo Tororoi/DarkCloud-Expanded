@@ -519,6 +519,11 @@ namespace Dark_Cloud_Improved_Version
             /// `jal MGEndDrawShadow` (dun 0x1DADDD4) lands here — one extra MGDrawShadowFast for the frame CodeCaves.RockShadow names
             /// while its flag is set (the Terra Sword's boulder), then the displaced call.</summary>
             internal const uint RockShadow       = Host + 0xCA0;  // 0x1B5460, 68 B → 0x1B54A4
+            /// <summary>tools/stubs/fall_drive.s (ElfWeaponPatches.PatchFallDrive): the blade fall's MODE 4 — falling and following,
+            /// its stop able to follow a float, and CodeCaves.FallDrive's drive rows — between the blade-fall cave and the spin cave.</summary>
+            internal const uint FallDrive        = Host + 0xCF0;  // 0x1B54B0, 364 B → 0x1B561C (the host ends at 0x1B5640)
+            /// <summary>Where the guard-crush cave first sat (0x1B5600): an ISO patched then has its hook here, accepted on re-patching.</summary>
+            internal const uint GuardCrushFirst  = Host + 0xE40;
         }
 
         /// <summary>A cave INSIDE a dead main-ELF function: the body of DebugInfomationDraw (0x1B3780, 3,952 B), the developers'
@@ -574,6 +579,12 @@ namespace Dark_Cloud_Improved_Version
             /// copy's slot height: the fall is the engine's own frame, not a mod thread racing it.</summary>
             internal const uint BladeFall      = Host + 0xDC0;   // 0x1B4540, 168 B → 0x1B45E8
             internal const uint WhpBill        = Host + 0xE70;   // 0x1B45F0, 88 B → 0x1B4648 (the host ends at 0x1B46F0)
+            /// <summary>tools/stubs/guard_crush.s (ElfWeaponPatches.PatchGuardCrush): CheckDmg's guard-window hook lands here first; an
+            /// entry carrying CodeCaves.CrushMark passes every guard window, anything else goes on to the cat's guard-bypass cave.</summary>
+            internal const uint GuardCrush     = Host + 0xED0;   // 0x1B4650, 56 B → 0x1B4688
+            /// <summary>tools/stubs/follow.s (ElfWeaponPatches.PatchFollow): CodeCaves.Follow's point carried with a unit, every frame —
+            /// between the fall-drive cave and the blade-spin cave.</summary>
+            internal const uint Follow         = Host + 0xF10;   // 0x1B4690, 76 B → 0x1B46DC
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -1043,6 +1054,10 @@ namespace Dark_Cloud_Improved_Version
         internal const int  BladeFallFlag = 0x0, BladeFallY = 0x4, BladeFallVy = 0x8, BladeFallG = 0xC, BladeFallStop = 0x10, BladeFallUnit = 0x14;
         internal const int  BladeFallOffX = 0x18, BladeFallOffZ = 0x1C;   // following: an x/z offset from the unit (the charge blade ahead of Toan: the unit is HIM)
         internal const int  BladeFallOff = 0, BladeFalling = 1, BladeLanded = 2, BladeFollowing = 3;
+        /// <summary>Mode 4 (DebugIfCave.FallDrive): falling as mode 1 AND, across the ground, the unit at +0x14's x/z plus the offsets —
+        /// or, with no unit, the slot's own x/z plus the offsets each frame (a drift); with <see cref="FallDrive"/>'s stop source and
+        /// drive rows. Lands as mode 1 does (flag 2).</summary>
+        internal const int  BladeFallFollowing = 4;
         /// <summary>A WEAPON-HP BILL FOR THE ENGINE TO TAKE (DebugInfoCave.WhpBill, the tail of the camera-pin chain, once a
         /// dungeon frame): +0 the factor of a bill the mod has posted (swing-equivalents: base WHP / 1.5), +4 a magic the mod
         /// writes ahead of it (<see cref="WhpBillMagicValue"/>) so stale memory never posts one. While the magic matches
@@ -1145,7 +1160,27 @@ namespace Dark_Cloud_Improved_Version
         internal const uint RockShadowGuest = 0x01FAFB80;
         internal const int  RockShadowFlag = 0x0, RockShadowFrame = 0x4, RockShadowPlane = 0x10, RockShadowDir = 0x20;
 
-        // ── FREE: 0x21FAFBB0 .. 0x21FB0000 (0x450 B) ────────────────────────────────────────────────────
+        /// <summary>The blade fall's mode 4 extras (DebugIfCave.FallDrive): +0 the stop source (guest address of a float; 0 = none: the
+        /// stop is BladeFall's own), +4 the offset added to it; from +0x10, <see cref="FallDriveRowCount"/> DRIVE ROWS of 0x20 —
+        /// +0 dst (guest; 0 = off), +4 count (≥ 1), +8 a, +0xC b, +0x10 lo, +0x14 hi: clamp(a + b·y, lo, hi) written as a float to
+        /// dst and the count−1 words after it, every falling frame (y = the fall height).</summary>
+        internal const long FallDrive      = 0x21FAFBC0;
+        internal const uint FallDriveGuest = 0x01FAFBC0;
+        internal const int  FallDriveStopSrc = 0x0, FallDriveStopOff = 0x4, FallDriveRows = 0x10, FallDriveRowStride = 0x20, FallDriveRowCount = 5;
+        /// <summary>The ARMED HOP: while +0xB0 is set, a mode-4 landing becomes the hop on the same frame — +0xB4 set (the mod's
+        /// signal), vy (+0xB8), the x/z drift a frame (+0xBC/+0xC0) and the stop (+0xC4) taken from here, no unit, no stop source.</summary>
+        internal const int  FallDriveHopArmed = 0xB0, FallDriveHopped = 0xB4, FallDriveHopVy = 0xB8, FallDriveHopDx = 0xBC, FallDriveHopDz = 0xC0, FallDriveHopStop = 0xC4;
+        internal const int  FallRowDst = 0x0, FallRowCount = 0x4, FallRowA = 0x8, FallRowB = 0xC, FallRowLo = 0x10, FallRowHi = 0x14;
+        /// <summary>A CRUSHING hit of the mod's, at a collision entry's +0x9C: passes every guard window (DebugIfCave.GuardCrush). Its
+        /// high half is <see cref="NoDrainMark"/>'s, which is all the no-drain caves test — an Ungaga crushing hit bills no weapon HP.</summary>
+        internal const uint CrushMark = 0x4B495243;   // "CRIK"
+
+        /// <summary>One point the engine carries with a unit (DebugInfoCave.Follow, every frame): +0 the source (guest address of a
+        /// position: x, height, y; 0 = off), +4 the destination (guest), +8/+0xC/+0x10 the x/height/y offsets added.</summary>
+        internal const long Follow      = 0x21FAFC90;
+        internal const int  FollowSrc = 0x0, FollowDst = 0x4, FollowOff = 0x8;
+
+        // ── FREE: 0x21FAFCB0 .. 0x21FB0000 (0x350 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

@@ -105,7 +105,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 while (Wielded() && Player.InDungeonFloor())
                 {
-                    if (!Player.CheckDunIsPausedOrMenu()) { Step(); SolarLighting.Tick(); }   // the flash's ease is stepped here: nothing of the wielder's else does
+                    if (!Player.CheckDunIsPausedOrMenu()) { Step(); SolarLighting.Tick(); BigBang.ExpireShells(); }   // the flash's ease is stepped here (nothing of the wielder's else does); the strike's unspent entries withdrawn
                     Thread.Sleep(TickMs);
                 }
             }
@@ -334,7 +334,7 @@ namespace Dark_Cloud_Improved_Version
             _blasted = true;
             MiragePos();
             float x = _key >= 1 ? _hx : _xiao ? _sx : _px, h = GroundH, y = _key >= 1 ? _hy : _xiao ? _sy : _py;   // where motion 1 plays (else its strike point: the mirage's spot, or where Xiao's pellet died)
-            BigBang.PlantFalloff(x, h, y, reachScale: BlastReach);                  // Big Bang's rings at twice the reach: 20 / 50 / 80 / 100
+            BigBang.PlantFalloff(x, h, y, reachScale: BlastReach, guardBreak: true); // Big Bang's rings at twice the reach: 20 / 50 / 80 / 100, crushing (through any guard)
             WeaponWhp.Drain((ushort)(_xiao ? Items.supersteve : Items.herculeswrath), BlastWhp, Tag + "ultimate ");
             Mirage.Dispel();                                                         // the strike takes the mirage with it
             SunSword.ZeusFlash.ArmLighting();

@@ -28,7 +28,7 @@ sub-shot stays on the mirage.
 | frame | what |
 |---|---|
 | 21 → 36 | `SolarLighting.DimRamp(0.35, u)`: the exponential plunge to black |
-| 36 | `BigBang.PlantFalloff(…, reachScale: 2)` (Big Bang's multipliers on rings of 20 / 50 / 80 / 100: 4× / 3× / 2× / 1× attack), `WeaponWhp.Drain(herculeswrath, 20)` (Big Bang's blast cost), `Mirage.Dispel()` (the decoy gone at once, under the flash), `SunSword.ZeusFlash.ArmLighting()` + `SolarLighting.Flash()` — the bolt's white, easing back over 2 s |
+| 36 | `BigBang.PlantFalloff(…, reachScale: 2, guardBreak: true)` (each entry crush-marked — `CodeCaves.CrushMark` at +0x9C: the ISO's guard-crush cave passes it through every guard window, and Ungaga's crushing hits bill no weapon HP per hit, the strike billing its 20 once; the thread now withdraws the unspent entries, `BigBang.ExpireShells`, which clears the mark with them) (Big Bang's multipliers on rings of 20 / 50 / 80 / 100: 4× / 3× / 2× / 1× attack), `WeaponWhp.Drain(herculeswrath, 20)` (Big Bang's blast cost), `Mirage.Dispel()` (the decoy gone at once, under the flash), `SunSword.ZeusFlash.ArmLighting()` + `SolarLighting.Flash()` — the bolt's white, easing back over 2 s |
 | 60 → 68 | the sparkle (`SetFade`) and the spear's gold (held full until here) fade out together; the sub-shot ends at 68 |
 
 Nothing of Ungaga's steps `SolarLighting.Tick`, so the ultimate's loop does, every 16 ms, and restores the light on exit.

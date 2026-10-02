@@ -218,9 +218,11 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Set the radius the effect's phase <paramref name="phase"/> (0 muzzle, 1 flying, 2 impact, 3 expiry) plants
-        /// damage with, on the copy the instance runs from — the step reads it live, so it can differ per shot.</summary>
+        /// damage with (0 = that phase plants nothing): in the effect's own config, which the next seeding copies, and on the copy
+        /// the instance runs from when it is entered — the step reads it live, so it can differ per shot.</summary>
         internal static void SetPhaseRadius(BorrowedEffect fx, int phase, float radius)
         {
+            BitConverter.GetBytes(radius).CopyTo(fx.Cfg, ShotEffectPack.CfgRadiusMuzzle + phase * 4);
             if (!Entered(fx)) return;
             Memory.WriteFloat(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotCfg + ShotEffectPack.CfgRadiusMuzzle + phase * 4, radius);
         }

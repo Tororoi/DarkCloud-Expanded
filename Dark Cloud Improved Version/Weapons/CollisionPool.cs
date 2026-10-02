@@ -26,6 +26,7 @@ namespace Dark_Cloud_Improved_Version
                                                       // that to unitBlowActionRot, which takes atan2(x, z) − π and SETS the player's
                                                       // facing from it. Left at the default, every hit throws him the same way in
                                                       // WORLD space, which reads as a random direction relative to him.
+        internal const int  AbilityFlags = 0x6C;      // the weapon's ability word (poison, stop, critical, steal, drain …); 0 = none
         internal const int  Owner      = 0x58;        // enemy swings: slot*5+200
         internal const int  GateA      = 0x70, GateB = 0x74;   // the entry is open to CheckHitUser while these are equal
         internal const uint HurtsPlayerMask = 1;

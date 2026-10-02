@@ -112,6 +112,7 @@ namespace Dark_Cloud_Improved_Version
             PatchCatGlowDraw(fs, ElfOff);                 // Divine Beast cat: blue torch-glow at its torso (dun.bin hooks in DunPatches)
             PatchCatSpherePercent(fs, ElfOff);            // Divine Beast cat: a hurt sphere may admit the cat's kick (spare[1]) at its own % (spare[0]) — Minotaur Joe's face
             PatchCatGuardBypass(fs, ElfOff);              // Divine Beast cat: its hits pass an enemy's guard window (mimics re-register theirs faster than the mod can crush them)
+            PatchGuardCrush(fs, ElfOff);                  // crush-marked hits pass every guard window (hooked in front of the cat's cave)
             PatchCatCapeTint(fs, ElfOff);                 // Divine Beast cat: the Super Steve cape draws under its own ambient, not the cat's
             PatchCatMaskTint(fs, ElfOff);                 // …and its mask does too, reached through a private vtable rather than a hook
             PatchAutoGuardMatch(fs, ElfOff);             // reaction 5: guard spark, then ignored outright (with DunPatches' hook)
@@ -123,6 +124,8 @@ namespace Dark_Cloud_Improved_Version
             PatchCameraPin(fs, ElfOff);                  // the camera held at a world height while CodeCaves.CameraPin is set (the dun hook is in DunPatches)
             PatchBladeFall(fs, ElfOff);                  // the judgement blade's fall stepped by the engine once a frame (chained after the camera pin)
             PatchBladeSpin(fs, ElfOff);                  // …then chara slot 3's yaw turned by CodeCaves.BladeSpin a frame (Babel's spear), before the WHP bill
+            PatchFallDrive(fs, ElfOff);                  // …and the blade fall's mode 4 (falling and following, drive rows) between the two
+            PatchFollow(fs, ElfOff);                     // …and the follow cave after it (a point carried with a unit: the Terra stars)
             PatchWhpBill(fs, ElfOff);                    // a weapon-HP bill the mod posts (CodeCaves.WhpBill) taken by the engine's own drain — SwordDmgCheck1 — once a frame (the chain's tail)
             PatchLungeGravity(fs, ElfOff);               // the charge lunge's gravity × (1 + CodeCaves.LungeGravityExtra): the seed cave + its main hook (the dun hook is in DunPatches)
             PatchSolarBladeTint(fs, ElfOff);              // the Sun Sword's blade too (SolarBlade): the rigid-mesh class's DrawVu1, into the mask cave's body

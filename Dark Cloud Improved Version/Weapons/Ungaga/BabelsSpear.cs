@@ -95,11 +95,6 @@ namespace Dark_Cloud_Improved_Version
         private static float Exposed       => ExposedModelZ * Scale;   // …in the world's units, at the copy's size
         private const float  Buried           = 4f;     // how far below the ground the tip starts
         private const float  ConfusionRadius  = 300f;
-        private const float  WanderSeconds    = 4f;     // a wandering enemy's spot renewed this often…
-        private const float  WanderRange      = 40f;    // …within this of where it stands…
-        private const float  WanderReached    = 8f;     // …or once it has got this close to it
-        private const float  ContactCooldown  = 0.5f;   // one friendly-fire hit per attacker-victim pair this often
-        private const float  ContactRadius    = 1f;     // the planted hit's own radius: the victim's sphere does the reaching
         private const int    ShellLifeTicks   = 3;      // ticks a planted hit stays before it is withdrawn
         private const int    ShellPoolReserve = 16;     // free pool entries always left to the engine
         private const float  StrikeRadius     = 6f;
@@ -109,9 +104,6 @@ namespace Dark_Cloud_Improved_Version
         // Light blue, as the unit's ambient add (scene ambient ≈ 128 is neutral): kept dim.
         private const float  TintR = 12f, TintG = 50f, TintB = 84f;
         private const float  SpearTint = 50f;           // the copy's own ambient add, neutral grey (brighter, not coloured)
-
-        /// <summary>True while any enemy is confused: the per-slot target table is this ability's (Mirage's loop leaves it).</summary>
-        internal static bool OwnsTable { get; private set; }
 
         private static BorrowedEffect _shock;
         private static int _shockSlot = -1;   // the sub-shot playing the shockwave (−1 = none)
@@ -144,10 +136,6 @@ namespace Dark_Cloud_Improved_Version
         private static int      _target = -1;      // the enemy the spear rose under (−1 = none): struck when the tip reaches its hit sphere
         private static DateTime _summoned, _confusionEnd;
         private static float    _sx, _sy, _ground;
-        private static readonly DateTime[] _confusedUntil = new DateTime[EnemyAddresses.FloorSlots.Count];
-        private static readonly int[]      _victim        = new int[EnemyAddresses.FloorSlots.Count];   // −1 = the player, −2 = wandering
-        private static readonly DateTime[] _wanderSet     = new DateTime[EnemyAddresses.FloorSlots.Count];
-        private static readonly DateTime[,] _lastContact  = new DateTime[EnemyAddresses.FloorSlots.Count, EnemyAddresses.FloorSlots.Count];
         private static readonly List<(int idx, int ticks)> _shells = new();
         private static bool _guardLatched; private static DateTime _guardSince;
         private static DateTime _lastReport;   // DIAGNOSTIC: the confused enemies' state, once a second
@@ -188,7 +176,6 @@ namespace Dark_Cloud_Improved_Version
             _xiao = ch == Player.XiaoId;
             F = _xiao ? StatueForm : SpearForm;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"curse of Babel: hold the guard {GuardChargeMs / 1000} s → the copy rises under the target for {SpearSeconds:F0} s; confusion within {ConfusionRadius:F0}");
-            for (int s = 0; s < _victim.Length; s++) _victim[s] = -3;
             try
             {
                 // Ends the moment the active character changes, a menu open or not (Desert Bloom's reason: the copy's slot was cloned
@@ -236,6 +223,7 @@ namespace Dark_Cloud_Improved_Version
             CopyAlpha(1f);
             _up = true; _summoned = GameClock.Now; _confusionEnd = _summoned.AddSeconds(SpearSeconds + VanishSeconds);   // the confusion outlasts the spear by the vanish: gone when it has fully faded
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the {F.Name} rises at ({_sx:F0},{_sy:F0}) ground {_ground:F0}" + (target >= 0 ? $" under enemy slot {target}" : " ahead of the wielder") + $"; target redirect {(Mirage.Armed ? "armed" : "NOT ARMED — confusion cannot steer")}");
+            Confusion.Configure((_sx, _sy, ConfusionRadius), new[] { TintR, TintG, TintB }, provokes: false, Tag);
             if (target >= 0) Confuse(target);                                                  // the strike waits for the tip to reach it (TipStrike)
             ConfuseWithinRadius();
             ShockStart();
@@ -304,7 +292,7 @@ namespace Dark_Cloud_Improved_Version
         {
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
-                if (_confusedUntil[s] != default || !Enemies.IsLive(s)) continue;
+                if (Confusion.IsConfused(s) || !Enemies.IsLive(s)) continue;
                 long p = EnemyAddresses.CharObjects.PosAddr(s);
                 float dx = Memory.ReadFloat(p) - _sx, dy = Memory.ReadFloat(p + 8) - _sy;
                 if (dx * dx + dy * dy > ConfusionRadius * ConfusionRadius) continue;
@@ -530,278 +518,15 @@ namespace Dark_Cloud_Improved_Version
             return best;
         }
 
-        // ── confusion ──
-        private static void Confuse(int slot)
-        {
-            if (GameClock.Now >= _confusionEnd) return;
-            _confusedUntil[slot] = _confusionEnd;
-            _victim[slot] = -3;                                          // unset: the first tick chooses and logs
-            _wanderSet[slot] = default;
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"enemy slot {slot} confused");
-        }
-
-        private static string Whom(int victim) => victim >= 0 ? $"enemy slot {victim}" : victim == -1 ? "the player" : "nothing — wandering";
-
-        private static bool Confused(int slot) => _confusedUntil[slot] != default && GameClock.Now < _confusedUntil[slot] && Enemies.IsLive(slot);
-
-        private static bool InArea(float x, float y) { float dx = x - _sx, dy = y - _sy; return dx * dx + dy * dy <= ConfusionRadius * ConfusionRadius; }
-
-        /// <summary>The nearest thing in the confusion area for a confused slot to go after: another live enemy in the area, or the
-        /// player while the player is in it; −2 when there is nothing.</summary>
-        private static int Nearest(int slot)
-        {
-            long me = EnemyAddresses.CharObjects.PosAddr(slot);
-            float mx = Memory.ReadFloat(me), my = Memory.ReadFloat(me + 8);
-            int best = -2; float bestD = float.MaxValue;
-            float px = Memory.ReadFloat(Addresses.dunPositionX), py = Memory.ReadFloat(Addresses.dunPositionY);
-            if (InArea(px, py)) { bestD = (px - mx) * (px - mx) + (py - my) * (py - my); best = -1; }
-            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
-            {
-                if (s == slot || !Enemies.IsLive(s)) continue;
-                long p = EnemyAddresses.CharObjects.PosAddr(s);
-                float x = Memory.ReadFloat(p), y = Memory.ReadFloat(p + 8);
-                if (!InArea(x, y)) continue;
-                float d = (x - mx) * (x - mx) + (y - my) * (y - my);
-                if (d < bestD) { bestD = d; best = s; }
-            }
-            return best;
-        }
-
-        /// <summary>A wandering slot's spot: a random point within WanderRange of where it stands, at its height, renewed every
-        /// WanderSeconds or once it has come within WanderReached of it. Returns the spot's guest address.</summary>
-        private static uint Wander(int slot)
-        {
-            long q = CodeCaves.BabelWander + (long)slot * CodeCaves.BabelWanderStride;
-            long me = EnemyAddresses.CharObjects.PosAddr(slot);
-            float mx = Memory.ReadFloat(me), mh = Memory.ReadFloat(me + 4), my = Memory.ReadFloat(me + 8);
-            float wx = Memory.ReadFloat(q), wy = Memory.ReadFloat(q + 8);
-            bool reached = (wx - mx) * (wx - mx) + (wy - my) * (wy - my) <= WanderReached * WanderReached;
-            if (_wanderSet[slot] == default || reached || (GameClock.Now - _wanderSet[slot]).TotalSeconds >= WanderSeconds)
-            {
-                double ang = _rng.NextDouble() * 2 * Math.PI, r = WanderRange * (0.5 + 0.5 * _rng.NextDouble());
-                var b = new byte[16];
-                BitConverter.GetBytes(mx + (float)(Math.Sin(ang) * r)).CopyTo(b, 0);
-                BitConverter.GetBytes(mh).CopyTo(b, 4);
-                BitConverter.GetBytes(my + (float)(Math.Cos(ang) * r)).CopyTo(b, 8);
-                BitConverter.GetBytes(1f).CopyTo(b, 12);
-                Memory.WriteBytesBatch(q, b);
-                _wanderSet[slot] = GameClock.Now;
-            }
-            return (uint)(q - Memory.Pcsx2Base);
-        }
+        // ── confusion (the shared Confusion) ──
+        private static void Confuse(int slot) => Confusion.Confuse(slot, _confusionEnd);
 
         private static void DriveConfusion()
         {
-            bool any = false;
-            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
-            {
-                if (_confusedUntil[s] == default) continue;
-                if (!Confused(s)) { Release(s); continue; }
-                any = true;
-                int victim = Nearest(s);
-                if (victim != _victim[s]) { _victim[s] = victim; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"enemy slot {s} → after {Whom(victim)}"); }
-                if (Mirage.Armed)
-                {
-                    uint ptr = victim >= 0 ? (uint)(EnemyAddresses.CharObjects.PosAddr(victim) - Memory.Pcsx2Base)
-                             : victim == -1 ? StbExternCmd.PlayerPosGuest : Wander(s);
-                    if (Memory.ReadUInt(CodeCaves.PtrAddr(s)) != ptr) Memory.WriteUInt(CodeCaves.PtrAddr(s), ptr);
-                }
-                Memory.WriteVec3(EnemyAddresses.CharObjects.CharAddr(s) + CCharacter.CharaTint, TintR * _fadeK, TintG * _fadeK, TintB * _fadeK);
-            }
+            Confusion.MoveArea(_sx, _sy);
+            Confusion.TintScale = _fadeK;                                                    // the confused enemies' tint fades with the spear
+            Confusion.Tick();
             RetireShells();
-            if (any) { ContactHits(); ShotHits(); } else _shotLast.Clear();
-            OwnsTable = any && Mirage.Armed;
-            if (any && (GameClock.Now - _lastReport).TotalSeconds >= 1) { _lastReport = GameClock.Now; Report(); }
-        }
-
-        /// <summary>DIAGNOSTIC: each confused enemy — where it is, whom it is after and how far, its motion, and what its
-        /// pointer-table entry holds.</summary>
-        private static void Report()
-        {
-            float px = Memory.ReadFloat(Addresses.dunPositionX), py = Memory.ReadFloat(Addresses.dunPositionY);
-            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
-            {
-                if (!Confused(s)) continue;
-                long me = EnemyAddresses.CharObjects.PosAddr(s);
-                float mx = Memory.ReadFloat(me), my = Memory.ReadFloat(me + 8);
-                float vx = px, vy = py;
-                if (_victim[s] >= 0) { long v = EnemyAddresses.CharObjects.PosAddr(_victim[s]); vx = Memory.ReadFloat(v); vy = Memory.ReadFloat(v + 8); }
-                else if (_victim[s] == -2) { long q = CodeCaves.BabelWander + (long)s * CodeCaves.BabelWanderStride; vx = Memory.ReadFloat(q); vy = Memory.ReadFloat(q + 8); }
-                float dist = (float)Math.Sqrt((vx - mx) * (vx - mx) + (vy - my) * (vy - my));
-                int motion = Memory.ReadInt(EnemyAddresses.CharObjects.CharAddr(s) + CCharacter.MotionId);
-                uint ptr = Mirage.Armed ? Memory.ReadUInt(CodeCaves.PtrAddr(s)) : 0;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"slot {s} at ({mx:F0},{my:F0}) after {Whom(_victim[s])} at ({vx:F0},{vy:F0}) dist {dist:F0}, motion {motion}, table → 0x{ptr:X8}");
-            }
-        }
-
-        /// <summary>A confused slot back to normal: its pointer on the player, its tint off.</summary>
-        private static void Release(int slot)
-        {
-            _confusedUntil[slot] = default; _victim[slot] = -3; _wanderSet[slot] = default;
-            if (Mirage.Armed) Memory.WriteUInt(CodeCaves.PtrAddr(slot), StbExternCmd.PlayerPosGuest);
-            Memory.WriteVec3(EnemyAddresses.CharObjects.CharAddr(slot) + CCharacter.CharaTint, 0f, 0f, 0f);
-        }
-
-        /// <summary>A confused enemy's open attack sphere touching another enemy's body: a hit planted on that body.</summary>
-        private static void ContactHits()
-        {
-            long pool = CollisionPool.Resolve();
-            if (pool == 0) return;
-            byte[] active = Memory.ReadBytesBatch(pool + CollisionPool.ActiveOff, CollisionPool.Entries * 4);
-            if (active == null) return;
-            for (int i = 0; i < CollisionPool.Entries; i++)
-            {
-                if (BitConverter.ToInt32(active, i * 4) == 0) continue;
-                long e = pool + i * CollisionPool.Stride;
-                int owner = Memory.ReadInt(e + CollisionPool.Owner);
-                if (owner < 200 || (owner - 200) % 5 != 0) continue;
-                int attacker = (owner - 200) / 5;
-                if (attacker >= EnemyAddresses.FloorSlots.Count || !Confused(attacker)) continue;
-                if (Memory.ReadInt(e + CollisionPool.GateA) != Memory.ReadInt(e + CollisionPool.GateB)) continue;   // not open this frame
-                byte[] atk = Memory.ReadBytesBatch(e, CollisionPool.Stride);
-                if (atk == null) continue;
-                float ax = BitConverter.ToSingle(atk, 0x00), ay = BitConverter.ToSingle(atk, 0x08), ar = BitConverter.ToSingle(atk, CollisionPool.Radius);
-                int damage = BitConverter.ToInt32(atk, 0x34);
-                if (damage <= 0 || ar <= 0f) continue;
-                for (int v = 0; v < EnemyAddresses.FloorSlots.Count; v++)
-                {
-                    if (v == attacker || !Enemies.IsLive(v)) continue;
-                    if ((GameClock.Now - _lastContact[attacker, v]).TotalSeconds < ContactCooldown) continue;
-                    if (BigBang.NearestHitSphereEdge(v, EnemyAddresses.FloorSlots.SlotAddr(v, 0), ax, ay) > ar) continue;   // no contact
-                    if (CollisionPool.FreeCount(pool) <= ShellPoolReserve) return;
-                    int idx = CollisionPool.TakeFreeSlot(pool);
-                    if (idx < 0) return;
-                    BigBang.BodyCentre(v, EnemyAddresses.FloorSlots.SlotAddr(v, 0), out float cx, out float ch, out float cy, out _);
-                    byte[] hit = CollisionPool.PlayerHitEntry(cx, ch, cy, ContactRadius, damage, 0);
-                    void I(int o, int val) => BitConverter.GetBytes(val).CopyTo(hit, o);
-                    I(CollisionPool.Owner, -1); I(0x60, -1); I(0x64, 0); I(0x68, -1); I(0x6C, 0);        // nobody's: damage − defence, no weapon, no drain, no credit
-                    Array.Copy(atk, 0x4C, hit, 0x4C, 4);                                                // the attack's reaction…
-                    Array.Copy(atk, 0x80, hit, 0x80, 0x1C);                                             // …and its kick (+0x80..+0x98)
-                    CollisionPool.Plant(pool, idx, hit);
-                    _shells.Add((idx, ShellLifeTicks));
-                    _lastContact[attacker, v] = GameClock.Now;
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"enemy slot {attacker}'s swing lands on enemy slot {v} for {damage} before defence (entry {idx})");
-                }
-            }
-        }
-
-        /// <summary>A confused enemy's SHOT reaching another enemy (the engine tests the monster shot pack's sub-shots against the
-        /// player alone — the config's victim mask — so they flew straight through the enemy they were aimed at): each tick, every live
-        /// flying sub-shot fired by a confused slot (the firing slot is OffA060, stamped by SetUserID2) is swept along the path it
-        /// moved since the last tick against every other live enemy's hit spheres, widened by the shot's flying radius. On contact a
-        /// hit is planted on the victim — the shot's damage, the config's reaction and element, its statuses applied as data (owner
-        /// −1, as the swings' friendly fire; the element and statuses as the Angel Gear's reflected shots carry them) — and the shot
-        /// put where its path met the enemy and taken through the engine's own CONTACT (<see cref="Contact"/>: its impact motion, or a
-        /// bomb's detonation; a timeout instead — its wait zeroed — leads to the expiry phase, which most shots lack, and they simply
-        /// vanished). Its burst plants its own damage as it would anywhere (the player is not sheltered by the confusion).</summary>
-        private static void ShotHits()
-        {
-            uint packG = Memory.ReadUInt(ShotEffectPack.NowShotEffectPtr);
-            if (!Memory.IsValidGuest(packG)) return;
-            long pack = Memory.ToMmu(packG);
-            long pool = CollisionPool.Resolve();
-            for (int p = 0; p < ShotEffectPack.PackSlots; p++)
-            {
-                long fx = pack + (long)p * ShotEffectPack.SlotStride;
-                uint cfgG = Memory.ReadUInt(fx + ShotEffectPack.OffCfg);
-                if (!Memory.IsValidGuest(cfgG)) continue;
-                long cfg = Memory.ToMmu(cfgG);
-                for (int i = 0; i < ShotEffectPack.SubShots; i++)
-                {
-                    int key = p * ShotEffectPack.SubShots + i;
-                    bool live = Memory.ReadUShort(fx + ShotEffectPack.OffActive + i * 2) != 0 && Memory.ReadUShort(fx + ShotEffectPack.OffPhase + i * 2) <= 1;
-                    int owner = Memory.ReadShort(fx + ShotEffectPack.OffA060 + i * 2);
-                    if (!live || owner < 0 || owner >= EnemyAddresses.FloorSlots.Count || !Confused(owner)) { _shotLast.Remove(key); continue; }
-                    long o = fx + ShotEffectPack.OffObj + (long)i * ShotEffectPack.ObjStride + ShotEffectPack.ObjPos;
-                    var now = (Memory.ReadFloat(o), Memory.ReadFloat(o + 4), Memory.ReadFloat(o + 8));
-                    var from = _shotLast.TryGetValue(key, out var was) ? was : now;
-                    _shotLast[key] = now;
-                    float reach = Math.Max(1f, Memory.ReadFloat(cfg + ShotEffectPack.CfgRadiusFlying));
-                    for (int v = 0; v < EnemyAddresses.FloorSlots.Count; v++)
-                    {
-                        if (v == owner || !Enemies.IsLive(v)) continue;
-                        if (SegmentEdge3D(v, from, now, out var at) > reach) continue;
-                        if (pool == 0 || CollisionPool.FreeCount(pool) <= ShellPoolReserve) return;
-                        int idx = CollisionPool.TakeFreeSlot(pool);
-                        if (idx < 0) return;
-                        int damage = Math.Max(1, Memory.ReadInt(fx + ShotEffectPack.OffDamage + i * 4));
-                        BigBang.BodyCentre(v, EnemyAddresses.FloorSlots.SlotAddr(v, 0), out float cx, out float ch, out float cy, out _);
-                        byte[] hit = CollisionPool.PlayerHitEntry(cx, ch, cy, ContactRadius, damage, 0);
-                        void I(int off, int val) => BitConverter.GetBytes(val).CopyTo(hit, off);
-                        I(CollisionPool.Owner, -1); I(0x60, -1); I(0x64, 0); I(0x68, -1); I(0x6C, 0);    // nobody's: damage − defence, no weapon, no drain, no credit
-                        I(0x4C, Memory.ReadInt(cfg + ShotEffectPack.CfgReaction));                        // the shot's reaction
-                        // Its element as the Angel Gear's reflected shots carry it: +0x50 a PURE element bit (a status bit there sends CheckDmg's
-                        // element branch through the wrong column), the statuses applied as data with CheckDmg's own rules.
-                        uint flags = Memory.ReadUInt(cfg + ShotEffectPack.CfgFlags);
-                        uint elem = flags & AngelGear.ShotElementMask, stat = flags & AngelGear.ShotEnemyStatusMask;
-                        I(CollisionPool.Element, (int)(elem != 0 && (flags & 0xFF00) == 0 ? elem : 0u));
-                        string statusNote = stat != 0 ? AngelGear.ApplyReflectedStatus(v, stat) : "";
-                        CollisionPool.Plant(pool, idx, hit);
-                        _shells.Add((idx, ShellLifeTicks));
-                        long obj = fx + ShotEffectPack.OffObj + (long)i * ShotEffectPack.ObjStride;
-                        Memory.WriteVec3(obj + ShotEffectPack.ObjPos, at.x, at.h, at.y);                    // the burst where the path met the enemy
-                        Contact(fx, cfg, i, obj);
-                        _shotLast.Remove(key);
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"enemy slot {owner}'s shot hits enemy slot {v} for {damage} before defence (entry {idx}){statusNote}");
-                        break;
-                    }
-                }
-            }
-        }
-        private static readonly Dictionary<int, (float x, float h, float y)> _shotLast = new();   // each tracked sub-shot's position last tick
-        /// <summary>The engine's own contact, as Step__12CSHOT_EFFECT (0x1AC180) does it when checkCollision meets something in flight:
-        /// phase 2 and its KEY from the config's phase table (+0x4C). No impact KEY: the shot is put out — and a bomb-type config
-        /// (+0x54 == 100) detonates, SetBombEffect(size +0x58, the position, the config's victim mask +0x48, +0x5C) — as it would
-        /// have anywhere: the confusion gives the summoner no shelter from it. An impact KEY: the shot's object restarts on it (its
-        /// first frame from the object's frame table, motion flags 6, the KEY's own rate) and its velocity becomes the phase's
-        /// speed (+0x18 + phase × 4). The phase is written last.</summary>
-        private static void Contact(long fx, long cfg, int i, long obj)
-        {
-            const int Phase = 2, CfgPhaseKeys = 0x4C, CfgPhaseSpeeds = 0x18, CfgBombKind = 0x54, CfgBombSize = 0x58, CfgBombArg = 0x5C, BombKind = 100;
-            uint SetBombEffect = 0x001D5940;
-            short key = Memory.ReadShort(cfg + CfgPhaseKeys + Phase * 2);
-            if (key == -1)
-            {
-                Memory.WriteUShort(fx + ShotEffectPack.OffPhase + i * 2, Phase);
-                Memory.WriteUShort(fx + ShotEffectPack.OffActive + i * 2, 0);
-                if (Memory.ReadShort(cfg + CfgBombKind) == BombKind)
-                    NativeCall.Invoke(SetBombEffect, out _, (uint)(obj + ShotEffectPack.ObjPos - 0x20000000L), (uint)Memory.ReadInt(cfg + ShotEffectPack.CfgVictimMask), (uint)Memory.ReadInt(cfg + CfgBombArg),
-                                      f12: Memory.ReadFloat(cfg + CfgBombSize));
-                return;
-            }
-            uint table = Memory.ReadGuestPtr(obj + ShotEffectPack.ObjFrameTb);
-            if (Memory.IsValidGuest(table)) Memory.WriteFloat(obj + ShotEffectPack.ObjFrame, Memory.ReadInt(Memory.ToMmu(table) + key * 0x10));
-            Memory.WriteInt  (obj + ShotEffectPack.ObjMotId, key);
-            Memory.WriteInt  (obj + ShotEffectPack.ObjMotFlag, 6);
-            Memory.WriteFloat(obj + ShotEffectPack.ObjMotSpd, -1f);
-            long d = fx + ShotEffectPack.OffDir + i * 0x10;
-            float dx = Memory.ReadFloat(d), dh = Memory.ReadFloat(d + 4), dy = Memory.ReadFloat(d + 8), len = (float)Math.Sqrt(dx * dx + dh * dh + dy * dy);
-            float speed = Memory.ReadFloat(cfg + CfgPhaseSpeeds + Phase * 4);
-            if (len > 1e-6f) Memory.WriteVec3(d, dx / len * speed, dh / len * speed, dy / len * speed);
-            Memory.WriteUShort(fx + ShotEffectPack.OffPhase + i * 2, Phase);
-        }
-
-        /// <summary>How near the segment <paramref name="a"/>→<paramref name="b"/> comes to an enemy's body: the least distance from it
-        /// to the surface of any of the enemy's active hit spheres placed this frame (SphereEdge3D's spheres), and the segment's point
-        /// there (<paramref name="at"/>). MaxValue with none.</summary>
-        private static float SegmentEdge3D(int slot, (float x, float h, float y) a, (float x, float h, float y) b, out (float x, float h, float y) at)
-        {
-            at = b;
-            long bc = BodyCollision.SlotBase(slot), up = EnemyAddresses.CharObjects.PosAddr(slot);
-            float ux = Memory.ReadFloat(up), uy = Memory.ReadFloat(up + 8), best = float.MaxValue;
-            float dx = b.x - a.x, dh = b.h - a.h, dy = b.y - a.y, len2 = dx * dx + dh * dh + dy * dy;
-            for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
-            {
-                if (Memory.ReadInt(bc + BodyCollision.ActiveArray + part * BodyCollision.BodyPartStride) == 0) continue;
-                long c = bc + BodyCollision.CentreArray + part * BodyCollision.CentreStride;
-                float cx = Memory.ReadFloat(c), ch = Memory.ReadFloat(c + 4), cy = Memory.ReadFloat(c + 8);
-                if (Math.Abs(cx - ux) > 80f || Math.Abs(cy - uy) > 80f) continue;
-                float t = len2 > 1e-6f ? Math.Clamp(((cx - a.x) * dx + (ch - a.h) * dh + (cy - a.y) * dy) / len2, 0f, 1f) : 0f;
-                float qx = a.x + dx * t, qh = a.h + dh * t, qy = a.y + dy * t, px = qx - cx, ph = qh - ch, py = qy - cy;
-                float edge = (float)Math.Sqrt(px * px + ph * ph + py * py) - Memory.ReadFloat(bc + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride);
-                if (edge < best) { best = edge; at = (qx, qh, qy); }
-            }
-            return best;
         }
 
         /// <summary>Planted hits the engine has not consumed within their life are withdrawn.</summary>
@@ -822,8 +547,7 @@ namespace Dark_Cloud_Improved_Version
         {
             TakeDown();
             { long pool = CollisionPool.Resolve(); foreach (var (idx, _) in _shells) if (pool != 0) { Memory.WriteInt(pool + idx * CollisionPool.Stride + CodeCaves.NoDrainMarkOff, 0); CollisionPool.Deactivate(pool, idx); } _shells.Clear(); }
-            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++) if (_confusedUntil[s] != default) Release(s);
-            OwnsTable = false;
+            Confusion.End();
             _guardLatched = false; _guardSince = default;
         }
     }

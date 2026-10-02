@@ -365,7 +365,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void PatchUngagaNoDrain(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint SwordDmgCheck1 = 0x01DB9B30;
-            uint mhi = CodeCaves.NoDrainMark >> 16, mlo = CodeCaves.NoDrainMark & 0xFFFFu;
+            uint mhi = CodeCaves.NoDrainMark >> 16;                // the marks' shared high half (NoDrainMark, CrushMark)
             uint[] Cave(uint entryReg) => new[]
             {
                 0x8F880000u | 0x9DF0u,                      //  0 lw    t0,-0x6210(gp)          NowColData
@@ -377,9 +377,9 @@ namespace Dark_Cloud_Improved_Version
                 0x8D090038u,                                //  6 lw    t1,0x38(t0)             the class word: his charge effect's
                 0x15200008u,                                //  7 bne   t1,zero,skip (+8 → 16)
                 0x00000000u,                                //  8   nop
-                0x8D090000u | (uint)CodeCaves.NoDrainMarkOff,//  9 lw   t1,0x9C(t0)             the mod's mark
-                0x3C0A0000u | mhi,                          // 10 lui   t2,HI(mark)
-                0x354A0000u | mlo,                          // 11 ori   t2,t2,LO(mark)
+                0x8D090000u | (uint)CodeCaves.NoDrainMarkOff,//  9 lw   t1,0x9C(t0)             the mod's mark…
+                0x00094C02u,                                // 10 srl   t1,t1,16               …its high half (SPIK's, CRIK's)
+                0x340A0000u | mhi,                          // 11 ori   t2,zero,HI(mark)
                 0x112A0003u,                                // 12 beq   t1,t2,skip (+3 → 16)
                 0x00000000u,                                // 13   nop                         (no jump in a delay slot)
                 MipsAsm.J(SwordDmgCheck1),                  // 14 go: j SwordDmgCheck1 (ra is the caller's)
@@ -608,7 +608,7 @@ namespace Dark_Cloud_Improved_Version
                 0xE5010000u | Lo(CodeCaves.BladeFallVy),            // 18 swc1  f1,vy(t0)
                 0x3C0B0000u | shi,                                  // 19 lui   t3,HI(slot pos)
                 0xE5600000u | SLo(4),                               // 20 swc1  f0,y(t3)               the copy's height, this frame
-                MipsAsm.J(CodeCaves.DebugIfCave.BladeSpin),         // 21 j     BladeSpin (then the WHP bill, the chain's tail)
+                MipsAsm.J(CodeCaves.DebugIfCave.FallDrive),         // 21 j     FallDrive (mode 4), then BladeSpin and the WHP bill
                 0x00000000u,                                        // 22   nop
                 0x240A0003u,                                        // 23 follow: li t2,3
                 0x152A0000u | 15,                                   // 24 bne   t1,t2,ret (+15 → index 40)
@@ -627,12 +627,62 @@ namespace Dark_Cloud_Improved_Version
                 0xE5600000u | SLo(0),                               // 37 swc1  f0,x(t3)
                 0xE5620000u | SLo(4),                               // 38 swc1  f2,y(t3)
                 0xE5610000u | SLo(8),                               // 39 swc1  f1,z(t3)
-                MipsAsm.J(CodeCaves.DebugIfCave.BladeSpin),         // 40 ret: j BladeSpin (then the WHP bill, the chain's tail)
+                MipsAsm.J(CodeCaves.DebugIfCave.FallDrive),         // 40 ret: j FallDrive (mode 4), then BladeSpin and the WHP bill
                 0x00000000u,                                        // 41   nop
             };
             if (cave + (uint)words.Length * 4 > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
                 throw new IOException("The blade-fall cave does not fit its host (DebugInfomationDraw).");
             for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+        }
+
+        /// <summary>The blade fall's MODE 4 (tools/stubs/fall_drive.s, see CodeCaves.DebugIfCave.FallDrive): entered from both exits of
+        /// the blade-fall cave, acting only on flag 4, and leaving for the follow cave (then the blade-spin cave).</summary>
+        internal static void PatchFallDrive(FileStream fs, Func<uint, long> ElfOff)
+        {
+            uint cave = CodeCaves.DebugIfCave.FallDrive;
+            byte[] b = Embedded("fallDrive.bin");
+            if (b.Length % 4 != 0 || U32(b, 0) != 0x3C0801FBu || U32(b, b.Length - 8) != MipsAsm.J(CodeCaves.DebugInfoCave.Follow))
+                throw new IOException($"fallDrive.bin malformed ({b.Length} B) or stale — reassemble its .s (it opens `lui t0,0x01FB` and leaves for the follow cave).");
+            if (cave + (uint)b.Length > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                throw new IOException("fallDrive.bin overruns DebugInfomationIF's span.");
+            for (int i = 0; i < b.Length; i += 4) WrU32(fs, ElfOff(cave + (uint)i), U32(b, i));
+        }
+
+        /// <summary>The GUARD CRUSH cave (tools/stubs/guard_crush.s, see CodeCaves.DebugInfoCave.GuardCrush): CheckDmg's guard-window hook
+        /// (main 0x1DAC78, ElfCatPatches.PatchCatGuardBypass's site) is re-aimed here; the cave goes on to the cat's.</summary>
+        internal static void PatchGuardCrush(FileStream fs, Func<uint, long> ElfOff)
+        {
+            uint cave = CodeCaves.DebugInfoCave.GuardCrush;
+            byte[] b = Embedded("guardCrush.bin");
+            if (b.Length % 4 != 0 || U32(b, 0) != 0x8F819DF0u || U32(b, 40) != MipsAsm.J(CodeCaves.DunCave.CatGuardBypass))
+                throw new IOException($"guardCrush.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (cave + (uint)b.Length > CodeCaves.DebugInfoCave.Follow)
+                throw new IOException("guardCrush.bin runs into the follow cave.");
+            for (int i = 0; i < b.Length; i += 4) WrU32(fs, ElfOff(cave + (uint)i), U32(b, i));
+            uint site = ElfCatPatches.GuardBypassHookAddr, cur = RdU32(fs, ElfOff(site));
+            if (cur != MipsAsm.J(CodeCaves.DunCave.CatGuardBypass) && cur != MipsAsm.J(cave) && cur != MipsAsm.J(CodeCaves.DebugIfCave.GuardCrushFirst) || RdU32(fs, ElfOff(site + 4)) != 0)
+                throw new IOException($"The guard-window hook 0x{site:X} is not the cat cave's — PatchCatGuardBypass must run first.");
+            WrU32(fs, ElfOff(site), MipsAsm.J(cave));
+        }
+
+        /// <summary>The FOLLOW cave (tools/stubs/follow.s, see CodeCaves.DebugInfoCave.Follow): entered from the fall-drive cave's exit,
+        /// leaving for the blade-spin cave.</summary>
+        internal static void PatchFollow(FileStream fs, Func<uint, long> ElfOff)
+        {
+            uint cave = CodeCaves.DebugInfoCave.Follow;
+            byte[] b = Embedded("follow.bin");
+            if (b.Length % 4 != 0 || U32(b, 0) != 0x3C0801FBu || U32(b, b.Length - 8) != MipsAsm.J(CodeCaves.DebugIfCave.BladeSpin))
+                throw new IOException($"follow.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (cave + (uint)b.Length > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
+                throw new IOException("follow.bin overruns DebugInfomationDraw's span.");
+            for (int i = 0; i < b.Length; i += 4) WrU32(fs, ElfOff(cave + (uint)i), U32(b, i));
+        }
+
+        private static byte[] Embedded(string name)
+        {
+            using var st = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch." + name)
+                ?? throw new IOException($"Embedded EE function missing: {name} (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); return ms.ToArray();
         }
 
         /// <summary>The BLADE SPIN cave (CodeCaves.DebugIfCave.BladeSpin): the blade-fall cave's two exits land here, once a dungeon

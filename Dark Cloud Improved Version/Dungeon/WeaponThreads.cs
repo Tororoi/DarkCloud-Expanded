@@ -528,10 +528,15 @@ namespace Dark_Cloud_Improved_Version
                         babelSpearThread = new Thread(new ThreadStart(BabelsSpear.CurseOfBabelEffect));
                         babelSpearThread.Start();
                     }
-                    if (!cactusSpikeThread.IsAlive && CactusSpike.Wielded())   // Desert Bloom, for a Cactus sphere (the palm)
+                    if (!cactusSpikeThread.IsAlive && CactusSpike.Wielded())   // Desert Bloom, for a Cactus sphere (Queens' trees)
                     {
                         cactusSpikeThread = new Thread(new ThreadStart(CactusSpike.SpikeEffect));
                         cactusSpikeThread.Start();
+                    }
+                    if (!terraSwordThread.IsAlive && TerraSword.Wielded())   // the nutfall, for a Terra Sword sphere
+                    {
+                        terraSwordThread = new Thread(new ThreadStart(TerraSword.RockfallEffect));
+                        terraSwordThread.Start();
                     }
                     if (!herculesUltimateThread.IsAlive && HerculesUltimate.Wielded())   // Hercules' Wrath's ultimate, for its sphere
                     {
