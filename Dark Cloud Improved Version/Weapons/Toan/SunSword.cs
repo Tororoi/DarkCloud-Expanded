@@ -363,7 +363,7 @@ namespace Dark_Cloud_Improved_Version
         /// Solar Shot): what SolarTick runs first each tick.</summary>
         internal static void BlindTick() { SolarLighting.Tick(); SolarBlind(); }
         /// <summary>The blinding cut short: the enemies' scripts back, their guards their own.</summary>
-        internal static void EndBlinding() { SolarScript.End(); GuardBreak.Drive(false); _blindUntil = default; }
+        internal static void EndBlinding() { SolarScript.End(); GuardGate.NobodyBlocks(false); _blindUntil = default; }
 
         /// <summary>The blinding's clock. The behaviour itself is the enemies' own scripts (SolarScript); this only decides
         /// when they lower their guard and when they get their AI back.</summary>
@@ -371,12 +371,12 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_blindUntil == default) return;
             double left = (_blindUntil - GameClock.Now).TotalSeconds;
-            if (left <= 0) { SolarScript.End(); GuardBreak.Drive(false); _blindUntil = default; }
+            if (left <= 0) { SolarScript.End(); GuardGate.NobodyBlocks(false); _blindUntil = default; }
             else
             {
                 // Blinded enemies hold a guard and it really does block, so the flash breaks it for as long as it lasts:
                 // a hit lands, their own hit reaction staggers them, and returning from it drops them back into the guard.
-                GuardBreak.Drive(true);
+                GuardGate.NobodyBlocks(true);
                 SolarScript.Wake(left);               // each species winds down on its own clip's clock
             }
         }
@@ -519,7 +519,7 @@ namespace Dark_Cloud_Improved_Version
             SolarGlow.Hide();
             ChargeTint.Clear();
             SolarLighting.Restore();
-            SolarScript.End(); GuardBreak.Drive(false); _blindUntil = default; FlashArmed = false;
+            SolarScript.End(); GuardGate.NobodyBlocks(false); _blindUntil = default; FlashArmed = false;
             long pool = CollisionPool.Resolve();
             foreach (var (slot, _) in st.planted) if (pool != 0) CollisionPool.Deactivate(pool, slot);
             st.planted.Clear();

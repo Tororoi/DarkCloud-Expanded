@@ -548,7 +548,10 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>tools/stubs/steel_level_up.s: the Steel Slingshot's level-up bonus is +2 endurance and twice the max-WHP
             /// roll — four entries at fixed offsets, one per hooked add in SetLevelUpWeaponData (B endurance, C max WHP) and
             /// WeaponLevelUpValueCalc (D endurance, E max WHP).</summary>
-            internal const uint SteelLevelUp     = Host + 0xB60;  // 0x1B42E0 → 0x1B43E0 at most
+            internal const uint SteelLevelUp     = Host + 0xB60;  // 0x1B42E0, 176 B → 0x1B4390
+            /// <summary>tools/stubs/guard_mask.s (ElfWeaponPatches.PatchGuardMask): the guard gate's second link — a window whose bit is
+            /// set in CodeCaves.GuardMask's byte for the enemy passes; anything else goes on to the cat's guard-bypass cave.</summary>
+            internal const uint GuardMask        = Host + 0xC10;  // 0x1B4390, 60 B → 0x1B43CC (AutoGuardMatch at 0x1B43E0)
             internal const uint SteelLevelUpB = SteelLevelUp, SteelLevelUpC = SteelLevelUp + 0x8, SteelLevelUpD = SteelLevelUp + 0x10,
                                 SteelLevelUpE = SteelLevelUp + 0x18;
             /// <summary>tools-free, 172 B: AUTO-GUARD, hooked at BtCheckDamageProc's CheckHitUser return. An entry whose
@@ -579,8 +582,9 @@ namespace Dark_Cloud_Improved_Version
             /// copy's slot height: the fall is the engine's own frame, not a mod thread racing it.</summary>
             internal const uint BladeFall      = Host + 0xDC0;   // 0x1B4540, 168 B → 0x1B45E8
             internal const uint WhpBill        = Host + 0xE70;   // 0x1B45F0, 88 B → 0x1B4648 (the host ends at 0x1B46F0)
-            /// <summary>tools/stubs/guard_crush.s (ElfWeaponPatches.PatchGuardCrush): CheckDmg's guard-window hook lands here first; an
-            /// entry carrying CodeCaves.CrushMark passes every guard window, anything else goes on to the cat's guard-bypass cave.</summary>
+            /// <summary>tools/stubs/guard_crush.s (ElfWeaponPatches.PatchGuardCrush): the GUARD GATE — CheckDmg's guard-window hook lands
+            /// here first; an entry carrying CodeCaves.CrushMark passes every guard window, anything else goes on to
+            /// <see cref="GuardMask"/> and then the cat's guard-bypass cave.</summary>
             internal const uint GuardCrush     = Host + 0xED0;   // 0x1B4650, 56 B → 0x1B4688
             /// <summary>tools/stubs/follow.s (ElfWeaponPatches.PatchFollow): CodeCaves.Follow's point carried with a unit, every frame —
             /// between the fall-drive cave and the blade-spin cave.</summary>
@@ -635,7 +639,7 @@ namespace Dark_Cloud_Improved_Version
         ///   0x1FB0CD0  LadderRefusal        52 B → 0x1FB0D04   hand-built (PatchLadderRefusal)
         ///   0x1FB0D10  ExclamationHeight    24 B → 0x1FB0D28   hand-built (PatchExclamationHeight)
         ///   0x1FB0D50  IdleMotionOverride   36 B → 0x1FB0D74   hand-built (PatchIdleMotionOverride)
-        ///   0x1FB0D90  CatPelletFollow    4244 B → 0x1FB1E24   catPelletFollow.bin
+        ///   0x1FB0D90  CatPelletFollow    4256 B → 0x1FB1E30   catPelletFollow.bin
         ///   0x1FB1E30  PropPelletFollow    156 B → 0x1FB1ECC   propPelletFollow.bin
         ///   0x1FB1ED0  BorrowedShotsEnter  296 B → 0x1FB1FF8   borrowedShotsEnter.bin (the HEAD; its tail is at 0x1FB3F40)
         ///   (the second band, 0x1FB2000 →, is the table in <see cref="ElfCave"/> below)
@@ -677,7 +681,7 @@ namespace Dark_Cloud_Improved_Version
             /// step loop's `jal step__5CSHOT` (dun 0x1DB874C), performs it, tracks which pellet slots are active, and when
             /// armed (<see cref="Mailbox.CatState"/> = 3) binds chara slot 1 to the next NEW pellet on its birth frame,
             /// then places it every frame (head on the pellet, growth scale, sprite fade) until that pellet ends.</summary>
-            internal const uint CatPelletFollow    = 0x01FB0D90;   // 4244 B → 0x1FB1E24 (frame 0x80, sq/lq saves)
+            internal const uint CatPelletFollow    = 0x01FB0D90;   // 4256 B → 0x1FB1E30 (PropPelletFollow follows directly) (frame 0x80, sq/lq saves)
             /// <summary>A chara-slot prop on one of Xiao's pellets (tools/stubs/prop_pellet_follow.s): the Matador's charged shot.
             /// Now the hook's target (DunPatches.CatFollowHookNew): calls CatCopyQueue — the cat's chain, which performs the
             /// displaced step__5CSHOT — then places chara slot 3 on the pellet Mailbox.PropFollowSlot names.</summary>
@@ -906,13 +910,15 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CatCopyQueueJobs  = 48;            // 48 × 0x30 + 0x10 = 0x910 B of the span below — the
                                                                // texture relocation needs one job per block per moved texture
         internal const int  CatCopyJobStride  = 0x30;
-        /// <summary>Where a find/replace job's old→new pairs live, just past the jobs: 16 B each.</summary>
-        internal const int  CatCopyPairsOff   = 0x10 + CatCopyQueueJobs * CatCopyJobStride;   // 0x910
+        // The jobs end at +0x910 (0x21FAEF30), just short of BorrowedShotBlock (0x21FAEF40). A find/replace job's old→new pair
+        // table is NOT after them: the job names it (+0x10), and it lives at CatCopyPairs — sitting past the jobs, it wrote the
+        // cat's texture pairs over the borrowed shot's block every time the cat was built (Babel's shockwave then never entered,
+        // and a re-request built the effect from the trashed config — a crash).
         /// <summary>How many old→new pairs a sweep can carry. MUST cover every name in CatTextures.CatTextureNames —
         /// there are TEN. A name that does not fit is silently dropped, and a dropped name's register keeps pointing into her
         /// old block (catcape is one the MASK draws with: dropped, the mask draws black). The count is checked against this
         /// rather than truncated.</summary>
-        internal const int  CatCopyMaxPairs   = 16;                                           // → the block ends at 0xA10
+        internal const int  CatCopyMaxPairs   = 16;                                           // × 16 B at CatCopyPairs
 
         /// <summary>The borrowed shot config in use (ElfCave.BorrowedShotsEnter keeps it entered in the main-character effect
         /// instance, BorrowedShots writes it): +0x00 "SHOT" (0 = nothing to enter — the mod's clear, or the cave's after a
@@ -1180,7 +1186,15 @@ namespace Dark_Cloud_Improved_Version
         internal const long Follow      = 0x21FAFC90;
         internal const int  FollowSrc = 0x0, FollowDst = 0x4, FollowOff = 0x8;
 
-        // ── FREE: 0x21FAFCB0 .. 0x21FB0000 (0x350 B) ────────────────────────────────────────────────────
+        /// <summary>The guard gate's per-enemy window mask (DebugInfoCave.GuardMask, written by GuardGate): one byte per slot, bit w set =
+        /// enemy window w blocks nothing (7 = none of its windows).</summary>
+        internal const long GuardMask   = 0x21FAFCB0;   // 16 B
+
+        /// <summary>The cat copy queue's old→new pair table (16 B each, CatCopyMaxPairs of them): a find/replace job names it.</summary>
+        internal const long CatCopyPairs      = 0x21FAFCC0;   // 0x100 B
+        internal const uint CatCopyPairsGuest = 0x01FAFCC0;
+
+        // ── FREE: 0x21FAFDC0 .. 0x21FB0000 (0x240 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

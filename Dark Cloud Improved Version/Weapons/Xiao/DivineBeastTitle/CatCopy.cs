@@ -469,7 +469,7 @@ namespace Dark_Cloud_Improved_Version
                 if (j.Op == 1)
                 {
                     BitConverter.GetBytes(_pairs.Count).CopyTo(buf, o + 0x0C);
-                    BitConverter.GetBytes(CodeCaves.CatCopyQueueGuest + (uint)CodeCaves.CatCopyPairsOff).CopyTo(buf, o + 0x10);
+                    BitConverter.GetBytes(CodeCaves.CatCopyPairsGuest).CopyTo(buf, o + 0x10);
                 }
             }
             if (_pairs.Count > 0)
@@ -477,7 +477,7 @@ namespace Dark_Cloud_Improved_Version
                 var pb = new byte[_pairs.Count * 16];
                 for (int i = 0; i < _pairs.Count; i++)
                 { BitConverter.GetBytes(_pairs[i].oldV).CopyTo(pb, i * 16); BitConverter.GetBytes(_pairs[i].newV).CopyTo(pb, i * 16 + 8); }
-                Memory.WriteBytesBatch(CodeCaves.CatCopyQueue + CodeCaves.CatCopyPairsOff, pb);
+                Memory.WriteBytesBatch(CodeCaves.CatCopyPairs, pb);
             }
             Memory.WriteBytesBatch(CodeCaves.CatCopyQueue, buf);                        // jobs first…
             Memory.WriteInt(CodeCaves.CatCopyQueue, _jobs.Count);                       // …then the count: the cave's go signal

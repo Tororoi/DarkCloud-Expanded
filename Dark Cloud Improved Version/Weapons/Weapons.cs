@@ -3343,7 +3343,6 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort((ice + (weaponoffset * (Items.kitchenknife - daggerid))), 0);           //Ice set to 0
                 Memory.WriteUShort((thunder + (weaponoffset * (Items.kitchenknife - daggerid))), 8);       //Thunder set to 0
                 Memory.WriteUShort((sea + (weaponoffset * (Items.kitchenknife - daggerid))), 90);          //Sea Killer set to 90
-                Memory.WriteUShort((buildup + 5 + (weaponoffset * (Items.kitchenknife - daggerid))), 0);   //Set build-up branches to none (The 5 was just to offset to the correct address since I wasn't finding a way to write 8 bytes)
 
                 //Tsukikage
                 Memory.WriteUShort((endurance + (weaponoffset * (Items.tsukikage - daggerid))), 33);    //Endurance set to 33

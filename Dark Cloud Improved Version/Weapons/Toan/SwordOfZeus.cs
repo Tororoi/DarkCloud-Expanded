@@ -99,7 +99,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The bolt at a point: a sub-shot of the instance played once there (no damage of its own), Big
         /// Bang's falloff blast at the point, and the bolt's weapon-HP cost. <paramref name="noKickSlot"/> is the enemy
         /// under it, which takes the blast where it stands — no shove; nobody is turned to face the bolt, they are
-        /// stunned facing wherever they were, and the struck enemy braces behind its guard like the rest of the floor.</summary>
+        /// stunned facing wherever they were, and the struck enemy braces behind its guard like the rest of the floor — the blast crushes that guard.</summary>
         internal static bool StrikeAt(float x, float h, float y, int noKickSlot, bool bill = true, ushort weapon = (ushort)Items.swordofzeus)
         {
             if (!LightningSeeded) return false;
@@ -107,7 +107,7 @@ namespace Dark_Cloud_Improved_Version
             MaintainScale();                                                        // …before its first frame
             SeSeq.Play(StrikeSe, 90);
             BigBang.LastBlast = (x, h, y);
-            BigBang.PlantFalloff(x, h, y, noKickSlot: noKickSlot, damageScale: BlastScale);
+            BigBang.PlantFalloff(x, h, y, noKickSlot: noKickSlot, damageScale: BlastScale, guardBreak: true);   // the bolt crushes any guard (the ISO's guard gate)
             if (bill) WeaponWhp.Drain(weapon, StrikeWhp, "[Zeus] bolt ");   // taken by the engine's own drain, as a landed hit's is (a volley bills once, StrikeNearest)
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] lightning at ({x:F0},{h:F0},{y:F0})");
             return true;

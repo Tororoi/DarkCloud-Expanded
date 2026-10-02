@@ -351,7 +351,7 @@ namespace Dark_Cloud_Improved_Version
                 RestoreSwing(st);
 
             // Guards are crushed while the whirl spins: a blocked spin would eat the detonation.
-            if (whirl != st.crushing) { GuardBreak.Drive(whirl); st.crushing = whirl; }
+            if (whirl != st.crushing) { GuardGate.NobodyBlocks(whirl); st.crushing = whirl; }
 
             // The blast, once per whirlwind, as the spin begins: the dropped blade's blast at his feet, and its bill.
             if (whirl && action != st.chargeAction)
@@ -849,7 +849,7 @@ namespace Dark_Cloud_Improved_Version
             SunSword.BigBangFlash.ArmLighting();
             SolarLighting.Flash();
             Burst(x, h, y);
-            PlantFalloff(x, h, y);
+            PlantFalloff(x, h, y, guardBreak: true);                   // the judgement blade's landing crushes any guard (the ISO's guard gate)
             TurnEnemiesToward(x, y);
             DrainWhp();
         }
@@ -1332,7 +1332,7 @@ namespace Dark_Cloud_Improved_Version
             ReleaseJudgement();
             ToanLockOn.ReleaseReach(); _faceHold = 0; ReleaseRedirect();
             { long pool = CollisionPool.Resolve(); foreach (var (slot, _) in _shells) if (pool != 0) CollisionPool.Deactivate(pool, slot); _shells.Clear(); }
-            if (st.crushing) { GuardBreak.Drive(false); st.crushing = false; }
+            if (st.crushing) { GuardGate.NobodyBlocks(false); st.crushing = false; }
             st.chargeAction = 0;
         }
     }

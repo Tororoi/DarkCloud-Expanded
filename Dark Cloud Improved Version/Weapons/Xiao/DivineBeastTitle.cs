@@ -126,9 +126,11 @@ namespace Dark_Cloud_Improved_Version
         internal const float  FallBlendSteps  = 16f;     // the float-up → fall fade, in steps (the engine's default is 10)
         internal const float  BlendDefault    = 0.1f;    // the engine's own per-step blend increment (MOTION_END seeds it)
         internal const double LandSeconds   = 0.45, TakeOffSeconds = 0.4, RunTimeoutSeconds = 6.0, StraightRunSeconds = 1.5;
-        internal const int    FadeTicks     = 30;       // ≈ 0.5 s at the 16 ms tick
-        internal const int    GlowFadeTicks = FadeTicks; // the glow SHRINKS over the same ≈ 0.5 s the cat fades
-        internal static int   _glowFade = -1;           // ticks into the glow's shrink (−1 = full size and following the cat; ≥ GlowFadeTicks = done: OFF until the next bind)
+        // On the game clock, not in ticks: a tick does much more than its 16 ms sleep (the cape, the glow, the look), so a count of
+        // ticks ran a 0.5 s fade over seconds.
+        internal const double FadeSeconds     = 0.5;
+        internal const double GlowFadeSeconds = FadeSeconds;   // the glow SHRINKS over the same 0.5 s the cat fades
+        internal static DateTime _glowFadeFrom = DateTime.MinValue;   // when the glow's shrink began (MinValue = full size and following the cat; past GlowFadeSeconds = done: OFF until the next bind)
         private const float  DamageMult    = 1.5f;     // × the weapon's attack (a charged pellet's worth)
         internal const int    PlantedLifeTicks = 4;   // ~4 frames for the enemy's CheckDmg to find the entry
 
@@ -249,7 +251,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly List<int> _wingMeshIdx = new List<int>();
         internal const float  HeadFallbackHeight = 6f;
         internal static bool  _hitDone;
-        internal static int   _fade;
+        internal static DateTime _fadeFrom;                   // when the cat's fade-out began (a landed hit or the lifetime's end)
         internal static readonly List<(int idx, int ticks, bool native)> _planted = new();   // native = planted by the cave (the cat's hit)
         internal static bool _hitFade;                        // the hit landed: the flight follows through while the cat fades out
         internal static int  _aimLoggedFor = -1;              // last target the aim choice was logged for
@@ -587,7 +589,7 @@ namespace Dark_Cloud_Improved_Version
             _native = (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew;
             if (!_native && !_nativeWarned) { _nativeWarned = true; Log("pellet-catcher cave not in this ISO (re-patch) — using the thread follower"); }
             if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }
-            _phase = Phase.Resident; _phaseStart = GameClock.Now; _hitDone = false; _fade = 0;
+            _phase = Phase.Resident; _phaseStart = GameClock.Now; _hitDone = false; _fadeFrom = default;
             SetKey(KeyLeap);
             Maintain();
             Log("cat resident (hidden) — " + (_native ? "native catcher" : "thread follower"));
@@ -669,7 +671,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!Active) return;
             DisarmCave();
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowOn, 0); _glowFade = -1;    // PollCave stops with Active — switch the glow off here
+            Memory.WriteInt(CodeCaves.Mailbox.CatGlowOn, 0); _glowFadeFrom = DateTime.MinValue;    // PollCave stops with Active — switch the glow off here
             if (_pelletSlot >= 0)                                                // cat gone while its pellet still flies: give the sprite back
             {
                 if (Memory.ReadInt(PlayerShotPool.FlagAddr(_pool, _pelletSlot)) != 0) Memory.WriteFloat(PlayerShotPool.ScaleAddr(_pool, _pelletSlot), 1f);
@@ -712,14 +714,14 @@ namespace Dark_Cloud_Improved_Version
             F(0x80, ox); F(0x84, oh); F(0x88, oy);                                  // kick origin (a point)
             F(0x90, KickStrength); F(0x94, KickDecay);                              // kick strength, decay
             BitConverter.GetBytes(CatKickType).CopyTo(e, 0x98);                     // type 2 = melee-style reaction
+            BitConverter.GetBytes(CodeCaves.CrushMark).CopyTo(e, CodeCaves.NoDrainMarkOff);   // through any guard (the ISO's guard gate)
             CollisionPool.Plant(pool, slot, e);
             lock (_planted) _planted.Add((slot, PlantedLifeTicks, false));
             Log(
                 $"hit entry at ({x:F1},{h:F1},{y:F1}) r={radius:F0}: base {baseDmg}, attr 0x{attr:X} → entry {slot}");
         }
 
-        /// <summary>Per-tick housekeeping for the hit. Restores crushed guard windows once their countdown expires, and
-        /// decides the fate of each planted damage entry: an entry that vanished AND left some slot's "last hit sphere" word
+        /// <summary>Per-tick housekeeping for the hit: decides the fate of each planted damage entry: an entry that vanished AND left some slot's "last hit sphere" word
         /// (+0x55750) no longer −1 was ACCEPTED — CheckDmg only overwrites that sentinel past its guard and invincibility
         /// gates, right before applying damage — so the cat is spent and fades. An entry that vanished without it was merely
         /// dropped by the engine, and the latch is freed so the cat may touch again.</summary>
@@ -727,13 +729,6 @@ namespace Dark_Cloud_Improved_Version
         {
             lock (_planted)
             {
-                for (int i = _guardRestore.Count - 1; i >= 0; i--)
-                {
-                    var (slot, ticks, flags) = _guardRestore[i];
-                    if (--ticks > 0) { _guardRestore[i] = (slot, ticks, flags); continue; }
-                    for (int w = 0; w < flags.Length; w++) if (flags[w] != 0) Memory.WriteUShort(EnemyAddresses.GuardWindows.FlagAddr(slot, w), flags[w]);
-                    _guardRestore.RemoveAt(i);
-                }
                 if (_planted.Count == 0) return;
                 long pool = CollisionPool.Resolve();
                 for (int i = _planted.Count - 1; i >= 0; i--)
@@ -753,7 +748,7 @@ namespace Dark_Cloud_Improved_Version
                             // Accepted: damage, hitspark, kick and (via the patched flinch rule) the stagger are all the engine's.
                             // Only now is the cat spent.
                             Log($"hit landed on enemy slot {hitSlot} (entry {idx}) — fading out");
-                            _hitFade = true; _fade = 0; _alpha = 1f;
+                            _hitFade = true; _fadeFrom = GameClock.Now; _alpha = 1f;
                         }
                         else
                         {

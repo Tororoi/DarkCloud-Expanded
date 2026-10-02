@@ -1235,6 +1235,9 @@ lw    $t5, 0x41D8($s0)
 sw    $t5, 0x0094($t7)         # kick decay
 addiu $t5, $zero, 2
 sw    $t5, 0x0098($t7)         # kick type 2 = melee-style → the patched flinch rule lets it stagger
+lui   $t5, 0x4B49
+ori   $t5, $t5, 0x5243
+sw    $t5, 0x009C($t7)         # CodeCaves.CrushMark "CRIK": the guard gate (guard_crush.s) lets it through every guard window
 # ── acceptance sentinel: CheckDmg writes the hit sphere's index into the victim's +0x55750 ONLY on an accepted hit (after
 # the guard/invincibility gates); an entry can vanish without one (`_STATUS_SET_MUTEKI` skips the whole test — a mimic
 # wakes with 100 frames of it). −1 into every slot's word now; the mod reads them back when the entry is gone.

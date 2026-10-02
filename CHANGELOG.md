@@ -397,7 +397,7 @@ All buildup paths as modified by this mod. `★` marks final forms (no further b
 
 ### Toan
 
-> **Mod changes:** Kitchen Knife has no buildup paths. Choora builds up to Maneater only. Heaven's Cloud and Aga's Sword are terminal weapons.
+> **Mod changes:** Choora builds up to Maneater only. Heaven's Cloud and Aga's Sword are terminal weapons.
 
 ```
 Baselard
@@ -421,7 +421,11 @@ Wise Owl Sword → Lamb's Sword → Atlamillia Sword → Chronicle Sword ★
 
 Bone Rapier → Evilcise → Drainseeker → Dark Cloud → 7th Heaven ★
 
-Kitchen Knife ★
+Kitchen Knife
+  ├─ Sax ─────────────────┐
+  └─ Chopper ─┬─ Choora → Maneater → Atlamillia Sword → Chronicle Sword ★
+               └──────────┴─ Dusack ─┬─ Brave Ark → Dark Cloud → 7th Heaven ★
+                                      └─ 7 Branch Sword → Atlamillia Sword → Chronicle Sword ★
 
 Sun Sword → Big Bang → Sword of Zeus ★
 

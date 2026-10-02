@@ -43,8 +43,8 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 4; i < 32 && i < b.Length; i += 4) if (U32(b, i) == Jal(0x001ABD10)) callsStep = true;
             if (!opensFrame || !callsStep)
                 throw new IOException($"catPelletFollow.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.XiaoMeleeFlinch)   // the flinch stub sits right after it
-                throw new IOException("catPelletFollow.bin overruns its cave — move ElfCave.XiaoMeleeFlinch/NextFree.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.PropPelletFollow)   // the prop follower sits right after it
+                throw new IOException("catPelletFollow.bin overruns its cave into PropPelletFollow.");
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
         }
@@ -139,8 +139,9 @@ namespace Dark_Cloud_Improved_Version
         // purely from the defender — a window flag (slot*0x20 + 0x60550) and the enemy's live motion frame inside that window's
         // [start, end] — and consults nothing on the attacking entry, so the mod could only zero the windows, which a script
         // re-registers with `_SET_GUARD_FRAME` whenever its label runs. Chest mimics do exactly that (their wake IS a guard, from
-        // our own disc patch), and the 20 Hz crush kept losing the race. The cave takes over the flag load and
-        // reports "no window" when the entry is Xiao's with the cat's kick type (+0x58 == 1, +0x98 == 2).
+        // our own disc patch), and the 20 Hz crush kept losing the race. The guard gate (guard_crush.s → guard_mask.s → this
+        // cave) takes over the flag load: crush-marked entries (the cat's) and the windows the mod switches off pass before here;
+        // this cave keeps the pellet rules (the Matador's charged pellet passes, Dragon's Y's shot gets its kick).
         internal const uint GuardBypassHookAddr = 0x001DAC78;                              // CheckDmg's guard-window load site
         internal const long GuardBypassHookAddrMmu = 0x20000000L + GuardBypassHookAddr;
         private static readonly uint[] GuardBypassPreviousCaves = { 0x01FB2250, 0x01FB3F40, 0x01FB1ED0, 0x01FB40C0, 0x01FB4120 }; // where the cave sat before it moved — an ISO patched then is re-hooked

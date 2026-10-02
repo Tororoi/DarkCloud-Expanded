@@ -7,11 +7,12 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>Babel's Spear — "Curse of Babel": a five-second guard charge raises a giant copy of the spear out of the ground
     /// under the locked-on enemy — following it across the ground while it rises, until the tip strikes it — point up, most of it
     /// still buried. The enemy above it is struck and thrown off it, and it
-    /// and every enemy within <see cref="ConfusionRadius"/> of the spear are CONFUSED for as long as the spear stands
-    /// (<see cref="SpearSeconds"/> plus its fade: the confusion ends when the spear has fully faded), as is any enemy that comes within that radius while it stands (Ungaga locks on from twice as
+    /// and every enemy on the floor are CONFUSED for as long as the spear stands
+    /// (<see cref="SpearSeconds"/> plus its fade: the confusion ends when the spear has fully faded), as is any enemy that appears while it stands (Ungaga locks on from twice as
     /// far while the spear is his — the Mirage's reach, <see cref="Mirage.HoldReach"/>): tinted a light blue, each
-    /// goes after the NEAREST thing inside the area — another enemy, or the player while the player is in it — and its swings
-    /// hurt other enemies; with nothing in the area to go after it wanders. Once risen the spear turns slowly on the spot, and
+    /// goes after the NEAREST thing — another enemy, or the player — and its swings hurt other enemies; with nothing to go after it
+    /// wanders. The wielder's weapon (Ungaga's spear, Super Steve's slingshot) wears the copy's own tint: ramping in over the
+    /// charge, held while the spear stands, fading with it. Once risen the spear turns slowly on the spot, and
     /// fades out over <see cref="FadeSeconds"/> when its time is up.
     ///
     /// The pieces, all data:
@@ -27,8 +28,8 @@ namespace Dark_Cloud_Improved_Version
     ///    kick words pointing away from the spear;
     ///  · confusion rides the Mirage's per-slot target-pointer table (CodeCaves.PtrTable, read by the cold-hosted
     ///    _GET_POSITION / _GET_DISTANCE): a confused slot's entry points at the LIVE position of its target, chosen every tick
-    ///    as the nearest candidate in the confusion area — another live enemy's CCharacter position, or the player global while
-    ///    the player is inside the area — or, with no candidate, at the slot's own wander quadword (CodeCaves.BabelWander), a
+    ///    as the nearest candidate anywhere on the floor — another live enemy's CCharacter position, or the player global — or,
+    ///    with no candidate, at the slot's own wander quadword (CodeCaves.BabelWander), a
     ///    random spot near it renewed every <see cref="WanderSeconds"/> or once reached. The table is owned here while any slot
     ///    is confused (Mirage's loop stands down, <see cref="OwnsTable"/>);
     ///  · friendly fire: each tick, every OPEN attack entry a confused enemy has planted (pool owner = slot·5 + 200, gate words
@@ -56,7 +57,7 @@ namespace Dark_Cloud_Improved_Version
     {
         private const string Tag = "[Babel] ";
         private const int    TickMs           = 50;
-        private const int    GuardChargeMs    = 1000;   // hold the guard this long to summon; not again until the spear has fully faded
+        private const int    GuardChargeMs    = 5000;   // hold the guard pose this long to summon (restarting whenever the pose is left); not again until the spear has fully faded
         private const int    GuardLoopMotion  = 9, GuardMoveMotion = 33;   // the guard-hold poses (the Mirage's; Ungaga's and Xiao's alike)
         private const float  SpearSeconds     = 20f;
         // The beam's KEY windows (c17_beem_s info.cfg) at ShockRate: rise 10–28, loop 28–48, vanish 48–70.
@@ -94,7 +95,6 @@ namespace Dark_Cloud_Improved_Version
         private static float ExposedModelZ => F.ExposedModelZ;
         private static float Exposed       => ExposedModelZ * Scale;   // …in the world's units, at the copy's size
         private const float  Buried           = 4f;     // how far below the ground the tip starts
-        private const float  ConfusionRadius  = 300f;
         private const int    ShellLifeTicks   = 3;      // ticks a planted hit stays before it is withdrawn
         private const int    ShellPoolReserve = 16;     // free pool entries always left to the engine
         private const float  StrikeRadius     = 6f;
@@ -104,6 +104,9 @@ namespace Dark_Cloud_Improved_Version
         // Light blue, as the unit's ambient add (scene ambient ≈ 128 is neutral): kept dim.
         private const float  TintR = 12f, TintG = 50f, TintB = 84f;
         private const float  SpearTint = 50f;           // the copy's own ambient add, neutral grey (brighter, not coloured)
+        private static readonly float[] WeaponTint = { SpearTint, SpearTint, SpearTint };   // the wielder's weapon wears the copy's tint
+        private const string ModelCode = "c10w10";      // Babel's Spear
+        private const uint   BladeFrame = 0x77303163;   // 'c','1','0','w' — its mesh frame
 
         private static BorrowedEffect _shock;
         private static int _shockSlot = -1;   // the sub-shot playing the shockwave (−1 = none)
@@ -175,7 +178,7 @@ namespace Dark_Cloud_Improved_Version
             int ch = Player.CurrentCharacterNum();
             _xiao = ch == Player.XiaoId;
             F = _xiao ? StatueForm : SpearForm;
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"curse of Babel: hold the guard {GuardChargeMs / 1000} s → the copy rises under the target for {SpearSeconds:F0} s; confusion within {ConfusionRadius:F0}");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"curse of Babel: hold the guard {GuardChargeMs / 1000} s → the copy rises under the target for {SpearSeconds:F0} s; every enemy on the floor confused");
             try
             {
                 // Ends the moment the active character changes, a menu open or not (Desert Bloom's reason: the copy's slot was cloned
@@ -200,14 +203,30 @@ namespace Dark_Cloud_Improved_Version
             bool guarding = (Memory.ReadUShort(Addresses.buttonInputs) & (ushort)Button.R1) != 0;
             int  mid = Memory.ReadInt(CCharacter.Base + CCharacter.MotionId);
             bool inPose = guarding && (mid == GuardLoopMotion || mid == GuardMoveMotion);
-            if (!guarding) { _guardLatched = false; _guardSince = default; return; }   // released: a new hold can charge again
-            if (!inPose || _guardLatched) return;
-            if (_up) { _guardSince = default; return; }                                    // cooling down: the spear still stands or fades
-            if (_guardSince == default) { _guardSince = GameClock.Now; return; }
-            if ((GameClock.Now - _guardSince).TotalMilliseconds < GuardChargeMs) return;
+            if (!guarding) { _guardLatched = false; ChargeOff(); return; }                 // released: a new hold can charge again
+            if (_up || _guardLatched) { _guardSince = default; return; }                   // cooling down (the spear still stands or fades), or this hold already summoned
+            if (!inPose) { ChargeOff(); return; }                                          // out of the guard pose (a swing, a hit, the raise): the charge starts again
+            if (_guardSince == default) _guardSince = GameClock.Now;
+            double held = (GameClock.Now - _guardSince).TotalMilliseconds;
+            SetTint((float)Math.Min(1.0, held / GuardChargeMs));                         // the weapon takes the copy's tint as it charges
+            if (held < GuardChargeMs) return;
             _guardLatched = true;
             Player.FlashChargeComplete();
             Summon();
+        }
+
+        /// <summary>A charge dropped: the timer cleared and the weapon's tint off (left alone while the spear is up — it is the spear's).</summary>
+        private static void ChargeOff()
+        {
+            if (_guardSince != default && !_up) SolarBlade.Clear();
+            _guardSince = default;
+        }
+
+        /// <summary>The wielder's weapon tinted toward the copy's own tint: Ungaga's spear, or Super Steve's whole slingshot.</summary>
+        private static void SetTint(float k)
+        {
+            if (_xiao) SolarBlade.Set(k, SolarShot.WeaponModel, 0, 0, WeaponTint);
+            else SolarBlade.Set(k, ModelCode, BladeFrame, 0, WeaponTint);
         }
 
         // ── the spear ──
@@ -223,13 +242,13 @@ namespace Dark_Cloud_Improved_Version
             CopyAlpha(1f);
             _up = true; _summoned = GameClock.Now; _confusionEnd = _summoned.AddSeconds(SpearSeconds + VanishSeconds);   // the confusion outlasts the spear by the vanish: gone when it has fully faded
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the {F.Name} rises at ({_sx:F0},{_sy:F0}) ground {_ground:F0}" + (target >= 0 ? $" under enemy slot {target}" : " ahead of the wielder") + $"; target redirect {(Mirage.Armed ? "armed" : "NOT ARMED — confusion cannot steer")}");
-            Confusion.Configure((_sx, _sy, ConfusionRadius), new[] { TintR, TintG, TintB }, provokes: false, Tag);
+            Confusion.Configure(null, new[] { TintR, TintG, TintB }, provokes: false, Tag);  // the whole floor: no area
             if (target >= 0) Confuse(target);                                                  // the strike waits for the tip to reach it (TipStrike)
-            ConfuseWithinRadius();
+            ConfuseAll();
             ShockStart();
         }
 
-        // ── the shockwave: the confusion area drawn ──
+        // ── the shockwave: the spear's spot marked ──
         private static void ShockStart()
         {
             _shockSlot = -1; _shockKey = -1; _shockRearms = 0;
@@ -287,17 +306,11 @@ namespace Dark_Cloud_Improved_Version
             _shockSlot = -1; _shockKey = -1;
         }
 
-        /// <summary>Every live enemy within ConfusionRadius of the standing spear not yet confused: confused until the spear goes.</summary>
-        private static void ConfuseWithinRadius()
+        /// <summary>Every live enemy on the floor not yet confused (one that spawns while the spear stands too): confused until the spear goes.</summary>
+        private static void ConfuseAll()
         {
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
-            {
-                if (Confusion.IsConfused(s) || !Enemies.IsLive(s)) continue;
-                long p = EnemyAddresses.CharObjects.PosAddr(s);
-                float dx = Memory.ReadFloat(p) - _sx, dy = Memory.ReadFloat(p + 8) - _sy;
-                if (dx * dx + dy * dy > ConfusionRadius * ConfusionRadius) continue;
-                Confuse(s);
-            }
+                if (!Confusion.IsConfused(s) && Enemies.IsLive(s)) Confuse(s);
         }
 
         /// <summary>The locked-on enemy, else the nearest live one within reach; its root's position and ground height out. −1
@@ -369,7 +382,7 @@ namespace Dark_Cloud_Improved_Version
             _fadeK = age < fadeAt ? 1f : (float)Math.Max(0.0, 1.0 - (age - fadeAt) / FadeSeconds);
             CopyAlpha(_fadeK);                                                                                // the confused enemies' tint fades with it (DriveConfusion)
             if (_risen) SpinContacts(age);
-            ConfuseWithinRadius();                                                                           // through the fade too: the confusion lasts until the spear has fully faded
+            ConfuseAll();                                                                                    // through the fade too: the confusion lasts until the spear has fully faded
         }
 
         private static void TakeDown()
@@ -380,6 +393,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
             Memory.WriteInt(CodeCaves.SpearBlock + CodeCaves.SpearBlockFlag, 0);                     // passable again
             CopyDespawn();
+            SolarBlade.Clear();                                                                       // the weapon's tint goes with the copy
             _up = false;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the spear sinks away");
         }
@@ -525,6 +539,7 @@ namespace Dark_Cloud_Improved_Version
         {
             Confusion.MoveArea(_sx, _sy);
             Confusion.TintScale = _fadeK;                                                    // the confused enemies' tint fades with the spear
+            if (_up) SetTint(_fadeK);                                                        // …and the weapon's with the copy
             Confusion.Tick();
             RetireShells();
         }
@@ -548,6 +563,7 @@ namespace Dark_Cloud_Improved_Version
             TakeDown();
             { long pool = CollisionPool.Resolve(); foreach (var (idx, _) in _shells) if (pool != 0) { Memory.WriteInt(pool + idx * CollisionPool.Stride + CodeCaves.NoDrainMarkOff, 0); CollisionPool.Deactivate(pool, idx); } _shells.Clear(); }
             Confusion.End();
+            SolarBlade.Clear();
             _guardLatched = false; _guardSince = default;
         }
     }

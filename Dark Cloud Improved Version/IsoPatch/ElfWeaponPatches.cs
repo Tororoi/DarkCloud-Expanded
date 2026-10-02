@@ -649,13 +649,13 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The GUARD CRUSH cave (tools/stubs/guard_crush.s, see CodeCaves.DebugInfoCave.GuardCrush): CheckDmg's guard-window hook
-        /// (main 0x1DAC78, ElfCatPatches.PatchCatGuardBypass's site) is re-aimed here; the cave goes on to the cat's.</summary>
+        /// (main 0x1DAC78, ElfCatPatches.PatchCatGuardBypass's site) is re-aimed here; the cave goes on to the guard-mask cave, then the cat's.</summary>
         internal static void PatchGuardCrush(FileStream fs, Func<uint, long> ElfOff)
         {
             uint cave = CodeCaves.DebugInfoCave.GuardCrush;
             byte[] b = Embedded("guardCrush.bin");
-            if (b.Length % 4 != 0 || U32(b, 0) != 0x8F819DF0u || U32(b, 40) != MipsAsm.J(CodeCaves.DunCave.CatGuardBypass))
-                throw new IOException($"guardCrush.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (b.Length % 4 != 0 || U32(b, 0) != 0x8F819DF0u || U32(b, 40) != MipsAsm.J(CodeCaves.DebugInfoCave.GuardMask))
+                throw new IOException($"guardCrush.bin malformed ({b.Length} B) or stale — reassemble its .s (it goes on to the guard-mask cave).");
             if (cave + (uint)b.Length > CodeCaves.DebugInfoCave.Follow)
                 throw new IOException("guardCrush.bin runs into the follow cave.");
             for (int i = 0; i < b.Length; i += 4) WrU32(fs, ElfOff(cave + (uint)i), U32(b, i));
@@ -663,6 +663,32 @@ namespace Dark_Cloud_Improved_Version
             if (cur != MipsAsm.J(CodeCaves.DunCave.CatGuardBypass) && cur != MipsAsm.J(cave) && cur != MipsAsm.J(CodeCaves.DebugIfCave.GuardCrushFirst) || RdU32(fs, ElfOff(site + 4)) != 0)
                 throw new IOException($"The guard-window hook 0x{site:X} is not the cat cave's — PatchCatGuardBypass must run first.");
             WrU32(fs, ElfOff(site), MipsAsm.J(cave));
+        }
+
+        /// <summary>Every engine-made damage entry starts with no mark at +0x9C. `CCollisionData::Set` (0x1B57A0) fills an entry's fields
+        /// but never +0x9C, so a mark planted on an entry (the cat's crush mark, which the cat cave stamps after its Set) stayed when
+        /// the engine reused the entry — a plain pellet planted there next passed every guard. Set writes +0x20 twice in a row
+        /// (`sw zero,0x20(a1)` then `sw a0,0x20(a1)` = 1.0), so the first, dead store is pointed at +0x9C instead.</summary>
+        internal static void PatchSetClearsMark(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Site = 0x001B5858, Vanilla = 0xACA00020u, Patched = 0xACA00000u | (uint)CodeCaves.NoDrainMarkOff;   // sw zero,0x20(a1) → sw zero,0x9C(a1)
+            uint cur = RdU32(fs, ElfOff(Site));
+            if (cur != Vanilla && cur != Patched || RdU32(fs, ElfOff(Site + 4)) != 0xACA40020u)
+                throw new IOException($"CCollisionData::Set at 0x{Site:X} is not vanilla (`sw zero,0x20(a1); sw a0,0x20(a1)`) — unmodified Dark Cloud (USA) ISO expected.");
+            WrU32(fs, ElfOff(Site), Patched);
+        }
+
+        /// <summary>The GUARD MASK cave (tools/stubs/guard_mask.s, see CodeCaves.DebugInfoCave.GuardMask): the guard gate's second link,
+        /// entered from the guard-crush cave, leaving for the cat's guard-bypass cave.</summary>
+        internal static void PatchGuardMask(FileStream fs, Func<uint, long> ElfOff)
+        {
+            uint cave = CodeCaves.DebugInfoCave.GuardMask;
+            byte[] b = Embedded("guardMask.bin");
+            if (b.Length % 4 != 0 || U32(b, 0) != 0x3C0101DFu || U32(b, 44) != MipsAsm.J(CodeCaves.DunCave.CatGuardBypass))
+                throw new IOException($"guardMask.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (cave + (uint)b.Length > CodeCaves.DebugInfoCave.AutoGuardMatch)
+                throw new IOException("guardMask.bin runs into the auto-guard cave.");
+            for (int i = 0; i < b.Length; i += 4) WrU32(fs, ElfOff(cave + (uint)i), U32(b, i));
         }
 
         /// <summary>The FOLLOW cave (tools/stubs/follow.s, see CodeCaves.DebugInfoCave.Follow): entered from the fall-drive cave's exit,

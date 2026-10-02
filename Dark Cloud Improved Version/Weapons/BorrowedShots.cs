@@ -73,6 +73,8 @@ namespace Dark_Cloud_Improved_Version
         private static BorrowedEffect _seeded;    // the effect in the block, as the provider gave it (null = none)
         private static readonly Dictionary<string, BorrowedEffect> _effects = new Dictionary<string, BorrowedEffect>();   // TableConfig/CustomConfig results, by key
         private static int _lastState = -3;        // the state word last logged
+        private static DateTime _waitingSince;     // when the seeded effect was first seen waiting (state 0) on this floor
+        private const double EntryRetrySeconds = 2.0;   // a request the cave has not answered by then is made again
         private static int _lastFloor = -1;        // checkFloor last seen in a floor: a change → magic restored (retry after a quiet floor)
         private static bool _wasInFloor;
         private static System.Threading.Thread _thread;
@@ -109,6 +111,21 @@ namespace Dark_Cloud_Improved_Version
                     _wasInFloor = inFloor; _lastFloor = floor;
                     WatchDonorPools();
                     int state = Memory.ReadInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotState);
+                    // A request made while the game reloads the character (an ally switch, a menu) can go unanswered: the cave
+                    // runs in the dungeon step loop, and nothing asked again until the next floor. Asked again after a while.
+                    if (_seeded != null && inFloor && state == 0 && !Player.CheckDunIsPausedOrMenu())
+                    {
+                        if (_waitingSince == default) _waitingSince = GameClock.Now;
+                        else if ((GameClock.Now - _waitingSince).TotalSeconds >= EntryRetrySeconds)
+                        {
+                            uint magic = Memory.ReadUInt(CodeCaves.BorrowedShotBlock);
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{_seeded.Name} still not entered after {EntryRetrySeconds:F0} s (magic 0x{magic:X8}{(magic == CodeCaves.BorrowedShotMagic ? "" : magic == 0 ? ", dropped" : ", OVERWRITTEN")}) — the whole request written again");
+                            var again = _seeded; _seeded = null;
+                            Seed(again);                                                   // config, path, reserve, instance, state and magic: never the tag alone over a block something else may have written
+                            _waitingSince = GameClock.Now;
+                        }
+                    }
+                    else _waitingSince = default;
                     if (_seeded != null && inFloor && state != _lastState)
                     {
                         _lastState = state;

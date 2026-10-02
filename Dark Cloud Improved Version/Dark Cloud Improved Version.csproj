@@ -46,6 +46,9 @@
     <EmbeddedResource Include="Resources\isoPatch\guardCrush.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.guardCrush.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\guardMask.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.guardMask.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\follow.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.follow.bin</LogicalName>
     </EmbeddedResource>
