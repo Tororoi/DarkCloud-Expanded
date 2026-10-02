@@ -502,11 +502,11 @@ namespace Dark_Cloud_Improved_Version
                     bool caught = false;
                     foreach (var hp in hands) if (SphereEdge3D(s, hp) <= HandReach) { caught = true; break; }
                     if (!caught) continue;
-                    Hit(s, SpikeShare, 0f, "caught by Steve's hand", drains: false);
+                    Hit(s, SpikeShare, Baselard.HalfKickStrength, "caught by Steve's hand", drains: false, kickDecay: Baselard.KickDecay);   // thrown off, half the Baselard's distance
                     continue;
                 }
                 if (BigBang.NearestHitSphereEdge(s, a, _sx, _sy) > BlockRadius + SpikeReach) continue;
-                Hit(s, SpikeShare, 0f, "spike caught", drains: false);
+                Hit(s, SpikeShare, Baselard.HalfKickStrength, "spike caught", drains: false, kickDecay: Baselard.KickDecay);
             }
         }
 
@@ -690,8 +690,10 @@ namespace Dark_Cloud_Improved_Version
         /// flying sub-shot fired by a confused slot (the firing slot is OffA060, stamped by SetUserID2) is swept along the path it
         /// moved since the last tick against every other live enemy's hit spheres, widened by the shot's flying radius. On contact a
         /// hit is planted on the victim — the shot's damage, the config's reaction and element, its statuses applied as data (owner
-        /// −1, as the swings' friendly fire; the element and statuses as the Angel Gear's reflected shots carry them) — and the shot's
-        /// flight ended there (its wait zeroed: the impact plays next frame), its damage latch held so the burst cannot reach the player.</summary>
+        /// −1, as the swings' friendly fire; the element and statuses as the Angel Gear's reflected shots carry them) — and the shot
+        /// put where its path met the enemy and taken through the engine's own CONTACT (<see cref="Contact"/>: its impact motion, or a
+        /// bomb's detonation; a timeout instead — its wait zeroed — leads to the expiry phase, which most shots lack, and they simply
+        /// vanished). Its burst plants its own damage as it would anywhere (the player is not sheltered by the confusion).</summary>
         private static void ShotHits()
         {
             uint packG = Memory.ReadUInt(ShotEffectPack.NowShotEffectPtr);
@@ -718,7 +720,7 @@ namespace Dark_Cloud_Improved_Version
                     for (int v = 0; v < EnemyAddresses.FloorSlots.Count; v++)
                     {
                         if (v == owner || !Enemies.IsLive(v)) continue;
-                        if (SegmentEdge3D(v, from, now) > reach) continue;
+                        if (SegmentEdge3D(v, from, now, out var at) > reach) continue;
                         if (pool == 0 || CollisionPool.FreeCount(pool) <= ShellPoolReserve) return;
                         int idx = CollisionPool.TakeFreeSlot(pool);
                         if (idx < 0) return;
@@ -736,8 +738,9 @@ namespace Dark_Cloud_Improved_Version
                         string statusNote = stat != 0 ? AngelGear.ApplyReflectedStatus(v, stat) : "";
                         CollisionPool.Plant(pool, idx, hit);
                         _shells.Add((idx, ShellLifeTicks));
-                        Memory.WriteByte  (fx + ShotEffectPack.OffLatch + i, ShotLatchHold);              // its burst plants nothing on the player
-                        Memory.WriteInt   (fx + ShotEffectPack.OffWait + i * 4, 0);                       // flight ends next frame, there (the Angel Gear's way)
+                        long obj = fx + ShotEffectPack.OffObj + (long)i * ShotEffectPack.ObjStride;
+                        Memory.WriteVec3(obj + ShotEffectPack.ObjPos, at.x, at.h, at.y);                    // the burst where the path met the enemy
+                        Contact(fx, cfg, i, obj);
                         _shotLast.Remove(key);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"enemy slot {owner}'s shot hits enemy slot {v} for {damage} before defence (entry {idx}){statusNote}");
                         break;
@@ -746,12 +749,44 @@ namespace Dark_Cloud_Improved_Version
             }
         }
         private static readonly Dictionary<int, (float x, float h, float y)> _shotLast = new();   // each tracked sub-shot's position last tick
-        private const byte ShotLatchHold = 0xFF;   // frames the burst's damage stays disarmed
+        /// <summary>The engine's own contact, as Step__12CSHOT_EFFECT (0x1AC180) does it when checkCollision meets something in flight:
+        /// phase 2 and its KEY from the config's phase table (+0x4C). No impact KEY: the shot is put out — and a bomb-type config
+        /// (+0x54 == 100) detonates, SetBombEffect(size +0x58, the position, the config's victim mask +0x48, +0x5C) — as it would
+        /// have anywhere: the confusion gives the summoner no shelter from it. An impact KEY: the shot's object restarts on it (its
+        /// first frame from the object's frame table, motion flags 6, the KEY's own rate) and its velocity becomes the phase's
+        /// speed (+0x18 + phase × 4). The phase is written last.</summary>
+        private static void Contact(long fx, long cfg, int i, long obj)
+        {
+            const int Phase = 2, CfgPhaseKeys = 0x4C, CfgPhaseSpeeds = 0x18, CfgBombKind = 0x54, CfgBombSize = 0x58, CfgBombArg = 0x5C, BombKind = 100;
+            uint SetBombEffect = 0x001D5940;
+            short key = Memory.ReadShort(cfg + CfgPhaseKeys + Phase * 2);
+            if (key == -1)
+            {
+                Memory.WriteUShort(fx + ShotEffectPack.OffPhase + i * 2, Phase);
+                Memory.WriteUShort(fx + ShotEffectPack.OffActive + i * 2, 0);
+                if (Memory.ReadShort(cfg + CfgBombKind) == BombKind)
+                    NativeCall.Invoke(SetBombEffect, out _, (uint)(obj + ShotEffectPack.ObjPos - 0x20000000L), (uint)Memory.ReadInt(cfg + ShotEffectPack.CfgVictimMask), (uint)Memory.ReadInt(cfg + CfgBombArg),
+                                      f12: Memory.ReadFloat(cfg + CfgBombSize));
+                return;
+            }
+            uint table = Memory.ReadGuestPtr(obj + ShotEffectPack.ObjFrameTb);
+            if (Memory.IsValidGuest(table)) Memory.WriteFloat(obj + ShotEffectPack.ObjFrame, Memory.ReadInt(Memory.ToMmu(table) + key * 0x10));
+            Memory.WriteInt  (obj + ShotEffectPack.ObjMotId, key);
+            Memory.WriteInt  (obj + ShotEffectPack.ObjMotFlag, 6);
+            Memory.WriteFloat(obj + ShotEffectPack.ObjMotSpd, -1f);
+            long d = fx + ShotEffectPack.OffDir + i * 0x10;
+            float dx = Memory.ReadFloat(d), dh = Memory.ReadFloat(d + 4), dy = Memory.ReadFloat(d + 8), len = (float)Math.Sqrt(dx * dx + dh * dh + dy * dy);
+            float speed = Memory.ReadFloat(cfg + CfgPhaseSpeeds + Phase * 4);
+            if (len > 1e-6f) Memory.WriteVec3(d, dx / len * speed, dh / len * speed, dy / len * speed);
+            Memory.WriteUShort(fx + ShotEffectPack.OffPhase + i * 2, Phase);
+        }
 
         /// <summary>How near the segment <paramref name="a"/>→<paramref name="b"/> comes to an enemy's body: the least distance from it
-        /// to the surface of any of the enemy's active hit spheres placed this frame (SphereEdge3D's spheres). MaxValue with none.</summary>
-        private static float SegmentEdge3D(int slot, (float x, float h, float y) a, (float x, float h, float y) b)
+        /// to the surface of any of the enemy's active hit spheres placed this frame (SphereEdge3D's spheres), and the segment's point
+        /// there (<paramref name="at"/>). MaxValue with none.</summary>
+        private static float SegmentEdge3D(int slot, (float x, float h, float y) a, (float x, float h, float y) b, out (float x, float h, float y) at)
         {
+            at = b;
             long bc = BodyCollision.SlotBase(slot), up = EnemyAddresses.CharObjects.PosAddr(slot);
             float ux = Memory.ReadFloat(up), uy = Memory.ReadFloat(up + 8), best = float.MaxValue;
             float dx = b.x - a.x, dh = b.h - a.h, dy = b.y - a.y, len2 = dx * dx + dh * dh + dy * dy;
@@ -762,8 +797,9 @@ namespace Dark_Cloud_Improved_Version
                 float cx = Memory.ReadFloat(c), ch = Memory.ReadFloat(c + 4), cy = Memory.ReadFloat(c + 8);
                 if (Math.Abs(cx - ux) > 80f || Math.Abs(cy - uy) > 80f) continue;
                 float t = len2 > 1e-6f ? Math.Clamp(((cx - a.x) * dx + (ch - a.h) * dh + (cy - a.y) * dy) / len2, 0f, 1f) : 0f;
-                float px = a.x + dx * t - cx, ph = a.h + dh * t - ch, py = a.y + dy * t - cy;
-                best = Math.Min(best, (float)Math.Sqrt(px * px + ph * ph + py * py) - Memory.ReadFloat(bc + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride));
+                float qx = a.x + dx * t, qh = a.h + dh * t, qy = a.y + dy * t, px = qx - cx, ph = qh - ch, py = qy - cy;
+                float edge = (float)Math.Sqrt(px * px + ph * ph + py * py) - Memory.ReadFloat(bc + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride);
+                if (edge < best) { best = edge; at = (qx, qh, qy); }
             }
             return best;
         }

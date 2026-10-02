@@ -15,7 +15,7 @@ namespace Dark_Cloud_Improved_Version
     /// cave's ease on the engine's frames), then grows linearly to <see cref="PeakScale"/>× by frame <see cref="FxPeakFrame"/> and
     /// settles back to <see cref="Scale"/>× by frame <see cref="FxRisenFrame"/> (a touch of squash and stretch), its root moved with the scale so the same length of it stays out and its base on the spot. It stands without turning, is
     /// solid to enemies, the player and enemy shots (the spear-block caves, <see cref="BlockRadius"/>), and every enemy touching it takes
-    /// Babel's spike rate — a sixth of the weapon's attack every <see cref="HitSeconds"/>, no throw, no weapon HP. It stands
+    /// Babel's spike rate — a sixth of the weapon's attack every <see cref="HitSeconds"/>, thrown off to half the Baselard's distance, no weapon HP. It stands
     /// <see cref="StandSeconds"/> from the summon, then fades out over <see cref="FadeSeconds"/> (solid and hurting until gone).
     ///
     /// The copy is <see cref="BladeProp"/>'s (untinted: it draws in the room's own light), in one of two <see cref="Form"/>s:
@@ -272,7 +272,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (CodeCaves.SpearBlock + CodeCaves.SpearBlockFlag, 1);
         }
 
-        /// <summary>One player-hit sphere on a touching enemy's body at a sixth of the weapon's attack, no throw, marked so the
+        /// <summary>One player-hit sphere on a touching enemy's body at a sixth of the weapon's attack, thrown away from the cactus to half
+        /// the Baselard's distance (Baselard.HalfKickStrength), marked so the
         /// ISO's no-drain caves bill no weapon HP for it (Babel's spike).</summary>
         private static void Hit(int slot)
         {
@@ -283,6 +284,10 @@ namespace Dark_Cloud_Improved_Version
             BigBang.BodyCentre(slot, EnemyAddresses.FloorSlots.SlotAddr(slot, 0), out float cx, out float ch, out float cy, out float cr);
             int attack = Math.Max(1, (int)Math.Round(Memory.ReadUShort(WeaponHave.BattleWeaponRecord + WeaponHave.EffAttackOffset) * HitShare));
             byte[] e = CollisionPool.PlayerHitEntry(cx, ch, cy, Math.Max(HitRadius, cr), attack, 0);
+            void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
+            F(0x80, _sx); F(0x84, _ground); F(0x88, _sy);                                   // thrown away from the cactus…
+            F(0x90, Baselard.HalfKickStrength); F(0x94, Baselard.KickDecay);                 // …half the Baselard's distance
+            BitConverter.GetBytes(2).CopyTo(e, 0x98);                                         // kick type 2: away from that point
             BitConverter.GetBytes(CodeCaves.NoDrainMark).CopyTo(e, CodeCaves.NoDrainMarkOff);
             CollisionPool.Plant(pool, idx, e);
             _shells.Add((idx, ShellLifeTicks));

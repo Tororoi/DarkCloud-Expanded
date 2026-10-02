@@ -15,6 +15,9 @@ namespace Dark_Cloud_Improved_Version
         // the same fade is a strength of 3.5 / √3 (the distance goes with the square of it).
         internal const float KickStrength = 2.02f;    // ≈ 17 units (the Claymore, and both spheres, throw with the same)
         internal const float KickDecay    = 0.12f;     // the blast's own fade: the throw reads the same, only shorter
+        /// <summary>A throw to HALF the Baselard's distance at its fade (distance ≈ force² / (2·decay), so force ÷ √2): Babel's Spear's
+        /// spikes and hands, the Cactus's prick.</summary>
+        internal static readonly float HalfKickStrength = KickStrength / MathF.Sqrt(2f);   // ≈ 1.43, ≈ 8.5 units
         private const int   TickMs       = 100;
 
         public static void HeavyHandEffect()
