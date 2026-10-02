@@ -62,3 +62,17 @@ spin. (The skinned mesh node's own world matrix is not kept current for the copy
 point, 8 out along the slingshot's length.) The catch is 3D: the hand's distance to the surface of the nearest active hit sphere.
 
 Super Steve's solid column is radius 2 (its feet, 0.46 from the centre at 1×, × 4) — the spear's is 8. The player is held at r + 6, an enemy at r + its own move radius, an enemy shot at r + its radius.
+
+## Friendly fire — shots
+
+The engine tests a monster shot (a sub-shot of the shot pack at `*NowShotEffect`) against the player alone (the config's victim
+mask), so a confused enemy's shot flew straight through the enemy it was aimed at. `BabelsSpear.ShotHits` (every confusion tick
+while any enemy is confused): each live flying sub-shot (phase ≤ 1) whose firing slot (`OffA060`, stamped by `SetUserID2`) is
+confused is swept along the path it moved since the last tick (positions kept per pack slot × sub-shot — a 50 ms tick spans
+several frames of flight) against every other live enemy's active hit spheres, widened by the config's flying radius (+0x2C). On
+contact: a hit entry on the victim's body — the shot's damage (`OffDamage`), the config's reaction (+0x44), owner −1 (damage −
+defence, no weapon, no drain, no credit); its element and statuses as the Angel Gear's reflected shots carry them (+0x50 one pure
+element bit, 0 when the shot has status bits; poison / freeze / gooey applied by data, `AngelGear.ApplyReflectedStatus`) — and the
+shot's flight ended there (`OffWait` = 0: the impact plays next frame) with its damage latch held (`OffLatch` = 0xFF) so the burst
+cannot reach the player.
+

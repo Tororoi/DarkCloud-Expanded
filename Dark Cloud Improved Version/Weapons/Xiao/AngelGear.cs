@@ -79,7 +79,7 @@ namespace Dark_Cloud_Improved_Version
         // and CMonstorUnit::CheckDmg does defense, anti-category, resistance, No Effect, statuses, numbers.
         private const long   BattleWeaponAttack  = WeaponHave.BattleWeaponRecord + 0x04;   // short (BattleActionPlay_Jinn's pellet damage)
         private const float  TierDivisor = 14f;
-        private const uint   ShotElementMask = 0x1F, ShotEnemyStatusMask = 0x100 | 0x200 | 0x800;
+        internal const uint  ShotElementMask = 0x1F, ShotEnemyStatusMask = 0x100 | 0x200 | 0x800;
         private const float  HitMargin = 4f;                                              // contact slack + planted-entry reach
         private const int    PlantedLifeTicks = 2;                                       // retire an unconsumed entry
         private const int    ReflectMaxTicks = 260;                                      // give up tracking (FreshTimers + slack)
@@ -925,7 +925,7 @@ namespace Dark_Cloud_Improved_Version
         /// species susceptibility (0 = immune); poison 180 f unless frozen/raging (clears gooey); freeze 300 f
         /// (toggles OFF if already frozen; clears the others and the move blend); gooey 180 f only when no
         /// other status is up. Curse (0x400) and 0x1000 do nothing to enemies, as in vanilla.</summary>
-        private static string ApplyReflectedStatus(int slot, uint stat)
+        internal static string ApplyReflectedStatus(int slot, uint stat)
         {
             long a = EnemyAddresses.FloorSlots.SlotAddr(slot, 0);
             if (Memory.ReadShort(a + EnemySlotOffsets.StatusSusceptibility) == 0) return " status: immune";

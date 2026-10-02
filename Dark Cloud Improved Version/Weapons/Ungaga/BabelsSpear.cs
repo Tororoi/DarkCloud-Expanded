@@ -609,7 +609,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteVec3(EnemyAddresses.CharObjects.CharAddr(s) + CCharacter.CharaTint, TintR * _fadeK, TintG * _fadeK, TintB * _fadeK);
             }
             RetireShells();
-            if (any) ContactHits();
+            if (any) { ContactHits(); ShotHits(); } else _shotLast.Clear();
             OwnsTable = any && Mirage.Armed;
             if (any && (GameClock.Now - _lastReport).TotalSeconds >= 1) { _lastReport = GameClock.Now; Report(); }
         }
@@ -683,6 +683,89 @@ namespace Dark_Cloud_Improved_Version
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"enemy slot {attacker}'s swing lands on enemy slot {v} for {damage} before defence (entry {idx})");
                 }
             }
+        }
+
+        /// <summary>A confused enemy's SHOT reaching another enemy (the engine tests the monster shot pack's sub-shots against the
+        /// player alone — the config's victim mask — so they flew straight through the enemy they were aimed at): each tick, every live
+        /// flying sub-shot fired by a confused slot (the firing slot is OffA060, stamped by SetUserID2) is swept along the path it
+        /// moved since the last tick against every other live enemy's hit spheres, widened by the shot's flying radius. On contact a
+        /// hit is planted on the victim — the shot's damage, the config's reaction and element, its statuses applied as data (owner
+        /// −1, as the swings' friendly fire; the element and statuses as the Angel Gear's reflected shots carry them) — and the shot's
+        /// flight ended there (its wait zeroed: the impact plays next frame), its damage latch held so the burst cannot reach the player.</summary>
+        private static void ShotHits()
+        {
+            uint packG = Memory.ReadUInt(ShotEffectPack.NowShotEffectPtr);
+            if (!Memory.IsValidGuest(packG)) return;
+            long pack = Memory.ToMmu(packG);
+            long pool = CollisionPool.Resolve();
+            for (int p = 0; p < ShotEffectPack.PackSlots; p++)
+            {
+                long fx = pack + (long)p * ShotEffectPack.SlotStride;
+                uint cfgG = Memory.ReadUInt(fx + ShotEffectPack.OffCfg);
+                if (!Memory.IsValidGuest(cfgG)) continue;
+                long cfg = Memory.ToMmu(cfgG);
+                for (int i = 0; i < ShotEffectPack.SubShots; i++)
+                {
+                    int key = p * ShotEffectPack.SubShots + i;
+                    bool live = Memory.ReadUShort(fx + ShotEffectPack.OffActive + i * 2) != 0 && Memory.ReadUShort(fx + ShotEffectPack.OffPhase + i * 2) <= 1;
+                    int owner = Memory.ReadShort(fx + ShotEffectPack.OffA060 + i * 2);
+                    if (!live || owner < 0 || owner >= EnemyAddresses.FloorSlots.Count || !Confused(owner)) { _shotLast.Remove(key); continue; }
+                    long o = fx + ShotEffectPack.OffObj + (long)i * ShotEffectPack.ObjStride + ShotEffectPack.ObjPos;
+                    var now = (Memory.ReadFloat(o), Memory.ReadFloat(o + 4), Memory.ReadFloat(o + 8));
+                    var from = _shotLast.TryGetValue(key, out var was) ? was : now;
+                    _shotLast[key] = now;
+                    float reach = Math.Max(1f, Memory.ReadFloat(cfg + ShotEffectPack.CfgRadiusFlying));
+                    for (int v = 0; v < EnemyAddresses.FloorSlots.Count; v++)
+                    {
+                        if (v == owner || !Enemies.IsLive(v)) continue;
+                        if (SegmentEdge3D(v, from, now) > reach) continue;
+                        if (pool == 0 || CollisionPool.FreeCount(pool) <= ShellPoolReserve) return;
+                        int idx = CollisionPool.TakeFreeSlot(pool);
+                        if (idx < 0) return;
+                        int damage = Math.Max(1, Memory.ReadInt(fx + ShotEffectPack.OffDamage + i * 4));
+                        BigBang.BodyCentre(v, EnemyAddresses.FloorSlots.SlotAddr(v, 0), out float cx, out float ch, out float cy, out _);
+                        byte[] hit = CollisionPool.PlayerHitEntry(cx, ch, cy, ContactRadius, damage, 0);
+                        void I(int off, int val) => BitConverter.GetBytes(val).CopyTo(hit, off);
+                        I(CollisionPool.Owner, -1); I(0x60, -1); I(0x64, 0); I(0x68, -1); I(0x6C, 0);    // nobody's: damage − defence, no weapon, no drain, no credit
+                        I(0x4C, Memory.ReadInt(cfg + ShotEffectPack.CfgReaction));                        // the shot's reaction
+                        // Its element as the Angel Gear's reflected shots carry it: +0x50 a PURE element bit (a status bit there sends CheckDmg's
+                        // element branch through the wrong column), the statuses applied as data with CheckDmg's own rules.
+                        uint flags = Memory.ReadUInt(cfg + ShotEffectPack.CfgFlags);
+                        uint elem = flags & AngelGear.ShotElementMask, stat = flags & AngelGear.ShotEnemyStatusMask;
+                        I(CollisionPool.Element, (int)(elem != 0 && (flags & 0xFF00) == 0 ? elem : 0u));
+                        string statusNote = stat != 0 ? AngelGear.ApplyReflectedStatus(v, stat) : "";
+                        CollisionPool.Plant(pool, idx, hit);
+                        _shells.Add((idx, ShellLifeTicks));
+                        Memory.WriteByte  (fx + ShotEffectPack.OffLatch + i, ShotLatchHold);              // its burst plants nothing on the player
+                        Memory.WriteInt   (fx + ShotEffectPack.OffWait + i * 4, 0);                       // flight ends next frame, there (the Angel Gear's way)
+                        _shotLast.Remove(key);
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"enemy slot {owner}'s shot hits enemy slot {v} for {damage} before defence (entry {idx}){statusNote}");
+                        break;
+                    }
+                }
+            }
+        }
+        private static readonly Dictionary<int, (float x, float h, float y)> _shotLast = new();   // each tracked sub-shot's position last tick
+        private const byte ShotLatchHold = 0xFF;   // frames the burst's damage stays disarmed
+
+        /// <summary>How near the segment <paramref name="a"/>→<paramref name="b"/> comes to an enemy's body: the least distance from it
+        /// to the surface of any of the enemy's active hit spheres placed this frame (SphereEdge3D's spheres). MaxValue with none.</summary>
+        private static float SegmentEdge3D(int slot, (float x, float h, float y) a, (float x, float h, float y) b)
+        {
+            long bc = BodyCollision.SlotBase(slot), up = EnemyAddresses.CharObjects.PosAddr(slot);
+            float ux = Memory.ReadFloat(up), uy = Memory.ReadFloat(up + 8), best = float.MaxValue;
+            float dx = b.x - a.x, dh = b.h - a.h, dy = b.y - a.y, len2 = dx * dx + dh * dh + dy * dy;
+            for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
+            {
+                if (Memory.ReadInt(bc + BodyCollision.ActiveArray + part * BodyCollision.BodyPartStride) == 0) continue;
+                long c = bc + BodyCollision.CentreArray + part * BodyCollision.CentreStride;
+                float cx = Memory.ReadFloat(c), ch = Memory.ReadFloat(c + 4), cy = Memory.ReadFloat(c + 8);
+                if (Math.Abs(cx - ux) > 80f || Math.Abs(cy - uy) > 80f) continue;
+                float t = len2 > 1e-6f ? Math.Clamp(((cx - a.x) * dx + (ch - a.h) * dh + (cy - a.y) * dy) / len2, 0f, 1f) : 0f;
+                float px = a.x + dx * t - cx, ph = a.h + dh * t - ch, py = a.y + dy * t - cy;
+                best = Math.Min(best, (float)Math.Sqrt(px * px + ph * ph + py * py) - Memory.ReadFloat(bc + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride));
+            }
+            return best;
         }
 
         /// <summary>Planted hits the engine has not consumed within their life are withdrawn.</summary>
