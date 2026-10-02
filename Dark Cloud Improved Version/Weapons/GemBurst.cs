@@ -39,6 +39,7 @@ namespace Dark_Cloud_Improved_Version
                                   int damage = 0, float colRadius = 0f, float speedMult = 1f,
                                   int elementBits = -1)
         {
+            if (GemLanes.Owns(element)) return false;   // the slot holds another effect (GemLanes): its sub-shots are not the gem's
             long slot = MasekiEffect.Slot(element);
             long desc = MasekiEffect.Desc(element);
 

@@ -328,7 +328,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The species' authored height over its root (EnemySpecies HeightFromRoot, 15 where none), scaled with the unit — the
         /// top of its head.</summary>
-        private static float HeadHeight(int slot)
+        internal static float HeadHeight(int slot)
         {
             ushort eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.EnemySpeciesId));
             float height = EnemySpecies.Defaults.TryGetValue(eid, out var def) && def.HeightFromRoot.HasValue ? def.HeightFromRoot.Value : 15f;
@@ -734,7 +734,7 @@ namespace Dark_Cloud_Improved_Version
             StarsRestart();
             // Carried with the enemy by the ENGINE (the follow cave, every frame): its root's position plus the lift, into the sub-shot's
             // position, which the draw pushes into the stars' root.
-            long fo = CodeCaves.Follow;
+            long fo = CodeCaves.FollowTable;                                               // entry 0: the nut's one bonked enemy
             Memory.WriteUInt (fo + CodeCaves.FollowSrc, 0);
             Memory.WriteUInt (fo + CodeCaves.FollowDst, (uint)(StarsObj + ShotEffectPack.ObjPos - 0x20000000L));
             Memory.WriteVec3 (fo + CodeCaves.FollowOff, 0f, h - Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(slot) + 4), 0f);
@@ -779,7 +779,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static void StarsStop()
         {
-            Memory.WriteUInt(CodeCaves.Follow + CodeCaves.FollowSrc, 0);                     // no longer carried
+            Memory.WriteUInt(CodeCaves.FollowTable + CodeCaves.FollowSrc, 0);                   // no longer carried
             if (_starSub < 0 || _stars == null) return;
             Memory.WriteUShort(_stars.Instance + ShotEffectPack.OffActive + _starSub * 2, 0);
             Memory.WriteInt(CodeCaves.SecondEffectLive, 0);

@@ -185,6 +185,8 @@ namespace Dark_Cloud_Improved_Version
                 // from this character's objects, which an ally switch reloads under it; a sphere keeps Wielded() true across it).
                 while (Wielded() && Player.InDungeonFloor() && Player.CurrentCharacterNum() == ch)
                 {
+                    var stars = ConfusionStars.Effect();
+                    if (stars != null) GemLanes.Want(stars);                                    // the stars kept entered in two idle gem slots, ready before the spear rises
                     if (!Player.CheckDunIsPausedOrMenu())
                     {
                         Charge();
@@ -393,6 +395,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
             Memory.WriteInt(CodeCaves.SpearBlock + CodeCaves.SpearBlockFlag, 0);                     // passable again
             CopyDespawn();
+            ConfusionStars.StopAll();
             SolarBlade.Clear();                                                                       // the weapon's tint goes with the copy
             _up = false;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the spear sinks away");
@@ -540,6 +543,7 @@ namespace Dark_Cloud_Improved_Version
             Confusion.MoveArea(_sx, _sy);
             Confusion.TintScale = _fadeK;                                                    // the confused enemies' tint fades with the spear
             if (_up) SetTint(_fadeK);                                                        // …and the weapon's with the copy
+            ConfusionStars.Drive(Confusion.IsConfused, _fadeK);                              // the stars over every confused enemy, fading with the spear
             Confusion.Tick();
             RetireShells();
         }
@@ -563,6 +567,7 @@ namespace Dark_Cloud_Improved_Version
             TakeDown();
             { long pool = CollisionPool.Resolve(); foreach (var (idx, _) in _shells) if (pool != 0) { Memory.WriteInt(pool + idx * CollisionPool.Stride + CodeCaves.NoDrainMarkOff, 0); CollisionPool.Deactivate(pool, idx); } _shells.Clear(); }
             Confusion.End();
+            ConfusionStars.StopAll();
             SolarBlade.Clear();
             _guardLatched = false; _guardSince = default;
         }

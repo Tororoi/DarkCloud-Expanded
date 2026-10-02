@@ -703,6 +703,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  PackSlots  = 5;
         internal const int  SlotStride = 0xA160;
         internal const int  SubShots   = 8;
+        internal const int  EnteredSubShots = 6;   // what a borrowed entry gets unless it asks for more (the loader cave's +0x2BC)
         internal const int  OffCfg     = 0x000;     // BT_SHOT_EFFECT cfg ptr (EE): +0x38 wait, +0x3C life, +0x4E fly motion
         internal const int  OffDir     = 0x9F40;    // + i*0x10, vec3 — per-frame position delta (velocity)
         internal const int  OffAttr2   = 0x9FC0;    // + i*2, short — Set param_6

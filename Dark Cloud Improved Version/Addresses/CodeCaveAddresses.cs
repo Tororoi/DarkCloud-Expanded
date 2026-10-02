@@ -586,9 +586,9 @@ namespace Dark_Cloud_Improved_Version
             /// here first; an entry carrying CodeCaves.CrushMark passes every guard window, anything else goes on to
             /// <see cref="GuardMask"/> and then the cat's guard-bypass cave.</summary>
             internal const uint GuardCrush     = Host + 0xED0;   // 0x1B4650, 56 B → 0x1B4688
-            /// <summary>tools/stubs/follow.s (ElfWeaponPatches.PatchFollow): CodeCaves.Follow's point carried with a unit, every frame —
-            /// between the fall-drive cave and the blade-spin cave.</summary>
-            internal const uint Follow         = Host + 0xF10;   // 0x1B4690, 76 B → 0x1B46DC
+            /// <summary>tools/stubs/follow.s (ElfWeaponPatches.PatchFollow): CodeCaves.FollowTable's points carried with units, every
+            /// frame — between the fall-drive cave and the blade-spin cave.</summary>
+            internal const uint Follow         = Host + 0xF10;   // 0x1B4690, 96 B → 0x1B46F0 (the host's end)
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -933,7 +933,7 @@ namespace Dark_Cloud_Improved_Version
         internal const uint BorrowedShotMagic      = 0x544F4853;   // "SHOT"
         internal const int  BorrowedShotCfg = 0x10, BorrowedShotState = 0x250, BorrowedShotPath = 0x258, BorrowedShotPathLen = 0x40,
                             BorrowedShotAlloc = 0x298, BorrowedShotReserve = 0x2AC, BorrowedShotCarveMark = 0x2B0,
-                            BorrowedShotInstance = 0x2B4, BorrowedShotMainFlag = 0x2B8, BorrowedShotBlockSize = 0x2C0;   // +0x2B4 the instance (guest), +0x2B8 1 = the main one (texture block cleared, live pointer set)
+                            BorrowedShotInstance = 0x2B4, BorrowedShotMainFlag = 0x2B8, BorrowedShotSubShots = 0x2BC, BorrowedShotBlockSize = 0x2C0;   // +0x2BC the sub-shots to enter (mod; ≤ 8)   // +0x2B4 the instance (guest), +0x2B8 1 = the main one (texture block cleared, live pointer set)
 
         /// <summary>The shot-slot sharing block (DebugInfoCave.SharedShots shares the monster pack's five slots among every config
         /// a floor needs; SharedShots seeds and reads it): +0x00 "SHRE" (mod; without it a refused config is only skipped when it
@@ -1181,10 +1181,7 @@ namespace Dark_Cloud_Improved_Version
         /// high half is <see cref="NoDrainMark"/>'s, which is all the no-drain caves test — an Ungaga crushing hit bills no weapon HP.</summary>
         internal const uint CrushMark = 0x4B495243;   // "CRIK"
 
-        /// <summary>One point the engine carries with a unit (DebugInfoCave.Follow, every frame): +0 the source (guest address of a
-        /// position: x, height, y; 0 = off), +4 the destination (guest), +8/+0xC/+0x10 the x/height/y offsets added.</summary>
-        internal const long Follow      = 0x21FAFC90;
-        internal const int  FollowSrc = 0x0, FollowDst = 0x4, FollowOff = 0x8;
+        // 0x21FAFC90..0x21FAFCB0: the follow cave's first single entry — the table below replaced it (unused).
 
         /// <summary>The guard gate's per-enemy window mask (DebugInfoCave.GuardMask, written by GuardGate): one byte per slot, bit w set =
         /// enemy window w blocks nothing (7 = none of its windows).</summary>
@@ -1194,7 +1191,16 @@ namespace Dark_Cloud_Improved_Version
         internal const long CatCopyPairs      = 0x21FAFCC0;   // 0x100 B
         internal const uint CatCopyPairsGuest = 0x01FAFCC0;
 
-        // ── FREE: 0x21FAFDC0 .. 0x21FB0000 (0x240 B) ────────────────────────────────────────────────────
+        /// <summary>The points the engine carries with units (DebugInfoCave.Follow, every frame): FollowCount entries of FollowStride,
+        /// each +0 the source (guest address of a position: x, height, y; 0 = off), +4 the destination (guest), +8/+0xC/+0x10 the
+        /// x/height/y offsets added. The stars: the Terra nut's bonked enemy (entry 0), Babel's confused enemies (one each).</summary>
+        internal const long FollowTable = 0x21FAFDC0;
+        internal const int  FollowCount = 16, FollowStride = 0x14, FollowSrc = 0x0, FollowDst = 0x4, FollowOff = 0x8;
+
+        /// <summary>GemLanes' config copies (one BT_SHOT_EFFECT, 0x70 B, per lane): a gem slot holding a lane's effect points here.</summary>
+        internal const long GemLaneCfg = 0x21FAFF00;   // 2 × 0x70 → 0x21FAFFE0
+
+        // ── FREE: 0x21FAFFE0 .. 0x21FB0000 (0x20 B) ─────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

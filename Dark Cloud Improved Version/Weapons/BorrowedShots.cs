@@ -12,6 +12,7 @@ namespace Dark_Cloud_Improved_Version
         internal readonly string Path;     // the container in the archive, e.g. dun/effect/f_boll_3.chr
         internal readonly bool   KeepFlags; // the config's whole flags word stays (its ailments too); else the element bits alone
         internal readonly long   Instance;  // the CSHOT_EFFECT it is entered in: CharaMainEffect, or the second instance (Ruby's stolen shot)
+        internal int SubShots = ShotEffectPack.EnteredSubShots;   // how many sub-shots the cave enters (≤ ShotEffectPack.SubShots)
         internal BorrowedEffect(byte[] cfg, string path, bool keepFlags = false, long instance = ShotEffectPack.CharaMainEffect)
         { Cfg = cfg; Path = path; KeepFlags = keepFlags; Instance = instance; }
         internal string Name => BorrowedShots.Name(Cfg);
@@ -97,6 +98,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 try
                 {
+                    if (GemLanes.Tick()) { System.Threading.Thread.Sleep(50); continue; }   // a gem slot's request holds the block: nothing else touches it
                     BorrowedEffect fx = null;
                     foreach (var want in _wanted) { fx = want(); if (fx != null) break; }
                     if (fx != null) Seed(fx); else Clear();
@@ -184,19 +186,14 @@ namespace Dark_Cloud_Improved_Version
         private static void Seed(BorrowedEffect fx)
         {
             if (fx.Same(_seeded)) return;
-            byte[] c = (byte[])fx.Cfg.Clone();
-            BitConverter.GetBytes(2).CopyTo(c, ShotEffectPack.CfgVictimMask);                            // hurts enemies, not the player
-            BitConverter.GetBytes(0f).CopyTo(c, ShotEffectPack.CfgRadiusFlying);                         // no planting in flight: the impact's first frame is the first plant
-            int flags = BitConverter.ToInt32(c, ShotEffectPack.CfgFlags);
-            if (!fx.KeepFlags) BitConverter.GetBytes(flags & ShotEffectPack.CfgElementBits).CopyTo(c, ShotEffectPack.CfgFlags);   // the element only — no ailment (the Black Dragon's shot carries Freeze)
-            byte[] path = new byte[CodeCaves.BorrowedShotPathLen];
-            Encoding.ASCII.GetBytes(fx.Path, 0, Math.Min(fx.Path.Length, path.Length - 1), path, 0);
+            byte[] c = PreparedCfg(fx), path = PathBytes(fx.Path);
             Memory.WriteInt(CodeCaves.BorrowedShotBlock, 0);                                               // quiet while the block changes
             Memory.WriteBytesBatch(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotCfg, c);
             Memory.WriteBytesBatch(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotPath, path);
             Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotReserve, ReserveFor(fx));
             Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotInstance, (int)(fx.Instance - 0x20000000L));
             Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotMainFlag, fx.Instance == ShotEffectPack.CharaMainEffect ? 1 : 0);
+            Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotSubShots, fx.SubShots);
             // The carve mark and the region are left as they are: the cave proves a region by its signature and the pool's counter,
             // so a floor's region outlives a Clear (a weapon switch) and the next effect re-enters it instead of carving another.
             Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotState, 0);
@@ -204,6 +201,29 @@ namespace Dark_Cloud_Improved_Version
             _seeded = fx; _lastState = -3;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{fx.Name} ({fx.Path}) seeded, reserve {ReserveFor(fx):N0} units — entered on the next frame in a floor");
         }
+
+        /// <summary>The config as the cave enters it: hurting enemies only, no plant in flight, the element alone (no ailment)
+        /// unless the effect keeps its whole flags word.</summary>
+        internal static byte[] PreparedCfg(BorrowedEffect fx)
+        {
+            byte[] c = (byte[])fx.Cfg.Clone();
+            BitConverter.GetBytes(2).CopyTo(c, ShotEffectPack.CfgVictimMask);                            // hurts enemies, not the player
+            BitConverter.GetBytes(0f).CopyTo(c, ShotEffectPack.CfgRadiusFlying);                         // no planting in flight: the impact's first frame is the first plant
+            int flags = BitConverter.ToInt32(c, ShotEffectPack.CfgFlags);
+            if (!fx.KeepFlags) BitConverter.GetBytes(flags & ShotEffectPack.CfgElementBits).CopyTo(c, ShotEffectPack.CfgFlags);   // the element only — no ailment (the Black Dragon's shot carries Freeze)
+            return c;
+        }
+
+        /// <summary>A container path as the block holds it (NUL-padded to its field).</summary>
+        internal static byte[] PathBytes(string path)
+        {
+            byte[] b = new byte[CodeCaves.BorrowedShotPathLen];
+            Encoding.ASCII.GetBytes(path, 0, Math.Min(path.Length, b.Length - 1), b, 0);
+            return b;
+        }
+
+        /// <summary>The block's seeded effect, if any (GemLanes: it may borrow the block only while this one sits still).</summary>
+        internal static BorrowedEffect Seeded => _seeded;
 
         /// <summary>One of the game's 34 configs (<see cref="ShotEffectPack.CfgTable"/>) and its container under dun/effect, as
         /// the species loader uses it.</summary>
@@ -260,10 +280,11 @@ namespace Dark_Cloud_Improved_Version
         /// exactly such an effect (muzzle radius 20, motion 0, nothing after). Its damage entry is Xiao's, planted once
         /// (the reload) with the muzzle radius set by <see cref="SetPhaseRadius"/>. False when not entered or all busy.</summary>
         internal static bool Burst(BorrowedEffect fx, float x, float h, float y, int damage, float scale)
+            => Entered(fx) && BurstIn(fx.Cfg, fx.Instance, x, h, y, damage, scale);
+
+        /// <summary><see cref="Burst"/> into any instance an effect is entered in (GemLanes' gem slots), its config given.</summary>
+        internal static bool BurstIn(byte[] cfg, long inst, float x, float h, float y, int damage, float scale)
         {
-            if (!Entered(fx)) return false;
-            byte[] cfg = fx.Cfg;
-            long inst = fx.Instance;
             int count = Memory.ReadInt(inst + ShotEffectPack.OffCount);
             if (count < 1 || count > ShotEffectPack.SubShots) return false;
             int j = -1;
@@ -302,7 +323,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteByte  (inst + ShotEffectPack.OffLatch + j, damage > 0 ? (byte)0 : PlantReload);   // no damage → never plants
             Memory.WriteInt   (inst + ShotEffectPack.OffLastIdx, j);
             Memory.WriteUShort(inst + ShotEffectPack.OffActive + j * 2, 1);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{fx.Name} burst from {(inst == ShotEffectPack.CharaMainEffect ? "the main-character effect" : "the second instance")} #{j}: damage {damage}, scale {scale:F2} at ({x:F0},{h:F0},{y:F0})");
+            if (inst == ShotEffectPack.CharaMainEffect || inst == ShotEffectPack.CharaMainEffectCrash)
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{Name(cfg)} burst from {(inst == ShotEffectPack.CharaMainEffect ? "the main-character effect" : "the second instance")} #{j}: damage {damage}, scale {scale:F2} at ({x:F0},{h:F0},{y:F0})");
             return true;
         }
 

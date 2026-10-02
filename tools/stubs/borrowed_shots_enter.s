@@ -29,6 +29,7 @@
 #   +0x2B4 the instance to enter (mod): CharaMainEffect for Xiao's abilities; the SECOND instance (0x01E97BC0, the
 #   broken-weapon shot's, otherwise idle) for Ruby's stolen shot, which fires beside her own   +0x2B8 1 when it is the
 #   main instance (mod): only then is texture block 0x10 cleared before the entry and the live pointer set after it
+#   +0x2BC the sub-shots to enter (mod; the instance has room for 8)
 # Globals: 0x01E8DA60 CharaMainEffect   *0x002A2384 read_buffer   0x01F066D0 the monster pool's CDataAlloc2 (+0 base, +8 used,
 #   +0xC cap)   0x01C75870 the texture manager   gp−0x6304 the live main-character effect pointer
 
@@ -142,7 +143,7 @@ load:
     addiu $a3, $zero, 0x10         # the main-character effect's texture block
     addiu $t0, $s0, 0x298          # our allocator (the fifth argument)
     jal   0x001AD260               # Entry2__12CSHOT_EFFECT → 0 = failed
-    addiu $t1, $zero, 6            # (delay slot) six sub-shots
+    lw    $t1, 0x02BC($s0)         # (delay slot) the sub-shot count the mod asked for (+0x2BC: 6 for most, 8 at most)
     beq   $v0, $zero, noroom
     addiu $t1, $zero, 1            # (delay slot; noroom writes its own)
     sw    $t1, 0x0250($s0)         # entered

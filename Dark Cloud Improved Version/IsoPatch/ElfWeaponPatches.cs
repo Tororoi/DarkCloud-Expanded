@@ -691,8 +691,8 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < b.Length; i += 4) WrU32(fs, ElfOff(cave + (uint)i), U32(b, i));
         }
 
-        /// <summary>The FOLLOW cave (tools/stubs/follow.s, see CodeCaves.DebugInfoCave.Follow): entered from the fall-drive cave's exit,
-        /// leaving for the blade-spin cave.</summary>
+        /// <summary>The FOLLOW cave (tools/stubs/follow.s, see CodeCaves.DebugInfoCave.Follow): CodeCaves.FollowTable walked every
+        /// frame, entered from the fall-drive cave's exit, leaving for the blade-spin cave.</summary>
         internal static void PatchFollow(FileStream fs, Func<uint, long> ElfOff)
         {
             uint cave = CodeCaves.DebugInfoCave.Follow;
