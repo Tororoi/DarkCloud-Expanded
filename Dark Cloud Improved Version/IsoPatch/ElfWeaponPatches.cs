@@ -339,6 +339,25 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(ShotHookAddr), sours);
         }
 
+        /// <summary>The Terra Sword's boulder shadow (tools/stubs/rock_shadow.s): the cave here; its hook — Draw_MainUnitShadow's `jal
+        /// MGEndDrawShadow` — is in the overlay (DunPatches).</summary>
+        internal static void PatchRockShadow(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint DrawShadowFast = 0x001303B0, EndDrawShadow = 0x00130B30;
+            uint cave = CodeCaves.DebugIfCave.RockShadow;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.rockShadow.bin")
+                ?? throw new IOException("Embedded EE function missing: rockShadow.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            bool callsDraw = false, endsInEnd = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4) { if (U32(b, i) == Jal(DrawShadowFast)) callsDraw = true; if (U32(b, i) == MipsAsm.J(EndDrawShadow)) endsInEnd = true; }
+            if (b.Length % 4 != 0 || U32(b, 0) != 0x27BDFFE0u || !callsDraw || !endsInEnd)
+                throw new IOException($"rockShadow.bin malformed ({b.Length} B) or stale — reassemble its .s (it must call MGDrawShadowFast and jump to MGEndDrawShadow).");
+            if (cave + (uint)b.Length > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                throw new IOException("rockShadow.bin overruns DebugInfomationIF's span.");
+            for (int i = 0; i < b.Length; i += 4) WrU32(fs, ElfOff(cave + (uint)i), U32(b, i));
+        }
+
         /// <summary>Ungaga's weapon-HP rebalance: CheckDmg's two drain calls (a landed hit 0x1DB388, a guarded one 0x1DAE94) go
         /// through a cave that bills nothing for an entry of Ungaga's (owner 4) that his charge EFFECT planted (+0x38 non-zero; his
         /// swings plant 0) or the mod marked (+0x9C == CodeCaves.NoDrainMark), and tail-jumps to SwordDmgCheck1 otherwise. The

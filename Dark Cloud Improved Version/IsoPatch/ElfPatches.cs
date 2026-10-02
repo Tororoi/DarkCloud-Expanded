@@ -136,6 +136,7 @@ namespace Dark_Cloud_Improved_Version
             PatchGemDamage(fs, ElfOff);                   // a thrown gem's burst damage × CodeCaves.GemDamageFactor (the Crysknife doubles it)
             PatchSecondEffect(fs, ElfOff);                // the second main-character effect instance stepped and drawn beside the live one on demand (Babel's Spear)
             PatchSpearBlock(fs, ElfOff);
+            PatchRockShadow(fs, ElfOff);
             PatchUngagaNoDrain(fs, ElfOff);               // Ungaga's charge-effect hits and Babel's spikes cost no weapon HP (the charge's per-shot bill stays)                  // a solid column enemies cannot walk through, while armed (Babel's risen spear)
             PatchSteelLevelUp(fs, ElfOff);                // the Steel Slingshot's level-ups: endurance and max WHP grow twice as much
             PatchCircleEffects(fs, ElfOff);               // the magic circles, every magnitude from CodeCaves.CircleTable (the cave over DebugInfomationIF; the dun hook is in DunPatches)

@@ -59,6 +59,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread cactusSpikeThread = new Thread(new ThreadStart(CactusSpike.SpikeEffect));
         private static Thread herculesUltimateThread = new Thread(new ThreadStart(HerculesUltimate.UltimateEffect));
         private static Thread babelSpearThread = new Thread(new ThreadStart(BabelsSpear.CurseOfBabelEffect));
+        private static Thread terraSwordThread = new Thread(new ThreadStart(TerraSword.RockfallEffect));
         private static Thread cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.AbsorbEffect));
         private static Thread supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
         private static Thread starBreakerThread = new Thread(new ThreadStart(CustomOsmondEffects.ShootingStarsEffect));
@@ -797,6 +798,11 @@ namespace Dark_Cloud_Improved_Version
                     {
                         herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.WrathEffect));
                         herculesWrathThread.Start();
+                    }
+                    if (!terraSwordThread.IsAlive)   // its guard: the boulder
+                    {
+                        terraSwordThread = new Thread(new ThreadStart(TerraSword.RockfallEffect));
+                        terraSwordThread.Start();
                     }
                     break;
 

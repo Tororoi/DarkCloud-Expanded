@@ -37,6 +37,9 @@
     <EmbeddedResource Include="Resources\isoPatch\shotSpearBlock.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.shotSpearBlock.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\rockShadow.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.rockShadow.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\circleEffects.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.circleEffects.bin</LogicalName>
     </EmbeddedResource>

@@ -61,6 +61,7 @@ STUBS = [
     ('spear_block.s',            'spearBlock.bin',           0x1B5030),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchSpearBlock): a solid sphere for enemies (Babel's spear)
     ('player_spear_block.s',     'playerSpearBlock.bin',     0x1B5260),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchSpearBlock): the same sphere, solid to the player
     ('shot_spear_block.s',       'shotSpearBlock.bin',       0x1B5350),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchSpearBlock): the same column stops enemy shots
+    ('rock_shadow.s',            'rockShadow.bin',           0x1B5460),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchRockShadow): the Terra Sword boulder's shadow
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]

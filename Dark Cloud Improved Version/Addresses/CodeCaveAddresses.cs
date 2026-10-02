@@ -515,6 +515,10 @@ namespace Dark_Cloud_Improved_Version
             /// (main 0x1AC3E8) lands here — the engine's test, then, for a shot that is not the player's (victim mask ≠ 2) and met
             /// nothing, CodeCaves.SpearBlock's column (floor − 2 … top): a wall hit where the shot stands.</summary>
             internal const uint ShotSpearBlock   = Host + 0xB90;  // 0x1B5350, 268 B → 0x1B545C
+            /// <summary>tools/stubs/rock_shadow.s (ElfWeaponPatches.PatchRockShadow, hooked by DunPatches): Draw_MainUnitShadow's
+            /// `jal MGEndDrawShadow` (dun 0x1DADDD4) lands here — one extra MGDrawShadowFast for the frame CodeCaves.RockShadow names
+            /// while its flag is set (the Terra Sword's boulder), then the displaced call.</summary>
+            internal const uint RockShadow       = Host + 0xCA0;  // 0x1B5460, 68 B → 0x1B54A4
         }
 
         /// <summary>A cave INSIDE a dead main-ELF function: the body of DebugInfomationDraw (0x1B3780, 3,952 B), the developers'
@@ -1134,7 +1138,14 @@ namespace Dark_Cloud_Improved_Version
         internal const long HerculesCfg      = 0x21FAFB00;
         internal const uint HerculesCfgGuest = 0x01FAFB00;
 
-        // ── FREE: 0x21FAFB80 .. 0x21FB0000 (0x480 B) ────────────────────────────────────────────────────
+        /// <summary>The Terra Sword's boulder shadow (DebugIfCave.RockShadow, in the dungeon's shadow pass): +0 flag (0 = off), +4 the
+        /// frame to draw as a shadow (guest), +0x10 the plane point (x, h, y, 1), +0x20 the projection direction (0, 1, 0, 0) —
+        /// quadword-aligned (MGDrawShadowFast copies both with sceVu0CopyVector).</summary>
+        internal const long RockShadow      = 0x21FAFB80;
+        internal const uint RockShadowGuest = 0x01FAFB80;
+        internal const int  RockShadowFlag = 0x0, RockShadowFrame = 0x4, RockShadowPlane = 0x10, RockShadowDir = 0x20;
+
+        // ── FREE: 0x21FAFBB0 .. 0x21FB0000 (0x450 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

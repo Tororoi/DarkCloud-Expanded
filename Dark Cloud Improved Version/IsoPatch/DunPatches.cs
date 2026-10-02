@@ -120,6 +120,9 @@ namespace Dark_Cloud_Improved_Version
             // engine's call and then slides the velocity along the spear (ElfWeaponPatches.PatchSpearBlock writes the cave).
             new(PlayerSpearHookA, PlayerMoveCheckCall, PlayerSpearHookNew, "player spear block (jal MoveCheck__12CMonstorUnit → cave, walled floors)"),
             new(PlayerSpearHookB, PlayerMoveCheckCall, PlayerSpearHookNew, "player spear block (jal MoveCheck__12CMonstorUnit → cave, placed-parts floors)"),
+            // The Terra Sword's boulder shadow: the shadow pass's closing `jal MGEndDrawShadow` → the rock-shadow cave, which draws the
+            // boulder's shadow when asked and then makes the call (ElfWeaponPatches.PatchRockShadow writes the cave).
+            new(RockShadowHookAddr, RockShadowHookOrig, RockShadowHookNew, "rock shadow hook (jal MGEndDrawShadow → cave)"),
             // Super Steve's sphere icon: the HUD's status pass → the icon cave, which performs it and then draws the sphere
             // weapon's icon over Steve (ElfWeaponPatches.PatchSuperSteveIconDraw writes the cave).
             new(SsIconHookAddr, SsIconHookOrig, SsIconHookNew, "super steve icon hook (jal topStatusInfo → cave)"),
@@ -170,6 +173,11 @@ namespace Dark_Cloud_Improved_Version
         internal const uint PlayerSpearHookA = 0x01DB39AC, PlayerSpearHookB = 0x01DB3E58;         // the player's move: jal MoveCheck__12CMonstorUnitFPfPfi (delay slot nop)
         internal const uint PlayerMoveCheckCall = 0x0C077208;                                      // jal 0x1DC820
         internal const uint PlayerSpearHookNew  = 0x0C000000u | (CodeCaves.DebugIfCave.PlayerSpearBlock >> 2);
+
+        internal const uint RockShadowHookAddr = 0x01DADDD4;                                       // Draw_MainUnitShadow (a0 = 0x40 loaded before; delay slot nop)
+        internal const uint RockShadowHookOrig = 0x0C04C2CC;                                       // jal 0x130B30 MGEndDrawShadow
+        internal const uint RockShadowHookNew  = 0x0C000000u | (CodeCaves.DebugIfCave.RockShadow >> 2);
+        internal const long RockShadowHookAddrMmu = 0x20000000L + RockShadowHookAddr;
 
         internal const uint XiaoShotWhpSiteA = 0x01DBCC58, XiaoShotWhpSiteB = 0x01DBCDD0;   // the two `lui v0,0x3f80` feeding SwordDmgCheck1 in BattleActionPlay_Jinn
         // `lui v0,HI; addiu v0,v0,LO` of the guest address, LO sign-extended (the table sits at 0x1FAF480 = 0x1FB0000 − 0xB80)

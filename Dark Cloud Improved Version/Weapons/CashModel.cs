@@ -74,11 +74,34 @@ namespace Dark_Cloud_Improved_Version
             return 0;
         }
 
+        /// <summary>A SHADOW model of <paramref name="mds"/> (LoadMDSFile kind 8: CVisualShadow visuals, what MGDrawShadowFast
+        /// draws) in this model's own cash allocator, once per load of the model; 0 when the model is not loaded or the
+        /// allocator lacks <paramref name="needUnits"/> free (an overrun would hang the game).</summary>
+        internal uint ShadowRoot(byte[] mds, int needUnits)
+        {
+            if (Root() == 0) return 0;
+            if (_shadowFor == _root) return _shadow;
+            _shadowFor = _root; _shadow = 0;
+            long alloc = ItemModels.CashAllocBase + (long)_cash * ItemModels.CashAllocStride;
+            int used = Memory.ReadInt(alloc + ItemModels.CashAllocUsed), cap = Memory.ReadInt(alloc + ItemModels.CashAllocCap);
+            if (cap - used < needUnits) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"no room for the {_what}'s shadow in cash {_cash} ({cap - used} of {needUnits} units free)"); return 0; }
+            uint buf = Memory.ReadGuestPtr(ShotEffectPack.ReadBufferPtr);
+            if (!Memory.IsValidGuest(buf)) buf = Memory.ReadGuestPtr(ItemModels.MenuBufferPtr);
+            if (!Memory.IsValidGuest(buf) || mds.Length > ItemModels.MenuBufferImgOffset || Player.CheckDunIsPausedOrMenu()) { _shadowFor = 0; return 0; }
+            Memory.WriteBytesBatch(Memory.ToMmu(buf), mds);
+            if (!NativeCall.Invoke(ItemModels.LoadMDSFile, out uint root, buf, (uint)(alloc - 0x20000000L), ItemModels.MdsKindShadow, 0, 0, timeoutMs: 1500) || !Memory.IsValidGuest(root))
+            { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the {_what}'s shadow model did not load (0x{root:X})"); _shadowFor = 0; return 0; }
+            _shadow = root;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{_what} shadow model loaded into cash {_cash}: root 0x{root:X}, allocator {used} → {Memory.ReadInt(alloc + ItemModels.CashAllocUsed)} of {cap} units");
+            return root;
+        }
+        private uint _shadow, _shadowFor;
+
         /// <summary>Forget the load (a floor change empties the cash). The texture window's reservation is handed back when the
         /// manager's cursor still stands on it; kept (and reused by the next load) when something was handed out below it.</summary>
         internal void Forget()
         {
-            ReleaseTextures(); _root = 0; _cash = -1; _placedRoot = 0;
+            ReleaseTextures(); _root = 0; _cash = -1; _placedRoot = 0; _shadow = 0; _shadowFor = 0;
             if (_winBase != 0 && Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor) == _winBase)
             { Memory.WriteUInt(TextureManager.Base + TextureManager.Cursor, _cursorSaved); _winBase = 0; _winSize = 0; }
         }
@@ -234,6 +257,49 @@ namespace Dark_Cloud_Improved_Version
             if (_bound.Count == 0) return;
             foreach (long e in _bound) Memory.WriteUShort(e + TextureManager.EntryBlock, (ushort)(CashBlockBase + _cash));
             _bound.Clear();
+        }
+
+        /// <summary>One 8-bit TIM2 picture resampled to <paramref name="n"/>² (nearest texel: 8-bit indices cannot be blended), row-major: the header kept but for its sizes, the CLUT kept whole.
+        /// TIM2 picture header (after the 16-byte file header): total +0 (header + 4 × image size in every file of this game), CLUT size +4, image size +8, header size +0xC (u16),
+        /// image type +0x13 (5 = 8-bit), width +0x14, height +0x16 (u16); the pixels follow the header, the CLUT the pixels.</summary>
+        internal static byte[] ResampleTim8(byte[] tim, bool swizzled, int n)
+        {
+            const int pic = 0x10;
+            if (tim.Length < pic + 0x30 || tim[0] != 'T' || tim[1] != 'I' || tim[2] != 'M' || tim[3] != '2') throw new System.IO.IOException("not a TIM2 picture");
+            int clutSz = (int)IsoBytes.U32(tim, pic + 4), imgSz = (int)IsoBytes.U32(tim, pic + 8), hdrSz = IsoBytes.U16(tim, pic + 0xC);
+            int w = IsoBytes.U16(tim, pic + 0x14), h = IsoBytes.U16(tim, pic + 0x16);
+            if (tim[pic + 0x13] != 5 || imgSz != w * h) throw new System.IO.IOException($"not an 8-bit picture ({w}×{h}, {imgSz} B)");
+            byte[] px = tim.AsSpan(pic + hdrSz, imgSz).ToArray();
+            if (swizzled) px = Unswizzle8(px, w, h);
+            var outPx = new byte[n * n];
+            for (int y = 0; y < n; y++) for (int x = 0; x < n; x++)
+                outPx[y * n + x] = px[((y * h + h / 2) / n) * w + (x * w + w / 2) / n];   // the texel under each new texel's centre
+            var outp = new byte[pic + hdrSz + n * n + clutSz];
+            Array.Copy(tim, 0, outp, 0, pic + hdrSz);
+            IsoBytes.U32(outp, pic + 0, (uint)(hdrSz + 4 * n * n));                      // the files' own convention: header + 4 × image (the bomb's 0x10030, these 0x40030)
+            IsoBytes.U32(outp, pic + 8, (uint)(n * n));
+            IsoBytes.U16(outp, pic + 0x14, (ushort)n);
+            IsoBytes.U16(outp, pic + 0x16, (ushort)n);
+            Array.Copy(outPx, 0, outp, pic + hdrSz, n * n);
+            Array.Copy(tim, pic + hdrSz + imgSz, outp, pic + hdrSz + n * n, clutSz);
+            return outp;
+        }
+
+        /// <summary>PSMT8 pixels from the GS's block order to row-major (CanalRipple's un-swizzle).</summary>
+        internal static byte[] Unswizzle8(byte[] data, int w, int h)
+        {
+            var outp = new byte[w * h];
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++)
+            {
+                int blockLoc = (y & ~0xF) * w + (x & ~0xF) * 2;
+                int swapSel = (((y + 2) >> 2) & 0x1) * 4;
+                int posY = (((y & ~3) >> 1) + (y & 1)) & 0x7;
+                int colLoc = posY * w * 2 + ((x + swapSel) & 0x7) * 4;
+                int bn = ((y >> 1) & 1) + ((x >> 2) & 2);
+                int src = blockLoc + colLoc + bn;
+                if (src < data.Length) outp[y * w + x] = data[src];
+            }
+            return outp;
         }
     }
 }

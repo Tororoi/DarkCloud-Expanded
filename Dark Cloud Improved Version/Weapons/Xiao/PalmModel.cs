@@ -81,52 +81,8 @@ namespace Dark_Cloud_Improved_Version
             var bank = new CatPackBakes.Bank(bankBytes);
             bool swizzled = bank.Magic[2] == (byte)'2';
             var items = new List<(string, byte[])>();
-            foreach (string t in Textures) items.Add((t, Resample(bank.Block(t), swizzled)));
+            foreach (string t in Textures) items.Add((t, CashModel.ResampleTim8(bank.Block(t), swizzled, TexSize)));
             return CatPackBakes.Bank.Build(new[] { (byte)'I', (byte)'M', (byte)'G', (byte)0 }, items);
-        }
-
-        /// <summary>One 8-bit TIM2 picture at TexSize², row-major: the header kept but for its sizes, the CLUT kept whole.
-        /// TIM2 picture header (after the 16-byte file header): total +0 (header + 4 × image size in every file of this game), CLUT size +4, image size +8, header size +0xC (u16),
-        /// image type +0x13 (5 = 8-bit), width +0x14, height +0x16 (u16); the pixels follow the header, the CLUT the pixels.</summary>
-        private static byte[] Resample(byte[] tim, bool swizzled)
-        {
-            const int pic = 0x10;
-            if (tim.Length < pic + 0x30 || tim[0] != 'T' || tim[1] != 'I' || tim[2] != 'M' || tim[3] != '2') throw new IOException("not a TIM2 picture");
-            int clutSz = (int)IsoBytes.U32(tim, pic + 4), imgSz = (int)IsoBytes.U32(tim, pic + 8), hdrSz = IsoBytes.U16(tim, pic + 0xC);
-            int w = IsoBytes.U16(tim, pic + 0x14), h = IsoBytes.U16(tim, pic + 0x16);
-            if (tim[pic + 0x13] != 5 || imgSz != w * h) throw new IOException($"not an 8-bit picture ({w}×{h}, {imgSz} B)");
-            byte[] px = tim.AsSpan(pic + hdrSz, imgSz).ToArray();
-            if (swizzled) px = Unswizzle8(px, w, h);
-            int n = TexSize;
-            var outPx = new byte[n * n];
-            for (int y = 0; y < n; y++) for (int x = 0; x < n; x++)
-                outPx[y * n + x] = px[((y * h + h / 2) / n) * w + (x * w + w / 2) / n];   // the texel under each new texel's centre
-            var outp = new byte[pic + hdrSz + n * n + clutSz];
-            Array.Copy(tim, 0, outp, 0, pic + hdrSz);
-            IsoBytes.U32(outp, pic + 0, (uint)(hdrSz + 4 * n * n));                      // the files' own convention: header + 4 × image (the bomb's 0x10030, these 0x40030)
-            IsoBytes.U32(outp, pic + 8, (uint)(n * n));
-            IsoBytes.U16(outp, pic + 0x14, (ushort)n);
-            IsoBytes.U16(outp, pic + 0x16, (ushort)n);
-            Array.Copy(outPx, 0, outp, pic + hdrSz, n * n);
-            Array.Copy(tim, pic + hdrSz + imgSz, outp, pic + hdrSz + n * n, clutSz);
-            return outp;
-        }
-
-        /// <summary>PSMT8 pixels from the GS's block order to row-major (CanalRipple's un-swizzle).</summary>
-        private static byte[] Unswizzle8(byte[] data, int w, int h)
-        {
-            var outp = new byte[w * h];
-            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++)
-            {
-                int blockLoc = (y & ~0xF) * w + (x & ~0xF) * 2;
-                int swapSel = (((y + 2) >> 2) & 0x1) * 4;
-                int posY = (((y & ~3) >> 1) + (y & 1)) & 0x7;
-                int colLoc = posY * w * 2 + ((x + swapSel) & 0x7) * 4;
-                int bn = ((y >> 1) & 1) + ((x >> 2) & 2);
-                int src = blockLoc + colLoc + bn;
-                if (src < data.Length) outp[y * w + x] = data[src];
-            }
-            return outp;
         }
     }
 }
