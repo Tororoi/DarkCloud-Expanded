@@ -14,7 +14,8 @@ namespace Dark_Cloud_Improved_Version
     /// += g, y −= vy, landed at its stop height). Until it lands, every tick puts it over the target's root and sets the stop
     /// height from the floor under it (DungeonFloor), so it tracks the target across the ground and down steps and ramps. It grows
     /// from nothing to full size over the first <see cref="GrowDrop"/> units of the drop, and its round shadow on the floor under
-    /// the target grows over the first <see cref="ShadowGrowDrop"/> — the warning of where it lands. Both grow from a 2 ms loop of
+    /// the target grows over the first <see cref="ShadowGrowDrop"/> — the warning of where it lands — and the target itself darkens
+    /// with the fall, to <see cref="TargetDim"/> of its light at the impact, where it is released. Both grow from a 2 ms loop of
     /// their own (<see cref="GrowLoop"/>) that follows the cave's fall height, so the steps keep pace with the engine's frames.
     ///
     /// Where it lands:
@@ -29,8 +30,8 @@ namespace Dark_Cloud_Improved_Version
     ///    damage's hits are marked so the engine bills nothing for them.
     /// The boulder then rests on the ground, sunk <see cref="Sink"/>, solid to the player, enemies and enemy shots (the spear-block
     /// caves, <see cref="BlockRadius"/>), for <see cref="RestSeconds"/>, then fades over <see cref="FadeSeconds"/>. An enemy whose
-    /// root is inside it takes <see cref="StuckShare"/>× the attack every <see cref="StuckSeconds"/> while it stands. A new drop
-    /// while one rests takes the resting one away first.</summary>
+    /// root is inside it takes <see cref="StuckShare"/>× the attack every <see cref="StuckSeconds"/> while it stands. No new charge
+    /// starts while a rock falls, rests or fades: the next is summoned once it has gone.</summary>
     internal static class TerraSword
     {
         private const string Tag = "[TerraSword] ";
@@ -47,6 +48,9 @@ namespace Dark_Cloud_Improved_Version
         private const float  Sink            = 4f;                  // how far the resting rock sits into the ground
         private const float  GrowDrop        = 150f;                // the rock grows from nothing to full size over this much of the drop
         private const float  ShadowGrowDrop  = 300f;                // …its shadow over this much
+        // The target darkens as the rock comes down — its own lighting (CCharacter DimOn / DimFloor: the step eases DimFactor toward the
+        // floor 0.08 a frame), the floor lowered with the fall to TargetDim at the impact, and released there (the blast throws it clear).
+        private const float  TargetDim       = 0.55f;
         private const int    GrowTickMs      = 2;                   // the growth's own cadence: well inside a frame, so each frame's height is caught as it lands
         private const float  MinScale        = 0.01f;               // "nothing": a zero scale is a singular matrix
         // The impact.
@@ -63,7 +67,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  ShockStart      = 2f, ShockRate = 0.5f;      // its own KEY's rate
         private const float  ShockScale      = ReferenceRadius / 3f;   // its reference radius 3 → the rock's 21
         // The resting rock.
-        private const double RestSeconds     = 10.0;
+        private const double RestSeconds     = 20.0;
         private const double FadeSeconds     = 0.5;
         private const float  BlockRadius     = 20f;                 // the solid column (the rock is ±20.4 about its centre)
         private const float  StuckShare      = 1f;
@@ -79,6 +83,7 @@ namespace Dark_Cloud_Improved_Version
         private static int      _target = -1;
         private static float    _x, _y, _ground, _yaw, _start;
         private static DateTime _landed, _lastStuck;
+        private static volatile int _dimSlot = -1;                   // the enemy darkened (−1 = none); the growth loop and the tick both use it
         private static readonly List<(int idx, int ticks)> _shells = new();
         private static BorrowedEffect _shock;
         private static int _sub = -1;                               // the sub-shot playing the shockwave (−1 = none)
@@ -131,7 +136,8 @@ namespace Dark_Cloud_Improved_Version
             {
                 case Phase.Idle:
                     FadeTint();
-                    if (GuardHeld() > 0 && !_falling) { _phase = Phase.Charging; _tintFadeFrom = default; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "charging"); }
+                    // The charge counts from here, even for a guard held while the rock was still up.
+                    if (GuardHeld() > 0 && !_rockUp) { _phase = Phase.Charging; _tintFadeFrom = default; _guardSince = GameClock.Now; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "charging"); }
                     break;
                 case Phase.Charging:
                 {
@@ -196,6 +202,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFalling);
             _rockUp = true; _falling = true;
             _lastFallY = float.NaN;
+            DimStart(slot);
             new Thread(GrowLoop) { IsBackground = true, Name = "TerraSwordGrow" }.Start();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the boulder drops on enemy slot {slot} at ({_x:F0},{_y:F0}) ground {_ground:F1}");
         }
@@ -240,6 +247,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
             BladeProp.SetHeight(RestHeight());
             BladeProp.SetScale(1f);
+            DimEnd();                                                                          // the target's light back: the blast throws it clear
             _tintFadeFrom = GameClock.Now;                                                     // the sword's green fades from here
             Solid();
             Blast();
@@ -330,6 +338,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
             Memory.WriteInt(CodeCaves.SpearBlock + CodeCaves.SpearBlockFlag, 0);                      // passable again
             Shadow(false, 0f);
+            DimEnd();
             BladeProp.Despawn();
             IwaModel.ReleaseTextures();
             _rockUp = _falling = false; _target = -1;
@@ -358,11 +367,44 @@ namespace Dark_Cloud_Improved_Version
                     float fallen = _start - y;
                     BladeProp.SetScale(Math.Clamp(fallen / GrowDrop, MinScale, 1f));
                     GroundShadow.SetRadius(Math.Clamp(fallen / ShadowGrowDrop, MinScale, 1f) * IwaModel.Radius);
+                    float span = _start - RestHeight();
+                    DimTo(1f - (1f - TargetDim) * (span > 0f ? Math.Clamp(fallen / span, 0f, 1f) : 1f));
                 }
                 Thread.Sleep(GrowTickMs);
             }
         }
         private static float _lastFallY = float.NaN;
+
+        // ── the target's darkening ──
+        private static void DimStart(int slot)
+        {
+            DimEnd();
+            if (slot < 0 || !Enemies.IsLive(slot)) return;
+            _dimSlot = slot;
+            long c = EnemyAddresses.CharObjects.CharAddr(slot);
+            Memory.WriteFloat(c + CCharacter.DimFloor, 1f);
+            Memory.WriteInt  (c + CCharacter.DimOn, 1);
+        }
+
+        /// <summary>The darkened enemy's floor (the step eases its DimFactor there); released at once if it has died.</summary>
+        private static void DimTo(float floor)
+        {
+            int slot = _dimSlot;
+            if (slot < 0) return;
+            if (!Enemies.IsLive(slot)) { DimEnd(); return; }
+            Memory.WriteFloat(EnemyAddresses.CharObjects.CharAddr(slot) + CCharacter.DimFloor, floor);
+        }
+
+        /// <summary>Its own lighting back: dimming off (the step eases DimFactor back to 1.0), the floor at 1.</summary>
+        private static void DimEnd()
+        {
+            int slot = _dimSlot;
+            if (slot < 0) return;
+            _dimSlot = -1;
+            long c = EnemyAddresses.CharObjects.CharAddr(slot);
+            Memory.WriteInt  (c + CCharacter.DimOn, 0);
+            Memory.WriteFloat(c + CCharacter.DimFloor, 1f);
+        }
 
         // ── the shockwave ──
         private static long ShockObj => _shock.Instance + ShotEffectPack.OffObj + _sub * ShotEffectPack.ObjStride;
