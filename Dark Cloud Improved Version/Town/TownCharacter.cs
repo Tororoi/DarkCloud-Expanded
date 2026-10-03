@@ -1057,6 +1057,7 @@ namespace Dark_Cloud_Improved_Version
                 TownIdleSit.Tick();        //idle→sit for the swapped-in cat (arms the ElfPatches idle-motion cave)
                 TownLadder.Tick();         //block ladder mounts for non-Toan allies (Toan-rigged climb → crash)
                 CustomFishingSpot.Tick();  //inject a fishing spot into Queens / Brownboo / Yellow Drops
+                FishingCatchCamera.Tick(); //the fishing camera's distance/yaw put back after a catch's close-up
                 CanalTide.Tick();          //Queens canal water + ripple rise/fall with the day-night clock
                 TownCameraPolyBuffer.Tick(); //relocate+enlarge the camera gather arena (fixes the 400-poly overrun)
 

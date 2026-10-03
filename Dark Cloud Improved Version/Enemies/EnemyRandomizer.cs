@@ -61,8 +61,12 @@ namespace Dark_Cloud_Improved_Version
             // Non-themed mix pool: exactly the generic-placement set (bosses, companions, Killer Snake and mimics are
             // already excluded by EnemySpecies.RandomizerValid; mimics are inserted separately, weighted and always the
             // current dungeon's pair). RandomizerBosses (e.g. Minotaur Joe) will fold in via a toggle.
-            _eligiblePool = new int[EnemySpecies.RandomizerValid.Count];
-            EnemySpecies.RandomizerValid.Keys.CopyTo(_eligiblePool, 0);
+            // A replaced species' slot goes to its replacement (EnemySpecies.RandomizerReplacements), which so keeps the
+            // species' old frequency: the pick is uniform over entries and a roster's repeats are re-rolled.
+            var pool = new System.Collections.Generic.List<int>(EnemySpecies.RandomizerValid.Keys);
+            foreach (int replacement in EnemySpecies.RandomizerReplacements.Values)
+                if (EnemySpecies.RandomizerValid.ContainsKey(replacement)) pool.Add(replacement);
+            _eligiblePool = pool.ToArray();
 
             _mimicByDungeon = new (int, int)[BtEnemyLayout.DungeonCount];
             _mimicByDungeon[0] = (EnemySpecies.MimicDBC.TableIndex.Value, EnemySpecies.KingMimicDBC.TableIndex.Value);
@@ -73,7 +77,7 @@ namespace Dark_Cloud_Improved_Version
             _mimicByDungeon[5] = (EnemySpecies.MimicGoT.TableIndex.Value, EnemySpecies.KingMimicGoT.TableIndex.Value);
             _mimicByDungeon[6] = (EnemySpecies.MimicDS.TableIndex.Value,  EnemySpecies.KingMimicDS.TableIndex.Value);
 
-            Console.WriteLine($"[Randomizer] eligible pool: {_eligiblePool.Length} species.");
+            Console.WriteLine($"[Randomizer] eligible pool: {_eligiblePool.Length} entries ({EnemySpecies.RandomizerValid.Count} species).");
         }
 
         // ── DEBUG: per-floor model-buffer usage log (roster vs buffer capacity) ──────────────────────────────────

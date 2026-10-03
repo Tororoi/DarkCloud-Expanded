@@ -2160,6 +2160,15 @@ namespace Dark_Cloud_Improved_Version
         /// TableIndex. Kept out of <see cref="RandomizerValid"/>; the randomizer will optionally fold these in via a
         /// toggle. Currently just Minotaur Joe.</summary>
         internal static readonly Dictionary<int, EnemyDefaults> RandomizerBosses;
+        /// <summary>Species the randomizer never places because a working variant stands in for them, replaced TableIndex →
+        /// replacement TableIndex, so only the variant loads; the random mix gives the replacement the replaced entry's slot
+        /// too (EnemyRandomizer), so the species keeps its old frequency. Vanilla Gacious (105, e124) is a species-table BOSS
+        /// (monster type 2 — never proximity-activated, spawn-once), broken as a regular roster enemy; Gacious (Enhanced)
+        /// (155, e117) is the same Id as a regular.</summary>
+        internal static readonly Dictionary<int, int> RandomizerReplacements = new()
+        {
+            { Gacious.TableIndex.Value, GaciousEnhanced.TableIndex.Value },
+        };
         static EnemySpecies()
         {
             foreach (var f in typeof(EnemySpecies).GetFields(System.Reflection.BindingFlags.Static
@@ -2195,6 +2204,7 @@ namespace Dark_Cloud_Improved_Version
                 if (string.IsNullOrEmpty(e.ModelCode) || e.ModelCode[0] != 'e') continue;
                 if (BossEnemies.ContainsKey(e.Id)) continue;
                 if (e.Name != null && e.Name.Contains("Mimic")) continue;
+                if (RandomizerReplacements.ContainsKey(kv.Key)) continue;
                 RandomizerValid[kv.Key] = e;
             }
 
@@ -2312,8 +2322,8 @@ namespace Dark_Cloud_Improved_Version
         // These are deliberately broad; trim each to the most representative species to taste.
         internal static readonly Dictionary<int, EnemyDefaults> Dragons =                 // Σ footprint ≈ 235,494 B
             Group(Dragon, BlueDragon, BlackDragon);
-        internal static readonly Dictionary<int, EnemyDefaults> Undead =                  // Σ footprint ≈ 353,280 B  (Lich: single-spawn)
-            Group(SkeletonSoldier, MasterJacket, Gacious, HornHead, SilverGear, Lich);
+        internal static readonly Dictionary<int, EnemyDefaults> Undead =                  // Σ footprint ≈ 371,274 B  (Lich: single-spawn)
+            Group(SkeletonSoldier, MasterJacket, GaciousEnhanced, HornHead, SilverGear, Lich);   // the Enhanced Gacious: vanilla's is a boss record (RandomizerReplacements)
         internal static readonly Dictionary<int, EnemyDefaults> Marine =                  // Σ footprint ≈ 216,801 B
             Group(CrabbyHermit, Gunny, Gyon, Opar, SpaceGyon);
         internal static readonly Dictionary<int, EnemyDefaults> Rock =                    // Σ footprint ≈ 144,285 B
