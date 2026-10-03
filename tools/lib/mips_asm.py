@@ -26,6 +26,12 @@ wrong way (PCSX2 reproduces this). keystone does NOT insert the gap. YOU must wr
     bc1f  label
     nop                # delay slot (separate concern)
 
+⛔ NEVER use the `div` / `divu` MNEMONICS (2026-09-25, circle_effects.s): keystone treats even the two-operand form as
+LLVM's div macro and emits FOUR words — `bne $rt,$zero,+1; divu; break 7; mflo` — and the branch offset it writes lands ON the
+`break`, so any non-zero divisor traps. Hand-encode: `divu $rs,$rt` = 0x0000001B | rs<<21 | rt<<16 (e.g. divu $v0,$t0 =
+0x0048001B); `div` is func 0x1A. Then `mfhi`/`mflo` as usual. A `--check` of the word count against the source's instruction
+lines catches any such expansion (tools/stubs/build_ee_stubs.py counts one word per line).
+
 ⛔ NEVER use keystone's `sqrt.s` (cost a debugging session, FIX 9): the R5900 encodes SQRT.S as
 `sqrt.s fd, ft` — the OPERAND is in the ft field (bits 20-16). Standard MIPS (and keystone) encode it
 as `sqrt.s fd, fs` with the operand in fs (bits 15-11). So keystone's `sqrt.s $f5,$f5` = 0x46002944

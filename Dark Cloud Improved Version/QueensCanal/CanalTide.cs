@@ -80,7 +80,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 _frame = 0; _shownWaterLevel = float.NaN; _lastMeshLevel = float.NaN; _lastBakedLevel = int.MinValue;
                 CanalWaterEffects.Reset(); CanalWading.Reset(); CanalEvict.Reset(); _loggedLadderGate = false;   // Queens-only state
-                Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);                         // disarm the baked redraw
+                Memory.WriteInt(WaterRedraw.MizuRedrawFramePtr, 0);                         // disarm the baked redraw
                 ClearSprayTable();                                                        // no waterfall mist outside Queens
                 return;
             }
@@ -97,7 +97,7 @@ namespace Dark_Cloud_Improved_Version
             bool freshFrame = false;
             if (!FrameStillMizu(_frame) && _tickCount >= _nextFrameScanTick)
             {
-                Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);   // disarm while the frame is unknown/stale
+                Memory.WriteInt(WaterRedraw.MizuRedrawFramePtr, 0);   // disarm while the frame is unknown/stale
                 _frame = FindMizuFrame();
                 if (_frame == 0)
                 {
@@ -166,7 +166,7 @@ namespace Dark_Cloud_Improved_Version
             if (Memory.ReadInt(EditLoop.MapNo) != TownMapNo.Queens) return;
             _frame = 0; _lastMeshLevel = float.NaN; _lastBakedLevel = int.MinValue;
             _nextFrameScanTick = 0; _loggedLadderGate = false;
-            Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);   // disarm the baked redraw until the frame is re-found
+            Memory.WriteInt(WaterRedraw.MizuRedrawFramePtr, 0);   // disarm the baked redraw until the frame is re-found
             Log("town reloaded in place (ally switch) — caches dropped, re-applying tide state");
         }
 

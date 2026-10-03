@@ -20,7 +20,7 @@ namespace Dark_Cloud_Improved_Version
         {
             get
             {
-                uint hi = 0x3C020000u | (uint)((CodeCaves.Mailbox.FlameSpacing - 0x20000000) >> 16);
+                uint hi = 0x3C020000u | (uint)((Mailbox.FlameSpacing - 0x20000000) >> 16);
                 return (uint)Memory.ReadInt(0x20000000L + 0x001AED88) == hi;
             }
         }
@@ -34,9 +34,9 @@ namespace Dark_Cloud_Improved_Version
                 if (!_nativeWarned) { _nativeWarned = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the flamethrower-spacing patch is not in this ISO — vanilla reach (re-patch the ISO)"); }
                 return;
             }
-            if (Memory.ReadFloat(CodeCaves.Mailbox.FlameSpacing) == Spacing) return;
-            Memory.WriteInt(CodeCaves.Mailbox.FlameSpacingOwner, 1);   // ours: the PNACH stops re-seeding
-            Memory.WriteFloat(CodeCaves.Mailbox.FlameSpacing, Spacing);
+            if (Memory.ReadFloat(Mailbox.FlameSpacing) == Spacing) return;
+            Memory.WriteInt(Mailbox.FlameSpacingOwner, 1);   // ours: the PNACH stops re-seeding
+            Memory.WriteFloat(Mailbox.FlameSpacing, Spacing);
             if (!_held) { _held = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"flamethrower reach ×{Spacing / VanillaSpacing:F0}"); }
         }
 
@@ -45,7 +45,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!_held) return;
             _held = false;
-            if (Memory.ReadFloat(CodeCaves.Mailbox.FlameSpacing) == Spacing) Memory.WriteFloat(CodeCaves.Mailbox.FlameSpacing, VanillaSpacing);
+            if (Memory.ReadFloat(Mailbox.FlameSpacing) == Spacing) Memory.WriteFloat(Mailbox.FlameSpacing, VanillaSpacing);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "flamethrower reach released");
         }
     }

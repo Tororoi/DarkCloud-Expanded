@@ -7,7 +7,7 @@
 # nothing: the colour comes from the ambient, not from the material.
 #
 # THIS CAVE takes the `jal Draw__6CCloth` at 0x139694 (a0 = the CCloth about to draw, the loop's own load). For the ONE cloth whose
-# pointer the mod publishes at Mailbox.CatCapeCloth it adds Mailbox.CatCapeTint to the ambient, draws, and puts the ambient back;
+# pointer the mod publishes at CatBlock.CatCapeCloth it adds CatBlock.CatCapeTint to the ambient, draws, and puts the ambient back;
 # every other cloth in the game (Toan's cape, Ungaga's poncho, the cat's own future ones) draws untouched. The mod writes the tint
 # as a DELTA — it knows the cat's tint, so it can aim the sum wherever it likes without the cat's colour leaking in.
 #
@@ -16,7 +16,7 @@ addiu $sp, $sp, -0x50
 sw    $ra, 0x40($sp)
 sw    $a0, 0x44($sp)
 lui   $t0, 0x01FB
-lw    $t1, 0x4288($t0)         # Mailbox.CatCapeCloth: the cape's CCloth (guest), 0 while there is no cape
+lw    $t1, 0x4288($t0)         # CatBlock.CatCapeCloth: the cape's CCloth (guest), 0 while there is no cape
 beq   $t1, $zero, plain
 nop
 bne   $t1, $a0, plain          # some other character's cloth: leave it alone
@@ -29,7 +29,7 @@ lwc1  $f1, 0x0014($sp)
 lwc1  $f2, 0x0018($sp)
 lwc1  $f3, 0x001C($sp)
 lui   $t0, 0x01FB
-lwc1  $f4, 0x428C($t0)         # Mailbox.CatCapeTint r
+lwc1  $f4, 0x428C($t0)         # CatBlock.CatCapeTint r
 lwc1  $f5, 0x4290($t0)         #                     g
 lwc1  $f6, 0x4294($t0)         #                     b
 add.s $f0, $f0, $f4

@@ -206,6 +206,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Tsukikage ("Moonlit Focus")** — Charge attacks build twice as fast (lunge ready in ~0.25 s, whirlwind in ~0.75 s). Inherits Small Sword effect. Inherited by Heaven's Cloud.
 - **Heaven's Cloud ("Typhoon")** — Holding the whirlwind charge grows the blade — up to 3× at a full hold, with a flash at max — for a bigger, longer-reaching whirlwind. Also inherits Small Sword and Tsukikage effects.
 - **Sun Sword ("Solar Harvest")** — While wielding Sun Sword (or its evolution Big Bang), every enemy killed has a 1% chance to drop a Sun attachment.
+- **Sun Sword ("Solar Flash")** — Hold guard for a second and a half and the blade brightens as a golden glow gathers around Toan; at full charge it holds, ready, until you swing. As that swing comes forward the dungeon floods with light: a warm gold-white that fades back over five seconds while the fog it burns through clears in one. Every enemy within 300 units takes a light hit — a quarter of the sword's attack, with its element — and the whole floor is blinded for those five seconds. Blinded enemies stop where they stand and raise their guard, or simply stand if their kind cannot guard, each lowering it again in its own time just before it can act. While the light lasts nothing can block: a hit staggers an enemy, and it returns to its guard afterwards. Only one flash at a time, and a charge left unused for ten seconds fades away.
 - **Big Bang ("Detonate")** — Every enemy Toan hits triggers an explosion.
 - **Buster Sword ("Buster Boost")** — Anti-category attachments (Dinoslayer … Mage Slayer) are worth +4 instead of +3 when attached to a Buster Sword.
 - **Cross Hinder ("Sanctifier")** — Roughly double damage and double ABS reward against undead, and undead it kills can no longer revive.
@@ -396,7 +397,7 @@ All buildup paths as modified by this mod. `★` marks final forms (no further b
 
 ### Toan
 
-> **Mod changes:** Kitchen Knife has no buildup paths. Choora builds up to Maneater only. Heaven's Cloud and Aga's Sword are terminal weapons.
+> **Mod changes:** Choora builds up to Maneater only. Heaven's Cloud and Aga's Sword are terminal weapons.
 
 ```
 Baselard
@@ -420,7 +421,11 @@ Wise Owl Sword → Lamb's Sword → Atlamillia Sword → Chronicle Sword ★
 
 Bone Rapier → Evilcise → Drainseeker → Dark Cloud → 7th Heaven ★
 
-Kitchen Knife ★
+Kitchen Knife
+  ├─ Sax ─────────────────┐
+  └─ Chopper ─┬─ Choora → Maneater → Atlamillia Sword → Chronicle Sword ★
+               └──────────┴─ Dusack ─┬─ Brave Ark → Dark Cloud → 7th Heaven ★
+                                      └─ 7 Branch Sword → Atlamillia Sword → Chronicle Sword ★
 
 Sun Sword → Big Bang → Sword of Zeus ★
 

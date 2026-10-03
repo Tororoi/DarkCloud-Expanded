@@ -47,6 +47,15 @@ namespace Dark_Cloud_Improved_Version
             ((211, 73, 236), (33, 0, 175)),                 // Holy     purple
             ((50, 50, 50), (160, 160, 160)),                // None     the dimmed white
         };
+        /// <summary>Row 8's ramp — the Angel Gear cat's GOLD: a pale gold core out to a deeper gold edge. Toan's own glow
+        /// disc rests on it (ToanGlowBakes).</summary>
+        internal static ((int, int, int) core, (int, int, int) outer) GlowGold => GlowLooks[2];
+        /// <summary>The Sword of Zeus's ring: a BLACK core (nothing, drawn additively) out to a deep red edge, so the disc reads
+        /// as a ring around the judgement blade. Not a cave row — Toan's disc alone rests on it (ToanGlowBakes).</summary>
+        internal static readonly ((int, int, int) core, (int, int, int) outer) GlowZeus = ((0, 0, 0), (200, 4, 0));
+        /// <summary>Row 6's ramp — the Divine Beast Title cat's BLUE: a pale cyan core out to a deep blue edge. Big Bang's
+        /// glow disc rests on it (ToanGlowBakes).</summary>
+        internal static ((int, int, int) core, (int, int, int) outer) GlowBlue => GlowLooks[0];
         private static ((int, int, int) core, (int, int, int) outer)[] GlowRows => GlowElements.Concat(GlowLooks).ToArray();   // the cave's table, in row order
         internal const string CapeCloName = "catcape.clo";
         internal const string DranChr = @"dun\monstor\c12a.chr";                   // the wing donor
@@ -89,6 +98,8 @@ namespace Dark_Cloud_Improved_Version
         {
             private const int Hdr = 0x10, Ent = 0x30;
             internal readonly byte[] Magic, Data; internal readonly List<(string name, int off)> Entries = new();
+            /// <summary>An IM2 bank's 8-bit pictures are in PSMT8 block order (an IMG bank's row-major).</summary>
+            internal bool Swizzled => Magic[2] == (byte)'2';
             internal Bank(byte[] data)
             {
                 string m = Encoding.Latin1.GetString(data, 0, 4);
@@ -232,7 +243,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The per-element glow disc as an 8-bit TIM2 (64×64 indices + a 256-entry CLUT) built off a vanilla 8-bit picture's headers. The
         /// CLUT baked here is only the resting look; the cave repaints it per element.</summary>
-        private static byte[] GlowT8Tim2(byte[] template, byte[] lightling, (int, int, int) core, (int, int, int) outer)
+        internal static byte[] GlowT8Tim2(byte[] template, byte[] lightling, (int, int, int) core, (int, int, int) outer)
         {
             var info = Tim2Info(template);
             if (info.bpp != 5 || info.hdr != 0x30) throw new IOException("glow_t8_tim2: template is not an 8-bit TIM2 with a 0x30 picture header");

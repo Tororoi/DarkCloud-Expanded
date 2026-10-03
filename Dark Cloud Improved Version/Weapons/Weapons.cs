@@ -3343,7 +3343,6 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort((ice + (weaponoffset * (Items.kitchenknife - daggerid))), 0);           //Ice set to 0
                 Memory.WriteUShort((thunder + (weaponoffset * (Items.kitchenknife - daggerid))), 8);       //Thunder set to 0
                 Memory.WriteUShort((sea + (weaponoffset * (Items.kitchenknife - daggerid))), 90);          //Sea Killer set to 90
-                Memory.WriteUShort((buildup + 5 + (weaponoffset * (Items.kitchenknife - daggerid))), 0);   //Set build-up branches to none (The 5 was just to offset to the correct address since I wasn't finding a way to write 8 bytes)
 
                 //Tsukikage
                 Memory.WriteUShort((endurance + (weaponoffset * (Items.tsukikage - daggerid))), 33);    //Endurance set to 33
@@ -4066,7 +4065,7 @@ namespace Dark_Cloud_Improved_Version
         /// snapshot in <see cref="ScaleWeaponFrameByName"/>, which would then re-snapshot an ALREADY-SCALED
         /// matrix and compound the scale every tick.
         /// </summary>
-        static uint ResolveBladeFrame(string weaponCode)
+        internal static uint ResolveBladeFrame(string weaponCode)
         {
             if (string.IsNullOrEmpty(weaponCode) || weaponCode.Length < 4) return 0;
 
@@ -4204,7 +4203,7 @@ namespace Dark_Cloud_Improved_Version
         // The model root = *(*NowWeapon+0xBC) is a CFrame (name@+0x118, child@+0x138, next@+0x13c — confirmed
         // via CopyFrameVu1/SearchFrame); DFS from it exactly as the game's SearchFrame does. Returns the frame's
         // NAME address (base+0x118, so the +0xB8/0xE8/0xF0 offset conventions hold), or 0 if not resolvable.
-        static long LocateModelFrame(uint nameWord, byte? fifthByte)
+        internal static long LocateModelFrame(uint nameWord, byte? fifthByte)
         {
             int nw = Memory.ReadInt(WeaponModel.NowWeaponPtr);
             if (!IsRamPtr(nw)) return 0;
@@ -4363,6 +4362,10 @@ namespace Dark_Cloud_Improved_Version
             if (Player.CurrentCharacterNum() != Player.ToanId) return;
             int wid = GetEquippedWeaponId();
             if (wid == HeavensCloudReachId) return;   // HC → TyphoonEffect
+            // Big Bang REPLACES the whirl model with explosion.chr (BigBang.WantedShot). This path validates a root
+            // by the fuusya names and would only drop its cache every tick against that model, so it stands down and
+            // BigBang.MaintainExplosionScale holds the scale instead.
+            if (BigBang.ExplosionSeeded || SwordOfZeus.LightningSeeded) { _whirlRoots = System.Array.Empty<long>(); return; }
 
             if (wid != _whirlWeaponId)
             {
@@ -4374,12 +4377,44 @@ namespace Dark_Cloud_Improved_Version
                 // tree-walk only for ids not in the table or with no dcol1 frame (e.g. id 277).
                 if (ToanWeapons.TryGetValue(wid, out WeaponData wd) && wd.Dcol1.HasValue)
                 {
-                    _weaponDcol1Z = Math.Abs(wd.Dcol1.Value);
+                    _weaponDcol1Z = Math.Abs(wd.Dcol1.Value) * BladeFactor(wid);
                     WhirlVisualScale = _weaponDcol1Z / WhirlwindVisualRadius;
                 }
             }
             if (_weaponDcol1Z == 0f) { if (_whirlDcolBackoff <= 0) LocateWeaponDcol1(); else _whirlDcolBackoff--; }
             if (WhirlVisualScale > 0f) MaintainWhirlScale();
+        }
+
+        /// <summary>The hit radius Toan's combo swings 3, 4 and 5 SHARE (ELF float 0x202A1C70, vanilla 6.2; swings 1
+        /// and 2 have their own at 0x2A1C68 / 0x2A1C6C). Plain ELF data — no patch needed, unlike the charge radii,
+        /// which the game baked into instructions. ⚠ Shared: anything that widens it must snapshot the old value and
+        /// put it back, and must expect to be holding it for swings 3 and 4 as well as 5.</summary>
+        internal static float ComboHitRadius
+        {
+            get => Memory.ReadFloat(ComboHitRadiusAddr);
+            set => Memory.WriteFloat(ComboHitRadiusAddr, value);
+        }
+        internal static void SetComboHitRadius(float r) => ComboHitRadius = r;
+        private const long ComboHitRadiusAddr = 0x202A1C70;
+
+        /// <summary>Put Toan's charge-attack hit radii back to what the game bakes in. The ISO patch
+        /// (ElfToanMeleePatches.PatchChargeHitRadius) turned the two immediates into reads of
+        /// CodeCaves.ChargeHitRadius, so these words ARE the radii now: seeded at startup and restored by any
+        /// ability that resized them, because a 0 here is a charge attack that hits nothing.</summary>
+        /// <summary>Item-bomb blasts back to the vanilla knockdown reaction (the ISO patch made it data).</summary>
+        internal static void SeedBombReaction() =>
+            Memory.WriteInt(CodeCaves.BombReaction, CodeCaves.BombReactionVanilla);
+
+        internal static void SeedChargeHitRadii() => SetChargeHitRadii(CodeCaves.LungeRadiusVanilla, CodeCaves.WhirlRadiusVanilla);
+
+        /// <summary>Resize the engine's OWN charge-attack hit spheres. The engine plants the damage from them — its
+        /// victims, its knockback, one plant per frame — so an ability sized by these needs no hit detection of its
+        /// own. ⚠ Always paired with a restore (SeedChargeHitRadii): the words are global and every weapon's charge
+        /// reads them.</summary>
+        internal static void SetChargeHitRadii(float lunge, float whirl)
+        {
+            Memory.WriteFloat(CodeCaves.ChargeHitRadius + CodeCaves.ChargeRadiusLunge, lunge);
+            Memory.WriteFloat(CodeCaves.ChargeHitRadius + CodeCaves.ChargeRadiusWhirl, whirl);
         }
 
         // Locate / maintain the whirlwind effect (c01_fuusya). Only the root "kiru" matrix transforms the
@@ -4454,9 +4489,13 @@ namespace Dark_Cloud_Improved_Version
             float y = Memory.ReadFloat(name + WeaponModel.DcolNameToLocalX + 4);
             float z = Memory.ReadFloat(name + WeaponModel.DcolNameToLocalZ);
             if (Math.Abs(x) > 0.5f || Math.Abs(y) > 0.5f || z < 0.1f || z > 40f) { _whirlDcolBackoff = 8; return; } // sane (0,0,Z)
-            _weaponDcol1Z = z;
-            WhirlVisualScale = z / WhirlwindVisualRadius;
+            _weaponDcol1Z = z * BladeFactor(GetEquippedWeaponId());
+            WhirlVisualScale = _weaponDcol1Z / WhirlwindVisualRadius;
         }
+
+        /// <summary>How much longer than its model a weapon's blade is in Toan's hand (the Claymore is scaled up), so the whirl
+        /// visual is sized to the blade as swung.</summary>
+        static float BladeFactor(int wid) => wid == Items.claymore ? Claymore.BladeScale : 1f;
 
         static bool IsRamPtr(int p) => (uint)p >= 0x80000 && (uint)p < Memory.EeRamSize;
 

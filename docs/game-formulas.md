@@ -56,7 +56,7 @@ stats are built), then applies a per-move multiplier. If the player has **buff s
 | | lunge (charge ≥ 1.5) | Attack × 1.5 | attack kind 2 |
 | | windmill spin (charge ≥ 2.5 + unlock `UserStatus+0x4324`) | Attack × 1.5 | attack kind 3, radius 12.0 |
 | | windmill projectile | Attack × 1.5 | `CSHOT_EFFECT`, full weapon data |
-| Xiao (1) | slingshot stone | Attack × 1.0 | latched at `BattleActionPlay_Jinn` entry into `NowShotData` slot `+0x2E0` (pool ptr @ `0x2A35D4`, 12 slots, 120-frame life). On impact `CSHOT::step` registers the hit (radius 3.0) reading element/anti/ability data from `NowWeaponHave` **at impact time**. Her hits never cause flinch. |
+| Xiao (1) | slingshot stone | Attack × 1.0 | latched at `BattleActionPlay_Jinn` entry into `NowShotData` slot `+0x2E0` (pool ptr @ `0x2A35D4`, 12 slots, 120-frame life). On impact `CSHOT::step` registers the hit (radius 3.0) reading element/anti/ability data from `NowWeaponHave` **at impact time**. Her hits never cause flinch. Patched: a NEGATIVE `+0x2E0` makes the contact plant nothing and just end the pellet (`DebugIfCave.PelletPlant`, the plant call at 0x1ABE04 → cave) — how the Zeus sphere's bolt pellets hurt nothing themselves. |
 | Goro (2) | swing | Attack × 1.0 | radius 5.0 |
 | | charged smash | Attack × 1.5 | attack kind 1 |
 | | smash shockwave | Attack × **1.8** (1.2 (`0x2A1AF8`) × 1.5) | projectile |
@@ -250,18 +250,67 @@ WHP -= (1.5 − 0.01 × Endurance) × factor  +  0.1 × monster.whpCost   // +0x
   `ChargedShotWhp` writes the charge's factor while the shot is held — the game's own drain does the rest.
 - **Serpent Sword** (item 268) takes **no WHP damage** until game flag 0x30 is set
   (its story event).
-- Warnings at 10 % and 5 % of max WHP; at 0 an owned Repair Powder (item 0xB7) is
-  auto-consumed, else the weapon reverts/breaks via `WepDataListToHaveCopy`.
+- **Ungaga (mod rebalance):** his charge fires its effect (c10a_ex) as a shot every 30 frames while held and `UngagaKey_Play` bills `SwordDmgCheck1(0.8)` per shot fired — kept; the hits that shot LANDS (owner 4, entry +0x38 = 1.0 — his swings plant 0) cost nothing, through the no-drain caves on CheckDmg's two drain calls (0x1DB388 landed, 0x1DAE94 guarded; `ElfDamagePatches.PatchUngagaNoDrain`), which also skip any entry the mod marks at +0x9C (Babel's spikes).
+- Toan's CHARGE attacks bill at the attack's START, landing or not: `ToanKey_Play` calls `SwordDmgCheck1(2.0)` as the
+  lunge begins (0x242A70) and `SwordDmgCheck1(3.0)` as the whirlwind does (0x242B64).
+- Mod: an ability's own cost (a Zeus bolt, a Big Bang blast, a flash-bang) is POSTED to the engine rather than
+  written: `WeaponWhp.Drain` puts the factor (base WHP / 1.5) in `CodeCaves.WhpBill` (0x01FAF8D0, magic at +4) and the
+  WHP-bill cave (`ElfFrameChainPatches.PatchWhpBill`, the tail of the camera-pin chain, once a dungeon frame) calls
+  `SwordDmgCheck1(factor, 0)` with it — the same routine a landed hit calls — so the drain, the warnings, the powder
+  and the break are the engine's, at the moment the ability strikes.
+- Warnings at 10 % and 5 % of max WHP. At ≤ 0 (checked only inside `BattleSubWeaponDmg`, i.e. on a drain): an owned
+  Auto Repair Powder (item 183 = 0xB7) is consumed and WHP refilled; else WHP is clamped to 0, the break sound plays,
+  and the weapon breaks ONLY onto a fallback — the character's starter (`__612` table: Toan 257 Broken Dagger, Xiao
+  299, Goro 314, Ruby 331, Ungaga 347): a Dagger (starter+1) in hand reverts to the starter via
+  `WepDataListToHaveCopy`; any other weapon is destroyed (id → 0xFFFF) and the first Broken Dagger / Dagger in the
+  ten bag slots equipped. With neither in the bag nothing happens: the weapon stays equipped at 0 WHP. A mod write
+  that leaves WHP at 0 therefore breaks on the next DRAIN (a landed hit, or a charge attack's start), not at once.
 
-## 10. Thrown items (for completeness)
+## 10. Magic circles
 
-`CMainItemModel::Step` (0x1D4E20 region) special-cases throwables on landing:
-elemental gems (items 161–165) and items 152/159 deal **30 × (selectMapNo + 1)**
-(dungeon-indexed, ignores weapon stats entirely); items 160/166/167/169 register fixed
-2- or 8-damage collisions whose attribute bits (0x100/0x200/0x800) inflict the
-corresponding status instead of real damage.
+`SetupTrapCircle` (0x1C7AB0) spawns up to three per floor, each with an effect rolled 0–9 (`rand`, clamped 9) in
+its map entry (+0x14; state at +0x10: 1 armed, 2 fired). Stepping in (`CheckTrapCircle` 0x1C79F0) runs dun.bin's
+`Run_TrapCircle` (0x1DBFA70) once. A starter weapon in hand — the character's default or its broken form, table
+dun 0x1DC1B00 (257/299/314/331/347/363) — is always dealt effect 0.
 
-## 11. Constants reference
+| # | Effect | Vanilla figure | SE |
+|---|---|---|---|
+| 0 | Attack ×2 (`BtSetStatusErr(8)`, `StatusErrCheck(8)` doubles the latched attack) | 0x708 = 1800 frames | good |
+| 1 | Gilda += trunc(gilda × 1.2) + 10, capped 65535 (the 1.2 is the shared kick word `0x2A1AF8`) | | good |
+| 2 | ABS to max (`WeaponDataChangeByRGate` kind 0 → `GetWeaponMaxExp`) | | good |
+| 3 | Max WHP += 3 + rand % 3, cap 99 (kind 2) | | good |
+| 4 | WHP to max (kind 4) | | good |
+| 5 | Every enemy slot's rage timer (+0x10 of the 400-byte block) = 300 (`AllBin2`) | | bad |
+| 6 | Gilda −= gilda × 0.2 (the shared `0x2A1C50`), floor 0 | | bad |
+| 7 | One of attack/endurance/speed/magic −= 2 + rand % 3 (attack floors 1), plus `LocalWeaponDataChange` on one byte of each element/anti group: +0x17×5 (2 + rand % 3), +0x1C×3, +0x1F×3, +0x22×4 (2 + rand % 2) (kind 1) | | bad |
+| 8 | Max WHP −= 3 + rand % 3; WHP clamped down to it; max floors 1 (kind 3) | | bad |
+| 9 | WHP ÷ 4, floor 1 (kind 5) | | bad |
+
+Kinds 1–5 end in `SetWeaponAttachStatus` (the battle record rebuilt). Nothing here is a table: every figure is an
+immediate in one of four routines.
+
+- Mod: `Run_TrapCircle` jumps to the CIRCLE CAVE (`tools/stubs/circle_effects.s`, over the dead `DebugInfomationIF`
+  0x1B47C0 — `ElfWeaponPatches.PatchCircleEffects`, hook in `DunPatches`), which applies the same ten effects with
+  every figure read from `CodeCaves.CircleTable` (0x01FAF900; pnach-seeded vanilla while its owner word is 0). The
+  two "to max" circles can also drop RewardCount items into the bag while there is room. `MagicCircles` writes a set;
+  `CircleAmplifier` (ownership passive: Crysknife or Magical Hammer owned ×2, both ×3, `MagicCircles.Boosted(m)`) writes
+  the boosted one. The table's FAVOUR word (the Secret Armlet owned, `SecretArmlet`) has the cave deal the bad circles
+  as good ones: 6 → 1, 8 → 3, 9 → 4, 7's losses become gains of the
+  same roll (capped 99), and 5 slows every enemy (gooey timer, +0x14 of the slot block, = SlowFrames) instead of
+  enraging them. New circle effects are added to the cave's chain.
+
+## 11. Thrown items (for completeness)
+
+`CMainItemModel::Step` (0x1D4E20 region) handles every thrown item on landing (an enemy hit, or 0x2C frames):
+elemental gems (items 161–165) spawn their Maseki burst; Holy Water (152) a light burst — both at **30 ×
+(selectMapNo + 1)** (dungeon-indexed, ignores weapon stats entirely); Stone (160) and the fruits 166/167/169
+register fixed 2- or 8-damage collisions whose attribute bits (0x100/0x200/0x800) inflict the corresponding status;
+and EVERY OTHER thrown item — the Bomb (159), Bomb Nuts (168), and anything else you throw — goes to
+`SetBombEffect(1.0, pos, 3, 30 × (selectMapNo + 1))`: the bomb blast. The chest-opening display loads the item's
+own model the same way the throw does (`BtGetItemNamePath` → `dun/item/main_data/<code>.mds/.img`, textured
+through `SetTempTexture(0x1C, img)`), so the bomb in a chest IS `bakudan.mds`.
+
+## 12. Constants reference
 
 | Address | Value | Used for |
 |---|---|---|

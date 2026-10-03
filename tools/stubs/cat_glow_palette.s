@@ -40,7 +40,7 @@
 # Leaf routine — calls nothing, touches only $t registers, returns through $ra, so it needs no frame.
 
     lui   $t5, 0x01FB
-    lw    $t4, 0x42A4($t5)       # Mailbox.CatGlowPalRow — the row the mod asked for, ONE-based …
+    lw    $t4, 0x42A4($t5)       # CatBlock.CatGlowPalRow — the row the mod asked for, ONE-based …
     beq   $t4, $zero, byelement  # … and 0 (a zero-filled page) means "work it out from the element" instead
     nop
     addiu $t4, $t4, -1

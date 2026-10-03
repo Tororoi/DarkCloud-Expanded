@@ -30,8 +30,11 @@ namespace Dark_Cloud_Improved_Version
         /// (EnemyAttackParams.ReactionAddr) and projectiles via the shot-effect table (BehaviorScriptTable +0x44)
         /// — so nothing is unguardable. Side effect (accepted): unguarded, those attacks now knockback instead of
         /// knocking you down (softer). The reaction types are set once at spawn, so this holds with no race; the
-        /// originals are restored (3) on unequip / dungeon exit. 7th Heaven also inherits Dark Cloud's Guard Crush
-        /// (its guard-break vs enemies) for lineage reasons — see DarkCloud.GuardCrushEffect + the Dungeon dispatch.
+        /// originals are restored (3) on unequip / dungeon exit — and whenever an ALLY is the one out: the shot table is
+        /// shared ELF data every character's guard is judged against, so it is softened only while Toan himself holds the
+        /// sword on screen (Super Steve's sphere drives the same routine for Xiao from its own dispatch). 7th Heaven also
+        /// inherits Dark Cloud's Guard Crush (its guard-break vs enemies) for lineage reasons — see DarkCloud.GuardCrushEffect
+        /// + the Dungeon dispatch.
         /// </summary>
         public static void DivineGuardEffect()
         {
@@ -42,7 +45,7 @@ namespace Dark_Cloud_Improved_Version
                         toanSlot * WeaponHave.InventoryWeaponSlotStride) != Items.seventhheaven)
                     break;
 
-                SeventhHeavenSoftenAttacks(true);
+                SeventhHeavenSoftenAttacks(Player.CurrentCharacterNum() == Player.ToanId);   // his guard alone; an ally out gets the game's own reaction types
                 Thread.Sleep(100);
             }
             SeventhHeavenSoftenAttacks(false);   // restore original reaction types on unequip / exit

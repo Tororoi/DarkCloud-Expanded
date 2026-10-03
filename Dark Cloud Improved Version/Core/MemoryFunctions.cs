@@ -23,14 +23,13 @@ namespace Dark_Cloud_Improved_Version
 
         public static void Connect(int slot = 0)
         {
-            _stream?.Close();
-            _socket?.Close();
-
+            lock (_lock) DisconnectStream();                     // under the lock: never under a read another thread is making
+            Socket socket;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                _socket.NoDelay = true;
-                _socket.Connect(new IPEndPoint(IPAddress.Loopback, 28011 + slot));
+                socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                socket.NoDelay = true;
+                socket.Connect(new IPEndPoint(IPAddress.Loopback, 28011 + slot));
             }
             else
             {
@@ -53,11 +52,15 @@ namespace Dark_Cloud_Improved_Version
                     throw new FileNotFoundException(
                         "PINE socket not found. Looked in: " + string.Join(", ", candidates.Distinct()));
 
-                _socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-                _socket.Connect(new UnixDomainSocketEndPoint(sockPath));
+                socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+                socket.Connect(new UnixDomainSocketEndPoint(sockPath));
             }
 
-            _stream = new NetworkStream(_socket, ownsSocket: false);
+            lock (_lock)
+            {
+                _socket = socket;
+                _stream = new NetworkStream(socket, ownsSocket: false);
+            }
             _writeFailCount = 0;
             _writeProbeDone = false;
         }
@@ -178,6 +181,12 @@ namespace Dark_Cloud_Improved_Version
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[PINE] IO error — connection lost: {ex.Message}");
                     return Array.Empty<byte>();
                 }
+                catch (ObjectDisposedException)
+                {
+                    DisconnectStream();
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[PINE] Stream already closed — connection lost.");
+                    return Array.Empty<byte>();
+                }
             }
         }
 
@@ -233,8 +242,8 @@ namespace Dark_Cloud_Improved_Version
             _writeProbeDone = true;
 
             // Try current PCSX2 PINE spec: Write8 = 0x04
-            SendBatch(BuildWritePacket(0x04, CodeCaves.Mailbox.PineProbe, new byte[] { 0x01 }));
-            if (ReadByte(CodeCaves.Mailbox.PineProbe) == 0x01)
+            SendBatch(BuildWritePacket(0x04, Mailbox.PineProbe, new byte[] { 0x01 }));
+            if (ReadByte(Mailbox.PineProbe) == 0x01)
             {
                 _altWriteOpcodes = true;
                 Console.WriteLine("[PINE probe] Write8 opcode 0x04 works (current PCSX2 PINE spec).");
@@ -242,8 +251,8 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // Fallback: legacy PCSX2 PINE spec: Write8 = 0x08
-            SendBatch(BuildWritePacket(0x08, CodeCaves.Mailbox.PineProbe, new byte[] { 0x01 }));
-            if (ReadByte(CodeCaves.Mailbox.PineProbe) == 0x01)
+            SendBatch(BuildWritePacket(0x08, Mailbox.PineProbe, new byte[] { 0x01 }));
+            if (ReadByte(Mailbox.PineProbe) == 0x01)
             {
                 Console.WriteLine("[PINE probe] Write8 opcode 0x08 works (legacy PCSX2 PINE spec).");
                 goto Done;
@@ -253,7 +262,7 @@ namespace Dark_Cloud_Improved_Version
 
             Done:
             _writeFailCount = 0;
-            WriteByte(CodeCaves.Mailbox.PineProbe, 0x00); // Clear probe value so instance-check in MainMenuThread sees 0
+            WriteByte(Mailbox.PineProbe, 0x00); // Clear probe value so instance-check in MainMenuThread sees 0
             _writeFailCount = 0;
         }
 
@@ -470,6 +479,7 @@ namespace Dark_Cloud_Improved_Version
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[PINE] IO error — connection lost: {ex.Message}");
                     return new float[count];
                 }
+                catch (ObjectDisposedException) { DisconnectStream(); return new float[count]; }
             }
         }
 
@@ -514,6 +524,7 @@ namespace Dark_Cloud_Improved_Version
                 }
                 catch (EndOfStreamException) { DisconnectStream(); return new uint[count]; }
                 catch (IOException) { DisconnectStream(); return new uint[count]; }
+                catch (ObjectDisposedException) { DisconnectStream(); return new uint[count]; }
             }
         }
 
@@ -663,6 +674,15 @@ namespace Dark_Cloud_Improved_Version
 
         internal static bool WriteDouble(long address, double value)
         {
+            SendBatch(BuildWritePacket(OpWrite64, address, BitConverter.GetBytes(value)));
+            return true;
+        }
+
+        /// <summary>One 64-bit store: two adjacent words that must change together (an STB instruction's opcode and
+        /// first operand, say) land in the same host store instead of two round-trips the game can run between.</summary>
+        internal static bool WriteULong(long address, ulong value)
+        {
+            Trips++; TripBytes += 8;
             SendBatch(BuildWritePacket(OpWrite64, address, BitConverter.GetBytes(value)));
             return true;
         }

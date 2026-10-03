@@ -17,7 +17,6 @@ namespace Dark_Cloud_Improved_Version
         internal const float RubyBallGrowthPerMultiple = 1.0f;   // ball-scale gained per +1.0 of damage multiplier
 
 
-        private static Random random = new Random();
 
         // ── Mobius Ring ────────────────────────────────────────────────────────────────────
         /// <summary>
@@ -173,68 +172,6 @@ namespace Dark_Cloud_Improved_Version
                 Weapons.SetRubyBallScale(1.0f);
                 Weapons.RestoreRubyOrbHitbox();
             }
-        }
-
-        // ── Secret Armlet ──────────────────────────────────────────────────────────────────
-        /// <summary>
-        /// Enables the Secret Armlet special effect:
-        /// <br></br>
-        /// <br>Makes all magic circle effects turn into positive ones.</br>
-        /// </summary>
-        /// <param name="isNewFloor">Determines if we have entered a new floor to know if we should run this code again.</param>
-        public static bool SecretArmletEnable()
-        {
-            bool changed = false;
-
-            //Check if any of the spawned circles have a negative effect and change into positive ones
-            if (Memory.ReadByte(Addresses.circleSpawn1) != 0 && Memory.ReadByte(Addresses.circleEffect1) > 4)
-                { int effectPositive1 = random.Next(5); Memory.WriteByte(Addresses.circleEffect1, (byte)effectPositive1); changed = true; }
-
-            if (Memory.ReadByte(Addresses.circleSpawn2) != 0 && Memory.ReadByte(Addresses.circleEffect2) > 4)
-                { int effectPositive2 = random.Next(5); Memory.WriteByte(Addresses.circleEffect2, (byte)effectPositive2); changed = true; }
-
-            if (Memory.ReadByte(Addresses.circleSpawn3) != 0 && Memory.ReadByte(Addresses.circleEffect3) > 4)
-                { int effectPositive3 = random.Next(5); Memory.WriteByte(Addresses.circleEffect3, (byte)effectPositive3); changed = true; }
-
-            if (Memory.ReadByte(Addresses.backfloorcircleSpawn1) != 0 && Memory.ReadByte(Addresses.backfloorcircleEffect1) > 4)
-                { int effectPositive4 = random.Next(5); Memory.WriteByte(Addresses.backfloorcircleEffect1, (byte)effectPositive4); changed = true; }
-
-            if (Memory.ReadByte(Addresses.backfloorcircleSpawn2) != 0 && Memory.ReadByte(Addresses.backfloorcircleEffect2) > 4)
-                { int effectPositive5 = random.Next(5); Memory.WriteByte(Addresses.backfloorcircleEffect2, (byte)effectPositive5); changed = true; }
-
-            if (Memory.ReadByte(Addresses.backfloorcircleSpawn3) != 0 && Memory.ReadByte(Addresses.backfloorcircleEffect3) > 4)
-                { int effectPositive6 = random.Next(5); Memory.WriteByte(Addresses.backfloorcircleEffect3, (byte)effectPositive6); changed = true; }
-
-            if (changed) return true; else return false;
-        }
-
-        /// <summary>
-        /// Disables the Secret Armlet special effect and re-rolls any present magic circle outcome
-        /// </summary>
-        public static bool SecretArmletDisable()
-        {
-            bool changed = false;
-
-            //Re-roll the existing circles
-            if (Memory.ReadByte(Addresses.circleSpawn1) != 0)
-                { int effectPositive1 = random.Next(10); Memory.WriteByte(Addresses.circleEffect1, (byte)effectPositive1); changed = true; }
-
-            if (Memory.ReadByte(Addresses.circleSpawn2) != 0)
-                { int effectPositive2 = random.Next(10); Memory.WriteByte(Addresses.circleEffect2, (byte)effectPositive2); changed = true; }
-
-            if (Memory.ReadByte(Addresses.circleSpawn3) != 0)
-                { int effectPositive3 = random.Next(10); Memory.WriteByte(Addresses.circleEffect3, (byte)effectPositive3); changed = true; }
-
-            if (Memory.ReadByte(Addresses.backfloorcircleSpawn1) != 0)
-                { int effectPositive4 = random.Next(10); Memory.WriteByte(Addresses.backfloorcircleEffect1, (byte)effectPositive4); changed = true; }
-
-            if (Memory.ReadByte(Addresses.backfloorcircleSpawn2) != 0)
-                { int effectPositive5 = random.Next(10); Memory.WriteByte(Addresses.backfloorcircleEffect2, (byte)effectPositive5); changed = true; }
-
-            if (Memory.ReadByte(Addresses.backfloorcircleSpawn3) != 0)
-                { int effectPositive6 = random.Next(10); Memory.WriteByte(Addresses.backfloorcircleEffect3, (byte)effectPositive6); changed = true; }
-
-            if (changed) return true; else return false;
         }
 
     }

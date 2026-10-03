@@ -30,9 +30,7 @@ back with the Matador's kick (strength 2.5, decay 0.1): `ElfCave.CatGuardBypass`
 whose base damage equals `Mailbox.PelletKickDamage`, with the origin at the entry's own sphere centre (the burst), so
 every enemy caught in the burst is shoved straight out of it in whatever direction that is (Heaven's Cloud does the
 same from the mod side with `Enemies.RadialKnockback`); the guard window test then runs as vanilla — knockback
-without guard crush. The cave tests the two damage marks BEFORE its cat shortcut (owner 1 + kick type 2 → pass): a
-stamped entry carries the melee type from then on and outlives one CheckDmg, so with the shortcut first the shot passed
-every guard after its first hit. The reorder made the cave 332 B, and it now lives in dun.bin over `MemoryMapDump`'s body
+without guard crush. The cave's old cat shortcut (owner 1 + kick type 2 → pass) is gone: the cat's hit carries the crush mark (docs/guard-gate.md), so a stamped shot keeps its vanilla guard test on every later hit. The reorder made the cave 332 B, and it now lives in dun.bin over `MemoryMapDump`'s body
 (`DunCave.CatGuardBypass` 0x1DAC070 — a printf-only debug routine; DunPatches writes the cave bytes and nops its three
 callers), since the cave band had no such gap.
 

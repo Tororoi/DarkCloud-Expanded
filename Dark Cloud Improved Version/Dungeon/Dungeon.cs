@@ -42,7 +42,6 @@ namespace Dark_Cloud_Improved_Version
         static List<MiniBoss.MiniBossSnapshot> backfloorSnapshot = null;
         public static bool enemiesSpawn = false;
         public static bool doorIsOpen = false;
-        public static bool magicCircleChanged = false;
         public static List<byte> excludeFloors;
 
 //THREADS
@@ -120,6 +119,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         WeaponThreads.Launch();
                         CheckActiveItems();
+                        if (DebugDiagnostics.Enabled) TestWeaponGrant.Tick();     // the Partisan test grant
                     }
 
                     //Check if player is inside the weapon customize menu
@@ -157,6 +157,7 @@ namespace Dark_Cloud_Improved_Version
                     currentFloor = Memory.ReadByte(Addresses.checkFloor);
 
                     //Check if the player has entered a new floor
+                    if (DebugDiagnostics.Enabled) ShotReactionAudit.Tick();         // DIAGNOSTIC: the shot config table against vanilla
                     if (currentFloor != prevFloor)
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Floor changed!");
@@ -166,7 +167,6 @@ namespace Dark_Cloud_Improved_Version
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has entered a new floor!");
 
                             doorIsOpen = false;
-                            magicCircleChanged = false;
                             dunUsedActiveEscape = false;
                             dunUsedEscapeCheck = false;
                             hasClearMessageShown = false;
@@ -475,6 +475,7 @@ namespace Dark_Cloud_Improved_Version
 
             chronicle2 = ChronicleSword.CheckChronicle2(chronicle2);
             CustomChests.BasicChestRandomizer(currentDungeon, currentFloor, chronicle2); //Randomize the chest loot (old table-based version)
+            Sax.OnFloorChestsReady();         // Fine Fare (Sax line): the floor's chest upgrades planned once, applied if the sword is out
             Weapons.StartHeavensCloudReach(); // extend Heaven's Cloud reach (dcol1 frame + swing radii)
             Weapons.OnReachFloorEntered();    // re-locate the freshly reloaded model on this floor
 

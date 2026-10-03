@@ -518,7 +518,7 @@ namespace Dark_Cloud_Improved_Version
         // char) + level × step (+0x32, short), clamped to 1..999 with the engine's own ≤0 → 99
         // fallback. Reads the live table so any modded base values are honored. Returns 0 for
         // ids outside the weapon table.
-        private static int MachoMaxExp(int weaponId, int level)
+        internal static int MachoMaxExp(int weaponId, int level)
         {
             int row = weaponId - Weapons.daggerid;
             if (row < 0 || row > 118) return 0;
@@ -537,7 +537,7 @@ namespace Dark_Cloud_Improved_Version
         // equipped == defWeapon[char], and defWeapon holds the BROKEN id. So INTACT defaults (Dagger,
         // Mallet, …) earn ABS and roll over like any weapon — only the broken forms are excluded.
         // (The Serpent Sword's flag-gated no-ABS state is not replicated; it self-limits anyway.)
-        private static bool MachoIsAbslessWeapon(int id)
+        internal static bool MachoIsAbslessWeapon(int id)
         {
             return id == Item.DaggerBroken.Id
                 || id == Item.WoodenSlingshotBroken.Id

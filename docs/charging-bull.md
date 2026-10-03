@@ -26,7 +26,13 @@ The pellet is the game's own (`step__5CSHOT`, 0x1ABD10): it flies, collides and 
   back to None so the cat repaints on its next spawn. (A tenth, orange row cannot be baked: the palette tables end where
   the palette cave begins.) (For the record, `draw__5CSHOT` 0x1ABC40 draws every pellet
   as one 32 × 32 cell of `dun\effect\basefx01.img`, cell `id − 300`, at the pool's sprite scale +0x310 — the Matador's
-  is an orange ball, a free glow if ever wanted.)
+  is an orange ball, a free glow if ever wanted. The sheet's bottom row, cells 312–315, is four byte-exact copies of the
+  Angel Shooter's stone (cell 309): Super Steve and Angel Gear fire that stone, and 314–315 are Goro's first hammers by
+  id, which never shoot, so cells 314 and 315 are never drawn in vanilla. `PelletSheetBakes` (post-step `pellet-sheet`)
+  paints cell 315 fully transparent — palette index 0, which no vanilla pixel uses, set to 0,0,0,0 — so an invisible
+  pellet is the data write `Mailbox.PelletSpriteId = 315` (`PelletSheetBakes.BlankCell`; BigBangShot hides the pellet its
+  bomb replaces this way). Cell 314 still holds the stone, free for a custom sprite; 312 and 313 stay Super Steve's and
+  Angel Gear's own cells, so a custom sprite for either is a bake of its cell.)
 - **Model.** `SlingshotProp.SpawnProjectile`: the live weapon copied into chara slot 3 as for the Guardian Reflector, but
   world-rooted (no weld to her model root), slid down its own tree so the POUCH sits on the root (the point the cave
   puts on the pellet) with the spare node set at the model's centre for the glow, yaw set from the pellet's velocity, the grip bake at its own preset (the shield's pose flew upside down), and placed on the pellet every frame by

@@ -117,7 +117,7 @@ namespace Dark_Cloud_Improved_Version
             return Path.Combine(xdg, "PCSX2", "cheats");
         }
 
-        internal static string Patch(string stockIso, string outDir, Action<string> progress)
+        internal static string Patch(string stockIso, string outDir, Action<string> progress, bool publishPnach = true)
         {
             if (string.IsNullOrWhiteSpace(stockIso) || !File.Exists(stockIso))
                 throw new FileNotFoundException("Stock ISO not found. Select your Dark Cloud (USA) .iso first.");
@@ -155,7 +155,7 @@ namespace Dark_Cloud_Improved_Version
             // only; composes on the tail after the town models. (NOT the weapon pack: the weapon menu rebuilds
             // every carried weapon into a 944 KB arena and a bigger weapon pack overflowed it.)
             progress("Baking the Divine Beast Title cat into Xiao's dungeon model …");
-            BakeCatPack(outIso, progress);
+            BakeCharacterPacks(outIso, progress);
 
             // Hurt-sphere fixes baked into the monster scripts (dun\monstor\*.stb, redirected into the tail): Blizzard takes
             // Titan's four spheres, Sam and Billy take Mr. Blare's two, and Minotaur Joe's face admits the Divine Beast
@@ -168,8 +168,8 @@ namespace Dark_Cloud_Improved_Version
             progress("Baking borrowed shot effects …");
             BakeBorrowedShots(outIso, progress);
 
-            progress("Publishing pnach to PCSX2 …");
-            ReshipPnach(crc);
+            if (publishPnach) { progress("Publishing pnach to PCSX2 …"); ReshipPnach(crc); }
+            else progress("pnach not published (--no-pnach)");
             return outIso;   // the caller sets the final informative message (avoids overwriting it)
         }
 
@@ -185,10 +185,12 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The Divine Beast Title cat pack: the s86 cat rig, Dran's wings, the cape and the mask baked into Xiao's dungeon
         /// pack c04b.chr (CatPackBakes) and redirected into the DATA.DAT tail. Reads every model from the user's OWN ISO.
         /// Idempotent; also reverts the earlier weapon-pack bake if an ISO carries it.</summary>
-        static void BakeCatPack(string outIso, Action<string> progress)
+        static void BakeCharacterPacks(string outIso, Action<string> progress)
         {
             using var arc = new IsoArchive(outIso, progress);
-            CatPackBakes.Run(arc, progress);
+            CatPackBakes.Run(arc, progress);      // the Divine Beast cat, into Xiao's pack
+            ToanGlowBakes.Run(arc, progress);     // Solar Flash's white glow disc, into Toan's
+            PelletSheetBakes.Run(arc, progress);  // the pellet sheet's transparent cell (the bottom row is the mod's)
         }
 
         // MonsterScriptBakes rewrites the hurt-sphere declarations of a few monster scripts (each `_SET_BODY_COL` block
@@ -206,6 +208,7 @@ namespace Dark_Cloud_Improved_Version
         {
             using var arc = new IsoArchive(outIso, progress);
             BorrowedShotBakes.Run(arc, progress);
+            ConfuseAbilityBakes.Run(arc, progress);             // the Confuse ability's name (system banks) and icon (charaface)
         }
 
         /// <summary>Queens' snake-statue part collision, the Yellow Drops west bank, and the fishing collision bins the

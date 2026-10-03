@@ -1,5 +1,7 @@
-# cat_guard_bypass.s — CheckDmg__12CMonstorUnit (main ELF 0x1D9F10): the Divine Beast cat's hit — and the Matador's charged
-# pellet — ignore an enemy's GUARD WINDOW; a second marked pellet (Dragon's Y's ball) gets the kick WITHOUT the bypass.
+# cat_guard_bypass.s — CheckDmg__12CMonstorUnit (main ELF 0x1D9F10): the Matador's charged pellet ignores an enemy's GUARD
+# WINDOW; a second marked pellet (Dragon's Y's ball) gets the kick WITHOUT the bypass. The LAST link of the guard gate: the
+# hook lands in guard_crush.s (a crush-marked entry — the Divine Beast cat's hit among them — passes), then guard_mask.s (the
+# windows the mod switches off per enemy), then here.
 # Assembled at 0x01DAC070 (DunCave.CatGuardBypass): the body of dun.bin's MemoryMapDump, a printf-only debug routine (its
 # one other call, print_buff_info, is an empty function) whose three callers DunPatches turns into nops — the cave band has
 # no gap this size, and the band must never grow past 0x1FB4000 (runtime data: the fishing bobber pointer and the cat's block).
@@ -16,7 +18,7 @@
 # v1 = slot*0x20 + monster base). The next instruction branches to 0x1DAFC8 when the flag is zero, i.e. "no guard on
 # this window", so handing back v0 = 0 is exactly "this attacker is not guarded". s2 = the damage entry's index
 # (0x1DACE4 forms s2*0xA0 from it) and gp is intact, so the entry is reachable: NowColData (gp−0x6210) + s2*0xA0,
-# owner +0x58 == 1 (Xiao) and kick type +0x98 == 2 (the cat stamps it; her pellets carry 0 — cat_pellet_follow.s).
+# owner +0x58 == 1 (Xiao) for the pellet rules below.
 # Clobbers at and v0 only, both dead at the hook (v0 is re-loaded with 0x3510 at 0x1DAC88 on the taken path, and at is
 # re-formed by the `lui at,0x6` at 0x1DACA8).
 # THE PELLET. A pellet's entry carries kick type 0 and nothing that names the pellet, so the charged shot is told apart by
@@ -30,10 +32,14 @@
 # test comes first in CheckDmg; the kick is read in the damage block.
 # A Xiao-owned entry whose base damage equals +0xF0 PelletKickDamage instead (Dragon's Y's shot) is given the same
 # strength, decay and type, but its ORIGIN is the entry's own sphere centre (+0x00/+0x04/+0x08 — the shot's impact
-# sphere, planted where it burst), so every enemy caught in the burst is shoved straight out of it; it then takes the
-# VANILLA window test — knockback, no guard crush. The two damage marks are tested BEFORE the cat's kick-type shortcut:
+# sphere, planted where it burst) PLUS PelletKickOrigin read as an OFFSET (the mod writes −flight direction × a few
+# units at each shot): the enemy struck head-on — the burst sits at or inside it — is shoved along the flight, away from
+# the shooter, and one caught by the burst's side is shoved mostly sideways. It then takes the VANILLA window test —
+# knockback, no guard crush. (The Matador's crush reads the same words as an absolute origin; the two never fire together.)
+# $f0/$f1 are free here: nothing after the hook reads an FPU register before writing it. The two damage marks are tested BEFORE the cat's kick-type shortcut:
 # a stamped entry carries the melee type from then on, and an entry outlives one CheckDmg (the next enemy, the next
-# frame), so testing the type first would let Dragon's Y's shot through every guard after its first hit.
+# frame). Nothing here keys on the kick type: Super Steve's own mod-planted hits carry the melee type too, and pass a guard
+# only when they carry the crush mark (guard_crush.s).
 lw    $at, -0x6210($gp)        # NowColData
 sll   $v0, $s2, 5              # entry index × 0x20
 addu  $at, $at, $v0
@@ -53,19 +59,9 @@ nop
 kickq:
 lui   $at, 0x01F1
 lw    $at, 0x00F0($at)         # PelletKickDamage (mod)
-beq   $at, $zero, cat          # no kicking pellet out either
+beq   $at, $zero, vanilla      # no kicking pellet out either
 nop
 beq   $v0, $at, kick           # the kicking shot
-nop
-cat:
-lw    $at, -0x6210($gp)        # re-form the entry
-sll   $v0, $s2, 5
-addu  $at, $at, $v0
-sll   $v0, $s2, 7
-addu  $at, $at, $v0
-lw    $v0, 0x0098($at)         # its kick type
-addiu $v0, $v0, -2             # 2 = the cat (a melee-style kick; her pellets carry 0)
-beq   $v0, $zero, pass
 nop
 vanilla:
 sll   $v0, $a2, 1              # rebuild the vanilla address: (window × 2 + slot base) + 0x60000
@@ -89,12 +85,19 @@ lw    $v0, 0x00D8($v0)         # PelletKickDecay (mod)
 sw    $v0, 0x0094($at)
 addiu $v0, $zero, 2            # melee-type kick
 sw    $v0, 0x0098($at)
-lw    $v0, 0x0000($at)         # origin = the entry's sphere centre
-sw    $v0, 0x0080($at)
-lw    $v0, 0x0004($at)
-sw    $v0, 0x0084($at)
-lw    $v0, 0x0008($at)
-sw    $v0, 0x0088($at)
+lui   $v0, 0x01F1              # origin = the entry's sphere centre + PelletKickOrigin (here an OFFSET: back along the flight)
+lwc1  $f0, 0x0000($at)
+lwc1  $f1, 0x00DC($v0)
+add.s $f0, $f0, $f1
+swc1  $f0, 0x0080($at)
+lwc1  $f0, 0x0004($at)
+lwc1  $f1, 0x00E0($v0)
+add.s $f0, $f0, $f1
+swc1  $f0, 0x0084($at)
+lwc1  $f0, 0x0008($at)
+lwc1  $f1, 0x00E4($v0)
+add.s $f0, $f0, $f1
+swc1  $f0, 0x0088($at)
 b     vanilla                  # its guard test is the game's
 nop
 crush:
@@ -121,5 +124,5 @@ lui   $v0, 0x01F1
 lw    $v0, 0x00E4($v0)         #   y
 sw    $v0, 0x0088($at)
 pass:
-j     0x001DAC80               # the cat's or the charged pellet's hit: report "no window here" and let the damage through
+j     0x001DAC80               # the charged pellet's hit: report "no window here" and let the damage through
 move  $v0, $zero               # (delay slot)

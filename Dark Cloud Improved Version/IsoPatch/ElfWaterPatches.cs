@@ -68,7 +68,7 @@ namespace Dark_Cloud_Improved_Version
                 0x8F390014, 0x0320F809, 0x00000000, 0x72402628, 0x8E5900A0, 0x8F390094,
                 0x0320F809, 0x00000000, 0x3C0101FB, 0x8C3FE604, 0x03E00008, 0x00000000,
                 0x3C0101FB, 0x8C28E600, 0x11000003, 0xAC20E600,
-                0x0C000000u | ((CodeCaves.ElfCave.WaterOrderGate + 0x30) >> 2),   // jal ORDER-GATE SHIM (+0x30 in waterOrderGate.bin)
+                0x0C000000u | ((ElfCave.WaterOrderGate + 0x30) >> 2),   // jal ORDER-GATE SHIM (+0x30 in waterOrderGate.bin)
                 0x00000000,
                 0x8F829074, 0x14400003, 0x00000000, 0x0805F07A, 0x00000000, 0x0805F0FA,
                 0x00000000, 0x00000000,
@@ -174,7 +174,7 @@ namespace Dark_Cloud_Improved_Version
             };
             uint[] patchedPayload =
             {
-                0x08000000u | (CodeCaves.ElfCave.WaterOrderGate >> 2),
+                0x08000000u | (ElfCave.WaterOrderGate >> 2),
                 0x00000000, 0x00000000,                                     // STUB: j ORDER-GATE COND (waterOrderGate.bin entry)
                 // ^ was `set flag, skip to 0x17BCC4` (unconditional deferral). The order gate
                 //   (waterOrderGate.bin) defers ONLY while the wading mailbox 0x01FAE608 is armed
@@ -197,7 +197,7 @@ namespace Dark_Cloud_Improved_Version
                 0x00A21024, 0x00431025, 0x0C04BBB0, 0xA3A20424,             // ZMSK on: MGSetGsZBUF(&copy)
                 0x8F8490E8, 0x0C068CD8, 0x8F859100,                         // DrawWaterSurface(pEditGround, NowCamera)
                 0x0C04BBB0, 0x27848BF0,                                     // Z restore: MGSetGsZBUF(&mgZBuffer)
-                0x08000000u | ((CodeCaves.ElfCave.WaterOrderGate + 0x48) >> 2),
+                0x08000000u | ((ElfCave.WaterOrderGate + 0x48) >> 2),
                 0x00000000,                                                 // j RET_THUNK (WaterOrderGate+0x48: jr [0x01FAE610] — dynamic return; was constant j 0x1A3870)
             };
             // Two hard-won rules baked into this array:
@@ -286,7 +286,7 @@ namespace Dark_Cloud_Improved_Version
             // ── ORDER-GATE cave (tools/stubs/water_order_gate.s → waterOrderGate.bin @ElfCave.WaterOrderGate): COND
             //    (payload entry: defer only when the wading mailbox is armed) + SHIM (hook-cave call) +
             //    RET_THUNK (the payload's dynamic return). See the STUB comment in patchedPayload.
-            const uint OrderGateCaveAddr = CodeCaves.ElfCave.WaterOrderGate;   // registry: CodeCaveAddresses.ElfCave
+            const uint OrderGateCaveAddr = ElfCave.WaterOrderGate;   // registry: CodeCaveAddresses.ElfCave
             using (var st = System.Reflection.Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.waterOrderGate.bin")
                 ?? throw new IOException("Embedded EE function missing: waterOrderGate.bin (run tools/stubs/build_ee_stubs.py and rebuild)"))
@@ -316,7 +316,7 @@ namespace Dark_Cloud_Improved_Version
         // too. MUST run AFTER PatchWaterRedraw (which writes the `jal MGDraw` this replaces).
         internal static void PatchCapeEarlyDraw(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint StubAddr = CodeCaves.ElfCave.CapeEarlyDraw;   // registry: CodeCaveAddresses.ElfCave
+            const uint StubAddr = ElfCave.CapeEarlyDraw;   // registry: CodeCaveAddresses.ElfCave
             const uint HookAddr = 0x0017BBD0;   // EARLY_STUB `jal MGDraw` (patchedGate[23], set by PatchWaterRedraw)
             if (RdU32(fs, ElfOff(HookAddr)) != 0x0C04BB60)   // = jal MGDraw (0x0012ED80)
                 throw new IOException($"Cape early-draw hook site 0x{HookAddr:X} is not `jal MGDraw` — PatchWaterRedraw must run first / unmodified ISO expected.");

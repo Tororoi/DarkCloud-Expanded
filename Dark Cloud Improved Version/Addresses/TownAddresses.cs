@@ -396,6 +396,14 @@ namespace Dark_Cloud_Improved_Version
     /// resolves to <see cref="EditLoop.MainCamera"/> while walking/fishing. One home for the
     /// pointer and the Step-consumed field offsets (previously re-declared per feature file).
     /// </summary>
+    /// <summary>The dungeon's camera pointer (ELF <c>NowCamera</c>, gp-0x6358): the CCameraFollow the dungeon driver
+    /// (MoveChara, OpC_MotionProcess, CameraAutoMove) moves — a dungeon-side object (0x21DC45E0 in play), not the town's
+    /// MainCamera. 0 in town.</summary>
+    internal static class DungeonCamera
+    {
+        internal const long NowCamera = 0x202A3498;
+    }
+
     internal static class FollowCamera
     {
         /// <summary>Pointer to the active CCameraFollow.</summary>
@@ -657,7 +665,7 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// ⚠ RETIRED (2026-08): the anchor toggle is GONE. The ISO split caves (IsoPatcher.PatchFishLineSplit)
     /// bake the above/below rest-length cutover at FIXED A=18 and hook depth is now the distpBelow data word
-    /// (CodeCaves.Mailbox.LineDistpBelow), so the cold patch is NO LONGER INSTALLED — the vanilla
+    /// (Mailbox.LineDistpBelow), so the cold patch is NO LONGER INSTALLED — the vanilla
     /// instructions already compute point[18]. The Sites/NewLui machinery survives only so a mod RELAUNCH
     /// against an already-patched game can detect the leftover patch and pin BobberPtr back to point[18]
     /// (un-patching possibly-JIT'd code is the hot-write crash). DistpAddr/VanillaDistp remain live — they

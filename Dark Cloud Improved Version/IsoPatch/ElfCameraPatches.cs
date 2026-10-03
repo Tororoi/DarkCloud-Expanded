@@ -271,7 +271,7 @@ namespace Dark_Cloud_Improved_Version
             // ref-side flip was tried first and pulled the camera inside closed shells' far walls).
             uint[] normSide = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.cameraNormSide.bin", 0x3C0A01F1);
             for (int i = 0; i < normSide.Length; i++)
-                WrU32(fs, ElfOff(CodeCaves.ElfCave.CameraNormSideBank + (uint)(i * 4)), normSide[i]);
+                WrU32(fs, ElfOff(ElfCave.CameraNormSideBank + (uint)(i * 4)), normSide[i]);
             // ── FISHING LINE CANAL CLAMP (CamBankFishLineClamp in the bank above, camera_norm_side.s) ──
             // Wraps EdMoveChara's single FishLineStep call: after the real Verlet step, in QUEENS ONLY,
             // the rope tail (bobber point[18], hang-down line, uki/hook clusters — pos AND old_p, so the
@@ -280,7 +280,7 @@ namespace Dark_Cloud_Improved_Version
             // opposite the rod is clamped, so reel-in is never obstructed. The cast button always works
             // (v1 rejected the cast at the button — bad feel, and its facing ray over-rejected).
             Guard(0x0016D314, 0x0C06A8D0, "fishing line-clamp hook (jal FishLineStep)");
-            WrU32(fs, ElfOff(0x0016D314), MipsAsm.Jal(CodeCaves.ElfCave.CamBankFishLineClamp));   // jal the FishLineClamp wrapper in the cameraNormSide bank
+            WrU32(fs, ElfOff(0x0016D314), MipsAsm.Jal(ElfCave.CamBankFishLineClamp));   // jal the FishLineClamp wrapper in the cameraNormSide bank
             Guard(0x0027D090, 0x00000000, "world-height cave (ex-autorotate area, zero words in vanilla)");
             uint[] heightFn = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.cameraHeight.bin", 0x27BDFFE0);
             // REACQUISITION GATE (word 3 of the sub, 2026-08, HEIGHT-ONLY since the recovery fix): when
@@ -341,7 +341,7 @@ namespace Dark_Cloud_Improved_Version
         /// </code>
         /// It re-runs EVERY FRAME of a session, so a runtime write to the camera loses the race. Instead we
         /// rewrite those two instructions to LOAD the height from a mod-owned word
-        /// (<see cref="CodeCaves.Mailbox.FishCamHeight"/>), turning a code constant into per-spot data:
+        /// (<see cref="Mailbox.FishCamHeight"/>), turning a code constant into per-spot data:
         /// <code>
         ///   lui  $2,HI(FishCamHeight)
         ///   lwc1 $f12,LO(FishCamHeight)($2)
@@ -359,7 +359,7 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException($"Fishing camera-height site 0x{LuiAddr:X} is not vanilla " +
                                       $"(got 0x{gotLui:X8}/0x{gotMtc1:X8}) — is this an unmodified Dark Cloud (USA) ISO?");
 
-            const uint SLOT = (uint)(CodeCaves.Mailbox.FishCamHeight & 0x1FFFFFFF);   // guest (PINE addr minus the 0x20000000 view)
+            const uint SLOT = (uint)(Mailbox.FishCamHeight & 0x1FFFFFFF);   // guest (PINE addr minus the 0x20000000 view)
             uint hi = SLOT >> 16, lo = SLOT & 0xFFFF;
             if (lo >= 0x8000) hi += 1;                       // lwc1's offset is SIGNED — compensate like the assembler
             WrU32(fs, ElfOff(LuiAddr),  0x3C020000u | hi);                      // lui  $2,hi

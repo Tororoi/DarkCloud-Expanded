@@ -95,22 +95,66 @@ namespace Dark_Cloud_Improved_Version
         internal const int Count      = 6; // element 0-5
     }
 
+    /// <summary>The thrown-item and bomb-effect objects (dungeon).</summary>
+    internal static class ItemModels
+    {
+        internal const long ItemModelPtr     = 0x21EC78A8;   // → CMainItemModel: cash roots at +0 (6), item ids +0x18, refcounts +0x30, model states +0x48 (16), model cash idx +0x88
+        internal const int  CashCount = 6, CashRootOffset = 0x00, CashItemOffset = 0x18, CashRefOffset = 0x30;
+        /// <summary>Each cash entry's allocator, a CDataAlloc2 (BtItemCashArea + i·0x10): +0 base, +8 units used, +0xC capacity (16-byte
+        /// units; Alloc hangs forever on an overrun). SetCashModel loads the entry's texture copy and model into it.</summary>
+        internal const long CashAllocBase    = 0x21F067E0;
+        internal const int  CashAllocStride  = 0x10, CashAllocUsed = 0x8, CashAllocCap = 0xC;
+        /// <summary>LoadMDSFile(mds, allocator, kind, 0, 0) → the root frame: kind 0 a lit model (SetCashModel's), 8 a SHADOW model
+        /// (CommandSHADOW_MODEL's: CVisualShadow visuals, which MGDrawShadowFast draws).</summary>
+        internal const uint LoadMDSFile      = 0x001262B0;
+        internal const uint MdsKindShadow    = 8;
+        internal const uint SetCashModel     = 0x001D45E0;   // SetCashModel(this, itemId, mds, img, imgSize): loads the model + its texture block (0x38 + cash idx)
+        internal const long MenuBufferPtr    = 0x202A2CD4;   // gp−0x6B1C: the item menu's read buffer, where it loads item models (mds at +0, img at +0xFA10) — allocated only while a menu is open (0 in play); ShotEffectPack.ReadBufferPtr is the loader's, idle between floor loads
+        internal const int  MenuBufferImgOffset = 0xFA10;
+        internal const int  BombItemId = 159;                // "bakudan"
+        internal const long BombEffectPtr    = 0x202A35E4;   // gp−0x620C → CItemBombEffect[3], 0xC0 each: 5 sprites (pos +i*0x10, spread +0x50, delay +0x64, size +0x78, alpha +0x8C, live +0xA0), scale +0xB4
+        internal const long ShockWavePtr     = 0x202A35E8;   // gp−0x6208 → the blast ring (pos +0, +0xC 1.0, +0x10/+0x14 radius, +0x1C, +0x28 on)
+        internal const int  BombSlots = 3, BombSlotStride = 0xC0;
+        internal const ushort BombSe = 0x6C;
+    }
+
+    /// <summary>The words Toan's melee hits take their KNOCKBACK from. ToanKey_Play calls SetKickBack(strength, decay)
+    /// as each hit's collision is planted; the kick moves the enemy `strength` a frame, less `decay` each frame, so it
+    /// travels ≈ strength² / (2·decay). Strengths: hits 1–2 the shared 1.2 word (read from ten places in the ELF, Goro's
+    /// smash among them); hits 3–5, the lunge and the whirlwind bake theirs as immediates, made data by the ISO patch
+    /// (CodeCaves.MeleeKickWords). Decays: three words — 0.2 for hits 1–2, 0.3 for hits 3 and 5 and both charge attacks,
+    /// 0.4 for hit 4. Set as a whole and put back by <see cref="MeleeKick"/>.</summary>
+    internal static class MeleeKickWords
+    {
+        internal const long  Strength12 = 0x202A1AF8, Decay12 = 0x202A1C50, Decay35 = 0x202A1A80, Decay4 = 0x202A1B5C;
+        internal const float VanillaStrength12 = 1.2f, VanillaHit3 = 1.5f, VanillaHit4 = 2.0f, VanillaHit5 = 3.0f, VanillaCharge = 3.0f;
+        internal const float VanillaDecay12 = 0.2f, VanillaDecay35 = 0.3f, VanillaDecay4 = 0.4f;
+    }
+
     /// <summary>
     /// The player's ACTION / CHARGE state machine — one set of globals shared by every character's attack, which
     /// is why Toan's melee charge and Xiao's shot both live here: they are literally the same
     /// <see cref="ChargeActionState"/> word with different action ids.
-    ///
-    /// (These used to sit inside a class called "WeaponCollision", so anything that merely wanted to know whether
-    /// the player was charging had to reach into the collision system to find out.)
     /// </summary>
     internal static class PlayerAction
     {
 
         // ── Charge attack state (ToanKey_Play, RE'd from SCUS_971.11) ──
         // Drives HeavensCloud.TyphoonEffect's charge ramp + MaintainEnemyHitbox's whirl gate. See
-        // Weapons.IsChargingWhirlwind / IsWhirlwindActive and the toan-charge-states memory.
+        // Weapons.IsChargingWhirlwind / IsWhirlwindActive.
         internal const long ChargeActionState = 0x21DC4494; // DAT_01dc4494 action id (values below)
         internal const int  ActionWindup      = 0xE;        // charge wind-up (meter accumulates; lunge OR whirlwind)
+        internal const int  ActionLunge       = 0xF;        // charge lunge executing: the wind-up clip (15)…
+        // …then, in ToanKey_Play's order: the DASH (0x10, until the flight distance is spent), the loop clip (3, id 3 =
+        // 溜め攻撃loop2), the FALL (0x19, id 25 = loop3, one held frame, until the height is under 2.0) and the END clip
+        // (0x11, id 17 = 溜め攻撃end from frame 196), after which the attack is over. The CCharacter motion-id word reads
+        // 0 throughout; the action word is what tells the phases apart.
+        internal const int  ActionLungeDash   = 0x10;
+        internal const int  ActionLungeLoop   = 0x3;
+        internal const int  ActionLungeFall   = 0x19;
+        internal const int  ActionLungeEnd    = 0x11;
+        internal static bool InLunge(int action) =>
+            action == ActionLunge || action == ActionLungeDash || action == ActionLungeLoop || action == ActionLungeFall || action == ActionLungeEnd;
         internal const int  ActionWhirlwind   = 0x18;       // whirlwind executing
         internal const int  ActionComboFirst  = 0x24;       // combo swing states 0x24-0x28 = melee hits 1-5
         internal const int  ActionComboLast   = 0x28;       //   (each combo hit is its own action state)
@@ -126,9 +170,41 @@ namespace Dark_Cloud_Improved_Version
         // releases → what makes the 0xC hold advance to the 0xD shoot. Forcing it = fire now (no hold).
         internal const long XiaoShotReleaseFlag = 0x21DC4498;
         // ── Lock-on (SetNearLockOnTarget dun 0x1DC0160 / LockOffTargte 0x1DBFCE0, gp-relative globals) ──
-        // iGpffff9d94 = the locked-on MONSTOR SLOT (0..15; -1 = none), uGpffff9d90 = 1 while a lock is held.
+        // Three words: iGpffff9d94 = the locked-on MONSTOR SLOT (0..15; -1 = none), gp−0x6268 = the lock button's
+        // held TOGGLE, uGpffff9d90 = Xiao's shot-path flag. "Locked on, and to whom" is <see cref="LockHeld"/>: the
+        // slot a real one AND <see cref="LockOnHeld"/> up — the slot alone also holds the nearest CANDIDATE while no
+        // lock is held.
         internal const long LockOnTargetSlot = 0x202A3584;
+        /// <summary>⚠ Not a general "locked on" flag: it reads 0 for TOAN the whole time he holds a lock (measured
+        /// with a live target slot held for seconds). It rises on Xiao's shot path, which is the only reason Dragon's
+        /// Y can gate on it. For "is the player locked on, and to whom", use <see cref="LockHeld"/>
+        /// (<see cref="LockOnHeld"/> + <see cref="LockOnTargetSlot"/>); LockOffTargte (dun 0x1DBFCE0) returns the slot
+        /// to −1 on release.</summary>
         internal const long LockOnActive     = 0x202A3580;
+        /// <summary>THE HELD LOCK: the lock button TOGGLES this word (0 ↔ 1) in the player key handler (dun 0x1DB29B4)
+        /// whenever <see cref="LockOnTargetSlot"/> holds a candidate, and every frame setTargetCursor(this) runs — 0 has
+        /// it re-pick the nearest enemy (SetNearLockOnTarget(0,1)), 1 has it validate and draw the reticle on the held
+        /// one, and 32 frames of an invalid target (dead, out of range, off-screen) clear it and the slot together.
+        /// LockOffTargte clears it too. The cycle button only re-picks while this is 1.</summary>
+        internal const long LockOnHeld       = 0x202A3588;   // gp−0x6268
+        /// <summary>The lock-on target's NAME plate. SetNearLockOnTarget names a newly acquired target with
+        /// MonsterNameMake(id) (0x20ED90), which builds the message window in the ClsMes at
+        /// <see cref="CharaNameMes"/> and sets its +0x98 visible; the engine then shows or hides the plate through
+        /// this halfword alone — SetMonsterNameDrawFlag (0x20EB60) writes 1 on acquisition and 0 when the target
+        /// projects off-screen. Holding it at 0 hides the name and touches nothing on the enemy.</summary>
+        internal const long CharaNameDrawFlag = 0x202A2E10;   // ushort, gp−0x69E0
+        internal const long CharaNameMes      = 0x202A2E08;   // → ClsMes; +0x98 = the window's own visible flag
+        /// <summary>⚠ Neither is a lock gate. DrawTargetLife draws the HP bar while both are nonzero, but the cursor
+        /// word is only written DOWN when the candidate projects off-screen or the lock is cleared — after a release
+        /// it stays raised over whatever enemy is nearest — and the bar word flaps per frame.</summary>
+        internal const long TargetCursorUp   = 0x21E58F30;
+        internal const long TargetBarUp      = 0x21E58F34;
+        /// <summary>Is the player locked on, and to whom: <see cref="LockOnHeld"/> up and the slot a real one.</summary>
+        internal static bool LockHeld(out int slot)
+        {
+            slot = Memory.ReadInt(LockOnTargetSlot);
+            return slot >= 0 && Memory.ReadInt(LockOnHeld) != 0;
+        }
         // iRam01dc4490: nonzero while a shot is in progress (set at BattleActionOn start, cleared at the
         // shoot-motion end). iRam01dc44c8 (float): the ranged "speed bar" — BattleActionOn starts a shot
         // only when it reaches 100.0, then resets it to 0; its fill rate is the weapon's speed stat.
@@ -156,6 +232,41 @@ namespace Dark_Cloud_Improved_Version
         /// deals damage to a monster (wraps 0-15). Watching it across a swing is the "did that
         /// swing connect?" signal. Guarded hits do NOT advance it.</summary>
         internal const long HitSparkCounter   = 0x202A2C64;
+        /// <summary>ELF global <c>HitPointMark</c> (native 0x01EC4740): 16 entries of 0x20 holding the WORLD POSITION
+        /// of each hit mark — x at +0, height at +4, the ground plane at +8. CheckDmg copies the struck body part's
+        /// position in at index <see cref="HitSparkCounter"/> and only THEN advances the counter, so the hit that just
+        /// landed is at index (hitCnt − 1) &amp; 15.
+        ///
+        /// ⚠ The mark is stamped BEFORE the damage is computed (the element multiplier and the damage floor come
+        /// later in the same function), so it lands on a hit that is fully resisted to zero just as it does on one
+        /// that hurts — a nullified hit merely takes the branch that shows a white 0 instead of a red number. That
+        /// makes this the only "did my swing connect" signal that survives elemental immunity. GUARDED hits are the
+        /// exception: they take an earlier branch that stamps a mark without advancing the counter.</summary>
+        internal const long HitPointMark      = 0x21EC4740;
+        internal const int  HitPointMarkStride = 0x20, HitPointMarkCount = 16;
+        /// <summary>The mark's LIFE countdown within its entry: stamped at 16 and decremented one per frame by
+        /// <c>CHitPointMark::Step</c> (0x1B3710), which clears the entry's active word at zero. Since a GUARDED
+        /// hit re-stamps the CURRENT entry instead of advancing the counter, a life that has gone UP since the
+        /// last look is the only signal a blocked hit leaves behind.</summary>
+        internal const int  HitPointMarkLife  = 0x10;
+        /// <summary>Pointer (DAT_01ea2064) to the ACTIVE character's MOTION FRAME-RANGE table: one 0x10 record per
+        /// motion index, holding that motion's START frame at +0 and its END frame at +4, both ints. Starting a
+        /// motion seeks <see cref="AnimFrameCursor"/> to the start; the overlay's step code then holds the motion
+        /// until the cursor reaches the end (`cursor < end − 2 || end < cursor` keeps it playing, otherwise the
+        /// action is over). BtCheckDamageProc uses records 6 and 4 for the knockdown a player survives and the one
+        /// that kills him.
+        ///
+        /// ⚠ These are FRAMES, not distances. Scaling a start frame parks the cursor past the end of the clip, which
+        /// freezes the character mid-air on the last pose while the action runs on forever — measured. How far a
+        /// reaction carries the player is the clip's own root motion and is not in this table.</summary>
+        internal const long MotionRangeTablePtr = 0x21EA2064;
+        internal const int  MotionRangeStride   = 0x10;   // per motion index
+        internal const int  MotionRangeStart    = 0x00, MotionRangeEnd = 0x04;
+        /// <summary>The player's current blow-reaction action (DAT_01dc4490): 0 = none, 4 = the flinch/fatal
+        /// reaction, 5 = the knockdown. Set by BtCheckDamageProc and cleared by the step code when the motion
+        /// reaches its end frame.</summary>
+        internal const long BlowAction          = 0x21DC4490;
+        internal const int  BlowKnockdownAction = 5;
         // Charge METER (float, DAT_01dc449c): resets to 1.0 at attack start, accumulates each windup frame,
         // caps at 3.0. Thresholds: ≥1.5 → lunge available, ≥2.5 → whirlwind available (if unlocked).
         internal const long ChargeMeter       = 0x21DC449C;
@@ -174,11 +285,21 @@ namespace Dark_Cloud_Improved_Version
         // ≠ 0 (the ability learned). Documented for completeness; the level-2 check already folds it in, so code
         // reads ChargeLevel==2 rather than this directly (UserStatus base not needed).
         internal const int  WhirlwindUnlockOffset = 0x4324;
+        /// <summary>The whirlwind-unlock word itself: the "UserStatus" ToanKey_Play reads (through gp-0x6388) is the
+        /// CDngStatusData block (DngStatusData.Base), and the word is the first of six special-skill flags at +0x4324
+        /// (one per character, set to 1 by the event command _SSKILL_GET, cleared only by Initialize__14CDngStatusData).
+        /// ToanKey_Play reads it at the level-2 transition AND at the release — zero there, a full meter releases the
+        /// LUNGE (level 1); it is read nowhere else. Save data: never leave it changed.</summary>
+        internal const long WhirlwindUnlock = DngStatusData.Base + WhirlwindUnlockOffset;   // 0x21CDD870
         // Charge-active flag (DAT_01dc44f0): 1 while a lunge/whirlwind hit is live; cleared to 0 INSIDE the 0x18
         // block on the whirlwind's final frame — so (action 0x18 && flag 1) is the true "whirlwind executing"
         // window, and the flag dropping is the earliest, cleanest "attack finished" signal (the action state
         // itself lingers at 0x18 for a frame until ToanKey_On resets it).
         internal const long ChargeActiveFlag  = 0x21DC44F0;
+        /// <summary>The LOCK-ON AIM POINT (vec4, world): setTargetCursor writes it every frame a lock is held — the target's
+        /// lock-on frame position when its script declared one, else its origin raised 8 — before raising it 10 more and
+        /// projecting that for the name plate and HP gauge. Xiao's pellets fly at it; the judgement blade hangs off it.</summary>
+        internal const long LockOnAimPoint    = 0x21DC4500;
     }
 
     /// <summary>
@@ -266,9 +387,7 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>
     /// The equipped weapon's MODEL — the live <c>NowWeapon</c> object, its <c>CFrameVu1</c> tree, and the
     /// <c>dcol*</c> "damage-collision" frames that define melee REACH (full notes: docs/weapon-reach.md).
-    ///
-    /// This is the only part of the old "WeaponCollision" class that was ever really about collision — and note
-    /// even the CFrame node offsets here duplicate <see cref="CFrameVu1"/>, which is the real owner of that struct.
+    /// The CFrame node offsets here duplicate <see cref="CFrameVu1"/>, the owner of that struct.
     /// </summary>
     internal static class WeaponModel
     {
@@ -290,7 +409,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int   DcolNameToLocalX = 0xE8;       // local-matrix X (Y at +0xEC, Z at +0xF0)
         internal const int   DcolNameToLocalZ = 0xF0;       // local-matrix Z (the reach)
 
-        // ── Runtime weapon-model SCALE (visual blade + dcol collision, together) — CONFIRMED 2026-06-30 ──
+        // ── Runtime weapon-model SCALE (visual blade + dcol collision, together) — CONFIRMED live ──
         // The equipped weapon's model root is *(*NowWeapon + 0xBC) (NowWeapon = 0x202A34F0); it is a CFrameVu1
         // TEMPLATE node (name@0, NOT the +0x118 runtime CFrame). CFrameVu1 layout: name@0, LOCAL matrix 3x3 at
         // +0xB8 (row-major, rows of 0x10 → diagonal at +0xB8/+0xCC/+0xE0), LOCAL translation at +0xE8/+0xEC/+0xF0
@@ -304,7 +423,6 @@ namespace Dark_Cloud_Improved_Version
         // then write factor to its local-3x3 DIAGONAL (+0xB8/+0xCC/+0xE0; bind is identity so factor*identity).
         // CONFIRMED: this grows the visual blade AND the melee hit reach by `factor`, and is STABLE (the engine
         // does NOT re-pose this template node) — a pure data write, mid-game safe, NO EE-code patch, NO crash.
-        // This is the clean lever the old dcol1-only / code-immediate reach hacks were working around.
         internal const long NowWeaponPtr           = 0x202A34F0; // → native ptr to NowWeapon record
         internal const int  WeaponModelRootOffset  = 0xBC;       // NowWeapon + 0xBC → native ptr to model root CFrameVu1
         internal const int  Vu1LocalMatrixDiag0    = 0xB8;       // CFrameVu1 local 3x3 m00 (m11 +0x14=0xCC, m22 +0x28=0xE0)
@@ -312,9 +430,6 @@ namespace Dark_Cloud_Improved_Version
         internal const int  Vu1LocalMatrixDiag2    = 0xE0;
         internal const int  Vu1LocalTransX         = 0xE8;       // CFrameVu1 local translation (Y +0xEC, Z +0xF0)
         internal const int  Vu1LocalTransZ         = 0xF0;
-
-        /// <summary>Heaven's Cloud's visible-blade mesh frame name ("w14\0"). Scaling this frame's local 3x3
-        /// grows the blade + its dcol collision children together (the runtime reach lever above).</summary>
     }
 
     /// <summary>
@@ -463,13 +578,6 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class WeaponMenu
     {
-
-
-
-
-
-
-
         // Rollover display behavior (all RE'd, all native — nothing to patch):
         //   • Weapon menu panel (DrawWeaponStatusTag 0x1FA0B0): gauge width (abs<<7)/max is
         //     CLAMPED to 0x7E — the bar pins at full length while the NUMBERS draw raw
@@ -512,11 +620,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int  BreakStateAnimation   = 5;
         internal const int  BreakStateWindDown    = 6;
 
-        // ⚠ LESSON: PINE writes to EE CODE pages crash PCSX2 outright — the first
-        // value-changing poke to a hot instruction killed the emulator the same second (log:
-        // 19:24:09). Identical-value writes were benign. ALL patching must stay data-only; the
-        // 7 Branch Sword status-break effect is therefore implemented post-hoc on the sphere
-        // (see AttachBoard below + SevenBranchSword.SevenfoldRiteEffect), not by patching
+        // ⚠ PINE writes to EE CODE pages crash PCSX2 (docs/code-caves.md § PINE write safety): everything in
+        // this class is poked as DATA only. The 7 Branch Sword status-break effect is applied post-hoc on the
+        // sphere (AttachBoard below + SevenBranchSword.SevenfoldRiteEffect), not by patching
         // WeaponStatusBreakEnable/SetStatusBreak.
 
         /// <summary>The status-break stat-transfer factor: a DATA float (0.6f) at native 0x2A1890,
@@ -554,7 +660,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ScalarStride     = 0x04;
         internal const int  NoCollideOffset  = 0x280; // int: 0 = pellet runs its (fixed 2.0-radius) collision; nonzero = pass through (step__5CSHOT gate)
         internal const int  LifetimeOffset   = 0x2B0; // int (0x78 = 120 frames at spawn)
-        internal const int  DamageOffset     = 0x2E0; // int
+        internal const int  DamageOffset     = 0x2E0; // int — the entry's base damage on contact; NEGATIVE = the contact plants nothing and the pellet just ends (DebugIfCave.PelletPlant)
         internal const int  ScaleOffset      = 0x310; // float (1.0 at spawn) — draw__5CSHOT sprite scale ONLY; does NOT size the hitbox
         internal const int  ActiveFlagOffset = 0x3D0; // int (nonzero = slot in use)
 
@@ -583,11 +689,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int  PackSlots  = 5;
         internal const int  SlotStride = 0xA160;
         internal const int  SubShots   = 8;
+        internal const int  EnteredSubShots = 6;   // what a borrowed entry gets unless it asks for more (the loader cave's +0x2BC)
         internal const int  OffCfg     = 0x000;     // BT_SHOT_EFFECT cfg ptr (EE): +0x38 wait, +0x3C life, +0x4E fly motion
         internal const int  OffDir     = 0x9F40;    // + i*0x10, vec3 — per-frame position delta (velocity)
         internal const int  OffAttr2   = 0x9FC0;    // + i*2, short — Set param_6
         internal const int  OffWait    = 0x9FD0;    // + i*4 — phase-1 countdown
-        internal const int  OffPhase   = 0x9FF0;    // + i*2 — 0 muzzle, 1 flying, 3+ impact chain
+        internal const int  OffPhase   = 0x9FF0;    // + i*2 — 0 muzzle, 1 flying, 2 the impact after a CONTACT, 3 the burst when the wait ran out (Step: a contact writes 2; a timeout adds 2)
         internal const int  OffActive  = 0xA000;    // + i*2 (Set writes it LAST)
         internal const int  OffDamage  = 0xA010;    // + i*4 — the shot's DAMAGE (Set: cfg+0x3C; SetDmg; Step passes it as entry +0x34). Life/wait = OffWait.
         internal const int  OffOwner   = 0xA050;    // + i*2, short — owner attr → CollisionData +0x58
@@ -622,6 +729,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CfgCount   = 34;
         internal const int  CfgSize    = 0x70;
         internal const int  CfgVictimMask = 0x48;   // 1 = hurts the player, 2 = hurts enemies
+        /// <summary>The hit REACTION the shot's entry carries (→ entry +0x4C): 2 guardable knockback, 3 unguardable
+        /// knockdown, 4 light flinch. BtCheckDamageProc dispatches on exactly those three and subtracts the player's
+        /// HP INSIDE each branch, so a value outside {2,3,4} — 1 and 5 are both unused — is inert: the entry is
+        /// consumed and nothing happens to him. CMonstorUnit::CheckDmg never reads this field, so changing it does
+        /// not alter how the same shot damages ENEMIES (a reflected shot still lands normally).</summary>
+        internal const int  CfgReaction   = 0x44;
         internal const int  CfgWait    = 0x38;      // frames of flight before the impact chain
         internal const int  CfgName    = 0x00, CfgNameLen = 0x28;   // the effect's file name: dun/effect/<name>.chr
         // The motion (the .chr's KEY ordinal) each phase plays, shorts; −1 = none: muzzle, flying, impact, expiry burst.
@@ -657,8 +770,7 @@ namespace Dark_Cloud_Improved_Version
     internal static class AttachBoard
     {
         /// <summary>= status base 0x21CD954C + 0x84FC (the board sits right after the six
-        /// characters' weapon arrays: 0x450C + 6×0xAA8 = 0x84FC). Same address the mod has
-        /// long used as <see cref="Addresses.firstBagAttachment"/>.</summary>
+        /// characters' weapon arrays: 0x450C + 6×0xAA8 = 0x84FC) = <see cref="Addresses.firstBagAttachment"/>.</summary>
         internal const long Base      = Addresses.firstBagAttachment; // 0x21CE1A48
         internal const int  Stride    = 0x20;
         internal const int  ScanCount = Player.inventorySizeAttachments + 2; // 42, mirrors Player.GetBagAttachments

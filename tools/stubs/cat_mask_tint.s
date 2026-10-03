@@ -51,7 +51,7 @@ body:
     lwc1  $f1, 0x34($sp)
     lwc1  $f2, 0x38($sp)
     lwc1  $f3, 0x3C($sp)
-    lwc1  $f4, 0x428C($v1)         # Mailbox.CatCapeTint — the SAME delta the cape uses, so the two match by construction
+    lwc1  $f4, 0x428C($v1)         # CatBlock.CatCapeTint — the SAME delta the cape uses, so the two match by construction
     lwc1  $f5, 0x4290($v1)
     lwc1  $f6, 0x4294($v1)
     add.s $f0, $f0, $f4

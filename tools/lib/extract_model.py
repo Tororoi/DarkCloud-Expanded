@@ -69,6 +69,7 @@ CHAR_ORDER = [n for _, n in CHAR_MAP]
 EXTRA_MOTION_PACKS = [
     ('Goro', 'dun\\d02\\stair_mos\\c06d02s.chr', 1),   # borrows c06b rig (60 nodes; mot max w0 57)
     ('Xiao', 'dun\\d02\\stair_mos\\c04d02s.chr', 1),   # borrows c04b rig (79 nodes; mot max w0 78)
+    ('Toan', 'gedit\\s97\\chara\\e117_1.chr', 2),      # the snake fight's second motion file (no .mds; mot max w0 66)
 ]
 
 # ---- e02 Matataki event-cast models (NOT the six allies: villagers / elder / object model). Own an
@@ -85,6 +86,11 @@ GROUP_ORDER = CHAR_ORDER + [E02_GROUP]
 GORO_EXTRA = [('e101', 'gedit\\s01\\chara'), ('e101eb', 'gedit\\s01\\chara'),
               ('e102', 'gedit\\s01\\chara'), ('e103', 'gedit\\s01\\chara'),
               ('e105', 'gedit\\s01\\chara'), ('e130', 'gedit\\s03\\chara')]
+
+# ---- Toan's Wise Owl Forest interlude (s97, the Killer Snake fight): bundles Toan + the snake meshes with a cfg per
+#      character; the `c01` cfg is forced so TOAN's body/motion is shown. e117_1 is a motion-only continuation
+#      (no `.mds`), listed through EXTRA_MOTION_PACKS below. (stem, folder). ----
+TOAN_EXTRA = [('e116', 'gedit\\s97\\chara'), ('e117_0', 'gedit\\s97\\chara')]
 
 
 def _stem(hedname):
@@ -193,6 +199,9 @@ def enumerate_models(dc_dir=None):
     for st, folder in GORO_EXTRA:
         order.append({'char': 'Goro', 'stem': st, 'folder': folder, 'sub': f'{folder}\\{st}.chr',
                       'size': 0, 'dups': [], 'rank': 2, 'cfg_prefer': 'c06'})
+    for st, folder in TOAN_EXTRA:
+        order.append({'char': 'Toan', 'stem': st, 'folder': folder, 'sub': f'{folder}\\{st}.chr',
+                      'size': 0, 'dups': [], 'rank': 2, 'cfg_prefer': 'c01'})
 
     # e02 Matataki cast -> a trailing group of their own (build_model skips the two motion-only ones)
     for st in E02_STEMS:
@@ -409,13 +418,31 @@ def mdt_triangles(m):
 
 
 # ---------------------------------------------------------------- textures
-def tim2_rgba(block):
+def unswizzle8(data, w, h):
+    """PSMT8 pixel data laid out in the GS's 32-bit block order back to a plain row-major 8-bit image."""
+    out = bytearray(w * h)
+    for y in range(h):
+        for x in range(w):
+            bl = (y & ~0xF) * w + (x & ~0xF) * 2
+            ss = (((y + 2) >> 2) & 1) * 4
+            py = (((y & ~3) >> 1) + (y & 1)) & 7
+            cl = py * w * 2 + ((x + ss) & 7) * 4
+            bn = ((y >> 1) & 1) + ((x >> 2) & 2)
+            out[y * w + x] = data[bl + cl + bn]
+    return bytes(out)
+
+
+def tim2_rgba(block, swizzled=False):
     """(w, h, rgba bytes) from a TIM2 picture. 8-bit indexed only, which is every character texture on the disc.
 
     The 256-colour CLUT is stored in the PS2's CSM1 block order, so entries have to be un-swizzled before use — bits 3 and 4
     of the index swap. Reading it straight gives a picture with the right colours in the wrong places; measured on the cat's
     face texture, neighbouring pixels differ by 34 taken straight and 24 un-swizzled, which is how you can tell without
-    looking at it."""
+    looking at it.
+
+    `swizzled`: the PIXEL data is in the GS's PSMT8 block order too, and is put back row-major first. That is the case for
+    every picture in an `IM2\0` bank (Goro's, the Dark Genie's, most effect textures) and for none in an `IMG\0` bank —
+    measured over 750 textures by comparing neighbour-pixel roughness both ways (2026-09-28); pass the bank's magic."""
     if block[:4] != b'TIM2':
         raise ValueError('not a TIM2')
     pic = 0x10
@@ -425,6 +452,8 @@ def tim2_rgba(block):
     if colors != 256:
         raise ValueError(f'{colors}-colour TIM2 is not supported (8-bit indexed only)')
     px = block[pic + hdr_sz: pic + hdr_sz + img_sz]
+    if swizzled and w % 16 == 0 and h % 16 == 0:
+        px = unswizzle8(px, w, h)
     cl = block[pic + hdr_sz + img_sz: pic + hdr_sz + img_sz + clut_sz]
     unsw = lambda k: (k & ~0x18) | ((k & 0x08) << 1) | ((k & 0x10) >> 1)
     pal = []
@@ -544,11 +573,33 @@ def load_weights(pack, wgt_name):
     return out
 
 
-def build_mesh_weighted(mds, node, nodes, per_vertex, textured=False):
+def load_bind_pose(pack, bbp_name, nodes):
+    """The SKIN's bind pose from the pack's `.bbp` (the MOTION line's third name; most rigs leave it empty): one row-vector
+    4×4 per node, 64 B each, holding that node's LOCAL matrix in the pose the skin was weighted in — which need not be the
+    .mds rest pose (the moonship's sails: bone `1_1` binds at a 21° turn with no offset, its rest pose is a 90° turn and a
+    tilt). Returns each node's bind WORLD matrix (local × parent's, a zero matrix read as the rest local), or None when
+    the record is missing or does not match the rig."""
+    rec = pack.find(bbp_name) if bbp_name else None
+    if rec is None or len(rec.payload) < len(nodes) * 64:
+        return None
+    b = rec.payload
+    by_i = {n['i']: n for n in nodes}
+    world = {}
+    for n in sorted(nodes, key=lambda n: n['i']):
+        loc = [list(struct.unpack_from('<4f', b, n['i'] * 64 + r * 16)) for r in range(4)]
+        if all(v == 0.0 for row in loc for v in row):
+            loc = mat_from_rt(n['R'], n['T'])
+        par = n['parent']
+        world[n['i']] = mat_mul(loc, world[par]) if par >= 0 and par in world else loc
+    return [world[n['i']] for n in sorted(nodes, key=lambda n: n['i'])] if len(world) == len(by_i) else None
+
+
+def build_mesh_weighted(mds, node, nodes, per_vertex, textured=False, bind_world=None):
     """Like build_mesh, but with the pack's REAL weights for this mesh (top two influences per vertex, renormalised);
     vertices the .wgt leaves out ride the owner node. With `textured`, also carries what it takes to draw the thing with its
     own textures: per-CORNER uv pairs (MDT records are (position, uv, normal), so UVs do not belong to vertices) and the
-    triangles sorted into runs, one per texture."""
+    triangles sorted into runs, one per texture. `bind_world` (load_bind_pose): the skin's own bind pose, used instead of
+    the rest pose to put each vertex into its bones' frames."""
     m = parse_mdt(mds, node['meshoff'])
     local_pos = [v[:3] for v in m.pos]
     if textured:
@@ -569,7 +620,8 @@ def build_mesh_weighted(mds, node, nodes, per_vertex, textured=False):
     if not tris:
         return None
     owner = node['i']
-    ow = node['world']
+    ow = bind_world[owner] if bind_world else node['world']
+    inv = (lambda b: rigid_inv(bind_world[b])) if bind_world else (lambda b: nodes[b]['invworld'])
     infl0_bone, infl0_pos, infl1_bone, infl1_pos, w0 = [], [], [], [], []
     for vi, v in enumerate(local_pos):
         vm = xform_pt(ow, v)
@@ -582,8 +634,8 @@ def build_mesh_weighted(mds, node, nodes, per_vertex, textured=False):
         (b0, wa) = infl[0]
         (b1, wb) = infl[1] if len(infl) > 1 else (b0, 0.0)
         tot = wa + wb
-        infl0_bone.append(b0); infl0_pos.append(xform_pt(nodes[b0]['invworld'], vm))
-        infl1_bone.append(b1); infl1_pos.append(xform_pt(nodes[b1]['invworld'], vm))
+        infl0_bone.append(b0); infl0_pos.append(xform_pt(inv(b0), vm))
+        infl1_bone.append(b1); infl1_pos.append(xform_pt(inv(b1), vm))
         w0.append(wa / tot if tot > 0 else 1.0)
     out = {'node': owner, 'skin': True, 'nv': len(local_pos), 'tris': tris,
            'b0': infl0_bone, 'p0': infl0_pos, 'b1': infl1_bone, 'p1': infl1_pos, 'w0': w0}
@@ -743,11 +795,17 @@ def build_model(spec, kf_stride=1, tri_keep=1.0, skeleton_only=False):
         nodes = read_skeleton(mds)
         _MESH_DIM_CACHE.clear()
         full_meshes = []
+        # The pack's own skinning when the cfg names it — MOTION 0, "x.mot", "x.bbp", "x.wgt": the real per-vertex weights,
+        # against the skin's own bind pose (Ungaga's differs from his rest pose on 63 of 67 joints); else the auto-skin.
+        wm = re.search(rb'MOTION\s+\d+\s*,\s*"[^"]+"\s*,\s*"([^"]*)"\s*,\s*"([^"]+\.wgt)"', cfg.payload)
+        weights = load_weights(pack, wm.group(2).decode('latin1')) if wm else None
+        bind = load_bind_pose(pack, wm.group(1).decode('latin1'), nodes) if wm and wm.group(1) else None
         if not skeleton_only:
             for n in nodes:
                 if n['meshoff']:
                     try:
-                        mm = build_mesh(mds, n, nodes)
+                        per = weights.get(n['i']) if weights else None
+                        mm = build_mesh_weighted(mds, n, nodes, per, bind_world=bind) if per else build_mesh(mds, n, nodes)
                         if mm:
                             full_meshes.append(mm)
                     except Exception as e:                 # skip an unparseable chunk, keep the rest

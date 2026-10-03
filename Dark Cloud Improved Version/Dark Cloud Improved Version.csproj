@@ -28,6 +28,42 @@
     <EmbeddedResource Include="Resources\isoPatch\stiltsHeal.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.stiltsHeal.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\spearBlock.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.spearBlock.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\playerSpearBlock.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.playerSpearBlock.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\shotSpearBlock.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.shotSpearBlock.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\rockShadow.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.rockShadow.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\fallDrive.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.fallDrive.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\guardCrush.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.guardCrush.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\guardMask.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.guardMask.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\confuseName.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.confuseName.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\confuseProc.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.confuseProc.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\confuse_icon.png">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.confuse_icon.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\follow.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.follow.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\circleEffects.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.circleEffects.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\catPelletFollow.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catPelletFollow.bin</LogicalName>
     </EmbeddedResource>
@@ -48,9 +84,6 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\sharedShots.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.sharedShots.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\pelletSprite.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.pelletSprite.bin</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\steelLevelUp.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.steelLevelUp.bin</LogicalName>

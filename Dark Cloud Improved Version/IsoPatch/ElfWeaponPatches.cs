@@ -4,145 +4,160 @@ using System.IO;
 using static Dark_Cloud_Improved_Version.IsoBytes;
 using static Dark_Cloud_Improved_Version.MipsAsm;
 using static Dark_Cloud_Improved_Version.IsoPatcher;
+using static Dark_Cloud_Improved_Version.ElfCaveWriter;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Weapon-ability ELF patches: the Matador's pellet prop, the borrowed-shots keeper, the shot-slot sharing cave, the pellet sprite, Xiao's build-up tree, the Steel Slingshot's level-ups, the flamethrower spacing and the Super Steve HUD icon. Called in order from ElfPatches.ElfPatchAndCrc.</summary>
+    /// <summary>Per-weapon ELF patches: Babel's spear column, the Terra Sword's boulder shadow, the Sun Sword's blade tint, the
+    /// lock-on name-plate gate, the magic circles, Xiao's build-up tree, the Steel Slingshot's level-ups, the flamethrower spacing
+    /// and the Super Steve HUD icon. Called in order from ElfPatches.ElfPatchAndCrc (the dead hosts are claimed first by
+    /// ElfDeadFunctionPatches).</summary>
     internal static class ElfWeaponPatches
     {
-        /// <summary>The prop-on-a-pellet cave (tools/stubs/prop_pellet_follow.s): the cat follower hook's new first stop. It must
-        /// call CatCopyQueue (the cat's chain performs the displaced step__5CSHOT) and read the shot pool.</summary>
-        internal static void PatchPropPelletFollow(FileStream fs, Func<uint, long> ElfOff)
+        /// <summary>The spear-block caves written into DebugInfomationIF's body: the enemies' (DebugIfCave.SpearBlock,
+        /// tools/stubs/spear_block.s) with Step__12CMonstorUnit's `jal MoveChecMonster` (main 0x1DE344) pointed at it, and the
+        /// player's (DebugIfCave.PlayerSpearBlock, tools/stubs/player_spear_block.s), whose hooks are the overlay's (DunPatches), and
+        /// the enemy shots' (DebugIfCave.ShotSpearBlock, tools/stubs/shot_spear_block.s) with Step__12CSHOT_EFFECT's `jal checkCollision`
+        /// (main 0x1AC3E8) pointed at it.</summary>
+        internal static void PatchSpearBlock(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint CaveAddr = CodeCaves.ElfCave.PropPelletFollow;
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.propPelletFollow.bin")
-                ?? throw new IOException("Embedded EE function missing: propPelletFollow.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
-            uint chain = 0x0C000000u | (CodeCaves.ElfCave.CatCopyQueue >> 2);
-            bool chained = false, pool = false;
-            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == chain) chained = true; if (w == 0x8D4A35D4u) pool = true; }
-            if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u || !chained || !pool)
-                throw new IOException("propPelletFollow.bin malformed or stale — it must call CatCopyQueue and read the shot pool.");
-            if (CaveAddr + (uint)b.Length > 0x01FB2000u)
-                throw new IOException("propPelletFollow.bin overruns its gap — it must end before 0x1FB2000 (the first band's end).");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
-        }
-
-        /// <summary>The borrowed-shots cave (tools/stubs/borrowed_shots_enter.s): the head of the step chain — must call
-        /// PropPelletFollow (the rest of the chain) and Entry__17CSHOT_EFFECT_PACK, and read NowShotEffect.</summary>
-        internal static void PatchBorrowedShotsEnter(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint CaveAddr = CodeCaves.ElfCave.BorrowedShotsEnter;
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.borrowedShotsEnter.bin")
-                ?? throw new IOException("Embedded EE function missing: borrowedShotsEnter.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
-            bool chainCall = false;
-            uint chain = 0x0C000000u | (CodeCaves.ElfCave.PropPelletFollow >> 2);
-            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == chain) chainCall = true; }
-            if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u || !chainCall)
-                throw new IOException("borrowedShotsEnter.bin (the head) malformed or stale — it must call PropPelletFollow.");
-            if (CaveAddr + (uint)b.Length > 0x01FB2000u)
-                throw new IOException("borrowedShotsEnter.bin (the head) overruns its gap — it must end by 0x1FB2000.");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
-            // …and the tail piece, at the band's end
-            using var st2 = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.borrowedShotsEnterTail.bin")
-                ?? throw new IOException("Embedded EE function missing: borrowedShotsEnterTail.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
-            using var ms2 = new MemoryStream(); st2.CopyTo(ms2); byte[] t = ms2.ToArray();
-            const uint TailAddr = CodeCaves.ElfCave.BorrowedShotsEnterTail;
-            bool jrRa = false;
-            for (int i = 0; i + 4 <= t.Length; i += 4) if (U32(t, i) == 0x03E00008u) jrRa = true;
-            if (t.Length < 8 || t.Length % 4 != 0 || !jrRa)
-                throw new IOException("borrowedShotsEnterTail.bin malformed or stale — reassemble its .s.");
-            if (TailAddr + (uint)t.Length > CodeCaves.ElfCave.RegionEnd)
-                throw new IOException("borrowedShotsEnterTail.bin overruns the band — it must end by ElfCave.RegionEnd.");
-            for (int i = 0; i < t.Length; i += 4)
-                WrU32(fs, ElfOff(TailAddr + (uint)i), U32(t, i));
-        }
-
-        /// <summary>The monster shot pack's five slots shared among every shot config a floor needs (tools/stubs/shared_shots.s,
-        /// hosted in the dead DebugInfomationDraw — its first word becomes `jr ra`, so its debug-flag caller returns at once):
-        /// the species loader's two pack calls store a refused config's negative form in the species row, Step's two fire sites
-        /// acquire a config that is not in the pack before firing, and the dungeon step loop's chain head (DunPatches.
-        /// CatFollowHookNew) preloads one a frame while a slot is free.</summary>
-        internal static void PatchSharedShots(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint Host = CodeCaves.DebugInfoCave.Host;
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.sharedShots.bin")
-                ?? throw new IOException("Embedded EE function missing: sharedShots.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
-            // Shape: opens with the four-entry branch table, calls the keeper (its chain), Entry__17, Initialize__12 and Entry__12.
-            uint keeper = Jal(CodeCaves.ElfCave.BorrowedShotsEnter);
-            bool hasKeeper = false, hasEntry17 = false, hasInit = false, hasEntry12 = false;
-            for (int i = 0; i + 4 <= b.Length; i += 4)
-            {
-                uint w = U32(b, i);
-                if (w == keeper) hasKeeper = true; if (w == Jal(0x001AE4C0)) hasEntry17 = true;
-                if (w == Jal(0x001AE440)) hasInit = true; if (w == Jal(0x001ACC70)) hasEntry12 = true;
-            }
-            if (b.Length % 4 != 0 || b.Length < 0x40 || (U32(b, 0) >> 16) != 0x1000 || (U32(b, 8) >> 16) != 0x1000 || !hasKeeper || !hasEntry17 || !hasInit || !hasEntry12)
-                throw new IOException($"sharedShots.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            if (CodeCaves.DebugInfoCave.SharedShots + (uint)b.Length > CodeCaves.DebugInfoCave.PelletSprite)
-                throw new IOException("sharedShots.bin overruns into the pellet-sprite cave that follows it in DebugInfomationDraw.");
-            uint w0 = RdU32(fs, ElfOff(Host));
-            if (w0 != CodeCaves.DebugInfoCave.VanillaWord0 && w0 != 0x03E00008u)
-                throw new IOException($"DebugInfomationDraw at 0x{Host:X} is not vanilla (`addiu sp,sp,-0x170`) — unmodified Dark Cloud (USA) ISO expected.");
-            WrU32(fs, ElfOff(Host), 0x03E00008u);                                   // jr ra: the overlay draws nothing
-            WrU32(fs, ElfOff(Host + 4), 0);                                          // (its delay slot)
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(Host + 8 + (uint)i), U32(b, i));
-            // SetupBaseModel's two pack calls: `jal Entry__17CSHOT_EFFECT_PACK; nop; addiu v1,zero,-1`
-            uint enter = Jal(CodeCaves.DebugInfoCave.SharedShotsEnter);
-            foreach (uint site in new[] { 0x001E01B0u, 0x001E0224u })
-            {
-                uint cur = RdU32(fs, ElfOff(site));
-                if ((cur != Jal(0x001AE4C0) && cur != enter) || RdU32(fs, ElfOff(site + 4)) != 0 || RdU32(fs, ElfOff(site + 8)) != 0x2403FFFFu)
-                    throw new IOException($"Species-loader pack call at 0x{site:X} is not vanilla `jal Entry__17CSHOT_EFFECT_PACK; nop; addiu v1,zero,-1` — unmodified Dark Cloud (USA) ISO expected.");
-                WrU32(fs, ElfOff(site), enter);
-            }
-            // Step's two fire sites: the `lui at,0x6` before the request load; its delay slot, the vanilla `addu at,a0,at`, stays
-            // (the cave re-forms at = a0 + 0x60000 before returning to the load)
-            foreach (var (site, entry, load) in new[] { (0x001DEED0u, CodeCaves.DebugInfoCave.SharedShotsFire0, 0x8C23FF74u), (0x001DEFD8u, CodeCaves.DebugInfoCave.SharedShotsFire1, 0x8C230274u) })
-            {
-                uint cur = RdU32(fs, ElfOff(site)), ours = Jal(entry);
-                if ((cur != 0x3C010006u && cur != ours) || RdU32(fs, ElfOff(site + 4)) != 0x00810821u || RdU32(fs, ElfOff(site + 8)) != load || RdU32(fs, ElfOff(site + 12)) != 0x24020002u)
-                    throw new IOException($"Monster fire site at 0x{site:X} is not vanilla `lui at,0x6; addu at,a0,at; lw v1,…(at); addiu v0,zero,2` — unmodified Dark Cloud (USA) ISO expected.");
-                WrU32(fs, ElfOff(site), ours);
-            }
-        }
-
-        /// <summary>A player pellet's sprite cell taken from the item id in Mailbox.PelletSpriteId when it is set (tools/stubs/
-        /// pellet_sprite.s, after the sharing cave in DebugInfomationDraw's body): draw__5CSHOT's read of the equipped weapon's
-        /// id (0x1ABC74 `lw v0,-0x62FC(gp); lh v0,0(v0)`) becomes a call to it.</summary>
-        internal static void PatchPelletSprite(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint CaveAddr = CodeCaves.DebugInfoCave.PelletSprite, HookAddr = 0x001ABC74;
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.pelletSprite.bin")
-                ?? throw new IOException("Embedded EE function missing: pelletSprite.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
-            // Shape: reads the mailbox word, carries the vanilla `lw v0,-0x62FC(gp)` and `lh v0,0(v0)`, ends in `jr ra`.
-            bool vanillaRead = false, jrRa = false;
-            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == 0x8F829D04u) vanillaRead = true; if (w == 0x03E00008u) jrRa = true; }
-            if (b.Length % 4 != 0 || b.Length < 0x20 || U32(b, 0) != 0x3C0101F1u || !vanillaRead || !jrRa)
-                throw new IOException($"pelletSprite.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.DebugInfoCave.SteelLevelUp)
-                throw new IOException("pelletSprite.bin overruns into the level-up cave that follows it in DebugInfomationDraw.");
-            if (RdU32(fs, ElfOff(CodeCaves.DebugInfoCave.Host)) != 0x03E00008u)
-                throw new IOException("PatchPelletSprite must follow PatchSharedShots (the host's `jr ra`).");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
-            uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4)), ours = Jal(CaveAddr);
-            bool vanilla = cur0 == 0x8F829D04u && cur1 == 0x84420000u, patched = cur0 == ours && cur1 == 0;
-            if (!(vanilla || patched) || RdU32(fs, ElfOff(HookAddr + 8)) != 0x2443FED5u)
-                throw new IOException($"Pellet draw site 0x{HookAddr:X} is not vanilla `lw v0,-0x62FC(gp); lh v0,0(v0); addiu v1,v0,-0x12B` — unmodified Dark Cloud (USA) ISO expected.");
+            const uint HookAddr = 0x001DE344, MoveChecMonster = 0x001DD140;
+            uint cave = DebugIfCave.SpearBlock;
+            byte[] b = Embedded("spearBlock.bin");
+            bool callsMove = ContainsWord(b, Jal(MoveChecMonster));
+            if (b.Length % 4 != 0 || b.Length < 0x80 || U32(b, 0) != 0x27BDFFE0u || !callsMove)
+                throw new IOException($"spearBlock.bin malformed ({b.Length} B) or stale — reassemble its .s (it must call MoveChecMonster).");
+            WriteBytes(fs, ElfOff, cave, b, DebugIfCave.Host + DebugIfCave.HostSpan, "spearBlock.bin overruns DebugInfomationIF's span.");
+            uint cur = RdU32(fs, ElfOff(HookAddr)), ours = Jal(cave);
+            if (cur != Jal(MoveChecMonster) && cur != ours)
+                throw new IOException($"Step__12CMonstorUnit's site 0x{HookAddr:X} is not vanilla `jal MoveChecMonster` — unmodified Dark Cloud (USA) ISO expected.");
+            if (RdU32(fs, ElfOff(HookAddr + 4)) != 0) throw new IOException("Step__12CMonstorUnit is not laid out as expected around MoveChecMonster (delay slot).");
             WrU32(fs, ElfOff(HookAddr), ours);
-            WrU32(fs, ElfOff(HookAddr + 4), 0);
+
+            // The player's side (tools/stubs/player_spear_block.s): the cave here; its two hooks are in the overlay (DunPatches).
+            const uint PlayerMoveCheck = 0x001DC820;
+            uint pcave = DebugIfCave.PlayerSpearBlock;
+            byte[] pb = Embedded("playerSpearBlock.bin");
+            bool callsPlayer = ContainsWord(pb, Jal(PlayerMoveCheck));
+            if (pb.Length % 4 != 0 || pb.Length < 0x80 || U32(pb, 0) != 0x27BDFFE0u || !callsPlayer)
+                throw new IOException($"playerSpearBlock.bin malformed ({pb.Length} B) or stale — reassemble its .s (it must call MoveCheck__12CMonstorUnit).");
+            WriteBytes(fs, ElfOff, pcave, pb, DebugIfCave.Host + DebugIfCave.HostSpan, "playerSpearBlock.bin overruns DebugInfomationIF's span.");
+
+            // Enemy shots (tools/stubs/shot_spear_block.s): Step__12CSHOT_EFFECT's `jal checkCollision` → the cave.
+            const uint ShotHookAddr = 0x001AC3E8, CheckCollision = 0x001AB740;
+            uint scave = DebugIfCave.ShotSpearBlock;
+            byte[] sb = Embedded("shotSpearBlock.bin");
+            bool callsCheck = ContainsWord(sb, Jal(CheckCollision));
+            if (sb.Length % 4 != 0 || sb.Length < 0x80 || U32(sb, 0) != 0x27BDFFD0u || !callsCheck)
+                throw new IOException($"shotSpearBlock.bin malformed ({sb.Length} B) or stale — reassemble its .s (it must call checkCollision).");
+            WriteBytes(fs, ElfOff, scave, sb, DebugIfCave.Host + DebugIfCave.HostSpan, "shotSpearBlock.bin overruns DebugInfomationIF's span.");
+            uint scur = RdU32(fs, ElfOff(ShotHookAddr)), sours = Jal(scave);
+            if (scur != Jal(CheckCollision) && scur != sours)
+                throw new IOException($"Step__12CSHOT_EFFECT's site 0x{ShotHookAddr:X} is not vanilla `jal checkCollision` — unmodified Dark Cloud (USA) ISO expected.");
+            if (RdU32(fs, ElfOff(ShotHookAddr + 4)) != 0) throw new IOException("Step__12CSHOT_EFFECT is not laid out as expected around checkCollision (delay slot).");
+            WrU32(fs, ElfOff(ShotHookAddr), sours);
+        }
+
+        /// <summary>The Terra Sword's boulder shadow (tools/stubs/rock_shadow.s): the cave here; its hook — Draw_MainUnitShadow's `jal
+        /// MGEndDrawShadow` — is in the overlay (DunPatches).</summary>
+        internal static void PatchRockShadow(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint DrawShadowFast = 0x001303B0, EndDrawShadow = 0x00130B30;
+            uint cave = DebugIfCave.RockShadow;
+            byte[] b = Embedded("rockShadow.bin");
+            bool callsDraw = ContainsWord(b, Jal(DrawShadowFast)), endsInEnd = ContainsWord(b, MipsAsm.J(EndDrawShadow));
+            if (b.Length % 4 != 0 || U32(b, 0) != 0x27BDFFE0u || !callsDraw || !endsInEnd)
+                throw new IOException($"rockShadow.bin malformed ({b.Length} B) or stale — reassemble its .s (it must call MGDrawShadowFast and jump to MGEndDrawShadow).");
+            WriteBytes(fs, ElfOff, cave, b, DebugIfCave.Host + DebugIfCave.HostSpan, "rockShadow.bin overruns DebugInfomationIF's span.");
+        }
+
+        /// <summary>The Sun Sword's blade under its own ambient (SolarBlade): the mask-tint cave's BODY is generic — it adds
+        /// CatBlock.CatCapeTint to the ambient, calls the DrawVu1 in t9, restores — only its two 3-word entries name the skinned
+        /// class's overloads. A weapon model's mesh is a CVisualVu1, so these two entries load THAT class's overloads and jump
+        /// into the same body. Six words in the cave band's last gap; the private vtable SolarBlade builds points its DrawVu1
+        /// slots here.</summary>
+        internal static void PatchSolarBladeTint(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint DrawVu1Words = 0x00135000u, DrawVu1Packet = 0x00134BC0u;          // DrawVu1__10CVisualVu1, the uint* and sceVif1Packet* overloads
+            uint body = ElfCave.CatMaskTint + 0x18;                             // past the mask cave's own two entries
+            if (RdU32(fs, ElfOff(ElfCave.CatMaskTint)) != 0x3C190013u || RdU32(fs, ElfOff(body)) != 0x27BDFF70u)
+                throw new IOException("PatchSolarBladeTint must follow PatchCatMaskTint (its entries `lui t9,0x13` and body `addiu sp,sp,-0x90`).");
+            uint[] words =
+            {
+                0x3C190000u | (DrawVu1Words >> 16),  J(body), 0x37390000u | (DrawVu1Words & 0xFFFFu),    // lui t9,HI; j body; ori t9,t9,LO  (vtable slot 6)
+                0x3C190000u | (DrawVu1Packet >> 16), J(body), 0x37390000u | (DrawVu1Packet & 0xFFFFu),   // (vtable slot 7)
+            };
+            for (int i = 0; i < words.Length; i++)
+            {
+                uint cur = RdU32(fs, ElfOff(ElfCave.SolarBladeTint + (uint)(i * 4)));
+                if (cur != 0 && cur != words[i])
+                    throw new IOException($"Cave gap 0x{ElfCave.SolarBladeTint + i * 4:X} holds 0x{cur:X8} — not free.");
+                WrU32(fs, ElfOff(ElfCave.SolarBladeTint + (uint)(i * 4)), words[i]);
+            }
+        }
+
+        /// <summary>The lock-on NAME PLATE, gated by a mod word. MonsterNameDraw asks GetMonsterNameDrawFlag (0x20EB70,
+        /// the flag's only reader), and setTargetCursor re-raises the flag through its setter every frame the target is
+        /// on screen — so an ability cannot hide the plate by writing the flag; it is back next frame. The getter,
+        /// <code>
+        ///   0x20EB70  lh  v0,-0x69E0(gp)
+        ///   0x20EB74  jr  ra
+        ///   0x20EB78  nop
+        /// </code>
+        /// becomes `j NameDrawGate; nop`, and the cave returns the flag AND NOT <see cref="CodeCaves.NameHide"/>:
+        /// <code>
+        ///   lh  v0,-0x69E0(gp)  /  lui at,HI  /  lw at,LO(at)  /  nor at,zero,at  /  jr ra  /  and v0,v0,at
+        /// </code>
+        /// A zero word — what fresh memory holds — is vanilla, so nothing needs seeding; `at` is the only register
+        /// touched beyond the return value.</summary>
+        internal static void PatchNameDrawGate(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Getter = 0x0020EB70;
+            const uint VanillaLh = 0x87829620u, VanillaJr = 0x03E00008u;            // lh v0,-0x69e0(gp) ; jr ra
+            uint cave = ElfCave.NameDrawGate;
+            HiLo(CodeCaves.NameHideGuest, out uint hi, out uint lo);                 // lw's offset is signed
+            uint[] words =
+            {
+                VanillaLh,                      // lh  v0,-0x69e0(gp)   the flag, as the getter read it
+                0x3C010000u | hi,               // lui at,HI(NameHide)
+                0x8C210000u | lo,               // lw  at,LO(at)
+                0x00010827u,                    // nor at,zero,at       ~hide
+                VanillaJr,                      // jr  ra
+                0x00411024u,                    // and v0,v0,at         (delay slot)
+            };
+            for (int i = 0; i < words.Length; i++)
+            {
+                uint cur = RdU32(fs, ElfOff(cave + (uint)(i * 4)));
+                if (cur != 0 && cur != words[i])
+                    throw new IOException($"Cave gap 0x{cave + i * 4:X} holds 0x{cur:X8} — not free.");
+                WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+            }
+            uint jump = MipsAsm.J(cave);
+            uint got0 = RdU32(fs, ElfOff(Getter)), got1 = RdU32(fs, ElfOff(Getter + 4));
+            if (got0 == jump && got1 == 0) return;                                  // idempotent re-run
+            if (got0 != VanillaLh || got1 != VanillaJr)
+                throw new IOException($"GetMonsterNameDrawFlag 0x{Getter:X} is not vanilla (got 0x{got0:X8}/0x{got1:X8}) " +
+                                      "— is this an unmodified Dark Cloud (USA) ISO?");
+            WrU32(fs, ElfOff(Getter),     jump);
+            WrU32(fs, ElfOff(Getter + 4), 0);                                       // the jump's delay slot
+        }
+
+        /// <summary>THE MAGIC CIRCLES as data (tools/stubs/circle_effects.s, CodeCaves.CircleTable): the cave in the body of
+        /// DebugInfomationIF (DebugIfCave, claimed by ElfDeadFunctionPatches.PatchClaimDeadFunctionHosts so the debug
+        /// key's one call reads "nothing pressed"), which dun.bin's Run_TrapCircle jumps to (DunPatches). Every circle magnitude is
+        /// then a word the mod may set.</summary>
+        internal static void PatchCircleEffects(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Host = DebugIfCave.Host, Cave = DebugIfCave.CircleEffects;
+            byte[] b = Embedded("circleEffects.bin");
+            // Shape: the engine's own frame, and the calls it makes — BtSetStatusErr, WeaponDataChangeByRGate, SetWeaponAttachStatus, rand, GetItem, SndSePlay.
+            bool statusErr = ContainsWord(b, Jal(0x001B1BB0)), rgate = ContainsWord(b, Jal(0x0020FCE0)), attach = ContainsWord(b, Jal(0x00225AA0));
+            bool rnd = ContainsWord(b, Jal(0x001046F8)), getItem = ContainsWord(b, Jal(0x001BE060)), se = ContainsWord(b, Jal(0x0015A6B0));
+            if (b.Length % 4 != 0 || b.Length < 0x200 || U32(b, 0) != 0x27BDFF70u || !statusErr || !rgate || !attach || !rnd || !getItem || !se)
+                throw new IOException($"circleEffects.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (Cave + (uint)b.Length > Host + DebugIfCave.HostSpan)
+                throw new IOException("circleEffects.bin overruns DebugInfomationIF's span.");
+            WriteBytes(fs, ElfOff, Cave, b);
         }
 
         /// <summary>Xiao's build-up tree, baked: the weapon template table's build-up word (WeaponList +0x3C, bit k = the weapon
@@ -157,10 +172,8 @@ namespace Dark_Cloud_Improved_Version
             })
             {
                 uint addr = (uint)(Weapons.buildup - 0x20000000 + Weapons.xiaooffset + Weapons.weaponoffset * (item - Weapons.woodenid));
-                uint cur = RdU32(fs, ElfOff(addr));
-                if (cur != vanilla && cur != ours)
-                    throw new IOException($"Build-up word of weapon {item} at 0x{addr:X} is 0x{cur:X}, not vanilla 0x{vanilla:X} — unmodified Dark Cloud (USA) ISO expected.");
-                WrU32(fs, ElfOff(addr), ours);   // {what}
+                ReplaceWord(fs, ElfOff, addr, vanilla, ours,   // {what}
+                            cur => $"Build-up word of weapon {item} at 0x{addr:X} is 0x{cur:X}, not vanilla 0x{vanilla:X} — unmodified Dark Cloud (USA) ISO expected.");
             }
         }
 
@@ -170,28 +183,24 @@ namespace Dark_Cloud_Improved_Version
         /// every other weapon. The attached items' sums are untouched.</summary>
         internal static void PatchSteelLevelUp(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint CaveAddr = CodeCaves.DebugInfoCave.SteelLevelUp;
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.steelLevelUp.bin")
-                ?? throw new IOException("Embedded EE function missing: steelLevelUp.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            const uint CaveAddr = DebugInfoCave.SteelLevelUp;
+            byte[] b = Embedded("steelLevelUp.bin");
             int jrRa = 0;
             for (int i = 0; i + 4 <= b.Length; i += 4) if (U32(b, i) == 0x03E00008u) jrRa++;
             if (b.Length % 4 != 0 || b.Length < 0x50 || (U32(b, 0) >> 16) != 0x1000 || (U32(b, 0x18) >> 16) != 0x1000 || jrRa != 4)
                 throw new IOException($"steelLevelUp.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
+            if (CaveAddr + (uint)b.Length > DebugInfoCave.Host + DebugInfoCave.HostSpan)
                 throw new IOException("steelLevelUp.bin overruns DebugInfomationDraw's span.");
-            if (RdU32(fs, ElfOff(CodeCaves.DebugInfoCave.Host)) != 0x03E00008u)
-                throw new IOException("PatchSteelLevelUp must follow PatchSharedShots (the host's `jr ra`).");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            if (RdU32(fs, ElfOff(DebugInfoCave.Host)) != 0x03E00008u)
+                throw new IOException("PatchSteelLevelUp must follow ElfDeadFunctionPatches.PatchClaimDeadFunctionHosts (the host's `jr ra`).");
+            WriteBytes(fs, ElfOff, CaveAddr, b);
             // (site, the vanilla word it replaces, the delay-slot word that stays, the cave entry)
             foreach (var (site, vanilla, delay, entry) in new[]
             {
-                (0x002367CCu, 0x24630001u, 0xA4830006u, CodeCaves.DebugInfoCave.SteelLevelUpB),   // SetLevelUpWeaponData: addiu v1,v1,1; sh v1,6(a0)
-                (0x00236880u, 0x00641821u, 0xA6230000u, CodeCaves.DebugInfoCave.SteelLevelUpC),   // SetLevelUpWeaponData: addu v1,v1,a0; sh v1,0(s1)
-                (0x00235D94u, 0x87A200AAu, 0x24430001u, CodeCaves.DebugInfoCave.SteelLevelUpD),   // WeaponLevelUpValueCalc: lh v0,0xAA(sp); addiu v1,v0,1
-                (0x00235EE4u, 0x00641821u, 0xA6A3000Cu, CodeCaves.DebugInfoCave.SteelLevelUpE),   // WeaponLevelUpValueCalc: addu v1,v1,a0; sh v1,0xC(s5)
+                (0x002367CCu, 0x24630001u, 0xA4830006u, DebugInfoCave.SteelLevelUpB),   // SetLevelUpWeaponData: addiu v1,v1,1; sh v1,6(a0)
+                (0x00236880u, 0x00641821u, 0xA6230000u, DebugInfoCave.SteelLevelUpC),   // SetLevelUpWeaponData: addu v1,v1,a0; sh v1,0(s1)
+                (0x00235D94u, 0x87A200AAu, 0x24430001u, DebugInfoCave.SteelLevelUpD),   // WeaponLevelUpValueCalc: lh v0,0xAA(sp); addiu v1,v0,1
+                (0x00235EE4u, 0x00641821u, 0xA6A3000Cu, DebugInfoCave.SteelLevelUpE),   // WeaponLevelUpValueCalc: addu v1,v1,a0; sh v1,0xC(s5)
             })
             {
                 uint cur = RdU32(fs, ElfOff(site)), ours = Jal(entry);
@@ -206,8 +215,8 @@ namespace Dark_Cloud_Improved_Version
         /// lwc1 f12,LO(v0)` of Mailbox.FlameSpacing (pnach-seeded 2.0; the Skunk writes 4.0 = twice the reach).</summary>
         internal static void PatchFlameSpacing(FileStream fs, Func<uint, long> ElfOff)
         {
-            uint hi = 0x3C020000u | (uint)((CodeCaves.Mailbox.FlameSpacing - 0x20000000) >> 16);
-            uint lo = 0xC44C0000u | (uint)((CodeCaves.Mailbox.FlameSpacing - 0x20000000) & 0xFFFF);
+            uint hi = 0x3C020000u | (uint)((Mailbox.FlameSpacing - 0x20000000) >> 16);
+            uint lo = 0xC44C0000u | (uint)((Mailbox.FlameSpacing - 0x20000000) & 0xFFFF);
             foreach (var (site, next) in new[] { (0x001AED88u, 0x27A40060u), (0x001AEB6Cu, 0x27A40070u) })
             {
                 uint w0 = RdU32(fs, ElfOff(site)), w1 = RdU32(fs, ElfOff(site + 4));
@@ -222,49 +231,32 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Every main-ELF call of DngActiveWeaponTextureCopy — the game's copy opportunities, each while a menu has
         /// the wepicon sheet registered: WeaponSelectKey, BtMenuLoad2, ExitDunEnterMenu, CharaChangeLoop.</summary>
         internal static readonly uint[] SsIconCopyMainHooks = { 0x001FE05C, 0x0020EA98, 0x00226560, 0x00228DDC };
+
         /// <summary>The dungeon HUD gains the icon of the weapon whose SynthSphere Super Steve carries, over Steve. Two
         /// caves: the DRAW (the overlay's `jal topStatusInfo`, dun 0x1DB0364, hooked by DunPatches) and the COPY that keeps
         /// the icon in a spare cell of the HUD sheet on every DngActiveWeaponTextureCopy call — the overlay's two sites
         /// (DunPatches) and the four menu paths in <see cref="SsIconCopyMainHooks"/> (hooked here).</summary>
         internal static void PatchSuperSteveIconDraw(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint CaveAddr = CodeCaves.ElfCave.SuperSteveIconDraw;
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconDraw.bin")
-                ?? throw new IOException("Embedded EE function missing: superSteveIconDraw.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            const uint CaveAddr = ElfCave.SuperSteveIconDraw;
+            byte[] b = Embedded("superSteveIconDraw.bin");
             if (b.Length < 8 || U32(b, 0) != 0x27BDFFC0u)   // opens its frame: addiu sp,sp,-0x40
                 throw new IOException($"superSteveIconDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             // The words that make it THIS cave: the displaced call (jal topStatusInfo) and the draw (jal set2DSprite).
-            bool orig = false, draw = false;
-            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == DunPatches.SsIconHookOrig) orig = true; if (w == 0x0C0570C4u) draw = true; }
+            bool orig = ContainsWord(b, DunPatches.SsIconHookOrig), draw = ContainsWord(b, 0x0C0570C4u);
             if (!orig || !draw)
                 throw new IOException("superSteveIconDraw.bin lacks the topStatusInfo call or the set2DSprite call.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
-                throw new IOException("superSteveIconDraw.bin overruns its cave — move ElfCave.NextFree.");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            WriteBytes(fs, ElfOff, CaveAddr, b, ElfCave.NextFree, "superSteveIconDraw.bin overruns its cave — move ElfCave.NextFree.");
 
-            const uint CopyAddr = CodeCaves.ElfCave.SuperSteveIconCopy;
-            using var st2 = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconCopy.bin")
-                ?? throw new IOException("Embedded EE function missing: superSteveIconCopy.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
-            using var ms2 = new MemoryStream(); st2.CopyTo(ms2); byte[] c = ms2.ToArray();
-            bool origCopy = false, move = false;
-            for (int i = 0; i + 4 <= c.Length; i += 4) { uint w = U32(c, i); if (w == DunPatches.SsIconCopyHookOrig) origCopy = true; if (w == 0x0C06C7BCu) move = true; }
+            const uint CopyAddr = ElfCave.SuperSteveIconCopy;
+            byte[] c = Embedded("superSteveIconCopy.bin");
+            bool origCopy = ContainsWord(c, DunPatches.SsIconCopyHookOrig), move = ContainsWord(c, 0x0C06C7BCu);
             if (c.Length < 8 || U32(c, 0) != 0x27BDFFE0u || !origCopy || !move)
                 throw new IOException("superSteveIconCopy.bin malformed or stale — it must call DngActiveWeaponTextureCopy and setItemToReserved.");
-            if (CopyAddr + (uint)c.Length > CodeCaves.ElfCave.NextFree)
-                throw new IOException("superSteveIconCopy.bin overruns its cave — move ElfCave.NextFree.");
-            for (int i = 0; i < c.Length; i += 4)
-                WrU32(fs, ElfOff(CopyAddr + (uint)i), U32(c, i));
+            WriteBytes(fs, ElfOff, CopyAddr, c, ElfCave.NextFree, "superSteveIconCopy.bin overruns its cave — move ElfCave.NextFree.");
             foreach (uint site in SsIconCopyMainHooks)
-            {
-                uint cur = RdU32(fs, ElfOff(site));
-                if (cur != DunPatches.SsIconCopyHookOrig && cur != DunPatches.SsIconCopyHookNew)
-                    throw new IOException($"copy hook site 0x{site:X} is not `jal DngActiveWeaponTextureCopy` (0x{cur:X8}) — unmodified Dark Cloud (USA) is required.");
-                WrU32(fs, ElfOff(site), DunPatches.SsIconCopyHookNew);
-            }
+                ReplaceWord(fs, ElfOff, site, DunPatches.SsIconCopyHookOrig, DunPatches.SsIconCopyHookNew,
+                            cur => $"copy hook site 0x{site:X} is not `jal DngActiveWeaponTextureCopy` (0x{cur:X8}) — unmodified Dark Cloud (USA) is required.");
         }
     }
 }

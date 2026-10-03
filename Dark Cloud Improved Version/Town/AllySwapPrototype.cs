@@ -102,7 +102,7 @@ namespace Dark_Cloud_Improved_Version
             // Player "!" event-mark height: some ally meshes put the vanilla mark (char Y + height + 3.0)
             // inside the model. The ElfPatches exclamation cave adds this float to the mark's Y.
             // Re-asserted per tick (survives resets); 0 = bit-exact vanilla for Toan/Goro/Osmond. TUNABLE.
-            Memory.WriteFloat(CodeCaves.Mailbox.ExclamationYBoost,
+            Memory.WriteFloat(Mailbox.ExclamationYBoost,
                 _currentAlly == 1 ? 4.0f      // Xiao: long/low cat mesh
               : _currentAlly == 3 ? 2.5f      // Ruby: slightly above her head
               : _currentAlly == 4 ? 6.0f      // Ungaga: tall — the mark sat inside his head

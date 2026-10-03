@@ -29,10 +29,10 @@ namespace Dark_Cloud_Improved_Version
 
         private const string Tag = "[Ladder] ";
 
-        private const long BlockLadder      = CodeCaves.Mailbox.BlockLadder;       // EE 0x21F10074 — mod writes (0=vanilla mount / Toan)
-        private const long RefusalRequested = CodeCaves.Mailbox.RefusalRequested;  // EE 0x21F10078 — cave sets on a blocked press, mod clears
-        private const long IdleMotionMailbox = CodeCaves.Mailbox.IdleMotionOverride; // EE 0x21F10070 — plays a motion in place of idle
-        private const long IdleMotionFlags   = CodeCaves.Mailbox.IdleMotionFlags;    // EE 0x21F10080 — +0xc64 playback flags for the override
+        private const long BlockLadder      = Mailbox.BlockLadder;       // EE 0x21F10074 — mod writes (0=vanilla mount / Toan)
+        private const long RefusalRequested = Mailbox.RefusalRequested;  // EE 0x21F10078 — cave sets on a blocked press, mod clears
+        private const long IdleMotionMailbox = Mailbox.IdleMotionOverride; // EE 0x21F10070 — plays a motion in place of idle
+        private const long IdleMotionFlags   = Mailbox.IdleMotionFlags;    // EE 0x21F10080 — +0xc64 playback flags for the override
 
         // Xiao's refusal = town slot 7 (assemble_town_model.py grafts e613c04cat's no/hold/return there,
         // frames 228-278 @ speed 0.30 ≈ 170 engine frames ≈ 2.8 s). Played ONCE via the engine's own one-shot:

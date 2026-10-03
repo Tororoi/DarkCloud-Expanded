@@ -14,13 +14,22 @@ namespace Dark_Cloud_Improved_Version
         private static Thread evilciseThread = new Thread(new ThreadStart(Evilcise.JealousSoulEffect));
         private static Thread maneaterThread = new Thread(new ThreadStart(Maneater.BloodPriceEffect));
         private static Thread sunSwordThread = new Thread(new ThreadStart(SunSword.SolarHarvestEffect));
+        private static Thread solarFlashThread = new Thread(() => SunSword.SolarFlashEffect(SunSword.SunSwordFlash));
         private static Thread bigBangThread = new Thread(new ThreadStart(BigBang.DetonateEffect));
+        private static Thread zeusThread = new Thread(new ThreadStart(SwordOfZeus.LightningEffect));
         private static Thread crossHinderThread = new Thread(new ThreadStart(CrossHinder.SanctifierEffect));
         private static Thread boneNoRevivalThread = new Thread(new ThreadStart(BoneRapier.GravediggerEffect));
         private static Thread tsukikageThread = new Thread(new ThreadStart(Tsukikage.MoonlitFocusEffect));
         private static Thread smallSwordThread = new Thread(new ThreadStart(SmallSword.QuickDrawEffect));
         private static Thread darkCloudThread = new Thread(new ThreadStart(DarkCloud.GuardCrushEffect));
         private static Thread kitchenKnifeThread = new Thread(new ThreadStart(KitchenKnife.SpringsBlessingEffect));
+        private static Thread baselardThread = new Thread(new ThreadStart(Baselard.HeavyHandEffect));
+        private static Thread claymoreThread = new Thread(new ThreadStart(Claymore.GreatswordEffect));
+        private static Thread shamshirThread = new Thread(new ThreadStart(Shamshir.SwiftStrikesEffect));
+        private static Thread dusackThread = new Thread(new ThreadStart(Dusack.NoFoolsGoldEffect));
+        private static Thread saxThread = new Thread(new ThreadStart(Sax.FineFareEffect));
+        private static Thread gladiusThread = new Thread(new ThreadStart(Gladius.JacketHunterEffect));
+        private static Thread crysKnifeThread = new Thread(new ThreadStart(CrysKnife.CrystalAffinityEffect));
         private static Thread angelGearThread = new Thread(new ThreadStart(AngelGear.GuardianReflectorEffect));
         private static Thread superSteveThread = new Thread(new ThreadStart(SuperSteve.SphereInheritanceEffect));
         private static Thread matadorThread = new Thread(new ThreadStart(Matador.ChargingBullEffect));
@@ -42,13 +51,36 @@ namespace Dark_Cloud_Improved_Version
         private static Thread frozenTunaThread = new Thread(new ThreadStart(CustomGoroEffects.ColdStorageEffect));
         private static Thread infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
         private static Thread mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
-        private static Thread herculesWrathThread = new Thread(new ThreadStart(CustomUngagaEffects.HerculesWrathEffect));
-        private static Thread babelSpearThread = new Thread(new ThreadStart(CustomUngagaEffects.BabelSpearEffect));
-        private static Thread cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.AbsorbEffect));
+        private static Thread halberdLineChargeThread = new Thread(new ThreadStart(HalberdLineCharge.TornadoChargeBuffEffect));
+        private static Thread partisanThread = new Thread(new ThreadStart(Partisan.QuickSwingEffect));
+        private static Thread deSangaThread = new Thread(new ThreadStart(DeSanga.KillHealEffect));
+        private static Thread javelinThread = new Thread(new ThreadStart(Javelin.MarineEffect));
+        private static Thread scorpionVenomThread = new Thread(new ThreadStart(ScorpionVenom.VenomEffect));
+        private static Thread cactusThread = new Thread(new ThreadStart(Cactus.DesertBloomEffect));
+        private static Thread herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.UltimateEffect));
+        private static Thread babelSpearThread = new Thread(new ThreadStart(BabelsSpear.CurseOfBabelEffect));
+        private static Thread terraSwordThread = new Thread(new ThreadStart(TerraSword.RockfallEffect));
+        private static Thread absorbThread = new Thread(new ThreadStart(CustomUngagaEffects.AbsorbEffect));
         private static Thread supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
         private static Thread starBreakerThread = new Thread(new ThreadStart(CustomOsmondEffects.ShootingStarsEffect));
         private static Thread skunkThread = new Thread(new ThreadStart(CustomOsmondEffects.LongerFlameEffect));
         private static Thread wiseOwlSwordThread = new Thread(new ThreadStart(WiseOwlSword.WiseOwlAlwaysKnowsEffect));
+
+        /// <summary>Starts <paramref name="entry"/> on a fresh thread in <paramref name="thread"/> unless the one there is still running.</summary>
+        private static void Ensure(ref Thread thread, ThreadStart entry)
+        {
+            if (thread.IsAlive) return;
+            thread = new Thread(entry);
+            thread.Start();
+        }
+        /// <summary>The same, for an ability that runs only while <paramref name="wanted"/> holds (a Super Steve sphere): the
+        /// predicate is read only while the thread is down.</summary>
+        private static void Ensure(ref Thread thread, Func<bool> wanted, ThreadStart entry)
+        {
+            if (thread.IsAlive || !wanted()) return;
+            thread = new Thread(entry);
+            thread.Start();
+        }
 
         /// <summary>The cursing swords apply on equip, even from the pause menu: their threads start ahead of the walking-mode
         /// launch.</summary>
@@ -56,21 +88,13 @@ namespace Dark_Cloud_Improved_Version
         {
         // Evilcise curse applies immediately on equip, even from the pause menu
         if (Player.CurrentCharacterNum() == Player.ToanId &&
-            Player.Weapon.GetCurrentWeaponId() == Items.evilcise &&
-            !evilciseThread.IsAlive)
-        {
-            evilciseThread = new Thread(new ThreadStart(Evilcise.JealousSoulEffect));
-            evilciseThread.Start();
-        }
+            Player.Weapon.GetCurrentWeaponId() == Items.evilcise)
+            Ensure(ref evilciseThread, Evilcise.JealousSoulEffect);
 
         // Maneater curse likewise applies immediately on equip
         if (Player.CurrentCharacterNum() == Player.ToanId &&
-            Player.Weapon.GetCurrentWeaponId() == Items.maneater &&
-            !maneaterThread.IsAlive)
-        {
-            maneaterThread = new Thread(new ThreadStart(Maneater.BloodPriceEffect));
-            maneaterThread.Start();
-        }
+            Player.Weapon.GetCurrentWeaponId() == Items.maneater)
+            Ensure(ref maneaterThread, Maneater.BloodPriceEffect);
         }
 
         /// <summary>The equipped weapon's ability threads for the active character, started when not already running; called
@@ -90,185 +114,134 @@ namespace Dark_Cloud_Improved_Version
 
         private static void Toan()
         {
-            if(Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
             switch (Player.Weapon.GetCurrentWeaponId())
             {
                 case Items.bonerapier:
                     BoneRapier.SkeletonKeyEffect(true);
 
-                    if (!boneDoorThread.IsAlive)
-                    {
-                        boneDoorThread = new Thread(new ThreadStart(BoneRapier.BoneDoorTrigger));
-                        boneDoorThread.Start();
-                    }
-                    if (!boneNoRevivalThread.IsAlive)
-                    {
-                        boneNoRevivalThread = new Thread(new ThreadStart(BoneRapier.GravediggerEffect));
-                        boneNoRevivalThread.Start();
-                    }
+                    Ensure(ref boneDoorThread, BoneRapier.BoneDoorTrigger);
+                    Ensure(ref boneNoRevivalThread, BoneRapier.GravediggerEffect);
                     break;
                 case Items.seventhheaven:
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!seventhHeavenThread.IsAlive)
-                    {
-                        seventhHeavenThread = new Thread(new ThreadStart(SeventhHeaven.DivineGuardEffect));
-                        seventhHeavenThread.Start();
-                    }
+                    Ensure(ref seventhHeavenThread, SeventhHeaven.DivineGuardEffect);
 
                     // 7th Heaven also inherits Dark Cloud's Guard Crush (lineage)
-                    if (!darkCloudThread.IsAlive)
-                    {
-                        darkCloudThread = new Thread(new ThreadStart(DarkCloud.GuardCrushEffect));
-                        darkCloudThread.Start();
-                    }
+                    Ensure(ref darkCloudThread, DarkCloud.GuardCrushEffect);
                     break;
                 case Items.chroniclesword:
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!chronicleSwordThread.IsAlive)
-                    {
-                        chronicleSwordThread = new Thread(new ThreadStart(ChronicleSword.ChronicleSwordEffect));
-                        chronicleSwordThread.Start();
-                    }
+                    Ensure(ref chronicleSwordThread, ChronicleSword.ChronicleSwordEffect);
+                    Ensure(ref shamshirThread, Shamshir.SwiftStrikesEffect);   // Swift Strikes, inherited from the Shamshir
+                    Ensure(ref saxThread, Sax.FineFareEffect);        // Fine Fare, inherited down the Sax line (with Treasure Keys → Gold Bullion, Repair → Auto Repair one in four)
                     break;
+
+                case Items.dusack:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    Ensure(ref dusackThread, Dusack.NoFoolsGoldEffect);     // No Fool's Gold
+                    Ensure(ref saxThread, Sax.FineFareEffect);        // Fine Fare, inherited from the Sax (plus Treasure Keys → Gold Bullion)
+                    Ensure(ref shamshirThread, Shamshir.SwiftStrikesEffect);   // Swift Strikes, inherited from the Shamshir
+                    break;
+
+                case Items.sevenbranchsword:
+                case Items.atlamilliasword:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    Ensure(ref shamshirThread, Shamshir.SwiftStrikesEffect);   // Swift Strikes, inherited from the Shamshir
+                    Ensure(ref saxThread, Sax.FineFareEffect);        // Fine Fare, inherited down the Sax line (with Treasure Keys → Gold Bullion, Repair → Auto Repair one in four)
+                    break;
+
 
                 case Items.heavenscloud:
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!heavensCloudThread.IsAlive)
-                    {
-                        heavensCloudThread = new Thread(new ThreadStart(HeavensCloud.TyphoonEffect));
-                        heavensCloudThread.Start();
-                    }
+                    Ensure(ref heavensCloudThread, HeavensCloud.TyphoonEffect);
 
                     // Heaven's Cloud also inherits Moonlit Focus (Tsukikage lineage)
-                    if (!tsukikageThread.IsAlive)
-                    {
-                        tsukikageThread = new Thread(new ThreadStart(Tsukikage.MoonlitFocusEffect));
-                        tsukikageThread.Start();
-                    }
+                    Ensure(ref tsukikageThread, Tsukikage.MoonlitFocusEffect);
 
                     // ...and Quick Draw (Small Sword lineage)
-                    if (!smallSwordThread.IsAlive)
-                    {
-                        smallSwordThread = new Thread(new ThreadStart(SmallSword.QuickDrawEffect));
-                        smallSwordThread.Start();
-                    }
+                    Ensure(ref smallSwordThread, SmallSword.QuickDrawEffect);
                     break;
 
                 case Items.evilcise:
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!evilciseThread.IsAlive)
-                    {
-                        evilciseThread = new Thread(new ThreadStart(Evilcise.JealousSoulEffect));
-                        evilciseThread.Start();
-                    }
+                    Ensure(ref evilciseThread, Evilcise.JealousSoulEffect);
                     break;
 
                 case Items.maneater:
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!maneaterThread.IsAlive)
-                    {
-                        maneaterThread = new Thread(new ThreadStart(Maneater.BloodPriceEffect));
-                        maneaterThread.Start();
-                    }
+                    Ensure(ref maneaterThread, Maneater.BloodPriceEffect);
                     break;
 
                 case Items.tsukikage:
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!tsukikageThread.IsAlive)
-                    {
-                        tsukikageThread = new Thread(new ThreadStart(Tsukikage.MoonlitFocusEffect));
-                        tsukikageThread.Start();
-                    }
+                    Ensure(ref tsukikageThread, Tsukikage.MoonlitFocusEffect);
 
                     // Tsukikage also inherits Quick Draw (Small Sword lineage)
-                    if (!smallSwordThread.IsAlive)
-                    {
-                        smallSwordThread = new Thread(new ThreadStart(SmallSword.QuickDrawEffect));
-                        smallSwordThread.Start();
-                    }
+                    Ensure(ref smallSwordThread, SmallSword.QuickDrawEffect);
                     break;
 
 
                 case Items.smallsword:
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!smallSwordThread.IsAlive)
-                    {
-                        smallSwordThread = new Thread(new ThreadStart(SmallSword.QuickDrawEffect));
-                        smallSwordThread.Start();
-                    }
+                    Ensure(ref smallSwordThread, SmallSword.QuickDrawEffect);
                     break;
 
                 case Items.darkcloud:
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!darkCloudThread.IsAlive)
-                    {
-                        darkCloudThread = new Thread(new ThreadStart(DarkCloud.GuardCrushEffect));
-                        darkCloudThread.Start();
-                    }
+                    Ensure(ref darkCloudThread, DarkCloud.GuardCrushEffect);
                     break;
 
                 case Items.sunsword:
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!sunSwordThread.IsAlive)
-                    {
-                        sunSwordThread = new Thread(new ThreadStart(SunSword.SolarHarvestEffect));
-                        sunSwordThread.Start();
-                    }
+                    Ensure(ref sunSwordThread, SunSword.SolarHarvestEffect);
+                    Ensure(ref solarFlashThread, () => SunSword.SolarFlashEffect(SunSword.SunSwordFlash));
                     break;
 
-                case Items.bigbang:   // inherits Solar Harvest (Sun Sword lineage) + its own Detonate
+                case Items.bigbang:   // inherits Solar Harvest AND Solar Flash (Sun Sword lineage) + its own Detonate
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!sunSwordThread.IsAlive)
-                    {
-                        sunSwordThread = new Thread(new ThreadStart(SunSword.SolarHarvestEffect));
-                        sunSwordThread.Start();
-                    }
-                    if (!bigBangThread.IsAlive)
-                    {
-                        bigBangThread = new Thread(new ThreadStart(BigBang.DetonateEffect));
-                        bigBangThread.Start();
-                    }
+                    Ensure(ref sunSwordThread, SunSword.SolarHarvestEffect);
+                    Ensure(ref solarFlashThread, () => SunSword.SolarFlashEffect(SunSword.BigBangFlash));
+                    Ensure(ref bigBangThread, BigBang.DetonateEffect);
+                    break;
+
+                case Items.swordofzeus:   // inherits Solar Harvest AND Solar Flash (Sun Sword lineage) + its lightning
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    Ensure(ref sunSwordThread, SunSword.SolarHarvestEffect);
+                    Ensure(ref solarFlashThread, () => SunSword.SolarFlashEffect(SunSword.ZeusFlash));
+                    Ensure(ref zeusThread, SwordOfZeus.LightningEffect);
                     break;
 
                 case Items.crosshinder:
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!crossHinderThread.IsAlive)
-                    {
-                        crossHinderThread = new Thread(new ThreadStart(CrossHinder.SanctifierEffect));
-                        crossHinderThread.Start();
-                    }
+                    Ensure(ref crossHinderThread, CrossHinder.SanctifierEffect);
                     break;
 
                 case Items.agassword:
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!agasSwordThread.IsAlive)
-                    {
-                        agasSwordThread = new Thread(new ThreadStart(AgasSword.DefensiveLegacyEffect));
-                        agasSwordThread.Start();
-                    }
+                    Ensure(ref agasSwordThread, AgasSword.DefensiveLegacyEffect);
                     break;
 
                 case Items.braveark:
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!braveArkThread.IsAlive)
-                    {
-                        braveArkThread = new Thread(new ThreadStart(BraveArk.HerosCourageEffect));
-                        braveArkThread.Start();
-                    }
+                    Ensure(ref braveArkThread, BraveArk.HerosCourageEffect);
+                    Ensure(ref dusackThread, Dusack.NoFoolsGoldEffect);     // No Fool's Gold, inherited from the Dusack
                     break;
 
                 // Kitchen Knife is a TOAN sword — its effect gates on ToanId, so registering it under
@@ -277,11 +250,43 @@ namespace Dark_Cloud_Improved_Version
                 case Items.kitchenknife:
                     BoneRapier.SkeletonKeyEffect(false);
 
-                    if (!kitchenKnifeThread.IsAlive)
-                    {
-                        kitchenKnifeThread = new Thread(new ThreadStart(KitchenKnife.SpringsBlessingEffect));
-                        kitchenKnifeThread.Start();
-                    }
+                    Ensure(ref kitchenKnifeThread, KitchenKnife.SpringsBlessingEffect);
+                    break;
+
+                case Items.baselard:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    Ensure(ref baselardThread, Baselard.HeavyHandEffect);
+                    break;
+
+                case Items.claymore:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    Ensure(ref claymoreThread, Claymore.GreatswordEffect);
+                    break;
+
+                case Items.sax:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    Ensure(ref saxThread, Sax.FineFareEffect);
+                    break;
+
+                case Items.shamshir:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    Ensure(ref shamshirThread, Shamshir.SwiftStrikesEffect);
+                    break;
+
+                case Items.crystalknife:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    Ensure(ref crysKnifeThread, CrysKnife.CrystalAffinityEffect);
+                    break;
+
+                case Items.gladius:
+                    BoneRapier.SkeletonKeyEffect(false);
+
+                    Ensure(ref gladiusThread, Gladius.JacketHunterEffect);
                     break;
 
                 default:
@@ -294,124 +299,68 @@ namespace Dark_Cloud_Improved_Version
         {
             // Super Steve manages the bone-door bypass itself (via an attached Bone Rapier / Bone Slingshot sphere); the Bone Slingshot has it below.
             if (Player.Weapon.GetCurrentWeaponId() != Items.supersteve && Player.Weapon.GetCurrentWeaponId() != Items.boneslingshot) BoneRapier.SkeletonKeyEffect(false);
-            if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
             // The lock-on movement buff: Dragon's Y's, and the three weapons that inherit it (Super Steve's own loop drives its sphere's).
-            if (DragonsY.LockOnSpeedGrants(Player.Weapon.GetCurrentWeaponId()) && !lockOnSpeedThread.IsAlive)
-            {
-                lockOnSpeedThread = new Thread(new ThreadStart(DragonsY.LockOnSpeedEffect));
-                lockOnSpeedThread.Start();
-            }
+            if (DragonsY.LockOnSpeedGrants(Player.Weapon.GetCurrentWeaponId())) Ensure(ref lockOnSpeedThread, DragonsY.LockOnSpeedEffect);
             // The lock-on reach: the Flamingo's, and the four weapons that inherit it (Super Steve's own loop drives its sphere's).
-            if (Flamingo.GrantsReach(Player.Weapon.GetCurrentWeaponId()) && !lockOnReachThread.IsAlive)
-            {
-                lockOnReachThread = new Thread(new ThreadStart(Flamingo.LockOnDistanceEffect));
-                lockOnReachThread.Start();
-            }
+            if (Flamingo.GrantsReach(Player.Weapon.GetCurrentWeaponId())) Ensure(ref lockOnReachThread, Flamingo.LockOnDistanceEffect);
             // The cat: the Divine Beast Title's, the two weapons that inherit it with their own looks, and Super Steve with any of
             // their spheres — ONE thread for all of them (the cat must never have two drivers).
-            if (DivineBeastTitle.Wields() && !divineBeastTitleThread.IsAlive)
-            {
-                divineBeastTitleThread = new Thread(new ThreadStart(DivineBeastTitle.SpiritBeastEffect));
-                divineBeastTitleThread.Start();
-            }
+            if (DivineBeastTitle.Wields()) Ensure(ref divineBeastTitleThread, DivineBeastTitle.SpiritBeastEffect);
             // Guardian Grace: the Angel Shooter's, the Angel Gear's by inheritance, and Super Steve with either sphere — one thread.
-            if (AngelShooter.Carries() && !angelShooterThread.IsAlive)
-            {
-                angelShooterThread = new Thread(new ThreadStart(AngelShooter.GuardianGraceEffect));
-                angelShooterThread.Start();
-            }
+            if (AngelShooter.Carries()) Ensure(ref angelShooterThread, AngelShooter.GuardianGraceEffect);
             switch (Player.Weapon.GetCurrentWeaponId())
             {
 
                 case Items.angelgear:
-                    if (!angelGearThread.IsAlive)
-                    {
-                        angelGearThread = new Thread(new ThreadStart(AngelGear.GuardianReflectorEffect));
-                        angelGearThread.Start();
-                    }
+                    Ensure(ref angelGearThread, AngelGear.GuardianReflectorEffect);
                     break;
 
                 case Items.supersteve:
-                    if (!superSteveThread.IsAlive)
-                    {
-                        superSteveThread = new Thread(new ThreadStart(SuperSteve.SphereInheritanceEffect));
-                        superSteveThread.Start();
-                    }
-                    if (!boneNoRevivalThread.IsAlive)   // the bone key's no-revival, for a Bone Rapier / Bone Slingshot sphere (the thread checks)
-                    {
-                        boneNoRevivalThread = new Thread(new ThreadStart(BoneRapier.GravediggerEffect));
-                        boneNoRevivalThread.Start();
-                    }
-                    if (!crossHinderThread.IsAlive && CrossHinder.CrossHinderWielded())   // Sanctifier, for a Cross Hinder sphere
-                    {
-                        crossHinderThread = new Thread(new ThreadStart(CrossHinder.SanctifierEffect));
-                        crossHinderThread.Start();
-                    }
+                    Ensure(ref superSteveThread, SuperSteve.SphereInheritanceEffect);
+                    Ensure(ref deSangaThread, DeSanga.Wielded, DeSanga.KillHealEffect);   // every kill heals the weapon 5 WHP, for a DeSanga sphere
+                    Ensure(ref javelinThread, Javelin.Wielded, Javelin.MarineEffect);   // marine enemies defenseless and worth double ABS, for a Javelin sphere
+                    Ensure(ref scorpionVenomThread, ScorpionVenom.Wielded, ScorpionVenom.VenomEffect);   // Scorpion's venom, for a Scorpion sphere
+                    Ensure(ref babelSpearThread, BabelsSpear.Wielded, BabelsSpear.CurseOfBabelEffect);   // Curse of Babel, for a Babel's Spear sphere (Super Steve itself rises)
+                    Ensure(ref cactusThread, Cactus.Wielded, Cactus.DesertBloomEffect);   // Desert Bloom, for a Cactus sphere (Queens' trees)
+                    Ensure(ref terraSwordThread, TerraSword.Wielded, TerraSword.RockfallEffect);   // the nutfall, for a Terra Sword sphere
+                    Ensure(ref herculesWrathThread, HerculesWrath.Wielded, HerculesWrath.UltimateEffect);   // Hercules' Wrath's ultimate, for its sphere
+                    Ensure(ref boneNoRevivalThread, BoneRapier.GravediggerEffect);   // the bone key's no-revival, for a Bone Rapier / Bone Slingshot sphere (the thread checks)
+                    if (CrossHinder.CrossHinderWielded()) Ensure(ref crossHinderThread, CrossHinder.SanctifierEffect);   // Sanctifier, for a Cross Hinder sphere
+                    Ensure(ref gladiusThread, Gladius.Wielded, Gladius.JacketHunterEffect);   // Jacket Hunter, for a Gladius sphere
+                    Ensure(ref crysKnifeThread, CrysKnife.Wielded, CrysKnife.CrystalAffinityEffect);   // Crystal Affinity, for a Crysknife sphere (its circle passive is ownership's, not the sphere's)
                     break;
 
                 case Items.matador:
-                    if (!matadorThread.IsAlive)
-                    {
-                        matadorThread = new Thread(new ThreadStart(Matador.ChargingBullEffect));
-                        matadorThread.Start();
-                    }
+                    Ensure(ref matadorThread, Matador.ChargingBullEffect);
                     break;
 
                 case Items.dragonsy:
-                    if (!dragonsYThread.IsAlive)
-                    {
-                        dragonsYThread = new Thread(new ThreadStart(DragonsY.DragonsBreathEffect));
-                        dragonsYThread.Start();
-                    }
+                    Ensure(ref dragonsYThread, DragonsY.DragonsBreathEffect);
                     break;
 
                 case Items.doubleimpact:
-                    if (!doubleImpactThread.IsAlive)
-                    {
-                        doubleImpactThread = new Thread(new ThreadStart(DoubleImpact.DoubleImpactEffect));
-                        doubleImpactThread.Start();
-                    }
+                    Ensure(ref doubleImpactThread, DoubleImpact.DoubleImpactEffect);
                     break;
 
                 case Items.banditslingshot:
-                    if (!banditSlingshotThread.IsAlive)
-                    {
-                        banditSlingshotThread = new Thread(new ThreadStart(BanditSlingshot.StealShotEffect));
-                        banditSlingshotThread.Start();
-                    }
+                    Ensure(ref banditSlingshotThread, BanditSlingshot.StealShotEffect);
                     break;
 
                 case Items.boneslingshot:
                     // the skeleton key, the Bone Rapier's: bone doors open without their key, the undead stay down
                     BoneRapier.SkeletonKeyEffect(true);
 
-                    if (!boneDoorThread.IsAlive)
-                    {
-                        boneDoorThread = new Thread(new ThreadStart(BoneRapier.BoneDoorTrigger));
-                        boneDoorThread.Start();
-                    }
-                    if (!boneNoRevivalThread.IsAlive)
-                    {
-                        boneNoRevivalThread = new Thread(new ThreadStart(BoneRapier.GravediggerEffect));
-                        boneNoRevivalThread.Start();
-                    }
+                    Ensure(ref boneDoorThread, BoneRapier.BoneDoorTrigger);
+                    Ensure(ref boneNoRevivalThread, BoneRapier.GravediggerEffect);
                     break;
 
                 case Items.steelslingshot:
-                    if (!steelSlingshotThread.IsAlive)
-                    {
-                        steelSlingshotThread = new Thread(new ThreadStart(SteelSlingshot.EnduranceUpEffect));
-                        steelSlingshotThread.Start();
-                    }
+                    Ensure(ref steelSlingshotThread, SteelSlingshot.EnduranceUpEffect);
                     break;
 
                 case Items.hardshooter:
-                    if (!hardshooterThread.IsAlive)
-                    {
-                        hardshooterThread = new Thread(new ThreadStart(Hardshooter.RicochetEffect));
-                        hardshooterThread.Start();
-                    }
+                    Ensure(ref hardshooterThread, Hardshooter.RicochetEffect);
                     break;
 
                 default:
@@ -422,30 +371,17 @@ namespace Dark_Cloud_Improved_Version
         private static void Goro()
         {
             BoneRapier.SkeletonKeyEffect(false);
-            if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
             switch (Player.Weapon.GetCurrentWeaponId())
             {
                 case Items.tallhammer:
-                    if (!tallHammerThread.IsAlive)
-                    {
-                        tallHammerThread = new Thread(new ThreadStart(CustomGoroEffects.TallHammerEffect));
-                        tallHammerThread.Start();
-                    }
+                    Ensure(ref tallHammerThread, CustomGoroEffects.TallHammerEffect);
                     break;
                 case Items.frozentuna:
-                    if (!frozenTunaThread.IsAlive)
-                    {
-                        frozenTunaThread = new Thread(new ThreadStart(CustomGoroEffects.ColdStorageEffect));
-                        frozenTunaThread.Start();
-                    }
+                    Ensure(ref frozenTunaThread, CustomGoroEffects.ColdStorageEffect);
                     break;
                 case Items.inferno:
-                    if (!infernoHammerThread.IsAlive)
-                    {
-                        infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
-                        infernoHammerThread.Start();
-                    }
+                    Ensure(ref infernoHammerThread, CustomGoroEffects.InfernoEffect);
                     break;
 
                 default:
@@ -460,31 +396,14 @@ namespace Dark_Cloud_Improved_Version
             switch (Player.Weapon.GetCurrentWeaponId())
             {
                 case Items.mobiusring:
-                    if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
-                    if (!mobiusRingThread.IsAlive)
-                    {
-                        mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
-                        mobiusRingThread.Start();
-                    }
+                    Ensure(ref mobiusRingThread, CustomRubyEffects.MobiusRingEffect);
                     break;
                 case Items.banditsring:
-                    if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
-                    if (!banditsRingThread.IsAlive)
-                    {
-                        banditsRingThread = new Thread(new ThreadStart(BanditsRing.StealShotEffect));
-                        banditsRingThread.Start();
-                    }
-                    break;
-                case Items.secretarmlet:
-                    if (!Dungeon.magicCircleChanged) {
-                        bool executed = CustomRubyEffects.SecretArmletEnable();
-                        if(executed) Dungeon.magicCircleChanged = true;
-                    }
+                    Ensure(ref banditsRingThread, BanditsRing.StealShotEffect);
                     break;
                 default:
-                    if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
                     break;
             }
         }
@@ -492,34 +411,56 @@ namespace Dark_Cloud_Improved_Version
         private static void Ungaga()
         {
             BoneRapier.SkeletonKeyEffect(false);
-            if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
 
             switch (Player.Weapon.GetCurrentWeaponId())
             {
                 case Items.herculeswrath:
-                    if (!herculesWrathThread.IsAlive)
-                    {
-                        herculesWrathThread = new Thread(new ThreadStart(CustomUngagaEffects.HerculesWrathEffect));
-                        herculesWrathThread.Start();
-                    }
+                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);
+                    Ensure(ref herculesWrathThread, HerculesWrath.UltimateEffect);   // its own: the ultimate
                     break;
 
                 case Items.babelsspear:
-                    if (!babelSpearThread.IsAlive)
-                    {
-                        babelSpearThread = new Thread(new ThreadStart(CustomUngagaEffects.BabelSpearEffect));
-                        babelSpearThread.Start();
-                    }
+                    Ensure(ref babelSpearThread, BabelsSpear.CurseOfBabelEffect);
+                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);   // the Halberd line's charge
                     break;
 
                 case Items.cactus:
-                    if (!cactusThread.IsAlive)
-                    {
-                        cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.AbsorbEffect));
-                        cactusThread.Start();
-                    }
+                    Ensure(ref absorbThread, CustomUngagaEffects.AbsorbEffect);
+                    Ensure(ref cactusThread, Cactus.DesertBloomEffect);   // its guard: the cactus rising ahead
+                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);   // the Halberd line's charge
                     break;
+
+                case Items.halberd:
+                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);   // the Halberd line's charge
+                    break;
+
+                case Items.partisan:
+                    Ensure(ref partisanThread, Partisan.QuickSwingEffect);   // the combo swings a third faster (Shamshir's factor)
+                    break;
+
+                case Items.desanga:
+                    Ensure(ref deSangaThread, DeSanga.KillHealEffect);   // every kill heals the weapon 5 WHP
+                    break;
+
+                case Items.javelin:
+                    Ensure(ref javelinThread, Javelin.MarineEffect);   // marine enemies defenseless and worth double ABS
+                    break;
+
+                case Items.scorpion:
+                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);   // the Halberd line's charge
+                    Ensure(ref scorpionVenomThread, ScorpionVenom.VenomEffect);   // its poison landing cures the wielder and feeds the weapon
+                    break;
+
+                case Items.mirage:
+                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);   // the Halberd line's charge
+                    break;
+
+                case Items.terrasword:
+                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);   // the Halberd line's charge
+                    Ensure(ref terraSwordThread, TerraSword.RockfallEffect);   // its guard: the boulder
+                    break;
+
                 default:
                     break;
             }
@@ -528,40 +469,23 @@ namespace Dark_Cloud_Improved_Version
         private static void Osmond()
         {
             BoneRapier.SkeletonKeyEffect(false);
-            if (Dungeon.magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); Dungeon.magicCircleChanged = false;
 
             switch (Player.Weapon.GetCurrentWeaponId())
             {
                 case Items.supernova:
-                    if (!supernovaThread.IsAlive)
-                    {
-                        supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
-                        supernovaThread.Start();
-                    }
+                    Ensure(ref supernovaThread, CustomOsmondEffects.SupernovaEffect);
                     break;
 
                 case Items.starbreaker:
-                    if (!starBreakerThread.IsAlive)
-                    {
-                        starBreakerThread = new Thread(new ThreadStart(CustomOsmondEffects.ShootingStarsEffect));
-                        starBreakerThread.Start();
-                    }
+                    Ensure(ref starBreakerThread, CustomOsmondEffects.ShootingStarsEffect);
                     break;
 
                 case Items.snail:
-                    if (!snailThread.IsAlive)
-                    {
-                        snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SlimeTrailEffect));
-                        snailThread.Start();
-                    }
+                    Ensure(ref snailThread, CustomOsmondEffects.SlimeTrailEffect);
                     break;
 
                 case Items.skunk:
-                    if (!skunkThread.IsAlive)
-                    {
-                        skunkThread = new Thread(new ThreadStart(CustomOsmondEffects.LongerFlameEffect));
-                        skunkThread.Start();
-                    }
+                    Ensure(ref skunkThread, CustomOsmondEffects.LongerFlameEffect);
                     break;
                 default:
                     break;
@@ -571,11 +495,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The Wise Owl Sword's floor-secrets message runs in Wise Owl Forest whether or not the sword is equipped.</summary>
         internal static void LaunchWiseOwl(byte currentDungeon)
         {
-            if (currentDungeon == 1 && !wiseOwlSwordThread.IsAlive)
-            {
-                wiseOwlSwordThread = new Thread(new ThreadStart(WiseOwlSword.WiseOwlAlwaysKnowsEffect));
-                wiseOwlSwordThread.Start();
-            }
+            if (currentDungeon == 1) Ensure(ref wiseOwlSwordThread, WiseOwlSword.WiseOwlAlwaysKnowsEffect);
         }
     }
 }

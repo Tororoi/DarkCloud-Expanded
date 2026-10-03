@@ -34,6 +34,13 @@ namespace Dark_Cloud_Improved_Version
             return 0;
         }
 
+        /// <summary>Xiao is the active character with Super Steve equipped and a SynthSphere of <paramref name="weaponId"/> attached
+        /// (the battle record's) — the sphere's source weapon's effect is hers.</summary>
+        internal static bool Wields(int weaponId)
+            => Player.CurrentCharacterNum() == Player.XiaoId
+            && Player.Weapon.GetCurrentWeaponId() == Items.supersteve
+            && AttachedSphere(WeaponHave.BattleWeaponRecord) == weaponId;
+
         // ── Quick Draw (Small Sword / Tsukikage / Heaven's Cloud sphere) ──
         private const float ShotFireFrame = 251.0f;  // inside the (251,252) pellet-release window (shoot motion idx 13)
         private static bool _xqReleaseArmed;          // edge latch so one X-release = one instant shot
@@ -120,17 +127,18 @@ namespace Dark_Cloud_Improved_Version
         private static bool _spriteWarned;
         /// <summary>Super Steve's pellet drawn as the sphere weapon's when the sphere came from a slingshot (the pellet sprite is
         /// a per-weapon cell of basefx01, so a slingshot's sphere brings its pellet): Mailbox.PelletSpriteId = that weapon's id,
-        /// read by DebugInfoCave.PelletSprite at every pellet draw; 0 (vanilla) for any other sphere, or none.</summary>
+        /// read by DebugIfCave.PelletSprite at every pellet draw; 0 (vanilla) for any other sphere, or none.</summary>
         internal static void DriveSphereSprite(int sphere)
         {
             if (sphere == _spriteSphere) return;
             bool slingshot = sphere >= Items.woodenslingshot && sphere <= Items.angelgear && sphere != Items.supersteve;
-            if (slingshot && (uint)Memory.ReadInt(0x20000000L + 0x001ABC74) != Jal(CodeCaves.DebugInfoCave.PelletSprite))
+            uint hook = (uint)Memory.ReadInt(0x20000000L + 0x001ABC74);
+            if (slingshot && hook != Jal(DebugIfCave.PelletSprite) && hook != Jal(DebugInfoCave.PelletSprite))
             {
                 if (!_spriteWarned) { _spriteWarned = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SuperSteve] pellet-sprite hook not in this ISO — the pellet stays Super Steve's (re-patch the ISO)"); }
                 return;
             }
-            Memory.WriteInt(CodeCaves.Mailbox.PelletSpriteId, slingshot ? sphere : 0);
+            Memory.WriteInt(Mailbox.PelletSpriteId, slingshot ? sphere : 0);
             _spriteSphere = sphere;
             if (slingshot) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] pellet sprite: the sphere weapon's (item {sphere})");
         }
@@ -146,14 +154,14 @@ namespace Dark_Cloud_Improved_Version
             }
             _ssIconSphere = sphere;
             long rec = ItemAddresses.ComItemInfo.RecordAddr(sphere);
-            if (sphere == 0 || rec < 0) { Memory.WriteInt(CodeCaves.Mailbox.SsIconOn, 0); return; }
+            if (sphere == 0 || rec < 0) { Memory.WriteInt(Mailbox.SsIconOn, 0); return; }
             int cls  = Memory.ReadUShort(rec + ItemAddresses.ComItemInfo.ClassOffset);
             int icon = Memory.ReadUShort(rec + ItemAddresses.ComItemInfo.SubIndexOffset);
-            Memory.WriteInt(CodeCaves.Mailbox.SsIconX, SsIconX);
-            Memory.WriteInt(CodeCaves.Mailbox.SsIconY, SsIconY);
-            Memory.WriteInt(CodeCaves.Mailbox.SsIconSize, SsIconSize);
-            Memory.WriteInt(CodeCaves.Mailbox.SsIconOn, 1);                                       // on LAST
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] sphere icon: weapon {sphere} (class {cls}, icon {icon}) → wepicon cell ({(icon & 7) * 32},{(icon >> 3) * 32}), drawn at ({SsIconX},{SsIconY}) size {SsIconSize}; manager has {SheetsRegistered()}; counters draw {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagDraws)} copy calls {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagCopyCalls)} sheet seen {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagSheetSeen)} copies {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagCopies)}");
+            Memory.WriteInt(Mailbox.SsIconX, SsIconX);
+            Memory.WriteInt(Mailbox.SsIconY, SsIconY);
+            Memory.WriteInt(Mailbox.SsIconSize, SsIconSize);
+            Memory.WriteInt(Mailbox.SsIconOn, 1);                                       // on LAST
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] sphere icon: weapon {sphere} (class {cls}, icon {icon}) → wepicon cell ({(icon & 7) * 32},{(icon >> 3) * 32}), drawn at ({SsIconX},{SsIconY}) size {SsIconSize}; manager has {SheetsRegistered()}; counters draw {Memory.ReadInt(Mailbox.SsIconDiagDraws)} copy calls {Memory.ReadInt(Mailbox.SsIconDiagCopyCalls)} sheet seen {Memory.ReadInt(Mailbox.SsIconDiagSheetSeen)} copies {Memory.ReadInt(Mailbox.SsIconDiagCopies)}");
         }
 
         /// <summary>Which of the sheets the icon cave can draw from are registered right now — the one failure it cannot report.</summary>
@@ -306,6 +314,7 @@ namespace Dark_Cloud_Improved_Version
                         long dmgA = PlayerShotPool.DamageAddr(poolBase, i);
                         Memory.WriteInt(dmgA, (int)(Memory.ReadInt(dmgA) * (1f + empowered * (HcMaxDamageMult - 1f))));
                         _ssArmedSlot   = i;                  // ANY empowered shot bursts on impact, not just a max one
+                        PelletContacts.Sync(ref _hcContactSeen);   // only contacts from here on are this pellet's
                         _ssArmedCharge = empowered;
                         // The burst LOOKS like wind but HURTS like the weapon: it inherits whatever element is
                         // selected on Super Steve (0 = none). Frozen at the shot, like the charge.
@@ -366,18 +375,27 @@ namespace Dark_Cloud_Improved_Version
             long poolBase = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
             if (!Memory.IsValidGuest(poolBase)) { _ssArmedSlot = -1; return; }
 
-            // Still in flight → keep its position fresh; the last one we see before it dies is the impact point.
-            if (Memory.ReadInt(PlayerShotPool.FlagAddr(poolBase, _ssArmedSlot)) != 0)
+            // The engine's own contact record first (the pellet-contact cave): an enemy — the burst on the hit sphere it struck;
+            // a wall — no burst. Without a record (an ISO without the cave), the pellet's death and the nearest enemy decide.
+            if (PelletContacts.Poll(ref _hcContactSeen, out var c) && c.Slot == _ssArmedSlot)
             {
-                long pp = PlayerShotPool.PosAddr(poolBase, _ssArmedSlot);
-                _ssArmedX = Memory.ReadFloat(pp);
-                _ssArmedH = Memory.ReadFloat(pp + 4);
-                _ssArmedY = Memory.ReadFloat(pp + 8);
-                return;
+                if (!c.Enemy) { _ssArmedSlot = -1; return; }
+                _ssArmedX = c.X; _ssArmedH = c.H; _ssArmedY = c.Y;
             }
-
+            else
+            {
+                // Still in flight → keep its position fresh; the last one we see before it dies is the impact point.
+                if (Memory.ReadInt(PlayerShotPool.FlagAddr(poolBase, _ssArmedSlot)) != 0)
+                {
+                    long pp = PlayerShotPool.PosAddr(poolBase, _ssArmedSlot);
+                    _ssArmedX = Memory.ReadFloat(pp);
+                    _ssArmedH = Memory.ReadFloat(pp + 4);
+                    _ssArmedY = Memory.ReadFloat(pp + 8);
+                    return;
+                }
+                if (!EnemyNear(_ssArmedX, _ssArmedY, WindImpactProximity)) { _ssArmedSlot = -1; return; }   // hit a wall / flew its full range
+            }
             _ssArmedSlot = -1;                                   // it landed — one blast per empowered shot
-            if (!EnemyNear(_ssArmedX, _ssArmedY, WindImpactProximity)) return;   // hit a wall / flew its full range
 
             float charge = _ssArmedCharge;                       // 0..1 across the empowered band
             float scale  = WindFxScaleMin + charge * (WindFxScaleMax - WindFxScaleMin);
@@ -404,15 +422,16 @@ namespace Dark_Cloud_Improved_Version
                                     WindKnockScale);
         }
 
-        /// <summary>Is any live enemy within <paramref name="range"/> of (x, y)? Distinguishes a pellet that LANDED
-        /// on something from one that expired at the end of its flight or clipped a wall.</summary>
+        private static int _hcContactSeen = PelletContacts.Fresh;
+        /// <summary>Is any live enemy within <paramref name="range"/> of (x, y), by its own position? Distinguishes a pellet that
+        /// LANDED on something from one that expired at the end of its flight or clipped a wall (the fallback without the contact cave).</summary>
         private static bool EnemyNear(float x, float y, float range)
         {
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
-                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) <= 0) continue;
-                long pos = EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX);
-                float dx = Memory.ReadFloat(pos) - x, dy = Memory.ReadFloat(pos + 8) - y;
+                if (!Enemies.IsLive(s) || Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) <= 0) continue;
+                long up = EnemyAddresses.CharObjects.PosAddr(s);
+                float dx = Memory.ReadFloat(up) - x, dy = Memory.ReadFloat(up + 8) - y;
                 if (dx * dx + dy * dy <= range * range) return true;
             }
             return false;
@@ -542,7 +561,7 @@ namespace Dark_Cloud_Improved_Version
         ///
         /// NOT every weapon's ability transfers. Excluded by design:
         ///   • Macho Sword, Wise Owl Sword, Chronicle 2 — rely on weapon ownership
-        ///   • Buster Sword, 7 Branch Sword - modify upgrading / status-breaks
+        ///   • Buster Sword, 7 Branch Sword - modify upgrading / status-breaks (the 7 Branch sphere still hands over Swift Strikes)
         /// </summary>
         public static void SphereInheritanceEffect()
         {
@@ -558,23 +577,27 @@ namespace Dark_Cloud_Improved_Version
             var ssSnail = new CustomOsmondEffects.SnailState();
             var ssStarBreaker = new CustomOsmondEffects.StarBreakerState();
             int lastSphere = 0;   // the sphere last seen: Charging Bull keeps a resident copy that must go when its sphere does
+            int errors = 0;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SuperSteve] sphere dispatch up");
             while (Player.InDungeonFloor())
             {
                 int ch = Player.CurrentCharacterNum();
-                if (ch != Player.XiaoId) break;
+                if (ch != Player.XiaoId) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] dispatch down: character {ch}"); break; }
                 int equipSlot = Memory.ReadByte(DngStatusData.Base +
                                                 DngStatusData.EquipSlotArrayOffset + ch);
-                if ((uint)equipSlot > 9) break;
+                if ((uint)equipSlot > 9) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] dispatch down: equip slot {equipSlot}"); break; }
                 long rec = DngStatusData.WeaponRecord(ch, equipSlot);
-                if (Memory.ReadUShort(rec) != Items.supersteve) break;
+                if (Memory.ReadUShort(rec) != Items.supersteve) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] dispatch down: weapon {Memory.ReadUShort(rec)} in slot {equipSlot}"); break; }
 
                 int sphere = SuperSteve.AttachedSphere(rec);
                 bool active = !Player.CheckDunIsPaused();
+                if (sphere != lastSphere) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] sphere {lastSphere} → {sphere}");
+                try {
 
                 // Toan Effects
                 // Divine Guard (7th Heaven) + Guard Crush (Dark Cloud; 7th Heaven inherits Guard Crush by lineage).
                 SeventhHeaven.SeventhHeavenSoftenAttacks(active && sphere == Items.seventhheaven);
-                DarkCloud.DarkCloudDriveGuards(active && (sphere == Items.seventhheaven || sphere == Items.darkcloud));
+                GuardGate.NobodyBlocks(active && (sphere == Items.seventhheaven || sphere == Items.darkcloud || SunSword.BlindRunning));   // …and while a Solar Shot's blinding holds the floor
 
                 // Defensive Legacy (Aga's Sword): +15 Xiao defense.
                 SuperSteve.DriveAgasSword(active && sphere == Items.agassword);
@@ -592,7 +615,41 @@ namespace Dark_Cloud_Improved_Version
                 BoneRapier.SkeletonKeyEffect(active && (sphere == Items.bonerapier || sphere == Items.boneslingshot));
 
                 // Solar Harvest (Sun Sword / Big Bang): ~1% of the floor's enemies drop a Sun attachment.
-                SunSword.SunHarvestDrive(sphere == Items.sunsword || sphere == Items.bigbang, ssSun);
+                SunSword.SunHarvestDrive(sphere == Items.sunsword || sphere == Items.bigbang || sphere == Items.swordofzeus, ssSun);
+
+                // Solar Shot (Sun Sword): a 5 s guard charge, and the next pellet carries the Sun Sword's flash to where it lands.
+                if (lastSphere == Items.sunsword && sphere != Items.sunsword) SolarShot.Stop();
+                SolarShot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.sunsword);
+
+                // Detonate (Big Bang): the guard charge hangs a bomb over the locked target for her shot to drop, or makes the next
+                // pellet a bomb; Big Bang's blast and flash where it lands; explosions cannot hurt her.
+                if (lastSphere == Items.bigbang && sphere != Items.bigbang) BigBangShot.Stop();
+                BigBangShot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.bigbang);
+
+                // Lightning (Sword of Zeus): the guard charge primes the sword's bolts — the volley on a release with no lock; locked on, a
+                // bolt on every pellet hit for five seconds; the shot charge's pellet calls the charge bolt down wherever it dies.
+                if (lastSphere == Items.swordofzeus && sphere != Items.swordofzeus) ZeusShot.Stop();
+                ZeusShot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.swordofzeus);
+
+                // Heavy Hand (Baselard) and the Claymore's throw: every pellet throws its enemy as the sword's hits do (the
+                // Claymore's size stays with the sword).
+                Baselard.DriveSphere(active && (sphere == Items.baselard || sphere == Items.claymore));
+
+                // No Fool's Gold (Dusack / Brave Ark): mimics' wake guard held open for her pellets (Dark Cloud's and 7th Heaven's
+                // Guard Crush above covers every guard, the wake included).
+                Dusack.DriveSphere(active && Dusack.Grants(sphere));
+
+                // Fine Fare (Sax / Dusack / 7 Branch Sword / Atlamillia Sword / Chronicle Sword): the floor's chest water, food, keys and
+                // repair powder upgraded at the sphere's sword's form; the originals back when the sphere goes.
+                Sax.DriveSphere(sphere, active);
+
+                // The Halberd line's charge (Halberd / Scorpion / Mirage / Cactus / Hercules' Wrath / Terra Sword / Babel's Spear): a
+                // 0.5 s held shot fires a pellet at the sphere's form — bigger, faster, 1.5× the attack.
+                HalberdLineCharge.DriveSphere(sphere, active);
+
+                // Swift Strikes (Shamshir / Dusack / 7 Branch Sword / Atlamillia Sword / Chronicle Sword) and the Partisan's quick combo:
+                // her draw plays ×1.6 faster and her shoot at the fastest step that still fires.
+                Shamshir.DriveSphere(active && (Shamshir.Grants(sphere) || sphere == Items.partisan));
 
                 // Curses (full inherit): curse Xiao. Not pause-gated — mirrors the Toan loops.
                 Evilcise.Drive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);
@@ -618,8 +675,8 @@ namespace Dark_Cloud_Improved_Version
                 // Lock-on speed (Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear): ×1.3 movement while locked on.
                 DragonsY.LockOnSpeedDrive(active && DragonsY.LockOnSpeedGrants(sphere));
 
-                // Lock-on reach (Flamingo / Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear): enemies locked from twice as far.
-                Flamingo.Drive(active && Flamingo.GrantsReach(sphere));
+                // Lock-on reach (Flamingo / Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear — and Big Bang, whose sword has it): enemies locked from twice as far.
+                Flamingo.Drive(active && (Flamingo.GrantsReach(sphere) || sphere == Items.crosshinder || sphere == Items.bigbang || sphere == Items.swordofzeus));   // the Cross Hinder's reach, and Big Bang's and the Sword of Zeus's inherited from it
 
                 // Dragon's Y: the charged shot — the Gemron ball of Super Steve's own selected element.
                 DragonsY.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.dragonsy);
@@ -675,18 +732,27 @@ namespace Dark_Cloud_Improved_Version
 
                 // Star Breaker: 2% chance on an enemy kill to receive an empty SynthSphere.
                 CustomOsmondEffects.StarBreakerDrive(active && sphere == Items.starbreaker, ssStarBreaker);
+                }
+                catch (Exception ex)
+                {   // one ability's fault must not take the whole dispatch down with it
+                    if (errors++ < 5) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SuperSteve] tick error: " + ex.Message + "\n" + ex.StackTrace);
+                }
 
                 Thread.Sleep(16);
             }
 
             // Restore everything on unequip / character-switch / dungeon exit (no-ops if not driven).
             SeventhHeaven.SeventhHeavenSoftenAttacks(false);
-            DarkCloud.DarkCloudDriveGuards(false);
+            GuardGate.NobodyBlocks(false);
             BoneRapier.SkeletonKeyEffect(false);
             SunSword.SunHarvestDrive(false, ssSun);
             Evilcise.Drive(false, xiaoCurse, ssEvilcise);
             Maneater.Drive(false, xiaoCurse, 0, ssManeater);
             SuperSteve.DriveSmallSword(false);
+            Shamshir.DriveSphere(false);
+            Dusack.DriveSphere(false);
+            HalberdLineCharge.DriveSphere(0, false);
+            Sax.DriveSphere(0, false);
             SuperSteve.DriveTsukikage(false);
             SuperSteve.DriveHeavensCloud(false);   // resets the flash latches
             SuperSteve.DriveAgasSword(false);
@@ -698,6 +764,8 @@ namespace Dark_Cloud_Improved_Version
             Flamingo.Stop();
             DragonsY.Stop();
             Matador.Stop();   // the resident slingshot copy too
+            SolarShot.Stop();
+            BigBangShot.Stop();
             DoubleImpact.Stop();
             BanditSlingshot.Stop();
             SteelSlingshot.Stop();

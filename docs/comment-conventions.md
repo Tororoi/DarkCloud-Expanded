@@ -39,7 +39,7 @@ at runtime is not a definition and should not read like one.
 ## Keep
 
 - **Measured constants, addresses, offsets, frame numbers, struct layouts.** Current facts, not history.
-- **Cross-references to other code in this repo** — `MirageSceneGateFlag`, `Draw__10CCharacter`,
+- **Cross-references to other code in this repo** — `Mailbox.MirageSceneGate`, `Draw__10CCharacter`,
   `CharacterClone.CopyCloth`, `MotionProc2`. These are the hardest thing to rediscover by reading and they describe how
   the system is wired now.
 - **Rules and warnings, in the present tense.** Turn "the caves used to live in 0x228BB0, which turned out to be live

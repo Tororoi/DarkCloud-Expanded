@@ -21,9 +21,23 @@ namespace Dark_Cloud_Improved_Version
         internal const int  Radius     = 0x3C;
         internal const int  Mask       = 0x48;        // bit 0 = hurts the player
         internal const int  Element    = 0x50;        // ONE pure element bit, or 0 — a status bit here misroutes CheckDmg's element branch
+        internal const int  BlowDir    = 0x20;        // vec3 — the direction the PLAYER path throws its victim. Set__CCollisionData
+                                                      // defaults it to (1,0,0): BtCheckDamageProc copies it to a scratch and hands
+                                                      // that to unitBlowActionRot, which takes atan2(x, z) − π and SETS the player's
+                                                      // facing from it. Left at the default, every hit throws him the same way in
+                                                      // WORLD space, which reads as a random direction relative to him.
+        internal const int  AbilityFlags = 0x6C;      // the weapon's ability word (poison, stop, critical, steal, drain …); 0 = none
         internal const int  Owner      = 0x58;        // enemy swings: slot*5+200
         internal const int  GateA      = 0x70, GateB = 0x74;   // the entry is open to CheckHitUser while these are equal
         internal const uint HurtsPlayerMask = 1;
+        // The kick words of a hit on an ENEMY (CheckDmg's path): the point the victim is pushed away from, how hard, how fast
+        // the push fades, and the kick type. Written by SetKick; PlayerHitEntry leaves them zero (no kick: the reaction without a shove).
+        internal const int  KickOriginOff   = 0x80;   // vec3 (x, h, y)
+        internal const int  KickStrengthOff = 0x90;   // float
+        internal const int  KickDecayOff    = 0x94;   // float
+        internal const int  KickTypeOff     = 0x98;   // int
+        internal const int  KickWordsSize   = KickTypeOff + 4 - KickOriginOff;   // 0x1C: the whole run, copied as one by Confusion's friendly fire
+        internal const int  KickTypeAway    = 2;      // thrown away from the origin, with the melee-style reaction (flinch + shove) — the type Toan's sword hits carry
 
         private const long BattleWeaponStats = WeaponHave.BattleWeaponRecord + 0x1C;   // anti-category bytes (entry +0x64 points here)
         private const long BattleWeaponFlags = WeaponHave.BattleWeaponRecord + 0xEE;   // ability flags (entry +0x6C)
@@ -44,8 +58,19 @@ namespace Dark_Cloud_Improved_Version
             return -1;
         }
 
+        /// <summary>How many entries are free right now.</summary>
+        internal static int FreeCount(long pool)
+        {
+            int n = 0;
+            for (int i = 0; i < Entries; i++) if (Memory.ReadInt(pool + ActiveOff + i * 4) == 0) n++;
+            return n;
+        }
+
         internal static bool IsActive(long pool, int slot) => Memory.ReadInt(pool + ActiveOff + slot * 4) != 0;
         internal static void Deactivate(long pool, int slot) => Memory.WriteInt(pool + ActiveOff + slot * 4, 0);
+
+        /// <summary>The active character's id for an entry's attacker field (0 Toan … 5 Osmond); 1 when no character is out.</summary>
+        private static int ActiveCharacter() { int c = Player.CurrentCharacterNum(); return c >= 0 && c <= 5 ? c : 1; }
 
         /// <summary>Write an entry and only then mark it active.</summary>
         internal static void Plant(long pool, int slot, byte[] entry)
@@ -56,7 +81,8 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>A player-attack sphere at (x, h, y): the form CheckDmg accepts as one of the player's own hits — damage
         /// <paramref name="baseDmg"/> before the enemy's defence, the equipped weapon's stats and ability flags, and
-        /// <paramref name="attr"/> as its element bit (0 = none). Kick words (+0x80..+0x98) are left zero for the caller.</summary>
+        /// <paramref name="attr"/> as its element bit (0 = none). Kick words (+0x80..+0x98) are left zero for the caller
+        /// (<see cref="SetKick"/>).</summary>
         internal static byte[] PlayerHitEntry(float x, float h, float y, float radius, int baseDmg, uint attr)
         {
             var e = new byte[Stride];
@@ -66,8 +92,68 @@ namespace Dark_Cloud_Improved_Version
             F(0x1C, 1f); F(0x20, 1f);
             I(0x34, baseDmg); I(EntryClass, 0); F(Radius, radius);
             I(0x44, 1); I(Mask, 2); I(0x4C, 2); I(Element, (int)attr); I(0x54, 0);
-            I(Owner, 1); I(0x5C, -1); I(0x60, 0);
+            // +0x58 is the attacking character id — the ACTIVE character's. CheckDmg indexes the per-hurtbox percent column
+            // with it (partPct[part][id] @ +0x555D0), halves the monster's defence for Ruby (3), applies the ranged distance
+            // falloff for 1/3/5 and, for 0/2/4, takes the weapon-HP drain of a landed hit (BattleSubWeaponDmg, its break
+            // included) per enemy the sphere lands on; and it writes the slot's KillerCharId, which the death block's kill-ABS
+            // grant compares with the active character — so the kill is credited to whoever holds the weapon.
+            I(Owner, ActiveCharacter()); I(0x5C, -1); I(0x60, 0);
             I(0x64, (int)(BattleWeaponStats - 0x20000000)); I(0x68, -1); I(0x6C, Memory.ReadShort(BattleWeaponFlags));
+            I(GateA, 0); I(GateB, 0); F(0x8C, 1f);
+            return e;
+        }
+
+        /// <summary>The kick words of a hit on an enemy, into a <see cref="PlayerHitEntry"/> before it is planted: the victim is
+        /// pushed away from (x, h, y) at <paramref name="strength"/>, fading by <paramref name="decay"/>, with reaction
+        /// <paramref name="type"/> (<see cref="KickTypeAway"/>). A strength of 0 with the words written is the reaction without
+        /// the shove; the words left unwritten is no reaction at all.</summary>
+        internal static void SetKick(byte[] entry, float x, float h, float y, float strength, float decay, int type = KickTypeAway)
+        {
+            BitConverter.GetBytes(x).CopyTo(entry, KickOriginOff);
+            BitConverter.GetBytes(h).CopyTo(entry, KickOriginOff + 4);
+            BitConverter.GetBytes(y).CopyTo(entry, KickOriginOff + 8);
+            BitConverter.GetBytes(strength).CopyTo(entry, KickStrengthOff);
+            BitConverter.GetBytes(decay).CopyTo(entry, KickDecayOff);
+            BitConverter.GetBytes(type).CopyTo(entry, KickTypeOff);
+        }
+
+        /// <summary>A planted entry taken back: its no-drain / crush mark word (+0x9C) zeroed when <paramref name="clearMark"/>
+        /// (Set__CCollisionData never writes it, so a mark left behind would ride into the entry's next use), then the entry
+        /// deactivated. Nothing when the pool is not allocated.</summary>
+        internal static void Withdraw(long pool, int slot, bool clearMark)
+        {
+            if (pool == 0) return;
+            if (clearMark) Memory.WriteInt(pool + slot * Stride + CodeCaves.NoDrainMarkOff, 0);
+            Deactivate(pool, slot);
+        }
+
+        /// <summary>A sphere at (x, h, y) that hurts the PLAYER — the form BtCheckDamageProc (dun 0x1DBAFD0) accepts as
+        /// an enemy's attack. <paramref name="baseDmg"/> is the damage BEFORE the player's defence: the handler
+        /// subtracts it and clamps at zero, so the HP lost is exactly baseDmg − defence.
+        ///
+        /// <paramref name="reaction"/> (+0x4C) is the one field governing guardability and knockover: 2 guardable
+        /// knockback, 3 unguardable knockdown (damage, <c>unitBlowActionRot</c> spins the player to the blow
+        /// direction, the big-damage stagger motion, ~160-frame stun), 4 light flinch. <see cref="Owner"/> is left −1
+        /// so no enemy slot is credited — the handler only runs its attacker-specific work when it is not −1. The
+        /// status-flag word (+0x50) is 0: no ailment rides along.
+        ///
+        /// <paramref name="dirX"/>/<paramref name="dirY"/>/<paramref name="dirZ"/> is the BLOW DIRECTION
+        /// (<see cref="BlowDir"/>) — the one thing that steers where the victim is thrown. ⚠ NOT the kick words at
+        /// +0x80..+0x98: those are the ENEMY path's, written with the attacker's POSITION, and the player path never
+        /// reads them. Pass the direction pointing from the blow toward the player.</summary>
+        internal static byte[] PlayerHurtEntry(float x, float h, float y, float radius, int baseDmg, int reaction,
+                                               float dirX, float dirY, float dirZ)
+        {
+            var e = new byte[Stride];
+            void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
+            void I(int o, int v)   => BitConverter.GetBytes(v).CopyTo(e, o);
+            F(0x00, x); F(0x04, h); F(0x08, y); F(0x0C, 1f);
+            F(0x1C, 1f);
+            F(BlowDir, dirX); F(BlowDir + 4, dirY); F(BlowDir + 8, dirZ);
+            I(0x34, baseDmg); I(EntryClass, 0); F(Radius, radius);
+            I(0x44, 2); I(Mask, (int)HurtsPlayerMask); I(0x4C, reaction); I(Element, 0); I(0x54, 0);
+            I(Owner, -1); I(0x5C, -1); I(0x60, -1);
+            I(0x64, 0); I(0x68, -1); I(0x6C, 1);
             I(GateA, 0); I(GateB, 0); F(0x8C, 1f);
             return e;
         }

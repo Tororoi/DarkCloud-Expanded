@@ -1,3 +1,4 @@
+using System;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
@@ -74,6 +75,30 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
+    /// The controller's vibration, as CGamePad keeps it (instance 0x21CBC540, SetVibration 0x12B940, stepped by
+    /// CGamePad::Step 0x12B140). Pure data: the step sends whatever these hold to scePadSetActDirect every frame and
+    /// counts the timers down, turning a motor off at zero — so writing them IS a rumble, no call needed.
+    /// The engine's own hits use motor 1 at 0xE6 for 22 frames (a knockdown) and 0xDC for 12 (a lighter hit).
+    /// </summary>
+    internal static class GamePad
+    {
+        internal const long Base       = 0x21CBC540;
+        internal const int  MotorSmall = 0x2C;   // byte, on/off
+        internal const int  MotorLarge = 0x2D;   // byte, strength 0-255
+        internal const int  TimerSmall = 0x38;   // int, frames left
+        internal const int  TimerLarge = 0x3C;
+        internal const int  Enabled    = 0x464;  // the player's own vibration option — 0 = off, and SetVibration obeys it
+
+        /// <summary>A shove of rumble on the big motor, if the player has vibration on.</summary>
+        internal static void Rumble(int strength, int frames)
+        {
+            if (Memory.ReadInt(Base + Enabled) == 0) return;
+            Memory.WriteInt(Base + TimerLarge, frames);
+            Memory.WriteByte(Base + MotorLarge, (byte)Math.Min(255, Math.Max(0, strength)));
+        }
+    }
+
+    /// <summary>
     /// The PLAYER's hit-collision globals — character data, not weapon data.
     ///
     /// Researched vanilla facts with no caller yet; kept deliberately (an unused finding still costs a day to
@@ -91,6 +116,23 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The player's collision object.</summary>
         internal const int PlayerColObject  = 0x21DF9DF0;
+
+        /// <summary>The player's horizontal KNOCK-PUSH — x and z of a vec the dungeon overlay's move code
+        /// read-modify-writes every frame, so a value written here decays on its own and carries him through the
+        /// normal movement path, walls included. CONFIRMED in game (Big Bang's Detonate shoves Toan with it).
+        ///
+        /// ⚠ USELESS DURING A HIT REACTION, and that is structural: the overlay's move code ZEROES all three
+        /// components every frame unless the player's action is idle or one of the guard states
+        /// (`if (!idle || …) { x = y = z = 0; }`, run just before BtCheckDamageProc). A knockdown is neither, so a
+        /// push written into a stagger is wiped before anything reads it — which is exactly why vanilla only ever
+        /// writes it from the GUARDING branches (blow direction ÷ 10 blocked-knockdown, (player − attacker) ÷ 2
+        /// blocked-knockback, so its own values run about 0.1 to 3), and why the guard slide decays: the guard
+        /// states multiply it down each frame instead of clearing it.
+        ///
+        /// The player has NO force/decay pair like the enemy kick words (collision entry +0x90/+0x94/+0x98). How far
+        /// a reaction carries him is the clip's own root motion. Moving him further than that means moving him
+        /// directly.</summary>
+        internal const long KnockPushX = 0x21DC2550, KnockPushZ = 0x21DC2558;
     }
 
     /// <summary>
@@ -190,7 +232,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int  MotionId       = 0xC68;   // current motion id; Step__10CCharacter early-outs when < 0 → pose FROZEN
         internal const int  CharaTint      = 0xCE0;   // float3 ambient ADD (tint)
         internal const int  NpcOpacity     = 0xCEC;   // model opacity 0..128; Draw folds it into ambient alpha (must be > 0 to draw)
-        internal const int  DimFactor      = 0xCF0;   // < 1.0 dims the model
+        internal const int  DimFactor      = 0xCF0;   // < 1.0 dims the model. ⚠ Step__10CCharacter rewrites it EVERY frame of a stepped
+                                                      // character: toward 1.0 while DimOn is 0, down to DimFloor while it is set,
+                                                      // 0x2A18C0 a frame — so on a stepped slot, drive those two, not this
+        internal const int  DimOn          = 0xC9C;   // int — nonzero: the step eases DimFactor down to DimFloor
+        internal const int  DimFloor       = 0xCFC;   // float — where it stops
         internal const int  LightFrom      = 0xD00;   // point-light slots — zero them so the light loop skips
         internal const int  LightTo        = 0xD60;
     }
@@ -229,6 +275,20 @@ namespace Dark_Cloud_Improved_Version
         internal const int  LocalTransX   = 0x200;  // local-matrix translation row (y +0x204, z +0x208)
         internal const int  LocalTransY   = 0x204;
         internal const int  LocalTransZ   = 0x208;
+        // The frame's EULER cache. GetRotation__6CFrame (0x128E30) copies the vector at +0x230 — but ONLY while
+        // <see cref="EulerValid"/> is 0; otherwise it returns (0,0,0). This is what the engine means by a
+        // character's facing: getCharacterVector (0x1D41A0) reads it off the MODEL ROOT frame and rotates the
+        // constant (0,0,1) by it, so forward = (sin yaw, 0, cos yaw). ⚠ NOT the same field as the CObject euler at
+        // CCharacter+0x60/+0x64/+0x68 — the two differ by the model's bind rotation.
+        internal const int  EulerX        = 0x230;
+        internal const int  EulerY        = 0x234;  // the yaw the engine's own forward vector is built from
+        internal const int  EulerZ        = 0x238;
+        internal const int  EulerValid    = 0x244;  // 0 = the euler cache is trustworthy (same word as WorldCacheB)
+        // SetFrameAttr's "__c" suffix (UNLIT constant colour): +0xC4 = 1 and the colour floats below = 128.0, with
+        // the frame's light matrix zeroed. A mesh drawn this way is IMMUNE to an ambient add — to brighten it the
+        // colour itself must be written. (Big Bang's blade `w18b__c` is such a mesh; its handle `w18a` is not.)
+        internal const int  UnlitFlag     = 0xC4;
+        internal const int  UnlitColourR  = 0xD0;   // g +0xD4, b +0xD8, a +0xDC
         internal const int  TrsScaleX     = 0x210;  // TRS scale x (y +0x214, z +0x218) — SetScale path
         internal const int  TrsPosX       = 0x220;  // TRS translation x (y +0x224, z +0x228) — SetPosition path
         internal const int  TrsPosY       = 0x224;
@@ -266,6 +326,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  VisMDT       = 0x20;        // → MDT block
         internal const uint MdtMagic     = 0x0054444D;  // "MDT\0" at MDT+0x00
         internal const uint Vu1Vtable    = 0x002A11A0;  // __vt__13CVisualMDTVu1: 32 B, slots 6/7 (+0x18/+0x1C) = DrawVu1
+        internal const uint RigidVtable  = 0x002A11C0;  // __vt__10CVisualVu1 (a rigid mesh — weapon models): same 32 B shape, DrawVu1 = 0x135000 (uint*) / 0x134BC0 (packet)
         internal const int  Vu1VtableBytes = 32, Vu1VtableDrawSlot = 0x18;
         internal const int  MdtSizeField = 0x08;        // MDT+0x08 = total block size
         internal const int  MdtVertCount = 0x0C;        // MDT+0x0C = vertex count (AnimeDataInit 0x1493A0 loops over it)

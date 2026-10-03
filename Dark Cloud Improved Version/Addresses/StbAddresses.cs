@@ -39,10 +39,29 @@ namespace Dark_Cloud_Improved_Version
         internal const int OpCallFunc    = 19; // call_func: jump to sub-program; operandB = code offset of callee
         internal const int OpCallFuncCond = 27; // call_func conditional variant (same layout)
         internal const int OpExt         = 21; // external-command call; operandB must be 0; first pushed arg = funcId
+        internal const int OpRet         = 15; // return: pops the result; at the top frame the label is finished
+        internal const int OpJmp         = 16; // jump: operandA = target, relative to CRunScript.CodeBase
+        internal const int OpYield       = 23; // wait a frame: saves the next op in CRunScript.Pc and returns to the engine
+        internal const int OpBrIfFalse   = 17; // pops a value; jumps to operandA (relative to CodeBase) when it is FALSE
+        internal const int OpBrIfTrue    = 18; // … and when it is true
+
+        // ── External command ids used by the mod's own injected bytecode ──
+        // The command id is pushed FIRST and counts toward argc: `push id; push arg…; ext(argc = 1 + nargs)`.
+        internal const int FnSetMoveCancel = 0x22; // _SET_MOVE_CANSEL() — zeroes the slot's scripted movement, argc 1
+        internal const int FnSetMotion     = 200;  // _SET_MOTION(idx, ?, flags) — writes the render object's id/flags/KEY rate, argc 4
+        internal const int FnSetMuteki     = 101;  // _STATUS_SET_MUTEKI(frames) — the unit takes no further hit for that many frames, argc 2
+        internal const int FnSetPallet     = 105;  // _STATUS_SET_PALLET(kind, seconds) — the hit flash palette (every vanilla hit reaction: 2, 0.2), argc 3
+        internal const int FnGetGlobalInt  = 221;  // _GET_GLOBAL_INT(i) — pops i, leaves GL_INT[i] on the stack, argc 2
 
         // ── Operand type/scope qualifiers ─────────────────────────────────
         internal const int TypeInt    = 1; // operandA of OpPush3: int32 literal (operandB = the value)
         internal const int TypeFloat  = 2; // operandA of OpPush3: float literal (operandB = IEEE-754 bits)
+        /// <summary>_SET_MOTION's 3-argument form (argc 4) is (clip, speed, flags): the int goes straight into the render
+        /// object's motion FLAGS word and the float into its SPEED word. Flags 0 LOOPS the clip; 2 plays it once and holds
+        /// the last frame. The speed sentinel -1.0 means "use the clip's own KEY rate" — the handler writes that sentinel
+        /// first and then overwrites it with whatever float is passed, so passing it back gives native speed.</summary>
+        internal const int MotionFlagsLoop = 0, MotionFlagsOnce = 2;
+        internal const uint MotionSpeedKeyBits = 0xBF800000; // -1.0f
         internal const int ScopeLocal = 1; // operandB of OpPush1: scope 1 = local / call argument (as opposed to global)
 
         // ── External command function IDs (as pushed in the STB as funcId to OpExt) ─────────────
@@ -111,16 +130,27 @@ namespace Dark_Cloud_Improved_Version
     /// Validate a read pointer by checking the STB magic 0x00425453 at +0x00 and the label-1 codeOffset at
     /// +0x54. Usage: stbBase = Memory.ReadInt(CRunScript.StbPtrAddr(slot)); patch at (stbBase | 0x20000000).
     ///
-    /// Other observed fields: +0x2C = current instruction pointer (into the running script),
-    /// +0x40 = code base (script base + label-1 code offset). See memory enemy-stat-normalization / stb-vm-cracked.
+    /// The VM (run__10CRunScript 0x23DE70 / resume 0x23DE40 / exe 0x23E080): run(label) re-initialises the frame, points
+    /// <see cref="Label"/> at the label's funcdata (STB base + the label table's codeOff) and executes from its entry;
+    /// exe keeps the CURRENT op's address in <see cref="Pc"/>; YIELD (op 23) stores the next op there and returns, and
+    /// resume() calls exe again from it while it is non-zero; RET (op 15) at the top frame zeroes it and sets
+    /// <see cref="Finished"/>. CMonstorUnit::Step (0x1DD540) runs a slot's script only while its FreezeTimer is 0: when
+    /// MainMonstorUnit.ScriptRunning is 0 it runs label 100 (label 50 once after spawn) and sets the flag; otherwise it
+    /// resumes, and clears the flag when Finished — label 110 (hit) and 120 (death) are run() straight from CheckDmg.
+    /// So a slot's AI is parked by pointing <see cref="Pc"/> at a run of YIELD ops (SolarScript replaced this with a
+    /// guard sequence written into the label itself), and restarted
+    /// cleanly by clearing ScriptRunning.
     /// </summary>
     internal static class CRunScript
     {
         internal const long Base   = EnemyAddresses.MainMonstorUnit.Base + 0x54DD0; // 0x21E4D5A0
         internal const int  Stride = 0x48;
-        internal const int  CurIp  = 0x2C; // current instruction pointer (native)
+        internal const int  Label  = 0x2C; // native ptr — funcdata of the label being run (STB base + its codeOff)
+        internal const int  Pc     = 0x30; // native ptr — the vmcode_t exe is at / resumes from; 0 = nothing to resume
+        internal const int  Finished = 0x34; // int — 1 once the label RETurned at its top frame
+        internal const int  ExtPending = 0x38; // int — non-zero while an external command is outstanding (YIELD and jumps wait for 0)
         internal const int  StbPtr = 0x3C; // ★ native base of the STB this slot executes
-        internal const int  CodeBase = 0x40; // script base + codeOffset
+        internal const int  CodeBase = 0x40; // script base + codeOffset (jump targets are relative to it)
 
         internal static long SlotAddr(int slot, int fieldOffset) => Base + (long)slot * Stride + fieldOffset;
         /// <summary>EE address of the STB-base pointer field for <paramref name="slot"/>.</summary>

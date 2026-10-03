@@ -36,11 +36,15 @@ namespace Dark_Cloud_Improved_Version
             GameClock.Start();           // the play clock every dungeon feature times against
             Mirage.Start();   // Ungaga's Mirage: watches for charge-release, drives the decoy via data writes
             XiaoPackWatch.Start();   // Xiao's pack beyond her model: the cat's cape off her cloth list, the character heap logged
-            BorrowedShots.Start(DragonsY.WantedShot, BanditSlingshot.WantedShot);   // shot effects borrowed for Xiao's abilities, entered on every floor; each ability names the one it wants
+            BorrowedShots.Start(DragonsY.WantedShot, BanditSlingshot.WantedShot, BigBang.WantedShot, SwordOfZeus.WantedShot, BigBangShot.WantedShot, ZeusShot.WantedShot, BabelsSpear.WantedShot, HerculesWrath.WantedShot, Cactus.WantedShot, TerraSword.WantedShot);
+            ConfuseAbility.Start();   // the Confuse ability's procs, the confusion's ticks and the stars over the confused, on every floor
+            //   ↑ shot effects borrowed for Xiao's abilities, entered on every floor; each ability names the one it wants
             SharedShots.Start();         // the monster shot pack's five slots shared among every config a floor needs (the cave does it; the mod arms and reports)
             AngelGear.Start();   // Xiao's Angel Gear projectile reflect, Stage A (roadmap PR 7)
             CustomFishingSpot.InstallShallowLinePatch();   // COLD: rewrite FishLineStep's bobber anchor to read a data global (before any fishing JITs it)
             CustomFishingSpot.SeedFishCamHeight();   // the ISO-patched fishing SetHeight reads a data word EVERY town — seed it to vanilla 40 before any session
+            Weapons.SeedBombReaction();              // …and the item-bomb reaction word, read by every bomb blast
+            Weapons.SeedChargeHitRadii();            // …and the ISO-patched charge-attack radii, read on every charge swing
         }
 
         public static void CheckEmulatorAndGame()
@@ -51,7 +55,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (Memory.process != null && Memory.IsConnected)
                 {
-                    Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 0); //mod's flag for PNACH
+                    Memory.WriteByte(Mailbox.PineProbe, 0); //mod's flag for PNACH
                 }
                 if (PID == 0)
                 {
@@ -103,7 +107,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     else
                     {
-                        if (Memory.ReadByte(CodeCaves.Mailbox.PnachActive) == 1) //check PNACH flag
+                        if (Memory.ReadByte(Mailbox.PnachActive) == 1) //check PNACH flag
                         {
                             if (firstlaunch)
                             {
@@ -146,7 +150,7 @@ namespace Dark_Cloud_Improved_Version
             // Check for another active mod instance before claiming the flag
             while (true)
             {
-                if (Memory.ReadByte(CodeCaves.Mailbox.PineProbe) == 1)
+                if (Memory.ReadByte(Mailbox.PineProbe) == 1)
                 {
                     ModWindow.EnhancedModAlreadyOpen();
                 }
@@ -157,7 +161,7 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // Claim the flag immediately to minimise the gap during which PNACH shows the "Launch Enhanced Mod" message
-            Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 1);
+            Memory.WriteByte(Mailbox.PineProbe, 1);
 
             TownCharacter.InitializeCharacterOffsetValues();
             while (true)
@@ -173,7 +177,7 @@ namespace Dark_Cloud_Improved_Version
 
             while (true)
             {
-                Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 1); //mod's flag for PNACH
+                Memory.WriteByte(Mailbox.PineProbe, 1); //mod's flag for PNACH
                 currentFrameCounter = Memory.ReadInt(0x202A2400);
                 int currentMode = Memory.ReadByte(Addresses.mode);
                 if (currentMode != previousMode && previousMode != -1)
@@ -303,7 +307,7 @@ namespace Dark_Cloud_Improved_Version
 
                 if (currentFrameCounter > 0)
                 {
-                    if (Memory.ReadByte(CodeCaves.Mailbox.PnachActive) != 1) //check PNACH flag
+                    if (Memory.ReadByte(Mailbox.PnachActive) != 1) //check PNACH flag
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "PNACH cheats were disabled!");
                         break;
@@ -320,7 +324,7 @@ namespace Dark_Cloud_Improved_Version
                 Thread.Sleep(1);
             }
 
-            Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 0); //disable mod's flag for pnach
+            Memory.WriteByte(Mailbox.PineProbe, 0); //disable mod's flag for pnach
         }
 
         public static void CheckModWindowOptions(int mode)
