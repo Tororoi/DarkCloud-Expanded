@@ -32,8 +32,11 @@
 # test comes first in CheckDmg; the kick is read in the damage block.
 # A Xiao-owned entry whose base damage equals +0xF0 PelletKickDamage instead (Dragon's Y's shot) is given the same
 # strength, decay and type, but its ORIGIN is the entry's own sphere centre (+0x00/+0x04/+0x08 — the shot's impact
-# sphere, planted where it burst), so every enemy caught in the burst is shoved straight out of it; it then takes the
-# VANILLA window test — knockback, no guard crush. The two damage marks are tested BEFORE the cat's kick-type shortcut:
+# sphere, planted where it burst) PLUS PelletKickOrigin read as an OFFSET (the mod writes −flight direction × a few
+# units at each shot): the enemy struck head-on — the burst sits at or inside it — is shoved along the flight, away from
+# the shooter, and one caught by the burst's side is shoved mostly sideways. It then takes the VANILLA window test —
+# knockback, no guard crush. (The Matador's crush reads the same words as an absolute origin; the two never fire together.)
+# $f0/$f1 are free here: nothing after the hook reads an FPU register before writing it. The two damage marks are tested BEFORE the cat's kick-type shortcut:
 # a stamped entry carries the melee type from then on, and an entry outlives one CheckDmg (the next enemy, the next
 # frame). Nothing here keys on the kick type: Super Steve's own mod-planted hits carry the melee type too, and pass a guard
 # only when they carry the crush mark (guard_crush.s).
@@ -82,12 +85,19 @@ lw    $v0, 0x00D8($v0)         # PelletKickDecay (mod)
 sw    $v0, 0x0094($at)
 addiu $v0, $zero, 2            # melee-type kick
 sw    $v0, 0x0098($at)
-lw    $v0, 0x0000($at)         # origin = the entry's sphere centre
-sw    $v0, 0x0080($at)
-lw    $v0, 0x0004($at)
-sw    $v0, 0x0084($at)
-lw    $v0, 0x0008($at)
-sw    $v0, 0x0088($at)
+lui   $v0, 0x01F1              # origin = the entry's sphere centre + PelletKickOrigin (here an OFFSET: back along the flight)
+lwc1  $f0, 0x0000($at)
+lwc1  $f1, 0x00DC($v0)
+add.s $f0, $f0, $f1
+swc1  $f0, 0x0080($at)
+lwc1  $f0, 0x0004($at)
+lwc1  $f1, 0x00E0($v0)
+add.s $f0, $f0, $f1
+swc1  $f0, 0x0084($at)
+lwc1  $f0, 0x0008($at)
+lwc1  $f1, 0x00E4($v0)
+add.s $f0, $f0, $f1
+swc1  $f0, 0x0088($at)
 b     vanilla                  # its guard test is the game's
 nop
 crush:

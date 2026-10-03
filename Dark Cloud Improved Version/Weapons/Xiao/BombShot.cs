@@ -459,6 +459,7 @@ namespace Dark_Cloud_Improved_Version
                 for (int s = 0; s < f.Hp.Length; s++) f.Hp[s] = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
                 Memory.WriteFloat(CodeCaves.Mailbox.PelletKickStrength, BigBang.KickStrength * KickFor(PelletKick));
                 Memory.WriteFloat(CodeCaves.Mailbox.PelletKickDecay, BigBang.KickDecay);
+                Memory.WriteVec3 (CodeCaves.Mailbox.PelletKickOrigin, 0f, 0f, 0f);             // no offset: straight out of the burst
                 Memory.WriteInt  (CodeCaves.Mailbox.PelletKickDamage, damage);
             }
             if (_carrier != null && BorrowedShots.Fire(_carrier, f.X, f.H, f.Y, vx, vh, vy, damage, life, plant: kind == Shot.Pellet))

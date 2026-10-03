@@ -534,7 +534,10 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── confusion (the shared Confusion) ──
-        private static void Confuse(int slot) { if (Confusion.IsActive(slot)) Confusion.Confuse(slot, _confusionEnd); }   // a dormant enemy (a shut chest mimic, one not yet activated) joins when it wakes (ConfuseAll then)
+        private static void Confuse(int slot)
+        {   // a dormant enemy (a shut chest mimic, one not yet activated) joins when it wakes (ConfuseAll then); bosses never, as the ability's roll
+            if (Confusion.IsActive(slot) && !Enemies.IsBoss(slot)) Confusion.Confuse(slot, _confusionEnd);
+        }
 
         private static void DriveConfusion()
         {

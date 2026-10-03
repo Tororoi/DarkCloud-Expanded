@@ -276,52 +276,70 @@ namespace Dark_Cloud_Improved_Version
                 if (cave + (uint)words.Length * 4 > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
                     throw new IOException("The second-effect caves do not fit their host (DebugInfomationIF).");
                 for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
-                uint[] tail = StarsTail(fn);
+                uint[] tail = StarsTail(fn, construct: starsCave == CodeCaves.DebugItemCave.StarsStep);
+                uint limit = starsCave == CodeCaves.DebugItemCave.StarsStep ? CodeCaves.DebugItemCave.StarsDraw : CodeCaves.DebugItemCave.DrawHost;
+                if (starsCave + (uint)tail.Length * 4 > limit) throw new IOException("The stars step/draw caves overlap.");
                 for (int i = 0; i < tail.Length; i++) WrU32(fs, ElfOff(starsCave + (uint)(i * 4)), tail[i]);
             }
         }
 
-        /// <summary>The second-effect caves' continuation: the RESIDENT STARS instance (CodeCaves.StarsInstance) stepped / drawn too,
+        /// <summary>The second-effect caves' continuation: the RESIDENT STARS instance (CodeCaves.StarsGate +0xC) stepped / drawn too,
         /// behind CodeCaves.StarsGate — live, its region's signature ("BSHT" + the mark) intact, the monster pool at or past the
-        /// mark — then the caves' epilogue (their frame: ra at 0(sp), 0x10 B). In DebugItemGetKey's dead body (PatchConfuseProc
-        /// makes it return at once; that patch runs before this one).</summary>
-        private static uint[] StarsTail(uint fn)
+        /// mark — then the caves' epilogue (their frame: ra at 0(sp), 0x10 B). The step's copy first constructs an instance
+        /// StarsLane posted (CodeCaves.StarsConstruct: `__ct__12CSHOT_EFFECT`, then the word cleared). In DebugItemGetKey's dead
+        /// body (PatchConfuseProc makes it return at once; that patch runs before this one).</summary>
+        private static uint[] StarsTail(uint fn, bool construct)
         {
+            const uint Ctor = 0x00143680;                                     // __ct__12CSHOT_EFFECTFv
             uint g = CodeCaves.StarsGateGuest, ghi = (g + 0x8000) >> 16;
             uint Lo(int off) => (uint)((int)(g - (ghi << 16)) + off) & 0xFFFFu;
-            uint inst = CodeCaves.StarsInstanceGuest;
-            uint Br(uint op, int at) => op | (uint)((24 - (at + 1)) & 0xFFFF);  // to `done` (index 24)
-            return new[]
+            uint c = CodeCaves.StarsConstructGuest, chi = (c + 0x8000) >> 16, clo = (c - (chi << 16)) & 0xFFFFu;
+            var w = new List<uint>();
+            if (construct)
+            {
+                w.Add(0x3C080000u | chi);                                     // lui   t0,HI(StarsConstruct)
+                w.Add(0x8D040000u | clo);                                     // lw    a0,construct
+                w.Add(0x10800000u | 5);                                       // beq   a0,zero,+5  (past the clear)
+                w.Add(0u);                                                    //   nop
+                w.Add(0x0C000000u | ((Ctor >> 2) & 0x03FFFFFFu));             // jal   __ct__12CSHOT_EFFECT(instance)
+                w.Add(0u);                                                    //   nop
+                w.Add(0x3C080000u | chi);                                     // lui   t0,HI(StarsConstruct)
+                w.Add(0xAD000000u | clo);                                     // sw    zero,construct   (constructed)
+            }
+            int b = w.Count, done = b + 24;
+            uint Br(uint op, int at) => op | (uint)((done - (at + 1)) & 0xFFFF);
+            w.AddRange(new[]
             {
                 0x3C080000u | ghi,                              //  0 lui   t0,HI(StarsGate)
                 0x8D090000u | Lo(CodeCaves.StarsGateLive),      //  1 lw    t1,live
-                Br(0x11200000u, 2),                             //  2 beq   t1,zero,done
+                Br(0x11200000u, b + 2),                         //  2 beq   t1,zero,done
                 0u,                                             //  3   nop
                 0x8D090000u | Lo(CodeCaves.StarsGateBase),      //  4 lw    t1,base
                 0x8D2AFFF0u,                                    //  5 lw    t2,-0x10(t1)      the region's signature
                 0x3C0B5448u,                                    //  6 lui   t3,0x5448
                 0x356B5342u,                                    //  7 ori   t3,t3,0x5342      "BSHT"
-                Br(0x154B0000u, 8),                             //  8 bne   t2,t3,done
+                Br(0x154B0000u, b + 8),                         //  8 bne   t2,t3,done
                 0u,                                             //  9   nop
                 0x8D2AFFF4u,                                    // 10 lw    t2,-0xC(t1)       its mark
                 0x8D0B0000u | Lo(CodeCaves.StarsGateMark),      // 11 lw    t3,mark
-                Br(0x154B0000u, 12),                            // 12 bne   t2,t3,done
+                Br(0x154B0000u, b + 12),                        // 12 bne   t2,t3,done
                 0u,                                             // 13   nop
                 0x3C1801F0u,                                    // 14 lui   t8,0x01F0
                 0x371866D0u,                                    // 15 ori   t8,t8,0x66D0      the monster pool
                 0x8F190008u,                                    // 16 lw    t9,8(t8)          its used counter
                 0x032B682Au,                                    // 17 slt   t5,t9,t3
-                Br(0x15A00000u, 18),                            // 18 bne   t5,zero,done      rewound below the mark: stale
+                Br(0x15A00000u, b + 18),                        // 18 bne   t5,zero,done      rewound below the mark: stale
                 0u,                                             // 19   nop
-                0x3C040000u | (inst >> 16),                     // 20 lui   a0,HI(the stars instance)
-                0x34840000u | (inst & 0xFFFFu),                 // 21 ori   a0,a0,LO
+                0x8D040000u | Lo(CodeCaves.StarsGateInstance),  // 20 lw    a0,instance       the stars instance (t0 still the gate's HI)
+                0u,                                             // 21 nop
                 0x0C000000u | ((fn >> 2) & 0x03FFFFFFu),        // 22 jal   Fn
                 0u,                                             // 23   nop
                 0x8FBF0000u,                                    // 24 done: lw ra,0(sp)
                 0x27BD0010u,                                    // 25 addiu sp,sp,0x10
                 0x03E00008u,                                    // 26 jr    ra
                 0u,                                             // 27   nop
-            };
+            });
+            return w.ToArray();
         }
 
         /// <summary>The Confuse ability's on-hit roll (tools/stubs/confuse_proc.s, docs/confuse-ability.md): the debug item-get screen's

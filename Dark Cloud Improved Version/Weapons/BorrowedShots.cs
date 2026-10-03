@@ -101,7 +101,7 @@ namespace Dark_Cloud_Improved_Version
                     // The resident stars (StarsLane) are entered first on every floor, through this same block; while their request is
                     // out nothing else touches it (the floor-change bookkeeping below waits, so this block's own effect is asked again after).
                     if (!Player.InDungeonFloor()) StarsLane.Leave();
-                    else if (StarsLane.Tick(Memory.ReadUShort(Addresses.checkFloor))) { System.Threading.Thread.Sleep(50); continue; }
+                    else if (StarsLane.Tick(Memory.ReadUShort(Addresses.checkFloor))) { System.Threading.Thread.Sleep(5); continue; }   // fast while the stars' request is out: it is withdrawn if a menu opens first
                     BorrowedEffect fx = null;
                     foreach (var want in _wanted) { fx = want(); if (fx != null) break; }
                     if (fx != null) Seed(fx); else Clear();
@@ -124,10 +124,14 @@ namespace Dark_Cloud_Improved_Version
                         else if ((GameClock.Now - _waitingSince).TotalSeconds >= EntryRetrySeconds)
                         {
                             uint magic = Memory.ReadUInt(CodeCaves.BorrowedShotBlock);
-                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{_seeded.Name} still not entered after {EntryRetrySeconds:F0} s (magic 0x{magic:X8}{(magic == CodeCaves.BorrowedShotMagic ? "" : magic == 0 ? ", dropped" : ", OVERWRITTEN")}) — the whole request written again");
-                            var again = _seeded; _seeded = null;
-                            Seed(again);                                                   // config, path, reserve, instance, state and magic: never the tag alone over a block something else may have written
-                            _waitingSince = GameClock.Now;
+                            if (magic != CodeCaves.BorrowedShotMagic)
+                            {   // dropped or overwritten: the cave is not working on it — the whole request written again
+                                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{_seeded.Name} not entered (magic 0x{magic:X8}{(magic == 0 ? ", dropped" : ", OVERWRITTEN")}) — the whole request written again");
+                                var again = _seeded; _seeded = null;
+                                Seed(again);
+                            }
+                            else Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{_seeded.Name} still not entered after {EntryRetrySeconds:F0} s — waiting (the cave may be loading it; a request is never rewritten under it)");
+                            _waitingSince = GameClock.Now.AddSeconds(60);
                         }
                     }
                     else _waitingSince = default;

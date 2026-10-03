@@ -308,6 +308,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int StaminaTimer      = 0x010; // int   — stamina/status countdown; starts at a large value (e.g. 0x004F0000 ≈ 5.2M) and decrements each frame; 0 when expired
         internal const int GooeyState        = 0x014; // int   — gooey/slime status; 0 at rest
         internal const int StatusSusceptibility = 0x0DE; // short — species ItemStatusRes copy (unit +0x1E4AE): 0 = immune to poison/freeze/gooey
+        internal const int MonsterType       = 0x040; // short — species MonsterType copy (unit +0x1E410): 2 = boss / boss companion
         internal const int DistanceToPlayer  = 0x018; // float — live distance to player in world units; updated each frame; used as proximity filter
 
         // ── HP / Stats ───────────────────────────────────────────────────────

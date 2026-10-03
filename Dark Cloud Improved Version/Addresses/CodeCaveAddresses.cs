@@ -426,7 +426,8 @@ namespace Dark_Cloud_Improved_Version
             internal const long PelletKickStrength = Base + 0xD4;
             internal const long PelletKickDecay    = Base + 0xD8;
             /// <summary>…and the kick's origin (x, height, y): CheckDmg shoves along (enemy point − origin), so a point well behind
-            /// the pellet on its flight line makes the shove follow the flight.</summary>
+            /// the pellet on its flight line makes the shove follow the flight. For a PelletKickDamage entry the cave reads it as an
+            /// OFFSET from the entry's own sphere centre instead (Dragon's Y: back along the flight; BombShot/Baselard: 0).</summary>
             internal const long PelletKickOrigin   = Base + 0xDC;
             /// <summary>A pellet-planted entry (Xiao-owned) with THIS base damage gets the kick above WITHOUT passing the guard
             /// window — Dragon's Y's ball. 0 = none.</summary>
@@ -603,11 +604,11 @@ namespace Dark_Cloud_Improved_Version
             internal const uint Host = 0x0022B240, HostSpan = 880 + 516, DrawHost = 0x0022B5B0;
             internal const uint KeyWord0 = 0x27BDFFC0, DrawWord0 = 0x27BDFF50;   // `addiu sp,sp,-0x40` / `addiu sp,sp,-0xB0`
             /// <summary>tools/stubs/confuse_proc.s: the Confuse ability's on-hit roll (CheckDmg 0x1DBAA4 jumps here).</summary>
-            internal const uint ConfuseProc = Host + 0x8;     // 0x22B248, 176 B → 0x22B2F8
+            internal const uint ConfuseProc = Host + 0x8;     // 0x22B248, 160 B → 0x22B2E8
             /// <summary>The resident stars instance stepped / drawn after the second-effect caves (ElfWeaponPatches.PatchSecondEffect
             /// ends each in a jump here), behind CodeCaves.StarsGate.</summary>
-            internal const uint StarsStep = Host + 0xC0;      // 0x22B300, 112 B → 0x22B370
-            internal const uint StarsDraw = Host + 0x140;     // 0x22B380, 112 B → 0x22B3F0 (the Key host ends at 0x22B5B0)
+            internal const uint StarsStep = Host + 0xC0;      // 0x22B300, 144 B → 0x22B390 (the construct check + the gate)
+            internal const uint StarsDraw = Host + 0x160;     // 0x22B3A0, 112 B → 0x22B410 (the Key host ends at 0x22B5B0)
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -1217,20 +1218,22 @@ namespace Dark_Cloud_Improved_Version
         internal const int  FollowCount = 16, FollowStride = 0x14, FollowSrc = 0x0, FollowDst = 0x4, FollowOff = 0x8;
 
         /// <summary>The resident stars instance's config copy (one BT_SHOT_EFFECT, 0x70 B): StarsLane points the instance here.</summary>
-        internal const long StarsCfg = 0x21FAFF00;      // 0x70 → 0x21FAFF70 (0x21FAFF70..0x21FAFFE0 free)
+        internal const long StarsCfg = 0x21FAFF00;      // 0x70 → 0x21FAFF70
+        /// <summary>The stars instance to CONSTRUCT (guest; 0 = none): StarsLane posts a freshly carved instance here, the stars
+        /// step cave runs `__ct__12CSHOT_EFFECT` on it (its nine CCharacters' vtables and sub-objects — Initialize and Entry2
+        /// make virtual calls through them) and writes 0 back.</summary>
+        internal const long StarsConstruct = 0x21FAFF70; // 4 B (0x21FAFF74..0x21FAFFE0 free)
+        internal const uint StarsConstructGuest = 0x01FAFF70;
         /// <summary>The Confuse ability's procs (confuse_proc.s): a byte per enemy slot, 1 = the roll succeeded this hit; the mod
         /// (ConfuseAbility) confuses the slot and writes it back to 0.</summary>
         internal const long ConfuseProc = 0x21FAFFE0;   // 16 B
         /// <summary>The resident stars instance's gate (the stars step/draw caves): +0 live (the mod: 1 once entered on this floor),
-        /// +4 its region's allocator base, +8 the region's mark — the instance is stepped and drawn only while live and the region
-        /// still carries its signature ("BSHT" + the mark, 16 B below the base) with the monster pool at or past the mark.</summary>
-        internal const long StarsGate   = 0x21FAFFF0;   // 12 B
+        /// +4 its region's allocator base, +8 the region's mark, +0xC the instance (guest) — a CSHOT_EFFECT (0xA160) StarsLane carves
+        /// from the monster pool just below the region. The instance is stepped and drawn only while live and the region still
+        /// carries its signature ("BSHT" + the mark, 16 B below the base) with the monster pool at or past the mark.</summary>
+        internal const long StarsGate   = 0x21FAFFF0;   // 16 B (to the ELF cave segment)
         internal const uint StarsGateGuest = 0x01FAFFF0;
-        internal const int  StarsGateLive = 0x0, StarsGateBase = 0x4, StarsGateMark = 0x8;
-        /// <summary>The resident stars instance: a CSHOT_EFFECT (0xA160) in main BSS `frame_info_cam` (0x1E3D030, 62,400 B), which
-        /// nothing in the ELF or the overlay references.</summary>
-        internal const long StarsInstance = 0x21E3D030;
-        internal const uint StarsInstanceGuest = 0x01E3D030;
+        internal const int  StarsGateLive = 0x0, StarsGateBase = 0x4, StarsGateMark = 0x8, StarsGateInstance = 0xC;
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

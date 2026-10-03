@@ -679,6 +679,10 @@ namespace Dark_Cloud_Improved_Version
             return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Hp)) > 0;
         }
 
+        /// <summary>Whether a floor slot's enemy is a boss or boss companion (monster type 2 — the type Critical skips).</summary>
+        internal static bool IsBoss(int slot)
+            => Memory.ReadShort(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MonsterType)) == 2;
+
         /// <summary>
         /// An area-of-effect KNOCKBACK centred on a world point: launch every live enemy within
         /// <paramref name="radius"/> radially OUTWARD, away from the centre. Returns how many it caught.

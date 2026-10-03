@@ -2,14 +2,14 @@
 # CMonstorUnit::CheckDmg (main 0x1D9F10). Assembled at 0x0022B248 (DebugItemCave.ConfuseProc, in the dead body of
 # DebugItemGetKey — the item menu's debug sub-mode 5, which nothing ever sets).
 # Every path out of the Stop roll meets at 0x1DBAA4 (`lw v1,0x90(s5)`, the slot); that word is `j` here (its delay slot,
-# `sll v0,v1,2`, is harmless and runs again after). With s5 = the monster unit and f20 = the hit's shared 0–100 roll (the
-# one Poison and Stop compare the status susceptibility against):
+# `sll v0,v1,2`, is harmless and runs again after). With s5 = the monster unit:
 #   the hit's ability word (unit + slot·0x510 + 0x55754) has 0x4000 (Confuse)
 #   AND rand() < 5 % of 2^31 (Stop's own 4 %, Poison's 10 %)
-#   AND f20 < the monster's status susceptibility (unit + slot·400 + 0x1E4AE; 0 = immune) — as Poison and Stop
+#   AND the monster's type (unit + slot·400 + 0x1E410) is not 2 (a boss) — gated as Critical is: a flat chance, status
+#   susceptibility ignored (Poison and Stop scale theirs by it)
 #   → CodeCaves.ConfuseProc[slot] = 1 (0x01FAFFE0, a byte per slot): the mod confuses it for 20 s and clears the byte.
 # rand() (0x1046F8) is called here as the Poison and Stop blocks call it: nothing caller-saved is live across this point
-# (the code after reloads from s5), f20 is callee-saved, and CheckDmg restores ra from its frame.
+# (the code after reloads from s5), and CheckDmg restores ra from its frame.
 
     lw    $v1, 0x0090($s5)         # the slot
     sll   $v0, $v1, 3
@@ -40,13 +40,9 @@
     addu  $v1, $v0, $s5
     lui   $at, 0x0002
     addu  $at, $v1, $at
-    lh    $v0, -0x1B52($at)        # status susceptibility (+0x1E4AE)
-    mtc1  $v0, $f0
-    nop
-    cvt.s.w $f0, $f0
-    .word 0x4600A034               # c.lt.s $f20,$f0 — the shared roll under the susceptibility?
-    nop
-    bc1f  out
+    lh    $v0, -0x1BF0($at)        # monster type (+0x1E410)
+    addiu $v0, $v0, -2
+    beq   $v0, $zero, out          # 2 = boss (and boss companions): never confused
     nop
     lw    $v1, 0x0090($s5)
     lui   $at, 0x01FB

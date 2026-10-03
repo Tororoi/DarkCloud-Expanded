@@ -35,8 +35,12 @@ it carries the ability to other weapons as any ability does. Built in phases.
 - **The roll (ISO).** `tools/stubs/confuse_proc.s` (0x22B248, in the dead body of `DebugItemGetKey` — the item menu's debug
   sub-mode 5, which nothing sets; it and `DebugItemGetDraw` now return at once). CheckDmg's paths out of the Stop roll meet at
   0x1DBAA4 (`lw v1,0x90(s5)`), which jumps there: the hit's ability word (unit + slot·0x510 + 0x55754) has 0x4000, `rand()`
-  under 5 % of 2³¹ (Stop's 4 %, Poison's 10 %), and the hit's shared roll f20 under the monster's status susceptibility
-  (unit + slot·400 + 0x1E4AE; 0 = immune) — as Poison and Stop — set `CodeCaves.ConfuseProc[slot]` (0x01FAFFE0, a byte each).
+  under 5 % of 2³¹ (Stop's 4 %, Poison's 10 %), and the monster's type (unit + slot·400 + 0x1E410) not 2 — set
+  `CodeCaves.ConfuseProc[slot]` (0x01FAFFE0, a byte each). Gated as Critical is (1 %, type ≠ 2): a flat 5 % on every
+  enemy but bosses and boss companions, status susceptibility ignored. Poison and Stop scale their chance by the
+  susceptibility (ItemStatusRes; the hit's shared 0–100 roll under it), which made Confuse land at 2.5–3.5 % on typical
+  enemies (50–70) — and the mod retunes ItemStatusRes per enemy for poison/stop, which must not move Confuse. Babel's
+  Spear's floor-wide confusion skips bosses too.
 - **The behaviour (mod).** `ConfuseAbility` (a loop from app start) confuses each proc'd enemy for 20 s and clears its byte
   (`Confusion`: the nearest enemy or the player). Every enemy a confused one hits remembers it, most recent first; one not
   confused goes after its most recent attacker still confused and hurts only it; when that attacker's confusion ends it turns
@@ -50,14 +54,37 @@ it carries the ability to other weapons as any ability does. Built in phases.
 
 ## Phase 3 — stars on every floor
 
-- **The instance.** A CSHOT_EFFECT of its own in main BSS `frame_info_cam` (0x1E3D030, 62,400 B, referenced by nothing —
-  no pointer, no `lui` pair, no gp-relative access in the ELF or the overlay): `CodeCaves.StarsInstance`. 8 sub-shots: the
-  stars go to the confused enemies NEAREST the player; as one recovers or dies the next takes its star.
+- **The instance.** A CSHOT_EFFECT (0xA160) of its own, carved by `StarsLane` from the top of the monster pool once per floor
+  (zeroed, the pool's used counter bumped past it, only between loader requests — the cave is the pool's only other mid-floor
+  allocator), its address in the gate's +0xC. 8 sub-shots: the stars go to the confused enemies NEAREST the player; as one
+  recovers or dies the next takes its star.
+- **Constructed before it is entered.** A CSHOT_EFFECT holds nine CCharacters (+0x10 and the eight sub-shots at +0x11C0),
+  each with its vtable at +0xA0, written only by `__ct__12CSHOT_EFFECT` (0x143680) — which the game runs for its own static
+  instances at boot. Initialize/Entry2 call through those vtables, so an unconstructed block jumps to garbage ("Jump to
+  unaligned address 0x02228821" on entering a floor — first seen with the instance in `frame_info_cam`, then in the pool).
+  StarsLane posts the carved instance to `CodeCaves.StarsConstruct` (0x01FAFF70); the stars STEP cave runs the constructor on
+  it and clears the word; only then (vtable checked) is the loader request written.
+- **Texture block.** The cave enters a non-main instance into texture block 0x10 without clearing it, beside the main
+  effect's. Every MAIN re-entry (any borrowed config — Ungaga's syougekiha / zibaku_f too — or a menu's character reload)
+  runs DeleteTextureBlock(0x10) and refills the block from its VRAM base, so the stars' baked VRAM address then shows the new
+  effect's pixels (seen: another effect's rings). StarsLane finds the stars' texture entry after each entry (name `e114ex`,
+  block 0x10) and watches it; once cleared (Initialize__8CTexture zeroes block and name) the gate closes and the stars are
+  entered again into the same instance and region (the block's allocator and mark written back, so the cave reuses it).
 - **Stepped and drawn.** The second-effect caves (`ElfWeaponPatches.PatchSecondEffect`, hooked at the live-instance step /
   draw, dun 0x1DB8740 / 0x1DAEB90) end in a jump to a continuation in `DebugItemGetKey`'s body (`StarsTail`, 0x22B300 /
-  0x22B380) that steps / draws the stars instance behind `CodeCaves.StarsGate` (0x01FAFFF0: live, region base, mark) — the
+  0x22B380) that steps / draws the stars instance behind `CodeCaves.StarsGate` (0x01FAFFF0: live, region base, mark, instance) — the
   mod's live word, the region's signature ("BSHT" + the mark, 16 B under its allocator base) and the monster pool at or past
   the mark — then their epilogue.
+- **Never under the cave.** The loader cave works on a request across frames (it loads the file and waits on the disc), so
+  the block is never changed while a request is in flight (magic set, state 0): StarsLane starts only when the block is idle,
+  waits for the answer with no timeout, and puts the block back only after it (1, or −1 "no room" — retried up to 3 times).
+- **Only while the dungeon is quiet.** The cave reads the stars' file into the loader's read buffer, which the menus load
+  into too. The quick character select (BtMiniChrSelect_Loop: sled 0 sets driveStepHold 0x2A3564 + frameCaputer 0x2A3568
+  and holds the step; sled 2 runs StartQuickChange — every texture block deleted, quickchr.pac read into read_buffer — and
+  sets dungeonMode 0x2A355C = 5, whose step runs the cave again) froze with an empty screen when a request written as it
+  opened was served over its data. StarsLane asks only after 0.5 s of dungeonMode 1 with no hold, no capture, no pause/menu,
+  re-checks before the magic word, and withdraws a pending request a menu opens under — only while the cave has not begun
+  (the block's allocator words still as written: a carve fills the base in, a reuse zeroes the used count).
 - **Entered once per floor.** `StarsLane`, from BorrowedShots' loop before that block's own effect is asked again: the block
   saved, the stars' request written (fresh region, 4,096 units, 8 sub-shots — the loader cave's count is now the block's
   +0x2BC), the cave answers, the block put back; the stars' config copied to `CodeCaves.StarsCfg` and the instance pointed at

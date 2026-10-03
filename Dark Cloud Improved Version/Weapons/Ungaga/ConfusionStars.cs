@@ -31,7 +31,7 @@ namespace Dark_Cloud_Improved_Version
         internal static BorrowedEffect Effect()
         {
             if (_fx != null) return _fx;
-            _fx = BorrowedShots.CustomConfig(Template, Name, muzzleMotion: 0, flyMotion: -1, impactMotion: -1, expireMotion: -1, dir: Dir, instance: CodeCaves.StarsInstance);
+            _fx = BorrowedShots.CustomConfig(Template, Name, muzzleMotion: 0, flyMotion: -1, impactMotion: -1, expireMotion: -1, dir: Dir, instance: 0);   // instance 0: its own cache key — StarsLane names the instance
             if (_fx == null) return null;
             _fx.SubShots = StarsLane.SubShots;
             for (int ph = 0; ph < 4; ph++) BorrowedShots.SetPhaseRadius(_fx, ph, 0f);
@@ -56,7 +56,7 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>Every star down (their follow entries off).</summary>
+        /// <summary>Every star down (their follow entries off; the sub-shots too while the instance is live).</summary>
         internal static void StopAll() { lock (_lock) for (int s = 0; s < Slots; s++) Stop(s); }
 
         /// <summary>The confused live slots nearest the player, at most the instance's sub-shots.</summary>
@@ -125,7 +125,8 @@ namespace Dark_Cloud_Improved_Version
             var st = _stars[slot];
             if (st == null) return;
             Memory.WriteUInt(CodeCaves.FollowTable + (long)slot * CodeCaves.FollowStride + CodeCaves.FollowSrc, 0);
-            Memory.WriteUShort(CodeCaves.StarsInstance + ShotEffectPack.OffActive + st.Sub * 2, 0);
+            long inst = StarsLane.Instance;   // 0 once the floor is left: its memory is the next floor's pool
+            if (inst != 0) Memory.WriteUShort(inst + ShotEffectPack.OffActive + st.Sub * 2, 0);
             _stars[slot] = null;
         }
     }

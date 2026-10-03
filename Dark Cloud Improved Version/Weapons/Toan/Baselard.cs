@@ -51,6 +51,7 @@ namespace Dark_Cloud_Improved_Version
                 if (damage <= 0 || damage == _stampedDamage) return;                     // a marked pellet (another ability's) or the one already stamped
                 Memory.WriteFloat(CodeCaves.Mailbox.PelletKickStrength, KickStrength);
                 Memory.WriteFloat(CodeCaves.Mailbox.PelletKickDecay, KickDecay);
+                Memory.WriteVec3 (CodeCaves.Mailbox.PelletKickOrigin, 0f, 0f, 0f);             // the kick-origin offset: none, out of the sphere itself
                 Memory.WriteInt  (CodeCaves.Mailbox.PelletKickDamage, damage);
                 _stampedDamage = damage;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Baselard] heavy hand on her pellets: kick {KickStrength:F2} fading {KickDecay:F2} stamped on damage {damage}");

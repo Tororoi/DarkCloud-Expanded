@@ -5,7 +5,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// The Confuse weapon ability (docs/confuse-ability.md) on the mod's side: the ISO's roll (tools/stubs/confuse_proc.s, inside
-    /// CheckDmg beside Poison and Stop: 5 %, the monster's status susceptibility) raises a byte per enemy in
+    /// CheckDmg beside Poison and Stop: a flat 5 % on any enemy but a boss, as Critical's 1 %) raises a byte per enemy in
     /// CodeCaves.ConfuseProc; this loop confuses each such enemy for <see cref="ProcSeconds"/> (Confusion: it goes after the
     /// nearest enemy, or the player when the player is nearest; whoever it hits turns on it until its confusion ends, then
     /// on its next attacker still confused, else back to the player) and clears the byte. It also ticks Confusion whenever any
@@ -46,6 +46,7 @@ namespace Dark_Cloud_Improved_Version
                         if (!Player.CheckDunIsPausedOrMenu())
                         {
                             Procs();
+                            Diagnose();
                             if (Confusion.AnyConfused() || Confusion.OwnsTable) Confusion.Tick();
                             ConfusionStars.Drive(Confusion.IsConfused);
                         }
@@ -53,6 +54,26 @@ namespace Dark_Cloud_Improved_Version
                 }
                 catch (Exception e) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "tick failed: " + e.Message); }
                 Thread.Sleep(TickMs);
+            }
+        }
+
+        // TEMP diagnostic: what the equipped weapon's battle copy and each enemy's last hit carry (the roll reads the latter).
+        private static int _wepWord = -1;
+        private static readonly int[] _hitWord = new int[16];
+        private static void Diagnose()
+        {
+            int w = Memory.ReadUShort(WeaponHave.BattleWeaponRecord + WeaponHave.AbilityFlagsOffset);
+            if (w != _wepWord)
+            {
+                _wepWord = w;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"battle weapon {Memory.ReadUShort(WeaponHave.BattleWeaponRecord)}: ability word 0x{w:X4} (Confuse {((w & 0x4000) != 0 ? "ON" : "off")})");
+            }
+            for (int s = 0; s < 16; s++)
+            {
+                int h = Memory.ReadInt(AbsRewards.SlotStatusFlagsAddr(s));
+                if (h == _hitWord[s]) continue;
+                _hitWord[s] = h;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"slot {s} hit carries 0x{h:X} (Confuse {((h & 0x4000) != 0 ? "ON" : "off")}){(Enemies.IsBoss(s) ? ", a boss (never confused)" : "")}");
             }
         }
 
