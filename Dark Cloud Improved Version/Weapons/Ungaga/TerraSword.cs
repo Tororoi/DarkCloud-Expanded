@@ -46,9 +46,7 @@ namespace Dark_Cloud_Improved_Version
     /// (<see cref="BonkUp"/>, <see cref="BonkSide"/>, across the player's line to the target, a random side, under
     /// <see cref="BonkGravity"/> — armed in the cave before the fall, so the landing on the head becomes the hop that very frame:
     /// mode 4 drifting with no unit to follow), lands and rests <see cref="RestSeconds"/> — solid, harmless — then fades. The bonked enemy wears
-    /// the spinning stars (gedit\s04\chara\e114ex, borrowed into the second effect instance) <see cref="StarsLift"/> above its
-    /// authored height — carried with it by the engine every frame (the follow cave: the enemy's position plus the lift into the
-    /// sub-shot's) — growing in over <see cref="StarsGrowSeconds"/> and looping until the nut has faded, and is CONFUSED as long
+    /// the spinning stars every confused enemy wears (ConfusionStars, the resident stars instance) and is CONFUSED as long
     /// (Confusion: it goes after the nearest enemy, or the player when the player is nearest; an enemy it hits goes after it).</summary>
     internal static class TerraSword
     {
@@ -100,13 +98,6 @@ namespace Dark_Cloud_Improved_Version
         private const float  BonkShare       = 0.5f;
         private const float  BonkUp          = 80f, BonkSide = 45f, BonkGravity = 400f;   // units/s, units/s, units/s²: a short hop off the head
         private const double HopAimSeconds   = 0.25;                // the armed hop's drift and landing floor re-worked this often while the nut falls
-        private const string StarsName       = "e114ex", StarsDir = "gedit/s04/chara/";   // the spinning stars (回る星), its own e114ex.cfg
-        private const int    StarsTemplate   = 5;
-        private const float  StarsFirst      = 1f, StarsEnd = 50f, StarsRate = 1f;        // its one KEY: frames 1–50 at 1.0
-        private const float  StarsLift       = 3f;                  // above the species' authored height
-        private const double StarsGrowSeconds = 0.25;
-        private const float  StarsScale      = 1.5f;                // the stars' full size
-        private const float  ClipLead        = 1.5f;                // frames before the clip's end it is rewound (a tick's advance at 1.0 + the park)
         private const double ConfusionHold   = 3600.0;              // seconds: the confusion is ended with the nut (TakeDown), not by time
 
         private enum Phase { Idle, Charging, Primed }
@@ -118,6 +109,7 @@ namespace Dark_Cloud_Improved_Version
         private static float    _x, _y, _ground, _yaw, _start;
         private static DateTime _landed, _lastStuck;
         private static volatile int _dimSlot = -1;                   // the enemy darkened (−1 = none); the growth loop and the tick both use it
+        private static int      _bonked = -1;                       // the enemy the nut confused (its confusion alone ends with the nut)
         private static bool     _headArmed;                         // the nut's fall stops on the target's head (the cave's armed hop: a landing there is a bonk)
         private static float    _hopGround;                         // the floor where the armed hop comes down
         private static DateTime _hopAimed;                          // when the armed hop's drift and floor were last worked out
@@ -128,10 +120,8 @@ namespace Dark_Cloud_Improved_Version
         private sealed class Shell { public int Idx, Ticks, Slot = -1, Hp, Tries; public Func<Shell, bool> Replant; public string What; }
         private static readonly List<Shell> _shells = new();
         private const int    HitTries        = 4;                   // plants of a watched hit before it is given up
-        private static BorrowedEffect _shock, _stars;
+        private static BorrowedEffect _shock;
         private static int _sub = -1;                               // the sub-shot playing the shockwave (−1 = none)
-        private static int      _starSub = -1, _starSlot = -1;     // the stars' sub-shot and the enemy wearing them
-        private static DateTime _starsFrom;
 
         /// <summary>Ungaga with the Terra Sword, or Xiao with Super Steve and a Terra Sword sphere.</summary>
         internal static bool Wielded()
@@ -143,21 +133,18 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The effect this weapon wants in the SECOND main-character instance — Ungaga's: the shockwave (its one clip the muzzle
-        /// motion, so the engine retires it at its end: it plays once); Super Steve's: the spinning stars (looped by the mod). Every
-        /// phase radius zeroed: each is the visual only.</summary>
+        /// motion, so the engine retires it at its end: it plays once), every phase radius zeroed. Super Steve's nut wants none: the
+        /// bonked enemy's stars are the resident ones every confused enemy wears (ConfusionStars).</summary>
         internal static BorrowedEffect WantedShot()
         {
-            if (!Wielded()) return null;
-            bool xiao = Player.CurrentCharacterNum() == Player.XiaoId;
-            ref BorrowedEffect fx = ref xiao ? ref _stars : ref _shock;
-            if (fx == null)
+            if (!Wielded() || Player.CurrentCharacterNum() == Player.XiaoId) return null;
+            if (_shock == null)
             {
-                fx = xiao ? BorrowedShots.CustomConfig(StarsTemplate, StarsName, muzzleMotion: 0, flyMotion: -1, impactMotion: -1, expireMotion: -1, dir: StarsDir, instance: ShotEffectPack.CharaMainEffectCrash)
-                          : BorrowedShots.CustomConfig(ShockTemplate, ShockName, muzzleMotion: 0, flyMotion: -1, impactMotion: -1, expireMotion: -1, dir: BorrowedShots.WepEffDir, instance: ShotEffectPack.CharaMainEffectCrash);
-                if (fx == null) return null;
-                for (int ph = 0; ph < 4; ph++) BorrowedShots.SetPhaseRadius(fx, ph, 0f);
+                _shock = BorrowedShots.CustomConfig(ShockTemplate, ShockName, muzzleMotion: 0, flyMotion: -1, impactMotion: -1, expireMotion: -1, dir: BorrowedShots.WepEffDir, instance: ShotEffectPack.CharaMainEffectCrash);
+                if (_shock == null) return null;
+                for (int ph = 0; ph < 4; ph++) BorrowedShots.SetPhaseRadius(_shock, ph, 0f);
             }
-            return fx;
+            return _shock;
         }
 
         // ── the two forms ──
@@ -192,7 +179,7 @@ namespace Dark_Cloud_Improved_Version
                         Step();
                         if (_rockUp) DriveRock();
                         ShockDrive();
-                        if (_xiao) { StarsDrive(); Confusion.Tick(); }
+                        if (_xiao) Confusion.Tick();
                         RetireShells();
                     }
                     Thread.Sleep(TickMs);
@@ -590,8 +577,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CodeCaves.SpearBlock + CodeCaves.SpearBlockFlag, 0);                      // passable again
             Shadow(false, 0f);
             DimEnd();
-            StarsStop();
-            if (_xiao) Confusion.End();                                                               // the bonked enemy's confusion ends with the nut
+            if (_xiao && _bonked >= 0) { Confusion.Unconfuse(_bonked); _bonked = -1; }               // the bonked enemy's confusion ends with the nut (others keep theirs)
             BladeProp.Despawn();
             ReleaseTextures();
             _target = -1;
@@ -626,7 +612,7 @@ namespace Dark_Cloud_Improved_Version
             sh.Replant = PlantBonk;
             PlantBonk(sh);
             Confusion.Confuse(slot, GameClock.Now.AddSeconds(ConfusionHold));
-            StarsStart(slot);
+            _bonked = slot;
         }
 
         /// <summary>The bonk's hit on <paramref name="sh"/>'s enemy: BonkShare× the attack, the vanilla melee kick from the player.</summary>
@@ -720,78 +706,11 @@ namespace Dark_Cloud_Improved_Version
             _sub = -1;
         }
 
-        // ── the stars (the bonked enemy's) ──
-        private static long StarsObj => _stars.Instance + ShotEffectPack.OffObj + _starSub * ShotEffectPack.ObjStride;
-
-        private static void StarsStart(int slot)
-        {
-            StarsStop();
-            if (_stars == null || !BorrowedShots.Entered(_stars)) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "stars not entered on this floor — the confusion goes unmarked"); return; }
-            var (x, h, y) = StarsSpot(slot);
-            if (!BorrowedShots.Burst(_stars, x, h, y, 0, MinScale)) return;
-            _starSub = Memory.ReadInt(_stars.Instance + ShotEffectPack.OffLastIdx);
-            _starSlot = slot; _starsFrom = GameClock.Now;
-            StarsRestart();
-            // Carried with the enemy by the ENGINE (the follow cave, every frame): its root's position plus the lift, into the sub-shot's
-            // position, which the draw pushes into the stars' root.
-            long fo = CodeCaves.FollowTable;                                               // entry 0: the nut's one bonked enemy
-            Memory.WriteUInt (fo + CodeCaves.FollowSrc, 0);
-            Memory.WriteUInt (fo + CodeCaves.FollowDst, (uint)(StarsObj + ShotEffectPack.ObjPos - 0x20000000L));
-            Memory.WriteVec3 (fo + CodeCaves.FollowOff, 0f, h - Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(slot) + 4), 0f);
-            Memory.WriteUInt (fo + CodeCaves.FollowSrc, (uint)(EnemyAddresses.CharObjects.PosAddr(slot) - 0x20000000L));   // on, last
-            Memory.WriteInt(CodeCaves.SecondEffectLive, 1);
-        }
-
-        private static void StarsRestart()
-        {
-            long o = StarsObj;
-            Memory.WriteInt  (o + ShotEffectPack.ObjMotId, 0);
-            Memory.WriteInt  (o + ShotEffectPack.ObjMotFlag, 6);
-            Memory.WriteFloat(o + ShotEffectPack.ObjFrame, StarsFirst);
-            Memory.WriteFloat(o + ShotEffectPack.ObjMotSpd, StarsRate);
-        }
-
-        /// <summary>Over the enemy's head: its root, plus the species' authored height (scaled with the unit) plus StarsLift.</summary>
-        private static (float x, float h, float y) StarsSpot(int slot)
-        {
-            long p = EnemyAddresses.CharObjects.PosAddr(slot);
-            return (Memory.ReadFloat(p), Memory.ReadFloat(p + 4) + HeadHeight(slot) + StarsLift, Memory.ReadFloat(p + 8));
-        }
-
-        /// <summary>The stars each tick (the engine carries them: the follow cave): grown from nothing to StarsScale over StarsGrowSeconds, the clip rewound
-        /// before its end (it would retire there) and re-armed if the engine ended it; gone with the enemy.</summary>
-        private static void StarsDrive()
-        {
-            if (_starSub < 0 || !Player.CheckDunIsWalkingMode()) return;
-            if (!Enemies.IsLive(_starSlot)) { StarsStop(); return; }
-            long inst = _stars.Instance, o = StarsObj;
-            if (Memory.ReadUShort(inst + ShotEffectPack.OffActive + _starSub * 2) == 0)
-            {   // retired under us: back on
-                Memory.WriteUShort(inst + ShotEffectPack.OffPhase + _starSub * 2, 0);
-                Memory.WriteUShort(inst + ShotEffectPack.OffActive + _starSub * 2, 1);
-                StarsRestart();
-            }
-            else if (Memory.ReadFloat(o + ShotEffectPack.ObjFrame) >= StarsEnd - ClipLead) StarsRestart();
-            float k = (float)Math.Clamp((GameClock.Now - _starsFrom).TotalSeconds / StarsGrowSeconds, MinScale, 1.0) * StarsScale;
-            Memory.WriteFloat(o + ShotEffectPack.ObjMotSpd, StarsRate);
-            Memory.WriteVec3 (o + CCharacter.CharScale, k, k, k);
-        }
-
-        private static void StarsStop()
-        {
-            Memory.WriteUInt(CodeCaves.FollowTable + CodeCaves.FollowSrc, 0);                   // no longer carried
-            if (_starSub < 0 || _stars == null) return;
-            Memory.WriteUShort(_stars.Instance + ShotEffectPack.OffActive + _starSub * 2, 0);
-            Memory.WriteInt(CodeCaves.SecondEffectLive, 0);
-            _starSub = -1; _starSlot = -1;
-        }
-
         private static void End()
         {
             ShockStop();
             TakeDown();
-            StarsStop();
-            if (_xiao) Confusion.End();
+            if (_xiao && _bonked >= 0) { Confusion.Unconfuse(_bonked); _bonked = -1; }
             long pool = CollisionPool.Resolve();
             foreach (var sh in _shells) if (pool != 0) { Memory.WriteInt(pool + sh.Idx * CollisionPool.Stride + CodeCaves.NoDrainMarkOff, 0); CollisionPool.Deactivate(pool, sh.Idx); }
             _shells.Clear();

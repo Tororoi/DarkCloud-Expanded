@@ -20,9 +20,11 @@ namespace Dark_Cloud_Improved_Version
     ///    statuses (as the Angel Gear's reflected shots carry them), owner −1 (damage − defence, no weapon stats, no WHP drain, no
     ///    kill credit) — one per attacker-victim pair per <see cref="ContactCooldown"/>; a shot is taken through the engine's own
     ///    contact (<see cref="ShotContact"/>);
-    ///  · PROVOKED (when configured): an enemy a confused one hits — itself not confused — goes after its attacker until the
-    ///    attacker's confusion ends, the player nearer or not; its own swings and shots then hurt that attacker alone. Released
-    ///    early if either dies;
+    ///  · PROVOKED (when configured — the default): every enemy a confused one hits remembers it (most recent first). One that is
+    ///    not confused itself goes after its most recent attacker still confused, the player nearer or not, and its swings and
+    ///    shots hurt that attacker alone; when that attacker's confusion ends (or it dies) it turns on the next one still
+    ///    confused, else back to the player — and so does a confused enemy whose own confusion ends while others are hitting it
+    ///    ("coming to its senses");
     ///  · the TINT (when configured) is the unit's ambient add (CCharacter +0xCE0), × <see cref="TintScale"/>, re-asserted each
     ///    tick, cleared on release.</summary>
     internal static class Confusion
@@ -51,14 +53,17 @@ namespace Dark_Cloud_Improved_Version
         private static readonly DateTime[] _until        = new DateTime[Slots];
         private static readonly int[]      _victim       = new int[Slots];   // −1 = the player, −2 = wandering, −3 = unset
         private static readonly DateTime[] _wanderSet    = new DateTime[Slots];
-        private static readonly int[]      _provokedBy   = new int[Slots];   // the confused slot it goes after (−1 = none)
-        private static readonly DateTime[] _provokedUntil = new DateTime[Slots];
+        private static readonly List<int>[] _hitBy       = new List<int>[Slots];   // the confused slots that have hit it, most recent first
+        private static readonly bool[]     _provoked     = new bool[Slots];        // its pointer is on a provoker (put back when none is left)
+        private static readonly object     _lock         = new();
+        private static DateTime _lastTick;
+        private const double MinTickSeconds = 0.012;    // several loops may tick (ConfuseAbility's, a weapon's): one pass a frame
         private static readonly DateTime[,] _lastContact = new DateTime[Slots, Slots];
         private static readonly List<(int idx, DateTime until)> _shells = new();
         private static readonly Dictionary<int, (float x, float h, float y)> _shotLast = new();   // each tracked sub-shot's position last tick
         private static DateTime _lastReport;
 
-        static Confusion() { for (int s = 0; s < Slots; s++) { _victim[s] = -3; _provokedBy[s] = -1; } }
+        static Confusion() { for (int s = 0; s < Slots; s++) { _victim[s] = -3; _hitBy[s] = new List<int>(); } _provokes = true; }
 
         /// <summary>How the current user confuses: the area its targets are chosen in (null = anywhere), the tint (null = none), and
         /// whether a confused enemy's hit provokes its victim. <paramref name="owner"/> tags the log.</summary>
@@ -71,7 +76,18 @@ namespace Dark_Cloud_Improved_Version
         internal static void MoveArea(float x, float y) { if (_area is var (_, _, r)) _area = (x, y, r); }
 
         internal static bool IsConfused(int slot) => _until[slot] != default && GameClock.Now < _until[slot] && Enemies.IsLive(slot);
-        private static bool IsProvoked(int slot) => _provokedBy[slot] >= 0 && GameClock.Now < _provokedUntil[slot] && Enemies.IsLive(slot) && Enemies.IsLive(_provokedBy[slot]);
+        /// <summary>The confused slot a non-confused one goes after: its most recent attacker still confused and alive (−1 = none).</summary>
+        private static int Provoker(int slot)
+        {
+            if (!_provokes || IsConfused(slot) || !Enemies.IsLive(slot)) return -1;
+            var list = _hitBy[slot];
+            for (int i = 0; i < list.Count; i++) if (IsConfused(list[i])) return list[i];
+            return -1;
+        }
+        private static bool IsProvoked(int slot) => Provoker(slot) >= 0;
+
+        /// <summary>Whether any enemy is confused right now.</summary>
+        internal static bool AnyConfused() { for (int s = 0; s < Slots; s++) if (IsConfused(s)) return true; return false; }
 
         /// <summary>Slot confused until <paramref name="until"/> (a later time extends it).</summary>
         internal static void Confuse(int slot, DateTime until)
@@ -79,32 +95,56 @@ namespace Dark_Cloud_Improved_Version
             if (slot < 0 || slot >= Slots || GameClock.Now >= until || !Enemies.IsLive(slot)) return;
             bool fresh = !IsConfused(slot);
             if (until > _until[slot]) _until[slot] = until;
-            if (_provokedBy[slot] >= 0) EndProvocation(slot);                 // its own confusion rules now
             if (!fresh) return;
             _victim[slot] = -3; _wanderSet[slot] = default;                   // unset: the first tick chooses and logs
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"enemy slot {slot} confused");
         }
 
+        /// <summary>One slot's confusion ended now, the others' untouched (the Terra nut's bonked enemy as the nut fades); whoever it
+        /// provoked turns on the next attacker still confused, else the player, on the next tick.</summary>
+        internal static void Unconfuse(int slot)
+        {
+            if (slot < 0 || slot >= Slots) return;
+            lock (_lock) { if (_until[slot] != default) Release(slot); }
+        }
+
+        /// <summary>Whether a slot is in play (RenderStatus 2). Until then it is dormant: a chest mimic still shut in its box, or an
+        /// enemy too far off for the game to have activated it yet.</summary>
+        internal static bool IsActive(int slot) => Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.RenderStatus)) == 2;
+
         /// <summary>Every tick of the user's loop: targets, tints, provocations, friendly fire, planted hits withdrawn.</summary>
         internal static void Tick()
+        {
+            lock (_lock)
+            {
+                if ((GameClock.Now - _lastTick).TotalSeconds < MinTickSeconds) return;
+                _lastTick = GameClock.Now;
+                TickLocked();
+            }
+        }
+
+        private static void TickLocked()
         {
             bool any = false;
             for (int s = 0; s < Slots; s++)
             {
+                _hitBy[s].RemoveAll(a => !IsConfused(a));                       // an attacker that came to its senses (or died) is forgotten
                 if (_until[s] != default)
                 {
-                    if (!IsConfused(s)) { Release(s); continue; }
+                    if (!IsConfused(s)) { Release(s); s--; continue; }          // released: provoked (below) by whoever is still hitting it, else the player
                     any = true;
                     int victim = Nearest(s);
                     if (victim != _victim[s]) { _victim[s] = victim; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"enemy slot {s} → after {Whom(victim)}"); }
                     Point(s, victim >= 0 ? (uint)(EnemyAddresses.CharObjects.PosAddr(victim) - Memory.Pcsx2Base) : victim == -1 ? StbExternCmd.PlayerPosGuest : Wander(s));
                     if (_tint != null) Memory.WriteVec3(EnemyAddresses.CharObjects.CharAddr(s) + CCharacter.CharaTint, _tint[0] * TintScale, _tint[1] * TintScale, _tint[2] * TintScale);
                 }
-                else if (_provokedBy[s] >= 0)
+                else
                 {
-                    if (!IsProvoked(s)) { EndProvocation(s); continue; }
+                    int by = Provoker(s);
+                    if (by < 0) { if (_provoked[s]) EndProvocation(s); continue; }
+                    if (!_provoked[s]) { _provoked[s] = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"enemy slot {s} provoked: after enemy slot {by}"); }
                     any = true;
-                    Point(s, (uint)(EnemyAddresses.CharObjects.PosAddr(_provokedBy[s]) - Memory.Pcsx2Base));
+                    Point(s, (uint)(EnemyAddresses.CharObjects.PosAddr(by) - Memory.Pcsx2Base));
                 }
             }
             RetireShells();
@@ -116,15 +156,22 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Everything back: every confused or provoked slot released, every planted hit withdrawn, the table handed back.</summary>
         internal static void End()
         {
+            lock (_lock) EndLocked();
+        }
+
+        private static void EndLocked()
+        {
             long pool = CollisionPool.Resolve();
             foreach (var (idx, _) in _shells) if (pool != 0) CollisionPool.Deactivate(pool, idx);
             _shells.Clear(); _shotLast.Clear();
             for (int s = 0; s < Slots; s++)
             {
                 if (_until[s] != default) Release(s);
-                if (_provokedBy[s] >= 0) EndProvocation(s);
+                if (_provoked[s]) EndProvocation(s);
+                _hitBy[s].Clear();
             }
             OwnsTable = false; TintScale = 1f;
+            _area = null; _tint = null; _provokes = true; _owner = "";   // the next user configures afresh; procs confuse plainly
         }
 
         private static void Point(int slot, uint ptr)
@@ -190,28 +237,31 @@ namespace Dark_Cloud_Improved_Version
         {
             _until[slot] = default; _victim[slot] = -3; _wanderSet[slot] = default;
             if (Mirage.Armed) Memory.WriteUInt(CodeCaves.PtrAddr(slot), StbExternCmd.PlayerPosGuest);
+            if (Enemies.IsLive(slot)) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"enemy slot {slot}'s confusion ends");
             if (_tint != null) Memory.WriteVec3(EnemyAddresses.CharObjects.CharAddr(slot) + CCharacter.CharaTint, 0f, 0f, 0f);
         }
 
-        /// <summary>A slot <paramref name="victim"/> hit by confused <paramref name="attacker"/> goes after it until the attacker's
-        /// confusion ends (configured users only; a confused victim keeps its own rules).</summary>
+        /// <summary>A slot <paramref name="victim"/> hit by confused <paramref name="attacker"/> remembers it, most recent first — a
+        /// confused victim too, for when its own confusion ends.</summary>
         private static void Provoke(int victim, int attacker)
         {
-            if (!_provokes || IsConfused(victim) || _provokedBy[victim] == attacker) return;
-            _provokedBy[victim] = attacker; _provokedUntil[victim] = _until[attacker];
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"enemy slot {victim} provoked: after enemy slot {attacker}");
+            var list = _hitBy[victim];
+            if (list.Count > 0 && list[0] == attacker) return;
+            list.Remove(attacker); list.Insert(0, attacker);
         }
 
+        /// <summary>No provoker left: back on the player ("come to its senses").</summary>
         private static void EndProvocation(int slot)
         {
-            _provokedBy[slot] = -1; _provokedUntil[slot] = default;
+            _provoked[slot] = false;
             if (Mirage.Armed && _until[slot] == default) Memory.WriteUInt(CodeCaves.PtrAddr(slot), StbExternCmd.PlayerPosGuest);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"enemy slot {slot} comes to its senses");
         }
 
         /// <summary>Whether <paramref name="attacker"/>'s attack may land on <paramref name="victim"/>: a confused attacker's on any
         /// other enemy, a provoked one's on its provoker alone.</summary>
         private static bool MayHit(int attacker, int victim)
-            => attacker != victim && (IsConfused(attacker) || (IsProvoked(attacker) && _provokedBy[attacker] == victim));
+            => attacker != victim && (IsConfused(attacker) || Provoker(attacker) == victim);
 
         private static bool Attacks(int slot) => IsConfused(slot) || IsProvoked(slot);
 

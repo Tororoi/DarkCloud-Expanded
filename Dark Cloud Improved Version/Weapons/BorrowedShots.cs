@@ -98,7 +98,10 @@ namespace Dark_Cloud_Improved_Version
             {
                 try
                 {
-                    if (GemLanes.Tick()) { System.Threading.Thread.Sleep(50); continue; }   // a gem slot's request holds the block: nothing else touches it
+                    // The resident stars (StarsLane) are entered first on every floor, through this same block; while their request is
+                    // out nothing else touches it (the floor-change bookkeeping below waits, so this block's own effect is asked again after).
+                    if (!Player.InDungeonFloor()) StarsLane.Leave();
+                    else if (StarsLane.Tick(Memory.ReadUShort(Addresses.checkFloor))) { System.Threading.Thread.Sleep(50); continue; }
                     BorrowedEffect fx = null;
                     foreach (var want in _wanted) { fx = want(); if (fx != null) break; }
                     if (fx != null) Seed(fx); else Clear();
@@ -222,7 +225,7 @@ namespace Dark_Cloud_Improved_Version
             return b;
         }
 
-        /// <summary>The block's seeded effect, if any (GemLanes: it may borrow the block only while this one sits still).</summary>
+        /// <summary>The block's seeded effect, if any.</summary>
         internal static BorrowedEffect Seeded => _seeded;
 
         /// <summary>One of the game's 34 configs (<see cref="ShotEffectPack.CfgTable"/>) and its container under dun/effect, as
@@ -282,7 +285,7 @@ namespace Dark_Cloud_Improved_Version
         internal static bool Burst(BorrowedEffect fx, float x, float h, float y, int damage, float scale)
             => Entered(fx) && BurstIn(fx.Cfg, fx.Instance, x, h, y, damage, scale);
 
-        /// <summary><see cref="Burst"/> into any instance an effect is entered in (GemLanes' gem slots), its config given.</summary>
+        /// <summary><see cref="Burst"/> into any instance an effect is entered in (StarsLane's resident instance), its config given.</summary>
         internal static bool BurstIn(byte[] cfg, long inst, float x, float h, float y, int damage, float scale)
         {
             int count = Memory.ReadInt(inst + ShotEffectPack.OffCount);

@@ -249,6 +249,7 @@ namespace Dark_Cloud_Improved_Version
         {
             const uint Step = 0x001AC180, Draw = 0x001ABF20, Second = 0x01E97BC0;
             uint flag = CodeCaves.SecondEffectLiveGuest, fhi = (flag + 0x8000) >> 16, flo = (flag - (fhi << 16)) & 0xFFFFu;
+            uint stars = 0;                                     // the continuation the cave being written jumps to
             uint[] Cave(uint fn) => new[]
             {
                 0x27BDFFF0u,                                    //  0 addiu sp,sp,-0x10
@@ -263,18 +264,90 @@ namespace Dark_Cloud_Improved_Version
                 0x34840000u | (Second & 0xFFFFu),               //  9 ori   a0,a0,LO
                 0x0C000000u | ((fn >> 2) & 0x03FFFFFFu),        // 10 jal   Fn
                 0x00000000u,                                    // 11   nop
-                0x8FBF0000u,                                    // 12 done: lw ra,0(sp)
-                0x27BD0010u,                                    // 13 addiu sp,sp,0x10
-                0x03E00008u,                                    // 14 jr    ra
-                0x00000000u,                                    // 15   nop
+                0x08000000u | ((stars >> 2) & 0x03FFFFFFu),     // 12 done: j StarsStep/StarsDraw (the resident stars, then the epilogue)
+                0x00000000u,                                    // 13   nop
+                0x00000000u,                                    // 14
+                0x00000000u,                                    // 15
             };
-            foreach (var (cave, fn) in new[] { (CodeCaves.DebugIfCave.SecondEffectStep, Step), (CodeCaves.DebugIfCave.SecondEffectDraw, Draw) })
+            foreach (var (cave, fn, starsCave) in new[] { (CodeCaves.DebugIfCave.SecondEffectStep, Step, CodeCaves.DebugItemCave.StarsStep), (CodeCaves.DebugIfCave.SecondEffectDraw, Draw, CodeCaves.DebugItemCave.StarsDraw) })
             {
+                stars = starsCave;
                 uint[] words = Cave(fn);
                 if (cave + (uint)words.Length * 4 > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
                     throw new IOException("The second-effect caves do not fit their host (DebugInfomationIF).");
                 for (int i = 0; i < words.Length; i++) WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
+                uint[] tail = StarsTail(fn);
+                for (int i = 0; i < tail.Length; i++) WrU32(fs, ElfOff(starsCave + (uint)(i * 4)), tail[i]);
             }
+        }
+
+        /// <summary>The second-effect caves' continuation: the RESIDENT STARS instance (CodeCaves.StarsInstance) stepped / drawn too,
+        /// behind CodeCaves.StarsGate — live, its region's signature ("BSHT" + the mark) intact, the monster pool at or past the
+        /// mark — then the caves' epilogue (their frame: ra at 0(sp), 0x10 B). In DebugItemGetKey's dead body (PatchConfuseProc
+        /// makes it return at once; that patch runs before this one).</summary>
+        private static uint[] StarsTail(uint fn)
+        {
+            uint g = CodeCaves.StarsGateGuest, ghi = (g + 0x8000) >> 16;
+            uint Lo(int off) => (uint)((int)(g - (ghi << 16)) + off) & 0xFFFFu;
+            uint inst = CodeCaves.StarsInstanceGuest;
+            uint Br(uint op, int at) => op | (uint)((24 - (at + 1)) & 0xFFFF);  // to `done` (index 24)
+            return new[]
+            {
+                0x3C080000u | ghi,                              //  0 lui   t0,HI(StarsGate)
+                0x8D090000u | Lo(CodeCaves.StarsGateLive),      //  1 lw    t1,live
+                Br(0x11200000u, 2),                             //  2 beq   t1,zero,done
+                0u,                                             //  3   nop
+                0x8D090000u | Lo(CodeCaves.StarsGateBase),      //  4 lw    t1,base
+                0x8D2AFFF0u,                                    //  5 lw    t2,-0x10(t1)      the region's signature
+                0x3C0B5448u,                                    //  6 lui   t3,0x5448
+                0x356B5342u,                                    //  7 ori   t3,t3,0x5342      "BSHT"
+                Br(0x154B0000u, 8),                             //  8 bne   t2,t3,done
+                0u,                                             //  9   nop
+                0x8D2AFFF4u,                                    // 10 lw    t2,-0xC(t1)       its mark
+                0x8D0B0000u | Lo(CodeCaves.StarsGateMark),      // 11 lw    t3,mark
+                Br(0x154B0000u, 12),                            // 12 bne   t2,t3,done
+                0u,                                             // 13   nop
+                0x3C1801F0u,                                    // 14 lui   t8,0x01F0
+                0x371866D0u,                                    // 15 ori   t8,t8,0x66D0      the monster pool
+                0x8F190008u,                                    // 16 lw    t9,8(t8)          its used counter
+                0x032B682Au,                                    // 17 slt   t5,t9,t3
+                Br(0x15A00000u, 18),                            // 18 bne   t5,zero,done      rewound below the mark: stale
+                0u,                                             // 19   nop
+                0x3C040000u | (inst >> 16),                     // 20 lui   a0,HI(the stars instance)
+                0x34840000u | (inst & 0xFFFFu),                 // 21 ori   a0,a0,LO
+                0x0C000000u | ((fn >> 2) & 0x03FFFFFFu),        // 22 jal   Fn
+                0u,                                             // 23   nop
+                0x8FBF0000u,                                    // 24 done: lw ra,0(sp)
+                0x27BD0010u,                                    // 25 addiu sp,sp,0x10
+                0x03E00008u,                                    // 26 jr    ra
+                0u,                                             // 27   nop
+            };
+        }
+
+        /// <summary>The Confuse ability's on-hit roll (tools/stubs/confuse_proc.s, docs/confuse-ability.md): the debug item-get screen's
+        /// two functions made to return at once (DebugItemCave), the cave written into DebugItemGetKey's body, and CheckDmg's
+        /// meeting point after the Stop roll (0x1DBAA4, `lw v1,0x90(s5)`) jumped to it.</summary>
+        internal static void PatchConfuseProc(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Hook = 0x001DBAA4, HookVanilla = 0x8EA30090u, HookSlot = 0x00031080u;   // lw v1,0x90(s5) ; sll v0,v1,2
+            uint key0 = RdU32(fs, ElfOff(CodeCaves.DebugItemCave.Host)), draw0 = RdU32(fs, ElfOff(CodeCaves.DebugItemCave.DrawHost));
+            if (key0 != CodeCaves.DebugItemCave.KeyWord0 && key0 != 0x03E00008u || draw0 != CodeCaves.DebugItemCave.DrawWord0 && draw0 != 0x03E00008u)
+                throw new IOException($"DebugItemGetKey/Draw (0x{CodeCaves.DebugItemCave.Host:X}/0x{CodeCaves.DebugItemCave.DrawHost:X}) are not vanilla — unmodified Dark Cloud (USA) ISO expected.");
+            WrU32(fs, ElfOff(CodeCaves.DebugItemCave.Host), 0x03E00008u);         // jr ra
+            WrU32(fs, ElfOff(CodeCaves.DebugItemCave.Host + 4), 0x2402FFFFu);     //   addiu v0,zero,-1 (the screen's "leave")
+            WrU32(fs, ElfOff(CodeCaves.DebugItemCave.DrawHost), 0x03E00008u);     // jr ra
+            WrU32(fs, ElfOff(CodeCaves.DebugItemCave.DrawHost + 4), 0u);          //   nop
+            uint cave = CodeCaves.DebugItemCave.ConfuseProc;
+            byte[] b = Embedded("confuseProc.bin");
+            if (b.Length % 4 != 0 || U32(b, 0) != 0x8EA30090u || U32(b, b.Length - 8) != MipsAsm.J(0x001DBAA8))
+                throw new IOException($"confuseProc.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (cave + (uint)b.Length > CodeCaves.DebugItemCave.StarsStep)
+                throw new IOException("confuseProc.bin runs into the stars step cave.");
+            for (int i = 0; i < b.Length; i += 4) WrU32(fs, ElfOff(cave + (uint)i), U32(b, i));
+            uint cur = RdU32(fs, ElfOff(Hook));
+            if (cur != HookVanilla && cur != MipsAsm.J(cave) || RdU32(fs, ElfOff(Hook + 4)) != HookSlot)
+                throw new IOException($"CheckDmg's post-Stop meeting point 0x{Hook:X} is not vanilla (0x{cur:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+            WrU32(fs, ElfOff(Hook), MipsAsm.J(cave));
         }
 
         /// <summary>The spear-block caves written into DebugInfomationIF's body: the enemies' (CodeCaves.DebugIfCave.SpearBlock,

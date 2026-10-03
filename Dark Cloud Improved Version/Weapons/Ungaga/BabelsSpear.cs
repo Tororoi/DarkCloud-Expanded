@@ -185,8 +185,6 @@ namespace Dark_Cloud_Improved_Version
                 // from this character's objects, which an ally switch reloads under it; a sphere keeps Wielded() true across it).
                 while (Wielded() && Player.InDungeonFloor() && Player.CurrentCharacterNum() == ch)
                 {
-                    var stars = ConfusionStars.Effect();
-                    if (stars != null) GemLanes.Want(stars);                                    // the stars kept entered in two idle gem slots, ready before the spear rises
                     if (!Player.CheckDunIsPausedOrMenu())
                     {
                         Charge();
@@ -244,7 +242,7 @@ namespace Dark_Cloud_Improved_Version
             CopyAlpha(1f);
             _up = true; _summoned = GameClock.Now; _confusionEnd = _summoned.AddSeconds(SpearSeconds + VanishSeconds);   // the confusion outlasts the spear by the vanish: gone when it has fully faded
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the {F.Name} rises at ({_sx:F0},{_sy:F0}) ground {_ground:F0}" + (target >= 0 ? $" under enemy slot {target}" : " ahead of the wielder") + $"; target redirect {(Mirage.Armed ? "armed" : "NOT ARMED — confusion cannot steer")}");
-            Confusion.Configure(null, new[] { TintR, TintG, TintB }, provokes: false, Tag);  // the whole floor: no area
+            Confusion.Configure(null, new[] { TintR, TintG, TintB }, provokes: true, Tag);   // the whole floor: no area; the hit turn on their attacker
             if (target >= 0) Confuse(target);                                                  // the strike waits for the tip to reach it (TipStrike)
             ConfuseAll();
             ShockStart();
@@ -395,7 +393,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
             Memory.WriteInt(CodeCaves.SpearBlock + CodeCaves.SpearBlockFlag, 0);                     // passable again
             CopyDespawn();
-            ConfusionStars.StopAll();
+            ConfusionStars.Fade = 1f;
             SolarBlade.Clear();                                                                       // the weapon's tint goes with the copy
             _up = false;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the spear sinks away");
@@ -536,14 +534,14 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── confusion (the shared Confusion) ──
-        private static void Confuse(int slot) => Confusion.Confuse(slot, _confusionEnd);
+        private static void Confuse(int slot) { if (Confusion.IsActive(slot)) Confusion.Confuse(slot, _confusionEnd); }   // a dormant enemy (a shut chest mimic, one not yet activated) joins when it wakes (ConfuseAll then)
 
         private static void DriveConfusion()
         {
             Confusion.MoveArea(_sx, _sy);
             Confusion.TintScale = _fadeK;                                                    // the confused enemies' tint fades with the spear
             if (_up) SetTint(_fadeK);                                                        // …and the weapon's with the copy
-            ConfusionStars.Drive(Confusion.IsConfused, _fadeK);                              // the stars over every confused enemy, fading with the spear
+            ConfusionStars.Fade = _up ? _fadeK : 1f;                                         // the stars (ConfuseAbility draws them) fade with the spear
             Confusion.Tick();
             RetireShells();
         }
@@ -567,7 +565,7 @@ namespace Dark_Cloud_Improved_Version
             TakeDown();
             { long pool = CollisionPool.Resolve(); foreach (var (idx, _) in _shells) if (pool != 0) { Memory.WriteInt(pool + idx * CollisionPool.Stride + CodeCaves.NoDrainMarkOff, 0); CollisionPool.Deactivate(pool, idx); } _shells.Clear(); }
             Confusion.End();
-            ConfusionStars.StopAll();
+            ConfusionStars.Fade = 1f;
             SolarBlade.Clear();
             _guardLatched = false; _guardSince = default;
         }

@@ -66,6 +66,7 @@ STUBS = [
     ('guard_crush.s',            'guardCrush.bin',           0x1B4650),    # main ELF: DebugInfomationDraw's free tail (ElfWeaponPatches.PatchGuardCrush): crush-marked hits pass guard windows
     ('guard_mask.s',             'guardMask.bin',            0x1B4390),    # main ELF: DebugInfomationDraw's body after steelLevelUp — the guard gate's per-enemy window mask (ElfWeaponPatches.PatchGuardMask)
     ('confuse_name.s',           'confuseName.bin',          0x1B561C),    # main ELF: DebugInfomationIF's tail after fallDrive — ability bit 14's name (ElfWeaponPatches.PatchConfuseAbility)
+    ('confuse_proc.s',           'confuseProc.bin',          0x22B248),    # main ELF: dead DebugItemGetKey's body — the Confuse ability's on-hit roll (ElfWeaponPatches.PatchConfuseProc)
     ('follow.s',                 'follow.bin',               0x1B4690),    # main ELF: DebugInfomationDraw's free tail (ElfWeaponPatches.PatchFollow): a point carried with a unit
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),

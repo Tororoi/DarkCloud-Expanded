@@ -30,13 +30,37 @@ it carries the ability to other weapons as any ability does. Built in phases.
   nearest palette entry (its CLUT in CSM1 order; alpha < 128 → the tiles' clear corner entry), written in place into every US sheet whose Heal tile is the vanilla one — `charatex.img` and `dunmenu5.pak`; the older variants
   (`_charatex.img`, `nameregi.pak`, `dunmenu3/4/_chk.pak`) differ and are left alone.
 
-## Phase 2 — the effect (next)
+## Phase 2 — the effect
 
-A cave in CheckDmg's status block beside Poison/Stop (game-formulas.md §3): a 5 % roll gated by the monster's status
-susceptibility (`+0x1E4AE`), setting a per-enemy confusion timer that the mod's Confusion steering reads. Babel's summoned spear
-keeps guaranteeing confusion for its duration.
+- **The roll (ISO).** `tools/stubs/confuse_proc.s` (0x22B248, in the dead body of `DebugItemGetKey` — the item menu's debug
+  sub-mode 5, which nothing sets; it and `DebugItemGetDraw` now return at once). CheckDmg's paths out of the Stop roll meet at
+  0x1DBAA4 (`lw v1,0x90(s5)`), which jumps there: the hit's ability word (unit + slot·0x510 + 0x55754) has 0x4000, `rand()`
+  under 5 % of 2³¹ (Stop's 4 %, Poison's 10 %), and the hit's shared roll f20 under the monster's status susceptibility
+  (unit + slot·400 + 0x1E4AE; 0 = immune) — as Poison and Stop — set `CodeCaves.ConfuseProc[slot]` (0x01FAFFE0, a byte each).
+- **The behaviour (mod).** `ConfuseAbility` (a loop from app start) confuses each proc'd enemy for 20 s and clears its byte
+  (`Confusion`: the nearest enemy or the player). Every enemy a confused one hits remembers it, most recent first; one not
+  confused goes after its most recent attacker still confused and hurts only it; when that attacker's confusion ends it turns
+  on the next one still confused, else back to the player — so does a confused enemy whose own time runs out while others
+  hit it. Provoking is the default (Babel's Spear too). The loop ticks Confusion whenever anyone is confused (weapons that
+  confuse tick it as well; passes are locked and rate-limited) and drives the stars.
+- Every enemy has its own timer: a hit's proc gives that enemy 20 s (a fresh proc restarts it); `Confusion.Unconfuse(slot)` ends
+  one alone. Babel's summoned spear confuses every ACTIVE enemy on the floor for its duration — a dormant one (RenderStatus 1: a
+  chest mimic still shut, or an enemy too far off to have been activated) joins the moment it wakes — and its end ends all confusion; the Terra nut's fade ends only its bonked enemy's. Its
+  regular hits carry the ability natively. The stars never sit over a dormant enemy.
 
-## Phase 3 — stars on every floor (next)
+## Phase 3 — stars on every floor
 
-A resident shot-effect instance of its own (~41 KB, 8 stars; two for 16), stepped/drawn beside the gem pool's loops, entered
-once per floor — replacing GemLanes.
+- **The instance.** A CSHOT_EFFECT of its own in main BSS `frame_info_cam` (0x1E3D030, 62,400 B, referenced by nothing —
+  no pointer, no `lui` pair, no gp-relative access in the ELF or the overlay): `CodeCaves.StarsInstance`. 8 sub-shots: the
+  stars go to the confused enemies NEAREST the player; as one recovers or dies the next takes its star.
+- **Stepped and drawn.** The second-effect caves (`ElfWeaponPatches.PatchSecondEffect`, hooked at the live-instance step /
+  draw, dun 0x1DB8740 / 0x1DAEB90) end in a jump to a continuation in `DebugItemGetKey`'s body (`StarsTail`, 0x22B300 /
+  0x22B380) that steps / draws the stars instance behind `CodeCaves.StarsGate` (0x01FAFFF0: live, region base, mark) — the
+  mod's live word, the region's signature ("BSHT" + the mark, 16 B under its allocator base) and the monster pool at or past
+  the mark — then their epilogue.
+- **Entered once per floor.** `StarsLane`, from BorrowedShots' loop before that block's own effect is asked again: the block
+  saved, the stars' request written (fresh region, 4,096 units, 8 sub-shots — the loader cave's count is now the block's
+  +0x2BC), the cave answers, the block put back; the stars' config copied to `CodeCaves.StarsCfg` and the instance pointed at
+  it; the gate opened. Leaving the floor closes it. `ConfusionStars` places, grows (0.25 s to 1.5×), loops and scales them
+  (`Fade`: Babel's copy), the follow cave carrying each with its enemy. The Terra nut's own stars and the gem-slot lanes are
+  gone.

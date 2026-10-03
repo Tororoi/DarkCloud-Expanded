@@ -594,6 +594,22 @@ namespace Dark_Cloud_Improved_Version
             internal const uint Follow         = Host + 0xF10;   // 0x1B4690, 96 B → 0x1B46F0 (the host's end)
         }
 
+        /// <summary>Caves inside two dead main-ELF functions: DebugItemGetKey (0x22B240, 880 B) and DebugItemGetDraw (0x22B5B0, 516 B),
+        /// the item menu's debug item-get screen — only ever entered in item-menu sub-mode 5 (0x1D9EC08), which nothing in the
+        /// ELF or the overlay sets. ElfWeaponPatches.PatchConfuseProc makes both return at once (Key with −1, its "leave" value)
+        /// and writes the caves after.</summary>
+        internal static class DebugItemCave
+        {
+            internal const uint Host = 0x0022B240, HostSpan = 880 + 516, DrawHost = 0x0022B5B0;
+            internal const uint KeyWord0 = 0x27BDFFC0, DrawWord0 = 0x27BDFF50;   // `addiu sp,sp,-0x40` / `addiu sp,sp,-0xB0`
+            /// <summary>tools/stubs/confuse_proc.s: the Confuse ability's on-hit roll (CheckDmg 0x1DBAA4 jumps here).</summary>
+            internal const uint ConfuseProc = Host + 0x8;     // 0x22B248, 176 B → 0x22B2F8
+            /// <summary>The resident stars instance stepped / drawn after the second-effect caves (ElfWeaponPatches.PatchSecondEffect
+            /// ends each in a jump here), behind CodeCaves.StarsGate.</summary>
+            internal const uint StarsStep = Host + 0xC0;      // 0x22B300, 112 B → 0x22B370
+            internal const uint StarsDraw = Host + 0x140;     // 0x22B380, 112 B → 0x22B3F0 (the Key host ends at 0x22B5B0)
+        }
+
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
         /// <summary>
         /// Every ISO-baked cave in the ELF. They live in a NEW loadable segment the ISO patcher creates by
@@ -1200,10 +1216,21 @@ namespace Dark_Cloud_Improved_Version
         internal const long FollowTable = 0x21FAFDC0;
         internal const int  FollowCount = 16, FollowStride = 0x14, FollowSrc = 0x0, FollowDst = 0x4, FollowOff = 0x8;
 
-        /// <summary>GemLanes' config copies (one BT_SHOT_EFFECT, 0x70 B, per lane): a gem slot holding a lane's effect points here.</summary>
-        internal const long GemLaneCfg = 0x21FAFF00;   // 2 × 0x70 → 0x21FAFFE0
-
-        // ── FREE: 0x21FAFFE0 .. 0x21FB0000 (0x20 B) ─────────────────────────────────────────────────────
+        /// <summary>The resident stars instance's config copy (one BT_SHOT_EFFECT, 0x70 B): StarsLane points the instance here.</summary>
+        internal const long StarsCfg = 0x21FAFF00;      // 0x70 → 0x21FAFF70 (0x21FAFF70..0x21FAFFE0 free)
+        /// <summary>The Confuse ability's procs (confuse_proc.s): a byte per enemy slot, 1 = the roll succeeded this hit; the mod
+        /// (ConfuseAbility) confuses the slot and writes it back to 0.</summary>
+        internal const long ConfuseProc = 0x21FAFFE0;   // 16 B
+        /// <summary>The resident stars instance's gate (the stars step/draw caves): +0 live (the mod: 1 once entered on this floor),
+        /// +4 its region's allocator base, +8 the region's mark — the instance is stepped and drawn only while live and the region
+        /// still carries its signature ("BSHT" + the mark, 16 B below the base) with the monster pool at or past the mark.</summary>
+        internal const long StarsGate   = 0x21FAFFF0;   // 12 B
+        internal const uint StarsGateGuest = 0x01FAFFF0;
+        internal const int  StarsGateLive = 0x0, StarsGateBase = 0x4, StarsGateMark = 0x8;
+        /// <summary>The resident stars instance: a CSHOT_EFFECT (0xA160) in main BSS `frame_info_cam` (0x1E3D030, 62,400 B), which
+        /// nothing in the ELF or the overlay references.</summary>
+        internal const long StarsInstance = 0x21E3D030;
+        internal const uint StarsInstanceGuest = 0x01E3D030;
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

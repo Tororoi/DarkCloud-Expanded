@@ -1,12 +1,14 @@
 using System;
+using System.Collections.Generic;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>The spinning stars (gedit\s04\chara\e114ex, the Terra nut's) over every enemy a spear has CONFUSED: one sub-shot
-    /// each, in the gem slots GemLanes holds the effect in (two lanes × 8 — the whole floor), carried with its enemy by the follow
-    /// cave (CodeCaves.FollowTable, entry = the enemy's slot) at its authored height + <see cref="Lift"/>, grown in over
-    /// <see cref="GrowSeconds"/> to <see cref="Scale"/>× and scaled with the spear's fade, the clip rewound before its end.
-    /// Every phase radius is zero: the stars hurt nothing.</summary>
+    /// <summary>The spinning stars (gedit\s04\chara\e114ex, the Terra nut's) over CONFUSED enemies, on any floor: sub-shots of the
+    /// resident stars instance (StarsLane, <see cref="StarsLane.SubShots"/> of them — given to the confused enemies NEAREST the
+    /// player; as one recovers or dies the next nearest takes its star), carried with its enemy by the follow cave
+    /// (CodeCaves.FollowTable, entry = the enemy's slot) at its authored height + <see cref="Lift"/>, grown in over
+    /// <see cref="GrowSeconds"/> to <see cref="Scale"/>× and scaled by <see cref="Fade"/> (Babel's Spear fades them with its copy),
+    /// the clip rewound before its end. Every phase radius is zero: the stars hurt nothing. Driven by ConfuseAbility's loop.</summary>
     internal static class ConfusionStars
     {
         private const string Tag = "[ConfusionStars] ";
@@ -17,109 +19,103 @@ namespace Dark_Cloud_Improved_Version
         private const double GrowSeconds = 0.25;
         private const int    Slots = 16;
 
+        /// <summary>The stars' size factor 0..1 (1 = full; Babel's Spear sets its copy's fade while it stands).</summary>
+        internal static float Fade = 1f;
+
         private static BorrowedEffect _fx;
-        private sealed class Star { public long Inst; public int Sub; public DateTime From; }
+        private sealed class Star { public int Sub; public DateTime From; }
         private static readonly Star[] _stars = new Star[Slots];
-        private static bool _noLaneLogged;
         private static readonly object _lock = new();
 
-        static ConfusionStars() { GemLanes.Releasing += Release; }
-
-        /// <summary>A gem slot going back to its gem: the stars in it let go (their follow entries off — they write into it); the
-        /// enemies take a star from the other lane next tick.</summary>
-        private static void Release(long inst)
-        {
-            lock (_lock)
-                for (int s = 0; s < Slots; s++)
-                    if (_stars[s] != null && _stars[s].Inst == inst)
-                    {
-                        Memory.WriteUInt(CodeCaves.FollowTable + (long)s * CodeCaves.FollowStride + CodeCaves.FollowSrc, 0);
-                        _stars[s] = null;
-                    }
-        }
-
-        /// <summary>The effect for GemLanes (its eight sub-shots, every radius zeroed).</summary>
+        /// <summary>The stars effect for StarsLane (its eight sub-shots, every radius zeroed).</summary>
         internal static BorrowedEffect Effect()
         {
             if (_fx != null) return _fx;
-            _fx = BorrowedShots.CustomConfig(Template, Name, muzzleMotion: 0, flyMotion: -1, impactMotion: -1, expireMotion: -1, dir: Dir, instance: MasekiEffect.SlotBase);
+            _fx = BorrowedShots.CustomConfig(Template, Name, muzzleMotion: 0, flyMotion: -1, impactMotion: -1, expireMotion: -1, dir: Dir, instance: CodeCaves.StarsInstance);
             if (_fx == null) return null;
-            _fx.SubShots = GemLanes.SubShotsPerLane;
+            _fx.SubShots = StarsLane.SubShots;
             for (int ph = 0; ph < 4; ph++) BorrowedShots.SetPhaseRadius(_fx, ph, 0f);
             return _fx;
         }
 
-        /// <summary>Every tick: a star on each confused live enemy, none on the rest; <paramref name="fade"/> scales them (the spear's).</summary>
-        internal static void Drive(Func<int, bool> confused, float fade)
+        /// <summary>Every tick: a star on each of the (up to eight) confused live enemies nearest the player, none on the rest.</summary>
+        internal static void Drive(Func<int, bool> confused)
         {
-            if (!Player.CheckDunIsWalkingMode()) return;
-            var lanes = GemLanes.Ready();                                                     // taken before our lock: GemLanes calls in while holding its own
-            byte[] cfg = GemLanes.Cfg;
+            long inst = StarsLane.Instance;
+            byte[] cfg = StarsLane.Cfg;
+            if (inst == 0 || cfg == null || !Player.CheckDunIsWalkingMode()) return;
             lock (_lock)
-            for (int s = 0; s < Slots; s++)
             {
-                bool want = Enemies.IsLive(s) && confused(s);
-                if (!want) { Stop(s); continue; }
-                if (_stars[s] == null && !Start(s, lanes, cfg)) continue;
-                Keep(s, fade);
+                var want = Wanted(confused);
+                for (int s = 0; s < Slots; s++) if (_stars[s] != null && !want.Contains(s)) Stop(s);
+                foreach (int s in want)
+                {
+                    if (_stars[s] == null && !Start(s, inst, cfg)) continue;
+                    Keep(s, inst);
+                }
             }
         }
 
-        /// <summary>Every star down.</summary>
+        /// <summary>Every star down (their follow entries off).</summary>
         internal static void StopAll() { lock (_lock) for (int s = 0; s < Slots; s++) Stop(s); }
 
-        private static bool Start(int slot, System.Collections.Generic.List<long> lanes, byte[] cfg)
+        /// <summary>The confused live slots nearest the player, at most the instance's sub-shots.</summary>
+        private static HashSet<int> Wanted(Func<int, bool> confused)
         {
-            if (cfg == null || lanes.Count == 0)
+            float px = Memory.ReadFloat(Addresses.dunPositionX), py = Memory.ReadFloat(Addresses.dunPositionY);
+            var list = new List<(float d, int s)>();
+            for (int s = 0; s < Slots; s++)
             {
-                if (!_noLaneLogged) { _noLaneLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no gem slot holds the stars yet — the confused go unmarked for now"); }
-                return false;
+                if (!Enemies.IsLive(s) || !confused(s) || !Confusion.IsActive(s)) continue;   // never over a dormant enemy (a shut chest mimic, one not yet activated)
+                long p = EnemyAddresses.CharObjects.PosAddr(s);
+                float dx = Memory.ReadFloat(p) - px, dy = Memory.ReadFloat(p + 8) - py;
+                list.Add((dx * dx + dy * dy, s));
             }
-            _noLaneLogged = false;
-            long p = EnemyAddresses.CharObjects.PosAddr(slot);
-            float x = Memory.ReadFloat(p), h = Memory.ReadFloat(p + 4) + TerraSword.HeadHeight(slot) + Lift, y = Memory.ReadFloat(p + 8);
-            uint laneCfgs = (uint)(CodeCaves.GemLaneCfg - 0x20000000L);
-            foreach (long inst in lanes)
-            {
-                uint c = Memory.ReadUInt(inst + ShotEffectPack.OffCfg);
-                if (c < laneCfgs || c >= laneCfgs + GemLanes.Lanes * ShotEffectPack.CfgSize) continue;   // handed back since the list was taken (the hand-back waits on our lock)
-                if (!BorrowedShots.BurstIn(cfg, inst, x, h, y, 0, MinScale)) continue;             // all eight busy: the next lane
-                var st = new Star { Inst = inst, Sub = Memory.ReadInt(inst + ShotEffectPack.OffLastIdx), From = GameClock.Now };
-                _stars[slot] = st;
-                Restart(st);
-                long e = CodeCaves.FollowTable + (long)slot * CodeCaves.FollowStride;
-                Memory.WriteUInt(e + CodeCaves.FollowSrc, 0);
-                Memory.WriteUInt(e + CodeCaves.FollowDst, (uint)(Obj(st) + ShotEffectPack.ObjPos - 0x20000000L));
-                Memory.WriteVec3(e + CodeCaves.FollowOff, 0f, h - Memory.ReadFloat(p + 4), 0f);
-                Memory.WriteUInt(e + CodeCaves.FollowSrc, (uint)(p - 0x20000000L));             // on, last
-                return true;
-            }
-            return false;
+            list.Sort((a, b) => a.d.CompareTo(b.d));
+            var set = new HashSet<int>();
+            for (int i = 0; i < list.Count && i < StarsLane.SubShots; i++) set.Add(list[i].s);
+            return set;
         }
 
-        private static long Obj(Star st) => st.Inst + ShotEffectPack.OffObj + st.Sub * ShotEffectPack.ObjStride;
+        private static long Obj(long inst, Star st) => inst + ShotEffectPack.OffObj + st.Sub * ShotEffectPack.ObjStride;
 
-        private static void Restart(Star st)
+        private static bool Start(int slot, long inst, byte[] cfg)
         {
-            long o = Obj(st);
+            long p = EnemyAddresses.CharObjects.PosAddr(slot);
+            float x = Memory.ReadFloat(p), h = Memory.ReadFloat(p + 4) + TerraSword.HeadHeight(slot) + Lift, y = Memory.ReadFloat(p + 8);
+            if (!BorrowedShots.BurstIn(cfg, inst, x, h, y, 0, MinScale)) return false;          // all eight busy
+            var st = new Star { Sub = Memory.ReadInt(inst + ShotEffectPack.OffLastIdx), From = GameClock.Now };
+            _stars[slot] = st;
+            Restart(inst, st);
+            long e = CodeCaves.FollowTable + (long)slot * CodeCaves.FollowStride;
+            Memory.WriteUInt(e + CodeCaves.FollowSrc, 0);
+            Memory.WriteUInt(e + CodeCaves.FollowDst, (uint)(Obj(inst, st) + ShotEffectPack.ObjPos - 0x20000000L));
+            Memory.WriteVec3(e + CodeCaves.FollowOff, 0f, h - Memory.ReadFloat(p + 4), 0f);
+            Memory.WriteUInt(e + CodeCaves.FollowSrc, (uint)(p - 0x20000000L));                 // on, last
+            return true;
+        }
+
+        private static void Restart(long inst, Star st)
+        {
+            long o = Obj(inst, st);
             Memory.WriteInt  (o + ShotEffectPack.ObjMotId, 0);
             Memory.WriteInt  (o + ShotEffectPack.ObjMotFlag, 6);
             Memory.WriteFloat(o + ShotEffectPack.ObjFrame, First);
             Memory.WriteFloat(o + ShotEffectPack.ObjMotSpd, Rate);
         }
 
-        private static void Keep(int slot, float fade)
+        private static void Keep(int slot, long inst)
         {
             var st = _stars[slot];
-            long o = Obj(st);
-            if (Memory.ReadUShort(st.Inst + ShotEffectPack.OffActive + st.Sub * 2) == 0)
+            long o = Obj(inst, st);
+            if (Memory.ReadUShort(inst + ShotEffectPack.OffActive + st.Sub * 2) == 0)
             {   // retired under us: back on
-                Memory.WriteUShort(st.Inst + ShotEffectPack.OffPhase + st.Sub * 2, 0);
-                Memory.WriteUShort(st.Inst + ShotEffectPack.OffActive + st.Sub * 2, 1);
-                Restart(st);
+                Memory.WriteUShort(inst + ShotEffectPack.OffPhase + st.Sub * 2, 0);
+                Memory.WriteUShort(inst + ShotEffectPack.OffActive + st.Sub * 2, 1);
+                Restart(inst, st);
             }
-            else if (Memory.ReadFloat(o + ShotEffectPack.ObjFrame) >= End - ClipLead) Restart(st);
-            float k = Math.Max(MinScale, (float)Math.Clamp((GameClock.Now - st.From).TotalSeconds / GrowSeconds, 0.0, 1.0) * Scale * fade);
+            else if (Memory.ReadFloat(o + ShotEffectPack.ObjFrame) >= End - ClipLead) Restart(inst, st);
+            float k = Math.Max(MinScale, (float)Math.Clamp((GameClock.Now - st.From).TotalSeconds / GrowSeconds, 0.0, 1.0) * Scale * Fade);
             Memory.WriteFloat(o + ShotEffectPack.ObjMotSpd, Rate);
             Memory.WriteVec3 (o + CCharacter.CharScale, k, k, k);
         }
@@ -129,7 +125,7 @@ namespace Dark_Cloud_Improved_Version
             var st = _stars[slot];
             if (st == null) return;
             Memory.WriteUInt(CodeCaves.FollowTable + (long)slot * CodeCaves.FollowStride + CodeCaves.FollowSrc, 0);
-            Memory.WriteUShort(st.Inst + ShotEffectPack.OffActive + st.Sub * 2, 0);
+            Memory.WriteUShort(CodeCaves.StarsInstance + ShotEffectPack.OffActive + st.Sub * 2, 0);
             _stars[slot] = null;
         }
     }

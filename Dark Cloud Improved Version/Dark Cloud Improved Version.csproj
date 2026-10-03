@@ -52,6 +52,9 @@
     <EmbeddedResource Include="Resources\isoPatch\confuseName.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.confuseName.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\confuseProc.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.confuseProc.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\confuse_icon.png">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.confuse_icon.png</LogicalName>
     </EmbeddedResource>

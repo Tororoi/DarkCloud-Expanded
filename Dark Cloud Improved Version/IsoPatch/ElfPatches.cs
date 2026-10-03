@@ -140,6 +140,7 @@ namespace Dark_Cloud_Improved_Version
             PatchPelletPlant(fs, ElfOff);                 // a player pellet whose damage word is negative plants nothing on contact — it just ends (ZeusShot's bolt pellets)
             PatchPelletContact(fs, ElfOff);               // every player pellet contact recorded (slot, enemy or wall, the point) for the mod, on the engine's frame
             PatchGemDamage(fs, ElfOff);                   // a thrown gem's burst damage × CodeCaves.GemDamageFactor (the Crysknife doubles it)
+            PatchConfuseProc(fs, ElfOff);                // the Confuse ability's on-hit roll (and the dead debug item host the stars caves share)
             PatchSecondEffect(fs, ElfOff);                // the second main-character effect instance stepped and drawn beside the live one on demand (Babel's Spear)
             PatchSpearBlock(fs, ElfOff);
             PatchRockShadow(fs, ElfOff);
