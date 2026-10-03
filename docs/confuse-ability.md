@@ -7,7 +7,7 @@ it carries the ability to other weapons as any ability does. Built in phases.
 
 - **The bit.** Ability word (`WEAPON_HAVE +0xEE`, Effect1 | Effect2 << 8) bit **0x4000** (Effect2 bit 0x40). No vanilla template
   sets 0x1, 0x4000 or 0x8000; 0x8000 is avoided because the word is read sign-extended. Babel's Spear's template
-  (`WeaponList[357 − 257] +0x39`) gets it (`ElfWeaponPatches.PatchConfuseAbility`).
+  (`WeaponList[357 − 257] +0x39`) gets it (`ElfConfusePatches.PatchConfuseAbility`).
 - **The list.** The status window's SPECIAL list is message 0x1A6 of the menu bank, a column of placeholders that
   `MenuClsMes::NowWeaponStatus` (main 0x20B7F0) fills with each set bit's name: system-bank message (bit + 0x45). The
   names, ids 0x46–0x52 of `meswin\system_1.mes`: Big bucks, Poor, Quench, Thirst, Poison, Stop, Steal, Fragile, Durable,
@@ -54,40 +54,54 @@ it carries the ability to other weapons as any ability does. Built in phases.
 
 ## Phase 3 — stars on every floor
 
-- **The instance.** A CSHOT_EFFECT (0xA160) of its own, carved by `StarsLane` from the top of the monster pool once per floor
-  (zeroed, the pool's used counter bumped past it, only between loader requests — the cave is the pool's only other mid-floor
-  allocator), its address in the gate's +0xC. 8 sub-shots: the stars go to the confused enemies NEAREST the player; as one
-  recovers or dies the next takes its star.
+The stars over confused enemies spin in a CSHOT_EFFECT of the mod's own — a RESIDENT instance — so that every confused enemy can
+wear them on any floor, whatever weapons, items and character effects are in use. `StarsLane` owns the instance (carve, construct,
+enter, re-enter, gate); `ConfusionStars` places, grows (0.25 s to 1.5×), loops and scales the stars (`Fade`: Babel's copy), the follow
+cave carrying each with its enemy. The Terra nut's own stars and the gem-slot lanes are gone.
+
+- **The instance.** A CSHOT_EFFECT (0xA160) carved by `StarsLane` from the top of the monster pool once per floor — the pool is a
+  bump allocator the floor's load resets: the block zeroed, the pool's used counter bumped past it — its address in the gate's +0xC.
+  Carved only between loader requests: the loader cave is the pool's only other mid-floor allocator, and it carves only while a
+  request is in flight. When the instance and the stars' region (4,096 units; the stars take ~2,450 at 6 sub-shots) would not both
+  fit, the floor goes without stars. 8 sub-shots: the stars go to the confused enemies NEAREST the player; as one recovers or dies
+  the next takes its star.
 - **Constructed before it is entered.** A CSHOT_EFFECT holds nine CCharacters (+0x10 and the eight sub-shots at +0x11C0),
   each with its vtable at +0xA0, written only by `__ct__12CSHOT_EFFECT` (0x143680) — which the game runs for its own static
   instances at boot. Initialize/Entry2 call through those vtables, so an unconstructed block jumps to garbage ("Jump to
   unaligned address 0x02228821" on entering a floor — first seen with the instance in `frame_info_cam`, then in the pool).
   StarsLane posts the carved instance to `CodeCaves.StarsConstruct` (0x01FAFF70); the stars STEP cave runs the constructor on
-  it and clears the word; only then (vtable checked) is the loader request written.
+  it and clears the word; only then (the last-built sub-object's vtable checked non-zero) is the loader request written.
 - **Texture block.** The cave enters a non-main instance into texture block 0x10 without clearing it, beside the main
   effect's. Every MAIN re-entry (any borrowed config — Ungaga's syougekiha / zibaku_f too — or a menu's character reload)
   runs DeleteTextureBlock(0x10) and refills the block from its VRAM base, so the stars' baked VRAM address then shows the new
   effect's pixels (seen: another effect's rings). StarsLane finds the stars' texture entry after each entry (name `e114ex`,
   block 0x10) and watches it; once cleared (Initialize__8CTexture zeroes block and name) the gate closes and the stars are
-  entered again into the same instance and region (the block's allocator and mark written back, so the cave reuses it).
-- **Stepped and drawn.** The second-effect caves (`ElfWeaponPatches.PatchSecondEffect`, hooked at the live-instance step /
-  draw, dun 0x1DB8740 / 0x1DAEB90) end in a jump to a continuation in `DebugItemGetKey`'s body (`StarsTail`, 0x22B300 /
-  0x22B380) that steps / draws the stars instance behind `CodeCaves.StarsGate` (0x01FAFFF0: live, region base, mark, instance) — the
-  mod's live word, the region's signature ("BSHT" + the mark, 16 B under its allocator base) and the monster pool at or past
-  the mark — then their epilogue.
-- **Never under the cave.** The loader cave works on a request across frames (it loads the file and waits on the disc), so
-  the block is never changed while a request is in flight (magic set, state 0): StarsLane starts only when the block is idle,
-  waits for the answer with no timeout, and puts the block back only after it (1, or −1 "no room" — retried up to 3 times).
+  entered again into the same instance and region (the block's allocator and mark written back, so the cave reuses it while
+  its signature and mark hold).
+- **Stepped and drawn.** The second-effect caves (`ElfConfusePatches.PatchSecondEffect`, hooked at the live-instance step /
+  draw, dun 0x1DB8740 / 0x1DAEB90) end in a jump to a continuation in `DebugItemGetKey`'s body (`ElfConfusePatches.StarsTail`,
+  0x22B300 / 0x22B380) that steps / draws the stars instance behind `CodeCaves.StarsGate` (0x01FAFFF0: live, region base, mark,
+  instance) — the mod's live word, the region's signature ("BSHT" + the mark, 16 B under its allocator base) and the monster pool
+  at or past the mark — then their epilogue. The check also covers the instance: it lies below the region, so a pool rewound
+  under it fails the same test and nothing is stepped from stale memory.
+- **Never under the cave.** The loader cave works on a request across frames (it loads the file and waits on the disc), so a
+  block changed under it would mix two requests — the data of one under the config of the other. The block is never changed
+  while a request is in flight (magic set, state 0): StarsLane starts only when the block is idle, waits for the answer with no
+  timeout (an answer slower than 10 s is logged once; only a floor change abandons a request), and puts the block back only
+  after it (1, or −1 "no room" — retried after 3 s, up to 3 tries a floor).
 - **Only while the dungeon is quiet.** The cave reads the stars' file into the loader's read buffer, which the menus load
   into too. The quick character select (BtMiniChrSelect_Loop: sled 0 sets driveStepHold 0x2A3564 + frameCaputer 0x2A3568
   and holds the step; sled 2 runs StartQuickChange — every texture block deleted, quickchr.pac read into read_buffer — and
   sets dungeonMode 0x2A355C = 5, whose step runs the cave again) froze with an empty screen when a request written as it
-  opened was served over its data. StarsLane asks only after 0.5 s of dungeonMode 1 with no hold, no capture, no pause/menu,
-  re-checks before the magic word, and withdraws a pending request a menu opens under — only while the cave has not begun
-  (the block's allocator words still as written: a carve fills the base in, a reuse zeroes the used count).
-- **Entered once per floor.** `StarsLane`, from BorrowedShots' loop before that block's own effect is asked again: the block
-  saved, the stars' request written (fresh region, 4,096 units, 8 sub-shots — the loader cave's count is now the block's
-  +0x2BC), the cave answers, the block put back; the stars' config copied to `CodeCaves.StarsCfg` and the instance pointed at
-  it; the gate opened. Leaving the floor closes it. `ConfusionStars` places, grows (0.25 s to 1.5×), loops and scales them
-  (`Fade`: Babel's copy), the follow cave carrying each with its enemy. The Terra nut's own stars and the gem-slot lanes are
-  gone.
+  opened was served over its data: the request waited out the held step and was served once the menu's step resumed, over
+  the menu's data. StarsLane asks only after 0.5 s of dungeonMode 1 with no hold, no capture, no pause/menu, re-checks before
+  the magic word, and withdraws a pending request a menu opens under. The withdrawal is safe only while the cave has not begun
+  on the request — the menu's opening holds the step, so the cave cannot be mid-way — and "begun" is read from the block's
+  allocator words, still exactly as written: a carve fills the base in, a reuse zeroes the used count. A withdrawn try is not
+  counted; it is asked again once the dungeon is quiet.
+- **Entered once per floor.** The loader cave serves ONE request block, BorrowedShots'. `StarsLane`, from BorrowedShots' loop on
+  each new floor before that block's own effect is asked again: the block saved, the stars' request written (the stars' config,
+  the path, the carved instance, a fresh region — the loader cave's sub-shot count is the block's +0x2BC), the cave answers,
+  the block put back as it was (its magic word last); the stars' config copied to `CodeCaves.StarsCfg` and the instance pointed
+  at it, because the block's own config changes under it when BorrowedShots' effect is asked again; the gate opened with the
+  instance and the region's base and mark, its live word last. Leaving the floor closes it.

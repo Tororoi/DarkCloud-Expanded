@@ -14,13 +14,7 @@ namespace Dark_Cloud_Improved_Version
         private const int    TickMs = 16;
 
         /// <summary>Ungaga with DeSanga, or Xiao with Super Steve and a DeSanga sphere.</summary>
-        internal static bool Wielded()
-        {
-            int ch = Player.CurrentCharacterNum();
-            if (ch == Player.UngagaId) return Player.Weapon.GetCurrentWeaponId() == Items.desanga;
-            if (ch == Player.XiaoId) return Player.Weapon.GetCurrentWeaponId() == Items.supersteve && SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.desanga;
-            return false;
-        }
+        internal static bool Wielded() => UngagaWeapon.WieldsOrSphere(Items.desanga);
 
         public static void KillHealEffect()
         {

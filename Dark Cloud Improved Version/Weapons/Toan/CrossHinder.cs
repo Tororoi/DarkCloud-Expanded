@@ -119,9 +119,7 @@ namespace Dark_Cloud_Improved_Version
         /// byte, the ABS and the no-revival then apply to Super Steve's own record).</summary>
         internal static bool CrossHinderWielded()
         {
-            int id = Player.Weapon.GetCurrentWeaponId();
-            if (id == Items.crosshinder) return true;
-            return id == Items.supersteve && SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.crosshinder;
+            return Player.Weapon.GetCurrentWeaponId() == Items.crosshinder || SuperSteve.Wields(Items.crosshinder);
         }
 
         internal static void RestoreUndeadRevivers(List<(long CellValueAddr, int OrigThr)> patched)

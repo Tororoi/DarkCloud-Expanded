@@ -63,7 +63,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static bool Native =>
             (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew
-            && (uint)Memory.ReadInt(ElfCatPatches.GuardBypassHookAddrMmu) == (0x08000000u | (CodeCaves.DunCave.CatGuardBypass >> 2));
+            && (uint)Memory.ReadInt(ElfCatPatches.GuardBypassHookAddrMmu) == (0x08000000u | (DunCave.CatGuardBypass >> 2));
 
         /// <summary>Drive every tick (16 ms) while the Matador (or Super Steve with its sphere) is equipped; <paramref name="active"/> false HOLDS everything
         /// as it stands (pause, menu, chest, conversation — the pellet and the prop's slot stand still natively).
@@ -125,10 +125,10 @@ namespace Dark_Cloud_Improved_Version
             }
             if (_slot >= 0)
             {
-                bool ended = Memory.ReadInt(PlayerShotPool.FlagAddr(pool, _slot)) == 0 || Memory.ReadInt(CodeCaves.Mailbox.PropFollowEnded) != 0;
+                bool ended = Memory.ReadInt(PlayerShotPool.FlagAddr(pool, _slot)) == 0 || Memory.ReadInt(Mailbox.PropFollowEnded) != 0;
                 // The pellet dies the frame it lands, but the enemy consumes its damage entry in its own CheckDmg — often the
                 // next frame — so PelletCrushDamage stays up through the fade (End clears it), or the bypass and the kick miss.
-                if (ended && _fade < 0) { _fade = 0; Memory.WriteInt(CodeCaves.Mailbox.CatGlowOn, 0); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "charged pellet ended — the copy fades"); }
+                if (ended && _fade < 0) { _fade = 0; Memory.WriteInt(CatBlock.CatGlowOn, 0); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "charged pellet ended — the copy fades"); }
                 if (_fade < 0) SlingshotProp.Maintain(1f);
                 else if (++_fade <= FadeOutTicks) SlingshotProp.Maintain(1f - _fade / (float)FadeOutTicks);
                 else End();                                                        // back to resident and hidden
@@ -139,18 +139,18 @@ namespace Dark_Cloud_Improved_Version
         /// the palette cave asked for the Fire row, the disc named, the bind cleared, then On LAST.</summary>
         private static void ShowGlow(uint node)
         {
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowPalRow, FireRow);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, GlowScale);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, GlowFlags);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, GlowPull);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, GlowLift);
-            Memory.WriteUInt (CodeCaves.Mailbox.CatGlowNodeA, node);
-            Memory.WriteUInt (CodeCaves.Mailbox.CatGlowNodeB, node);
+            Memory.WriteInt  (CatBlock.CatGlowOn, 0);
+            Memory.WriteInt  (CatBlock.CatGlowPalRow, FireRow);
+            Memory.WriteFloat(CatBlock.CatGlowScale, GlowScale);
+            Memory.WriteInt  (CatBlock.CatGlowFlags, GlowFlags);
+            Memory.WriteFloat(CatBlock.CatGlowPull, GlowPull);
+            Memory.WriteFloat(CatBlock.CatGlowLift, GlowLift);
+            Memory.WriteUInt (CatBlock.CatGlowNodeA, node);
+            Memory.WriteUInt (CatBlock.CatGlowNodeB, node);
             byte[] nm = new byte[16]; System.Text.Encoding.ASCII.GetBytes(GlowDisc).CopyTo(nm, 0);
-            Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowReady, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 1);
+            Memory.WriteBytesBatch(CatBlock.CatGlowName, nm);
+            Memory.WriteInt  (CatBlock.CatGlowReady, 0);
+            Memory.WriteInt  (CatBlock.CatGlowOn, 1);
         }
 
         /// <summary>The weapon or the floor went: tear down whatever is out, the resident copy included.</summary>
@@ -178,14 +178,14 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (dmgA, charged);
             float vh = Memory.ReadFloat(va + 4), vl = (float)Math.Sqrt(vx * vx + vh * vh + vz * vz);
             if (vl < 1e-3f) { vx = (float)Math.Sin(yaw); vh = 0f; vz = (float)Math.Cos(yaw); vl = 1f; }
-            Memory.WriteVec3 (CodeCaves.Mailbox.PelletKickOrigin, Memory.ReadFloat(pa) - vx / vl * KickOriginBack, Memory.ReadFloat(pa + 4) - vh / vl * KickOriginBack, Memory.ReadFloat(pa + 8) - vz / vl * KickOriginBack);
-            Memory.WriteFloat(CodeCaves.Mailbox.PelletKickStrength, KickStrength);
-            Memory.WriteFloat(CodeCaves.Mailbox.PelletKickDecay, KickDecay);
-            Memory.WriteInt  (CodeCaves.Mailbox.PelletCrushDamage, charged);
-            Memory.WriteFloat(CodeCaves.Mailbox.PropFollowLift, Lift);
-            Memory.WriteFloat(CodeCaves.Mailbox.PropFollowSpin, Spin);
-            Memory.WriteInt  (CodeCaves.Mailbox.PropFollowEnded, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.PropFollowSlot, slot + 1);        // LAST: the cave places the copy from this frame
+            Memory.WriteVec3 (Mailbox.PelletKickOrigin, Memory.ReadFloat(pa) - vx / vl * KickOriginBack, Memory.ReadFloat(pa + 4) - vh / vl * KickOriginBack, Memory.ReadFloat(pa + 8) - vz / vl * KickOriginBack);
+            Memory.WriteFloat(Mailbox.PelletKickStrength, KickStrength);
+            Memory.WriteFloat(Mailbox.PelletKickDecay, KickDecay);
+            Memory.WriteInt  (Mailbox.PelletCrushDamage, charged);
+            Memory.WriteFloat(Mailbox.PropFollowLift, Lift);
+            Memory.WriteFloat(Mailbox.PropFollowSpin, Spin);
+            Memory.WriteInt  (Mailbox.PropFollowEnded, 0);
+            Memory.WriteInt  (Mailbox.PropFollowSlot, slot + 1);        // LAST: the cave places the copy from this frame
             _slot = slot; _fade = -1;
             SlingshotProp.Maintain(1f);
             ShowGlow(SlingshotProp.CentreGuest != 0 ? SlingshotProp.CentreGuest : SlingshotProp.RootGuest);
@@ -194,10 +194,10 @@ namespace Dark_Cloud_Improved_Version
 
         private static void End()
         {
-            Memory.WriteInt(CodeCaves.Mailbox.PropFollowSlot, 0);
-            Memory.WriteInt(CodeCaves.Mailbox.PelletCrushDamage, 0);
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowOn, 0);
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, NoneRow);          // the cave repaints the disc for whoever uses it next
+            Memory.WriteInt(Mailbox.PropFollowSlot, 0);
+            Memory.WriteInt(Mailbox.PelletCrushDamage, 0);
+            Memory.WriteInt(CatBlock.CatGlowOn, 0);
+            Memory.WriteInt(CatBlock.CatGlowPalRow, NoneRow);          // the cave repaints the disc for whoever uses it next
             if (SlingshotProp.Active) SlingshotProp.Maintain(0f);                // hidden, resident for the next shot
             _slot = -1; _fade = -1;
         }

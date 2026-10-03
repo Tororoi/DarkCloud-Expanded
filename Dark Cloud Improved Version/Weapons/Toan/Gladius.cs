@@ -8,12 +8,7 @@ namespace Dark_Cloud_Improved_Version
     internal static class Gladius
     {
         /// <summary>Whether the equipped weapon is the Gladius, or Super Steve carrying its SynthSphere.</summary>
-        internal static bool Wielded()
-        {
-            int id = Player.Weapon.GetCurrentWeaponId();
-            if (id == Items.gladius) return true;
-            return id == Items.supersteve && SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.gladius;
-        }
+        internal static bool Wielded() => Player.Weapon.GetCurrentWeaponId() == Items.gladius || SuperSteve.Wields(Items.gladius);
 
         private const int AbsMult = 4;      // the Master Jacket's kill-ABS multiplier (applied once per slot)
         private const int TickMs  = 250;    // nothing here is latency-critical: one write per slot, asserted

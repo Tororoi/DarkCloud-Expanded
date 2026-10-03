@@ -48,22 +48,6 @@ namespace Dark_Cloud_Improved_Version
             throw new IOException($"{entryName} entry not in img.pak");
         }
 
-        private static byte[] Unswizzle8(byte[] data, int w, int h)
-        {
-            var outp = new byte[w * h];
-            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++)
-            {
-                int blockLoc = (y & ~0xF) * w + (x & ~0xF) * 2;
-                int swapSel = (((y + 2) >> 2) & 0x1) * 4;
-                int posY = (((y & ~3) >> 1) + (y & 1)) & 0x7;
-                int colLoc = posY * w * 2 + ((x + swapSel) & 0x7) * 4;
-                int bn = ((y >> 1) & 1) + ((x >> 2) & 2);
-                int src = blockLoc + colLoc + bn;
-                if (src < data.Length) outp[y * w + x] = data[src];
-            }
-            return outp;
-        }
-
         private static int[] Bilerp(int[][] px, int w, int h, double fx, double fy)
         {
             fx = fx < 0 ? 0.0 : (fx > w - 1 ? w - 1.0 : fx);
@@ -89,12 +73,10 @@ namespace Dark_Cloud_Improved_Version
             var pal = new int[256][];
             for (int i = 0; i < 256; i++)
             {
-                int blk = i / 32, idx = i % 32;
-                if (8 <= idx && idx < 16) idx += 8; else if (16 <= idx && idx < 24) idx -= 8;
-                int j = (blk * 32 + idx) * 4;
+                int j = Tim8.Csm1Index(i) * 4;                                            // the CLUT as the GS reads it
                 pal[i] = new int[] { clut[j], clut[j + 1], clut[j + 2], clut[j + 3] };
             }
-            byte[] de = Unswizzle8(img, w, h);
+            byte[] de = Tim8.Unswizzle8(img, w, h);                                       // the effect bank is IM2: block order
             var tl = new int[32 * 32][]; for (int sy = 0; sy < 32; sy++) for (int sx = 0; sx < 32; sx++) tl[sy * 32 + sx] = pal[de[sy * 64 + sx]];
             var quad = new int[64 * 64][]; for (int y = 0; y < 64; y++) for (int x = 0; x < 64; x++) quad[y * 64 + x] = Bilerp(tl, 32, 32, x / 2.0, y / 2.0);
             int peak = 0; foreach (var q in quad) peak = Math.Max(peak, Math.Max(q[0], Math.Max(q[1], q[2]))); if (peak == 0) peak = 1;

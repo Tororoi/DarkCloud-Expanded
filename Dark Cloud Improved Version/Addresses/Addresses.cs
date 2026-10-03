@@ -383,7 +383,7 @@ namespace Dark_Cloud_Improved_Version
         /// Address of the lui instruction that sets the fish detection (bite) radius. The PNACH patches this
         /// UNCONDITIONALLY ("more consistentfishing") — there is no flag and nothing to set from PINE.
         /// (A `fishRangeBoostFlag` mailbox slot was once reserved for a conditional boost that was never
-        /// built; it was removed, and it had been squatting on Mirage's scene-gate slot CodeCaves.Mailbox.MirageSceneGate.)
+        /// built; it was removed, and it had been squatting on Mirage's scene-gate slot Mailbox.MirageSceneGate.)
         /// </summary>
         public const int fishDetectionRadiusPatch = 0x20240364;
 

@@ -30,7 +30,7 @@ The pellet is the game's own (`step__5CSHOT`, 0x1ABD10): it flies, collides and 
   Angel Shooter's stone (cell 309): Super Steve and Angel Gear fire that stone, and 314–315 are Goro's first hammers by
   id, which never shoot, so cells 314 and 315 are never drawn in vanilla. `PelletSheetBakes` (post-step `pellet-sheet`)
   paints cell 315 fully transparent — palette index 0, which no vanilla pixel uses, set to 0,0,0,0 — so an invisible
-  pellet is the data write `Mailbox.PelletSpriteId = 315` (`PelletSheetBakes.BlankCell`; BombShot hides the pellet its
+  pellet is the data write `Mailbox.PelletSpriteId = 315` (`PelletSheetBakes.BlankCell`; BigBangShot hides the pellet its
   bomb replaces this way). Cell 314 still holds the stone, free for a custom sprite; 312 and 313 stay Super Steve's and
   Angel Gear's own cells, so a custom sprite for either is a bake of its cell.)
 - **Model.** `SlingshotProp.SpawnProjectile`: the live weapon copied into chara slot 3 as for the Guardian Reflector, but

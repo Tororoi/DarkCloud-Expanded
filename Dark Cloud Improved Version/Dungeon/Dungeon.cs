@@ -119,7 +119,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         WeaponThreads.Launch();
                         CheckActiveItems();
-                        TestWeaponGrant.Tick();   // TEMP: the Partisan for testing — remove once tested
+                        if (DebugDiagnostics.Enabled) TestWeaponGrant.Tick();     // the Partisan test grant
                     }
 
                     //Check if player is inside the weapon customize menu
@@ -157,7 +157,7 @@ namespace Dark_Cloud_Improved_Version
                     currentFloor = Memory.ReadByte(Addresses.checkFloor);
 
                     //Check if the player has entered a new floor
-                    ShotReactionAudit.Tick();                                       // DIAGNOSTIC: the shot config table against vanilla
+                    if (DebugDiagnostics.Enabled) ShotReactionAudit.Tick();         // DIAGNOSTIC: the shot config table against vanilla
                     if (currentFloor != prevFloor)
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Floor changed!");

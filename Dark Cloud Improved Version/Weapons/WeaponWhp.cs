@@ -5,7 +5,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>Weapon HP an ability spends — a bolt, a blast, a flash — taken by the ENGINE'S OWN drain at the moment it
     /// strikes, as if the sword had landed a hit. The bill is posted as swing-equivalents (base WHP / 1.5) to
-    /// CodeCaves.WhpBill and the WHP-bill cave (ElfWeaponPatches.PatchWhpBill) calls SwordDmgCheck1 with it on the next
+    /// CodeCaves.WhpBill and the WHP-bill cave (ElfFrameChainPatches.PatchWhpBill) calls SwordDmgCheck1 with it on the next
     /// frame: <c>(1.5 − 0.01 × Endurance) × factor</c>, halved by Durable and doubled by Fragile, the 10 % / 5 % warnings,
     /// an Auto Repair Powder at 0, and the break — the Dagger fallback, the message, the re-equip — are all the engine's,
     /// which is the only place the break exists (a WHP written to 0 from here would sit there until the next landed

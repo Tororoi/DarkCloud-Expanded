@@ -2,7 +2,7 @@ using System;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>TEMP (testing Partisan) — remove once tested: on the first walkable dungeon frame of the mod session, the Partisan is
+    /// <summary>A test aid behind <see cref="DebugDiagnostics"/>: on the first walkable dungeon frame of the mod session, the Partisan is
     /// put in Ungaga's weapons by the game's own pickup routine, CDngStatusData::GetItem (main 0x1BE060: an item id above 0x100 is a
     /// weapon — its owner looked up, the first empty weapon slot of theirs found, the record built by WepDataListToHaveCopy), called
     /// through the call-request cave; skipped when he already has one.</summary>
@@ -30,7 +30,7 @@ namespace Dark_Cloud_Improved_Version
                 return;
             }
             // Not taken: is the call-request cave in memory at all (its first word non-zero), and does the WHP-bill cave hand on to it?
-            uint caveWord = Memory.ReadUInt(0x20000000L + CodeCaves.DebugIfCave.CallRequest);
+            uint caveWord = Memory.ReadUInt(0x20000000L + DebugIfCave.CallRequest);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[TestWeaponGrant] attempt {++_tries}: GetItem not taken within 1.5 s (call-request cave word 0x{caveWord:X8}{(caveWord == 0 ? " — the cave is not in this ISO: repatch" : "")})");
             if (_tries >= MaxTries) _done = true;
         }

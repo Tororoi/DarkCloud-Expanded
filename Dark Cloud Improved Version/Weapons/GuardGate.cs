@@ -46,7 +46,7 @@ namespace Dark_Cloud_Improved_Version
             for (int s = 0; s < want.Length; s++) { want[s] = _all ? AllWindows : _windows[s]; any |= want[s] != 0; }
             byte[] cur = Memory.ReadBytesBatch(CodeCaves.GuardMask, want.Length);
             if (cur == null || !want.AsSpan().SequenceEqual(cur)) Memory.WriteBytesBatch(CodeCaves.GuardMask, want);
-            if (any && !_warned && Memory.ReadUInt(0x20000000L + CodeCaves.DebugInfoCave.GuardMask) != CaveWord0)
+            if (any && !_warned && Memory.ReadUInt(0x20000000L + DebugInfoCave.GuardMask) != CaveWord0)
             {
                 _warned = true;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the guard-mask cave is not in this ISO — guards are not broken until it is repatched");

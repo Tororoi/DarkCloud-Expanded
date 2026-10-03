@@ -98,6 +98,8 @@ namespace Dark_Cloud_Improved_Version
         {
             private const int Hdr = 0x10, Ent = 0x30;
             internal readonly byte[] Magic, Data; internal readonly List<(string name, int off)> Entries = new();
+            /// <summary>An IM2 bank's 8-bit pictures are in PSMT8 block order (an IMG bank's row-major).</summary>
+            internal bool Swizzled => Magic[2] == (byte)'2';
             internal Bank(byte[] data)
             {
                 string m = Encoding.Latin1.GetString(data, 0, 4);

@@ -69,7 +69,7 @@ namespace Dark_Cloud_Improved_Version
             /// water angle that suits casting from a bank. A spot where the player stands IN the water (the
             /// Queens canal floor at low tide) wants the ordinary town height (5) instead, because the downward
             /// view is counterproductive there. Fed to the patched SetHeight site via
-            /// <see cref="CodeCaves.Mailbox.FishCamHeight"/> (IsoPatcher.PatchFishingCameraHeight).</summary>
+            /// <see cref="Mailbox.FishCamHeight"/> (IsoPatcher.PatchFishingCameraHeight).</summary>
             internal readonly float CameraHeight;
 
             internal Spot(int mapNo, string name, int areaId,

@@ -43,9 +43,9 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(FireRaster.DistortionGain, Math.Clamp(gain01, 0f, 1f) * _gainOrig);
             if (!_on)
             {
-                Memory.WriteUInt (CodeCaves.Mailbox.MirageHazeNode, rootGuest);
-                Memory.WriteFloat(CodeCaves.Mailbox.MirageHazeLift, lift);
-                Memory.WriteInt  (CodeCaves.Mailbox.MirageHazeOn, 1);   // on LAST: the cave reads the node once this is set
+                Memory.WriteUInt (Mailbox.MirageHazeNode, rootGuest);
+                Memory.WriteFloat(Mailbox.MirageHazeLift, lift);
+                Memory.WriteInt  (Mailbox.MirageHazeOn, 1);   // on LAST: the cave reads the node once this is set
                 _on = true;
             }
             return true;
@@ -54,7 +54,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Stop drawing and restore the vanilla gain. Safe to call when not showing.</summary>
         internal static void Hide()
         {
-            if (_on) { Memory.WriteInt(CodeCaves.Mailbox.MirageHazeOn, 0); _on = false; }
+            if (_on) { Memory.WriteInt(Mailbox.MirageHazeOn, 0); _on = false; }
             if (_gainOrig > 0f) Memory.WriteFloat(FireRaster.DistortionGain, _gainOrig);
         }
     }

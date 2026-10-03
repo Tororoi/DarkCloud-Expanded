@@ -73,6 +73,7 @@ namespace Dark_Cloud_Improved_Version
             var seen = new HashSet<uint>();
             var seenPatched = new HashSet<uint>();
             var report = new List<string>();                                     // DIAGNOSTIC: each species seen, held or why not
+            bool diag = DebugDiagnostics.Enabled;
             int noRoom = 0;
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
@@ -80,16 +81,16 @@ namespace Dark_Cloud_Improved_Version
                 uint stb = Memory.ReadGuestPtr(CRunScript.StbPtrAddr(s));
                 if (!Memory.IsValidGuest(stb) || !seen.Add(stb)) continue;      // one patch per species, not per slot
                 ushort species = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
-                if (!Ordinary(s)) { report.Add($"{species}: boss, left alone"); continue; }   // bosses are left alone
-                if (!HoldClipOf(s, out int guard, out int back, out var clips)) { report.Add($"{species}: no motions known, left to its AI"); continue; }
+                if (!Ordinary(s)) { if (diag) report.Add($"{species}: boss, left alone"); continue; }   // bosses are left alone
+                if (!HoldClipOf(s, out int guard, out int back, out var clips)) { if (diag) report.Add($"{species}: no motions known, left to its AI"); continue; }
                 long b = Memory.ToMmu(stb);
-                if (Memory.ReadInt(b) != StbVm.Magic) { report.Add($"{species}: script magic wrong"); continue; }
+                if (Memory.ReadInt(b) != StbVm.Magic) { if (diag) report.Add($"{species}: script magic wrong"); continue; }
                 long code = LabelCode(b, LabelAi, out _, out _);
-                if (code == 0 || !LooksLikeCode(code)) { report.Add($"{species}: no AI label {LabelAi}"); continue; }
-                if (_patched.Count >= CodeCaves.SolarStubBlocks) { noRoom++; report.Add($"{species}: no stub block left"); continue; }
+                if (code == 0 || !LooksLikeCode(code)) { if (diag) report.Add($"{species}: no AI label {LabelAi}"); continue; }
+                if (_patched.Count >= CodeCaves.SolarStubBlocks) { noRoom++; if (diag) report.Add($"{species}: no stub block left"); continue; }
                 byte[] orig = Memory.ReadBytesBatch(code, StbVm.InstrSize);
-                if (orig == null) { report.Add($"{species}: label unreadable"); continue; }
-                report.Add($"{species}: held ({(clips.HasGuard ? $"guard {guard}" : $"idle {guard}")}, stagger {DamageOf(s)})");
+                if (orig == null) { if (diag) report.Add($"{species}: label unreadable"); continue; }
+                if (diag) report.Add($"{species}: held ({(clips.HasGuard ? $"guard {guard}" : $"idle {guard}")}, stagger {DamageOf(s)})");
 
                 long block = CodeCaves.SolarStubBase + (long)_patched.Count * CodeCaves.SolarStubBlock;
                 uint blockGuest = (uint)(block - 0x20000000L);
@@ -128,7 +129,7 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 $"[SunSword] blinding: {_patched.Count} species scripts held natively (guard where there is one, idle otherwise), {restarted} enemies re-entered at once"
                 + (noRoom > 0 ? $"; {noRoom} species beyond the {CodeCaves.SolarStubBlocks} stub blocks left to their own AI" : "")
-                + " — " + string.Join("; ", report));
+                + (report.Count > 0 ? " — " + string.Join("; ", report) : ""));
         }
 
         /// <summary>Is the code at <paramref name="at"/> still exactly what we wrote there? The only safe basis for undoing

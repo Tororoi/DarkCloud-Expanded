@@ -119,7 +119,7 @@ it as the clone template; her list entry is zeroed so she neither steps nor draw
 (the engine rebuilds the packet from the particles on every draw, so the copy must own them), the anchor re-pointed at
 the copy's `cat_sebone2` because the rest lattice was authored in that bone's space, no body capsules, the Verlet
 "previous" array seeded from "current" so the first step is quiet, and the copy's +0xC74 pointing at a one-entry list.
-The dungeon chara loop steps every slot's cloth while `MirageSceneGateFlag == 1` (the Mirage pnach's ClothStep swap),
+The dungeon chara loop steps every slot's cloth while `Mailbox.MirageSceneGate == 1` (the Mirage pnach's ClothStep swap),
 which the cat already sets; `Draw__10CCharacter` draws the list.
 
 **The element recolour is a palette write, not a texture swap.** `CatPackBakes.FlatTim2` (`build_cat_pack.flat_tim2` in the authoring model) bakes the cape texture as

@@ -1,40 +1,31 @@
 using System;
 using System.Collections.Generic;
+using static Dark_Cloud_Improved_Version.BombCarrier;
+using static Dark_Cloud_Improved_Version.PelletHide;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Super Steve with a Big Bang sphere — "Detonate" from Xiao's slingshot, as close to Big Bang's as her weapon
-    /// allows. Two charges, as Big Bang has two:
-    /// <br/>THE GUARD CHARGE (<see cref="GuardSeconds"/>) is Big Bang's Solar Flash: the slingshot whitens, the cyan build-up
-    /// runs on her (the room does not darken until a blast is coming); primed, she holds the white. LOCKED ON, a four-times
-    /// Bomb — the item's own model, red while it fades in over the whole charge, pulsing once it is in, the Matador's
-    /// red-orange disc growing with it — hangs over the target where Big Bang hangs its judgement blade, and her RELEASE lets it fall (the shoot motion plays and bills the shot; its pellet is drawn
-    /// from the blank cell and retired the tick it appears): the room darkens along the fall and it lands with the bomb's own
-    /// blast at twice its size, its ring out to the blast's reach, and exactly Big Bang's blast (the falloff damage, the kick, every enemy turned to it)
-    /// and Big Bang's flash. NOT locked
-    /// on, her release IS the flash: Big Bang's flash from where she stands — twice the Sun Sword's share — with no pellet
-    /// (the shoot motion plays and bills the shot; its pellet is retired as the drop's is).
-    /// <br/>EVERY PELLET IS A BOMB: each shot flies as Witch Illza's thrown-apple shot (table config 4, `ringo_ex`, entered in
-    /// the main-character effect instance — hers in the monster pack is untouched) with the Bomb's mesh grafted onto the
-    /// apple's node in place of its own, so it flies and turns as the apple does, with no light or flash of any kind; the
-    /// sub-shot is cut the tick it leaves its flight, so the apple's own impact never draws — the bomb's burst is the impact.
-    /// A PLAIN shot is the bomb at 1× that hits as her pellet would — the shot's own damage entry, planted ONCE on the frame
-    /// its contact turns it to its impact (no plants in flight, and the sub-shot is cut before a second), with the pellet's
-    /// damage (the engine's hit, reaction and weapon HP) and the drop's kick at a quarter of its distance stamped on it by the
-    /// guard-bypass cave (Mailbox.PelletKickDamage, as Dragon's Y's shot) — and bursts in the bomb's half-size visual there,
-    /// no blast of its own. THE SHOT CHARGE (the shot held <see cref="ShotChargeSeconds"/>, as her other charged shots are made)
-    /// is the bomb at 2× wearing the drop's red-orange disc, bursting where it dies with the bomb's own blast at 1.1× with
-    /// half the drop's damage, kick and reach. Several may be in the air at once.
-    /// <br/>Her white bleeds out over <see cref="TintFadeSeconds"/> once a shot leaves. Weapon HP is the shot's, taken as the
-    /// pellet leaves: 20 for the drop, 10 for the bomb shot, 5 for the flash shot. Explosions cannot hurt her while the sphere
-    /// is on. Driven from Super Steve's sphere dispatch; Solar Harvest is inherited alongside.</summary>
-    internal static class BombShot
+    /// <summary>Super Steve with a Big Bang sphere — "Detonate" from Xiao's slingshot. A <see cref="GuardSeconds"/> guard charge whitens
+    /// the slingshot and, locked on, hangs a four-times Bomb over the target (the judgement blade's hover, pulsing red); her release
+    /// drops it for the bomb's blast with Big Bang's falloff damage, kick and flash, or — nothing hanging — flashes from where she
+    /// stands. Every pellet flies as Witch Illza's apple shot wearing the Bomb's mesh (<see cref="BombCarrier"/>) and bursts where it
+    /// dies: a plain shot with the pellet's own damage, a shot held <see cref="ShotChargeSeconds"/> with half the drop's blast; her
+    /// pellets themselves are drawn from the blank cell (<see cref="PelletHide"/>). Driven from Super Steve's sphere dispatch; the
+    /// helpers share this class's members through using static (docs/big-bang.md).</summary>
+    internal static class BigBangShot
     {
-        private const string Tag = "[BombShot] ";
+        /// <summary>Super Steve with a Big Bang sphere (BigBangShot): Big Bang's flash — twice the Sun Sword's share, the cool
+        /// light — from where her bomb lands; no dim while she primes (the room darkens only along the fall, or the four frames
+        /// before a shot's flash); no disc on her (the bomb carries its own).</summary>
+        internal static readonly SunSword.SolarProfile FlashProfile = new SunSword.SolarProfile(
+            Items.supersteve, 0.50f, null, SuperSteveRig.WeaponModel, 0, 0, "BigBangShot", fog: 0.8f,
+            light: new[] { 236f, 226f, 255f }, fogRgb: new[] { 242f, 236f, 255f },
+            primeDim: 0f, bladeGlowOnly: true);                                     // no dim while it primes: the darkening is the fall's, or the four frames before a shot's flash
+        private const string Tag = "[BigBangShot] ";
         private const double GuardSeconds = 3.0, ShotChargeSeconds = 1.0;
         private const float  HoverScale = 4f;                          // the bomb over a target
         private const float  HoverFxScale = 2f, BombFxScale = 1.1f, PelletFxScale = 0.5f;   // the blast sprites: the drop, the charged shot, the plain shot; each ring reaches its blast's edge
-        private const float  ShotBombScale = 2f, PelletBombScale = 1f;  // the bomb on the apple shot, over the apple's own size (the sub-shot object's own scale): charged, plain
+        internal const float ShotBombScale = 2f, PelletBombScale = 1f;  // the bomb on the apple shot, over the apple's own size (the sub-shot object's own scale): charged, plain
         private const float  HoverMargin = 10f;                         // the hanging bomb's bottom this far above the species' authored height (Big Bang's blade: 6)
         private const float  ContactPad = 3f;                           // the bomb shot touches an enemy this far outside its body width
         // THE BOMB'S PULSE: red, 150,0,0, while the hanging bomb fades in; from the frame it is fully in, a smooth cosine
@@ -45,7 +36,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool _pulsing;
         private const float  BombLength = 1.22f;                        // bakudan.mds: its mesh runs 1.22 below the root to 1.98 above it at 1×, so this is root-to-bottom — the drop stops with the bottom ON the root
         private const int    CarrierConfig = 4;                         // the shot table's `ringo_ex`: Witch Illza's thrown apple (its flight motion turns the bomb as the apple turns)
-        private const string CarrierNode = "dokuring__m";               // the node that draws the apple in each of its trees (the impact's light, `hikari04__bacapp`, sits beside it)
+        internal const string CarrierNode = "dokuring__m";               // the node that draws the apple in each of its trees (the impact's light, `hikari04__bacapp`, sits beside it)
         private const float  BombDamage = 0.5f, BombKick = 0.5f, BombReach = 0.5f;            // the charged shot's blast against the drop's (the kick as DISTANCE)
         private const float  PelletKick = 0.25f;                        // the plain shot's kick DISTANCE, of the drop's (half the charged shot's); its damage is the pellet's own
         /// <summary>The kick strength that throws <paramref name="distanceFraction"/> as far as the drop's: distance ≈ strength² / (2 · decay).</summary>
@@ -58,7 +49,7 @@ namespace Dark_Cloud_Improved_Version
         private const int    GlowFireRow = 1;                           // the cave's one-based row: the Matador's red-orange, on the bomb
         private const float  BombGlowSize = 0.6f;
 
-        private static readonly BigBang.JudgementOwner Owner = new BigBang.JudgementOwner
+        private static readonly JudgementBlade.JudgementOwner Owner = new JudgementBlade.JudgementOwner
         {
             WeaponId = Items.supersteve, Glow = GlowDisc, Profile = null, Redirect = true, RampWholeFall = true,
             IsPrimed = () => _guard == Guard.Charging || _guard == Guard.Primed || _guard == Guard.Dropping,   // hung from the charge's start, fading in with it
@@ -82,161 +73,63 @@ namespace Dark_Cloud_Improved_Version
         private static readonly List<Flight> _flights = new List<Flight>();
         private static Guard _guard;
         private static bool  _whiteFading;                             // her primed white bleeding off after a release
-        private static DateTime _holdStart, _firedAt, _shotHoldStart;
-        private static bool  _shotHolding, _shotCharged;               // the shot charge: held long enough, the next pellet is the bomb
-        private static bool  _wasShooting;                             // the shoot state last tick (its rising edge is her release)
-        private static bool  _retirePellet;                            // the release was the drop or the flash: the pellet of that shot is retired the tick it appears
+        private static DateTime _holdStart, _firedAt;
+        private static readonly ShotCharge _shot = new ShotCharge();   // the shot charge (held long enough, the next pellet is the bomb), her release, and the retire mark (the release was the drop or the flash: the pellet of that shot is retired the tick it appears)
         private static bool  _flashPending;                            // the flash from her stands, after the ramp's frames
         private static DateTime _flashAt;
         private static float _flashX, _flashH, _flashY;
-        private static bool  _hiding;                                  // pellets drawn from the blank cell while the sphere is on: no pellet of hers is ever meant to be seen
-        private static int   _spriteBefore;                            // Mailbox.PelletSpriteId as the hide found it, put back after
-        private static BorrowedEffect _carrier;                            // the apple shot, ours in the main-character instance
-        private static uint  _graftRoot, _graftVisual;                  // the entered instance's template root (the entry the grafts belong to) and the bomb's visual
-        private static readonly bool[] _seen = new bool[PlayerShotPool.SlotCount];
-        private static readonly List<(int slot, int ticks)> _planted = new List<(int, int)>();
+        internal static BorrowedEffect _carrier;                            // the apple shot, ours in the main-character instance
+        private static readonly PelletWatch _pellets = new PelletWatch();
+        private static readonly PlantedHits _planted = new();   // the flash's light hits, withdrawn on their ticks
         private static byte _floor = 0xFF;
 
         /// <summary>The shot effect this sphere wants entered on every floor (BorrowedShots asks every tick): the apple shot,
         /// while Xiao is out with Super Steve carrying a Big Bang sphere.</summary>
         internal static BorrowedEffect WantedShot()
-        {
-            if (Player.CurrentCharacterNum() != Player.XiaoId || Player.Weapon.GetCurrentWeaponId() != Items.supersteve) return null;
-            int slot = Memory.ReadByte(DngStatusData.EquippedSlotAddr(Player.XiaoId));
-            if (slot < 0 || slot >= DngStatusData.MaxWeaponSlots || SuperSteve.AttachedSphere(DngStatusData.WeaponRecord(Player.XiaoId, slot)) != Items.bigbang) return null;
-            return _carrier ??= BorrowedShots.TableConfig(CarrierConfig);
-        }
+            => PelletWatch.SuperSteveSphereOn(Items.bigbang) ? _carrier ??= BorrowedShots.TableConfig(CarrierConfig) : null;
 
-        /// <summary>The Bomb's mesh onto the apple shot's nodes. The entered instance holds a template tree (+0xCC) AND one tree
-        /// per sub-shot object (each object's own model pointer) — the sub-shots draw their own — so every tree is walked for
-        /// the node that draws (the apple, `dokuring__m`) and its visual pointer swapped for the bomb model's; the bomb's
-        /// textures are tagged into the effect's texture block for as long as it stays. The apples' own visuals go back on
-        /// Stop. Re-done whenever the instance is re-entered (a new floor: new trees).</summary>
-        private static readonly List<(uint node, uint carrierVisual)> _grafts = new List<(uint, uint)>();
-        private static readonly Dictionary<long, float> _objScale = new Dictionary<long, float>();   // each sub-shot object's scale while grafted — the fired shot's kind sets it (an animated node's matrix is rebuilt every frame; the object's scale is not)
-        private static void GraftBomb()
-        {
-            if (_carrier == null || !BorrowedShots.Entered(_carrier)) { _graftRoot = 0; _grafts.Clear(); return; }
-            uint root = Memory.ReadGuestPtr(_carrier.Instance + 0xCC);
-            if (!Memory.IsValidGuest(root)) { _graftRoot = 0; _grafts.Clear(); return; }
-            if (root == _graftRoot)
-            {
-                if (_grafts.Count == 0) return;
-                foreach (var (node, _) in _grafts)
-                    if (Memory.ReadGuestPtr(Memory.ToMmu(node) + CFrameVu1.GeomPtr) != _graftVisual) Memory.WriteUInt(Memory.ToMmu(node) + CFrameVu1.GeomPtr, _graftVisual);   // a rebuild put an apple back
-                foreach (var kv in _objScale)
-                    if (Math.Abs(Memory.ReadFloat(kv.Key + CCharacter.CharScale) - kv.Value) > 0.01f) Memory.WriteVec3(kv.Key + CCharacter.CharScale, kv.Value, kv.Value, kv.Value);
-                return;
-            }
-            uint bombRoot = BombModel.Root();
-            if (bombRoot == 0) return;
-            uint bombVis = Memory.ReadGuestPtr(Memory.ToMmu(bombRoot) + CFrameVu1.GeomPtr);
-            if (!Memory.IsValidGuest(bombVis)) return;
-            _grafts.Clear(); _objScale.Clear(); _graftRoot = root; _graftVisual = bombVis;
-            var roots = new List<uint> { root };
-            int count = Memory.ReadInt(_carrier.Instance + ShotEffectPack.OffCount);
-            for (int i = 0; i < Math.Min(count, ShotEffectPack.SubShots); i++)
-            {
-                long obj = _carrier.Instance + ShotEffectPack.OffObj + i * ShotEffectPack.ObjStride;
-                uint r = Memory.ReadGuestPtr(obj + CCharacter.CharModel);
-                if (Memory.IsValidGuest(r) && !roots.Contains(r)) roots.Add(r);
-                Memory.WriteVec3(obj + CCharacter.CharScale, PelletBombScale, PelletBombScale, PelletBombScale);   // the object's scale, which the draw re-applies every frame; a fire sets its shot's
-                _objScale[obj] = PelletBombScale;
-            }
-            // The apple's node BY NAME: a tree still being built (the instance re-entered) has the impact's light node with a visual
-            // before the apple has one, and a graft onto that node drew the bomb offset — so a tree without a posed apple node
-            // waits (nothing recorded; next tick tries again).
-            var found = new List<(uint node, uint carrierVisual)>();
-            foreach (uint r in roots)
-            {
-                uint node = NodeNamed(r, CarrierNode);
-                uint carrierVis = node != 0 ? Memory.ReadGuestPtr(Memory.ToMmu(node) + CFrameVu1.GeomPtr) : 0;
-                if (node == 0 || (!Memory.IsValidGuest(carrierVis) && carrierVis != bombVis)) { _graftRoot = 0; _grafts.Clear(); _objScale.Clear(); return; }
-                if (carrierVis != bombVis) found.Add((node, carrierVis));
-            }
-            foreach (var (node, _) in found) Memory.WriteUInt(Memory.ToMmu(node) + CFrameVu1.GeomPtr, bombVis);
-            _grafts.AddRange(found);
-            if (_grafts.Count == 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the apple shot's trees already carry the bomb"); return; }
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the bomb's mesh grafted onto `{CarrierNode}` in {_grafts.Count} of the apple shot's trees ({roots.Count} trees: the template and the sub-shots) → visual 0x{bombVis:X}");
-        }
         /// <summary>The hanging bomb's tint: red while it fades in; the pulse from the frame it is fully in.</summary>
         private static void PulseTint(bool hanging)
         {
             if (!hanging) { _pulsing = false; return; }
-            if (BigBang.HoverAlpha < 1f) { _pulsing = false; BladeProp.Tint(PulseRed[0], PulseRed[1], PulseRed[2]); return; }
+            if (JudgementBlade.HoverAlpha < 1f) { _pulsing = false; BladeProp.Tint(PulseRed[0], PulseRed[1], PulseRed[2]); return; }
             if (!_pulsing) { _pulsing = true; _pulseStart = GameClock.Now; }
             double t = (GameClock.Now - _pulseStart).TotalSeconds / PulseSeconds;
             float k = (float)(0.5 + 0.5 * Math.Cos(2.0 * Math.PI * t));                  // 1 on the second (red), 0 on the half second (black)
             BladeProp.Tint(PulseRed[0] * k, PulseRed[1] * k, PulseRed[2] * k);
         }
-        /// <summary>The node under <paramref name="root"/> (root included) named <paramref name="name"/>; 0 when none.</summary>
-        private static uint NodeNamed(uint root, string name)
-        {
-            var work = new Stack<uint>(); work.Push(root); int guard = 0;
-            while (work.Count > 0 && guard++ < 64)
-            {
-                uint n = work.Pop();
-                if (!Memory.IsValidGuest(n)) continue;
-                byte[] nb = Memory.ReadBytesBatch(Memory.ToMmu(n) + CFrameVu1.Name, 16);
-                if (nb != null && System.Text.Encoding.ASCII.GetString(nb).Split('\0')[0] == name) return n;
-                for (uint c = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.RootChild); Memory.IsValidGuest(c); c = Memory.ReadGuestPtr(Memory.ToMmu(c) + CFrameVu1.RootSibling)) work.Push(c);
-            }
-            return 0;
-        }
-        private static void Ungraft()
-        {
-            if (_grafts.Count > 0 && _carrier != null && Memory.ReadGuestPtr(_carrier.Instance + 0xCC) == _graftRoot)
-            {
-                foreach (var (node, carrierVis) in _grafts)
-                    if (Memory.ReadGuestPtr(Memory.ToMmu(node) + CFrameVu1.GeomPtr) == _graftVisual) Memory.WriteUInt(Memory.ToMmu(node) + CFrameVu1.GeomPtr, carrierVis);   // the apple's own visual back
-                foreach (long obj in _objScale.Keys) Memory.WriteVec3(obj + CCharacter.CharScale, 1f, 1f, 1f);                                                                  // …and its size
-            }
-            _graftRoot = 0; _graftVisual = 0; _grafts.Clear(); _objScale.Clear();
-        }
 
         internal static void Drive(bool active)
         {
-            Owner.Profile ??= SunSword.BombShotFlash;
+            Owner.Profile ??= BigBangShot.FlashProfile;
             SunSword.BlindTick();
-            SunSword.ExpireHits(_planted);
+            _planted.Expire();
             if (!active) return;
             byte floor = Memory.ReadByte(Addresses.checkFloor);
             if (floor != _floor) { if (_floor != 0xFF) { BombModel.Forget(); _graftRoot = 0; _grafts.Clear(); EndFlights(); Dissipate(); } _floor = floor; }
-            BigBang.DriveImmunity(true);
+            ExplosionImmunity.DriveImmunity(true);
             GraftBomb();                                                                   // the apple shot carries the bomb's mesh while the sphere is on
             // The bomb's textures have ONE home at a time — the pass that is drawing it now: the clone slot's while the copy
-            // hangs, the effect's while the apple shot carries it. Two homes swapped every tick flickered the hanging bomb.
+            // hangs, the effect's while the apple shot carries it.
             bool copyUp = BladeProp.Active && (_guard == Guard.Charging || _guard == Guard.Primed || _guard == Guard.Dropping);
             if (copyUp) BombModel.KeepTextures(BombModel.WeaponPassBlock);
             else if (_grafts.Count > 0) BombModel.KeepTextures(BombModel.MainEffectBlock);
             else { BombModel.ReleaseTextures(); BombModel.Tick(); }
             PulseTint(copyUp);
-            var p = SunSword.BombShotFlash;
+            var p = BigBangShot.FlashProfile;
             SolarLighting.ToanTintOwned = _guard == Guard.Charging || _guard == Guard.Primed;
 
             // The shot charge, as her other charged shots: held ShotChargeSeconds, the charge-complete flash, and the next
-            // pellet is the bomb. It arms whether or not the guard charge is primed.
-            int shotState = Memory.ReadInt(PlayerAction.ChargeActionState);
-            bool holding = shotState == PlayerAction.XiaoShotDraw || shotState == PlayerAction.XiaoShotHold;
-            if (holding)
-            {
-                if (!_shotHolding) { _shotHolding = true; _shotCharged = false; _shotHoldStart = GameClock.Now; }
-                double held = (GameClock.Now - _shotHoldStart).TotalSeconds;
-                if (!_shotCharged && held >= ShotChargeSeconds) { _shotCharged = true; Player.FlashChargeComplete(); }
-                if (_guard != Guard.Charging) ChargeTint.Ramp(_shotCharged ? 0 : ShotChargeSeconds - held);
-            }
-            else if (_shotHolding && _guard != Guard.Charging) { _shotHolding = false; ChargeTint.Clear(); }   // released: _shotCharged stays for the pellet
-            else _shotHolding = false;
+            // pellet is the bomb. It arms whether or not the guard charge is primed; the guard charge owns the tint while it runs.
+            _shot.Tick(ShotChargeSeconds, rampTint: _guard != Guard.Charging);
             // Every pellet is REPLACED (a bomb) or RETIRED (the drop's, the flash's) the tick it appears — a frame or two after
             // the engine drew it, and a quick shot's pellet can be out before the shoot state is even seen — so for as long as
             // the sphere is on, every pellet is drawn from the sheet's transparent cell (Mailbox.PelletSpriteId =
             // PelletSheetBakes.BlankCell); the sprite id in force before comes back when the sphere goes (Stop).
             if (!_hiding) Hide();
-            else if (Memory.ReadInt(CodeCaves.Mailbox.PelletSpriteId) != PelletSheetBakes.BlankCell) Memory.WriteInt(CodeCaves.Mailbox.PelletSpriteId, PelletSheetBakes.BlankCell);   // re-asserted over another writer (a sphere change writes 0)
-            bool hanging = _guard == Guard.Primed && BigBang.HoverReady;                     // the bomb hangs over a live enemy (BigBang rides out a lock that blinks)
-            bool shooting = shotState == PlayerAction.XiaoShotShoot, released = shooting && !_wasShooting;
-            _wasShooting = shooting;
-            if (!shooting) _retirePellet = false;                                               // the shot went by without a pellet
+            else if (Memory.ReadInt(Mailbox.PelletSpriteId) != PelletSheetBakes.BlankCell) Memory.WriteInt(Mailbox.PelletSpriteId, PelletSheetBakes.BlankCell);   // re-asserted over another writer (a sphere change writes 0)
+            bool hanging = _guard == Guard.Primed && JudgementBlade.HoverReady;                     // the bomb hangs over a live enemy (JudgementBlade rides out a lock that blinks)
+            bool released = _shot.Released;
 
             if (_flashPending)                                                                  // her release's flash: the plunge, then the flash from where she stood
             {
@@ -245,14 +138,14 @@ namespace Dark_Cloud_Improved_Version
                 if (frames >= SolarLighting.RampFrames)
                 {
                     _flashPending = false;
-                    BigBang.TurnEnemiesToward(_flashX, _flashY);                                // every enemy turned to the flash, as to a blast
+                    EnemyFacing.TurnEnemiesToward(_flashX, _flashY);                                // every enemy turned to the flash, as to a blast
                     SunSword.FlashAt(p, _flashX, _flashH, _flashY, _planted);                  // Big Bang's flash, as the Sun Sword's from Toan
                 }
             }
 
             // What the NEXT pellet will be billed as (the engine takes it as the pellet leaves).
             if (hanging) ChargedShotWhp.Arm(DropWhp / SwingBase);
-            else if (_shotCharged) ChargedShotWhp.Arm(BombWhp / SwingBase);
+            else if (_shot.Charged) ChargedShotWhp.Arm(BombWhp / SwingBase);
             else if (_guard == Guard.Primed) ChargedShotWhp.Arm(FlashWhp / SwingBase);
 
             TrackFlights(p);                                                               // the shots in the air, and their blasts
@@ -276,10 +169,8 @@ namespace Dark_Cloud_Improved_Version
                         Dissipate(); break;
                     }
                     double held = (GameClock.Now - _holdStart).TotalSeconds;
-                    SolarBlade.Set((float)(held / GuardSeconds), p.Model, p.Frame, p.Unlit, p.BladeWhite);
-                    if (p.PrimeDim > 0f) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim * (float)Math.Min(1.0, held / GuardSeconds)); }
-                    ChargeTint.Ramp(GuardSeconds - held);
-                    BigBang.JudgementTick(Owner);                                     // locked on, the bomb fades in over the target with the charge (Owner.Alpha)
+                    GuardCharge.Frame(p, held, GuardSeconds);
+                    JudgementBlade.JudgementTick(Owner);                                     // locked on, the bomb fades in over the target with the charge (Owner.Alpha)
                     if (held >= GuardSeconds)
                     {
                         _guard = Guard.Primed; ChargeTint.Clear();
@@ -292,20 +183,20 @@ namespace Dark_Cloud_Improved_Version
                     SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);
                     if (p.PrimeDim > 0f) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim); }
                     SunSword.HoldPrimedTint(p, 1f);
-                    BigBang.JudgementTick(Owner);                                     // the bomb over a locked target, following it
+                    JudgementBlade.JudgementTick(Owner);                                     // the bomb over a locked target, following it
                     // Her release — the shoot state's first tick, before the engine has a pellet out — lets the hanging bomb go,
                     // or, with no bomb hanging, IS the flash: from where she stands, the charge spent.
-                    if (released && hanging && BigBang.BeginDrop())
+                    if (released && hanging && JudgementBlade.BeginDrop())
                     {
-                        _guard = Guard.Dropping; _firedAt = GameClock.Now; _shotCharged = false; _retirePellet = true;
+                        _guard = Guard.Dropping; _firedAt = GameClock.Now; _shot.Charged = false; _shot.RetirePellet = true;
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the hanging bomb is let go on her release");
                     }
                     else if (released && !hanging)
                     {
-                        _guard = Guard.Idle; _whiteFading = true; _firedAt = GameClock.Now; _shotCharged = false; _retirePellet = true;
+                        _guard = Guard.Idle; _whiteFading = true; _firedAt = GameClock.Now; _shot.Charged = false; _shot.RetirePellet = true;
                         _flashPending = true; _flashAt = GameClock.Now;
                         _flashX = Memory.ReadFloat(Addresses.dunPositionX); _flashH = Memory.ReadFloat(Addresses.dunPositionZ); _flashY = Memory.ReadFloat(Addresses.dunPositionY);
-                        BigBang.ReleaseJudgement();                                              // a hover fading off a lost lock: gone
+                        JudgementBlade.ReleaseJudgement();                                              // a hover fading off a lost lock: gone
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "released with nothing hanging — the flash from where she stands");
                     }
                     break;
@@ -314,25 +205,25 @@ namespace Dark_Cloud_Improved_Version
                     double since = (GameClock.Now - _firedAt).TotalSeconds;
                     float k = (float)Math.Max(0.0, 1.0 - since / TintFadeSeconds);
                     SunSword.HoldPrimedTint(p, k); SolarBlade.Set(k, p.Model, p.Frame, p.Unlit, p.BladeWhite);
-                    BigBang.JudgementTick(Owner);                                     // the fall, and the landing (LandDrop)
-                    if (BigBang.TakeDropLanded()) { _guard = Guard.Idle; break; }
-                    if (!BigBang.Dropping && !BigBang.LandingPending) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the drop was abandoned — the charge is spent"); Dissipate(); }
+                    JudgementBlade.JudgementTick(Owner);                                     // the fall, and the landing (LandDrop)
+                    if (JudgementBlade.TakeDropLanded()) { _guard = Guard.Idle; break; }
+                    if (!JudgementBlade.Dropping && !JudgementBlade.LandingPending) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the drop was abandoned — the charge is spent"); Dissipate(); }
                     break;
                 }
             }
 
             // A new pellet: retired (the drop's or the flash's — the release was the shot; the motion and its WHP already hers),
             // the charged bomb, or the plain bomb.
-            int slot = NewPellet();
+            int slot = _pellets.NewPellet();
             if (slot < 0) return;
             long poolNow = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
-            if (_retirePellet || (hanging && BigBang.BeginDrop()))
+            if (_shot.RetirePellet || (hanging && JudgementBlade.BeginDrop()))
             {
-                if (!_retirePellet) { _guard = Guard.Dropping; _firedAt = GameClock.Now; _shotCharged = false; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the hanging bomb is let go"); }
+                if (!_shot.RetirePellet) { _guard = Guard.Dropping; _firedAt = GameClock.Now; _shot.Charged = false; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the hanging bomb is let go"); }
                 if (Memory.IsValidGuest(poolNow)) Memory.WriteInt(PlayerShotPool.FlagAddr(poolNow, slot), 0);   // never drawn (the blank cell), never flies
-                _retirePellet = false;
+                _shot.RetirePellet = false;
             }
-            else if (_shotCharged) { _shotCharged = false; FireBomb(slot, Shot.Bomb); }
+            else if (_shot.Charged) { _shot.Charged = false; FireBomb(slot, Shot.Bomb); }
             else FireBomb(slot, Shot.Pellet);
         }
 
@@ -347,7 +238,7 @@ namespace Dark_Cloud_Improved_Version
             foreach (Flight f in _flights.ToArray())
             {
                 double since = (GameClock.Now - f.FiredAt).TotalSeconds;
-                if (f.Hp != null) ReportHits(f);                                           // DIAGNOSTIC: every HP drop while a plain shot is out, as it happens
+                if (DebugDiagnostics.Enabled && f.Hp != null) ReportHits(f);                                           // DIAGNOSTIC: every HP drop while a plain shot is out, as it happens
                 bool live;
                 if (f.Sub >= 0)
                 {   // the borrowed shot: flying while it is active and its phase is the flight; its object's position is the bomb's
@@ -406,28 +297,14 @@ namespace Dark_Cloud_Improved_Version
         /// the drop alone — the flash from it.</summary>
         private static void Blast(float x, float h, float y, float fxScale, float damage, float kick, float reach, bool flash, bool ring, float fxLift = 0f)
         {
-            BigBang.LastBlast = (x, h, y);
-            BombFx.Spawn(x, h + fxLift, y, fxScale, ringRadius: ring ? BigBang.BlastRadius * reach : 0f);
-            BigBang.PlantFalloff(x, h, y, damageScale: damage, kickScale: kick, reachScale: reach);
-            BigBang.TurnEnemiesToward(x, y);
-            if (flash) SunSword.FlashAt(SunSword.BombShotFlash, x, h, y, _planted);
+            BlastFalloff.LastBlast = (x, h, y);
+            BombFx.Spawn(x, h + fxLift, y, fxScale, ringRadius: ring ? BlastFalloff.BlastRadius * reach : 0f);
+            BlastFalloff.PlantFalloff(x, h, y, damageScale: damage, kickScale: kick, reachScale: reach);
+            EnemyFacing.TurnEnemiesToward(x, y);
+            if (flash) SunSword.FlashAt(BigBangShot.FlashProfile, x, h, y, _planted);
         }
         /// <summary>The hanging bomb's landing (BigBang's owner callback): the full blast, drawn a little above the floor, and the flash.</summary>
         private static void LandDrop(int slot, float x, float h, float y) => Blast(x, h, y, HoverFxScale, 1f, 1f, 1f, flash: true, ring: true, fxLift: DropFxLift);
-
-        private static int NewPellet()
-        {
-            long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
-            if (!Memory.IsValidGuest(pool)) return -1;
-            int found = -1;
-            for (int i = 0; i < PlayerShotPool.SlotCount; i++)
-            {
-                bool live = Memory.ReadInt(PlayerShotPool.FlagAddr(pool, i)) != 0;
-                if (live && !_seen[i]) { _seen[i] = true; if (found < 0) found = i; }
-                else if (!live) _seen[i] = false;
-            }
-            return found;
-        }
 
         private static Flight Begin(int slot, long pool, Shot kind)
         {
@@ -455,12 +332,16 @@ namespace Dark_Cloud_Improved_Version
             if (kind == Shot.Pellet)
             {   // the pellet's own damage, planted by the shot itself; the drop's kick at PelletKick, stamped on that damage's entries by the bypass cave
                 damage = Memory.ReadInt(PlayerShotPool.DamageAddr(pool, slot));
-                f.Damage = damage; f.Hp = new int[EnemyAddresses.FloorSlots.Count];
-                for (int s = 0; s < f.Hp.Length; s++) f.Hp[s] = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
-                Memory.WriteFloat(CodeCaves.Mailbox.PelletKickStrength, BigBang.KickStrength * KickFor(PelletKick));
-                Memory.WriteFloat(CodeCaves.Mailbox.PelletKickDecay, BigBang.KickDecay);
-                Memory.WriteVec3 (CodeCaves.Mailbox.PelletKickOrigin, 0f, 0f, 0f);             // no offset: straight out of the burst
-                Memory.WriteInt  (CodeCaves.Mailbox.PelletKickDamage, damage);
+                f.Damage = damage;
+                if (DebugDiagnostics.Enabled)
+                {   // DIAGNOSTIC: every enemy's HP as the shot leaves, for ReportHits
+                    f.Hp = new int[EnemyAddresses.FloorSlots.Count];
+                    for (int s = 0; s < f.Hp.Length; s++) f.Hp[s] = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
+                }
+                Memory.WriteFloat(Mailbox.PelletKickStrength, BlastFalloff.KickStrength * KickFor(PelletKick));
+                Memory.WriteFloat(Mailbox.PelletKickDecay, BlastFalloff.KickDecay);
+                Memory.WriteVec3 (Mailbox.PelletKickOrigin, 0f, 0f, 0f);             // no offset: straight out of the burst
+                Memory.WriteInt  (Mailbox.PelletKickDamage, damage);
             }
             if (_carrier != null && BorrowedShots.Fire(_carrier, f.X, f.H, f.Y, vx, vh, vy, damage, life, plant: kind == Shot.Pellet))
             {
@@ -480,26 +361,10 @@ namespace Dark_Cloud_Improved_Version
                         SolarGlow.Show(GlowDisc, anchor: f.Anchor, lift: 0f, growSeconds: 0, palRow: GlowFireRow, scale: BombGlowSize);
                     }
                 }
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{what}: the apple shot #{f.Sub} carrying the bomb at {sc:0.#}×, in the pellet's place ({life} frames" + (kind == Shot.Pellet ? $", damage {damage}, kick {BigBang.KickStrength * KickFor(PelletKick):0.##}" : "") + ")");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{what}: the apple shot #{f.Sub} carrying the bomb at {sc:0.#}×, in the pellet's place ({life} frames" + (kind == Shot.Pellet ? $", damage {damage}, kick {BlastFalloff.KickStrength * KickFor(PelletKick):0.##}" : "") + ")");
                 return;
             }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{what}: the apple shot is not entered on this floor — the pellet flies plain");
-        }
-
-        /// <summary>Every pellet drawn from the sheet's transparent cell, until <see cref="Unhide"/>.</summary>
-        private static void Hide()
-        {
-            _spriteBefore = Memory.ReadInt(CodeCaves.Mailbox.PelletSpriteId);
-            if (_spriteBefore == PelletSheetBakes.BlankCell) _spriteBefore = 0;
-            Memory.WriteInt(CodeCaves.Mailbox.PelletSpriteId, PelletSheetBakes.BlankCell);
-            _hiding = true;
-        }
-        private static void Unhide()
-        {
-            if (!_hiding) return;
-            if (Memory.ReadInt(CodeCaves.Mailbox.PelletSpriteId) == PelletSheetBakes.BlankCell)   // still ours (nothing else wrote it meanwhile)
-                Memory.WriteInt(CodeCaves.Mailbox.PelletSpriteId, _spriteBefore);
-            _hiding = false;
         }
 
         /// <summary>DIAGNOSTIC: each HP drop while a plain shot is out, the tick it shows, with the terms CheckDmg applied — the
@@ -548,10 +413,10 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The guard charge spent with nothing to show: her white and the blade off, a hover let go. Shots in the air fly on.</summary>
         private static void Dissipate()
         {
-            SunSword.HoldPrimedTint(SunSword.BombShotFlash, 0f);
+            SunSword.HoldPrimedTint(BigBangShot.FlashProfile, 0f);
             SolarBlade.Clear(); ChargeTint.Clear(); SolarLighting.EndDim();
             if (BladeProp.Active) SolarGlow.Fade();
-            BigBang.ReleaseJudgement();
+            JudgementBlade.ReleaseJudgement();
             _guard = Guard.Idle; _whiteFading = false; _flashPending = false;
         }
 
@@ -559,7 +424,7 @@ namespace Dark_Cloud_Improved_Version
         /// across, and between its feet and its authored height up?</summary>
         private static bool Touching(float x, float h, float y) => TouchingSlot(x, h, y) >= 0;
         /// <summary>The live enemy whose body (x, h, y) is inside, or −1.</summary>
-        internal static int TouchingSlot(float x, float h, float y)
+        private static int TouchingSlot(float x, float h, float y)
         {
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
@@ -583,18 +448,16 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The sphere or the weapon went: everything down, a blinding of hers ended, explosions dangerous again.</summary>
         internal static void Stop()
         {
-            if (_guard != Guard.Idle || _whiteFading) SunSword.HoldPrimedTint(SunSword.BombShotFlash, 0f);
+            if (_guard != Guard.Idle || _whiteFading) SunSword.HoldPrimedTint(BigBangShot.FlashProfile, 0f);
             EndFlights();
-            Memory.WriteInt(CodeCaves.Mailbox.PelletKickDamage, 0);                         // no kick mark
+            Memory.WriteInt(Mailbox.PelletKickDamage, 0);                         // no kick mark
             SolarBlade.Clear(); ChargeTint.Clear(); SolarGlow.Hide(); SolarLighting.Restore(); Unhide();
-            BigBang.ReleaseJudgement(); BigBang.DriveImmunity(false); Ungraft(); BombModel.ReleaseTextures();
+            JudgementBlade.ReleaseJudgement(); ExplosionImmunity.DriveImmunity(false); Ungraft(); BombModel.ReleaseTextures();
             SunSword.EndBlinding();
-            long pool = CollisionPool.Resolve();
-            foreach (var (slot, _) in _planted) if (pool != 0) CollisionPool.Deactivate(pool, slot);
-            _planted.Clear();
+            _planted.WithdrawAll();
             SolarLighting.ToanTintOwned = false;
-            Array.Clear(_seen, 0, _seen.Length);
-            _guard = Guard.Idle; _whiteFading = false; _shotHolding = false; _shotCharged = false; _retirePellet = false; _flashPending = false; _wasShooting = false;
+            _pellets.Reset(); _shot.Reset();
+            _guard = Guard.Idle; _whiteFading = false; _flashPending = false;
         }
     }
 }

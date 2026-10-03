@@ -2,7 +2,7 @@ using System;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>DIAGNOSTIC: the shot-effect config table (BehaviorScriptTable — shared, static ELF data every enemy shot is
+    /// <summary>DIAGNOSTIC, behind <see cref="DebugDiagnostics"/>: the shot-effect config table (BehaviorScriptTable — shared, static ELF data every enemy shot is
     /// planted from, and every character's guard judged against) watched for changes. Every <see cref="PeriodSeconds"/> in a
     /// dungeon, each config's hit-reaction (+0x44) and victim-mask (+0x48) words and the bomb-blast reaction word
     /// (CodeCaves.BombReaction) are compared with their vanilla values; a difference is logged the first time it appears and the
@@ -29,14 +29,14 @@ namespace Dark_Cloud_Improved_Version
                 if (off == _off[i]) continue;
                 _off[i] = off;
                 string name = System.Text.Encoding.ASCII.GetString(Memory.ReadBytesBatch(rec, 16) ?? new byte[0]).Split('\0')[0];
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[ShotAudit] cfg {i} `{name}`: reaction {reaction} (vanilla {VanillaReaction[i]}), mask {mask} (vanilla {VanillaMask[i]})" + (off ? " — ALTERED" : " — back to vanilla"));
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[ShotReactionAudit] cfg {i} `{name}`: reaction {reaction} (vanilla {VanillaReaction[i]}), mask {mask} (vanilla {VanillaMask[i]})" + (off ? " — ALTERED" : " — back to vanilla"));
             }
             int bomb = Memory.ReadInt(CodeCaves.BombReaction);
             bool bombOff = bomb != CodeCaves.BombReactionVanilla;
             if (bombOff != _bombOff)
             {
                 _bombOff = bombOff;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[ShotAudit] bomb-blast reaction word {bomb} (vanilla {CodeCaves.BombReactionVanilla})" + (bombOff ? " — ALTERED" : " — back to vanilla"));
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[ShotReactionAudit] bomb-blast reaction word {bomb} (vanilla {CodeCaves.BombReactionVanilla})" + (bombOff ? " — ALTERED" : " — back to vanilla"));
             }
         }
     }

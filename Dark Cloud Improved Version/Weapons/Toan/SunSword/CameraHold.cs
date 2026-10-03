@@ -5,7 +5,7 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>
     /// The camera HELD at its world height while Toan lunges. The follow camera's height field is its height above its
     /// follow point, and the follow point rises and falls with him, so the camera would rise and fall too; while the
-    /// pin flag is set the camera-pin cave (CodeCaves.DebugInfoCave.CameraPin, run at the end of the dungeon camera
+    /// pin flag is set the camera-pin cave (DebugInfoCave.CameraPin, run at the end of the dungeon camera
     /// pass every frame) re-derives that field from the pinned world height (CodeCaves.CameraPin) and the follow
     /// point, so the camera stays put in Y. Distance and angle stay the engine's. Nothing per tick.
     /// </summary>

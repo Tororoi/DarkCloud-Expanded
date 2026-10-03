@@ -250,12 +250,12 @@ WHP -= (1.5 − 0.01 × Endurance) × factor  +  0.1 × monster.whpCost   // +0x
   `ChargedShotWhp` writes the charge's factor while the shot is held — the game's own drain does the rest.
 - **Serpent Sword** (item 268) takes **no WHP damage** until game flag 0x30 is set
   (its story event).
-- **Ungaga (mod rebalance):** his charge fires its effect (c10a_ex) as a shot every 30 frames while held and `UngagaKey_Play` bills `SwordDmgCheck1(0.8)` per shot fired — kept; the hits that shot LANDS (owner 4, entry +0x38 = 1.0 — his swings plant 0) cost nothing, through the no-drain caves on CheckDmg's two drain calls (0x1DB388 landed, 0x1DAE94 guarded; `ElfWeaponPatches.PatchUngagaNoDrain`), which also skip any entry the mod marks at +0x9C (Babel's spikes).
+- **Ungaga (mod rebalance):** his charge fires its effect (c10a_ex) as a shot every 30 frames while held and `UngagaKey_Play` bills `SwordDmgCheck1(0.8)` per shot fired — kept; the hits that shot LANDS (owner 4, entry +0x38 = 1.0 — his swings plant 0) cost nothing, through the no-drain caves on CheckDmg's two drain calls (0x1DB388 landed, 0x1DAE94 guarded; `ElfDamagePatches.PatchUngagaNoDrain`), which also skip any entry the mod marks at +0x9C (Babel's spikes).
 - Toan's CHARGE attacks bill at the attack's START, landing or not: `ToanKey_Play` calls `SwordDmgCheck1(2.0)` as the
   lunge begins (0x242A70) and `SwordDmgCheck1(3.0)` as the whirlwind does (0x242B64).
 - Mod: an ability's own cost (a Zeus bolt, a Big Bang blast, a flash-bang) is POSTED to the engine rather than
   written: `WeaponWhp.Drain` puts the factor (base WHP / 1.5) in `CodeCaves.WhpBill` (0x01FAF8D0, magic at +4) and the
-  WHP-bill cave (`ElfWeaponPatches.PatchWhpBill`, the tail of the camera-pin chain, once a dungeon frame) calls
+  WHP-bill cave (`ElfFrameChainPatches.PatchWhpBill`, the tail of the camera-pin chain, once a dungeon frame) calls
   `SwordDmgCheck1(factor, 0)` with it — the same routine a landed hit calls — so the drain, the warnings, the powder
   and the break are the engine's, at the moment the ability strikes.
 - Warnings at 10 % and 5 % of max WHP. At ≤ 0 (checked only inside `BattleSubWeaponDmg`, i.e. on a drain): an owned
@@ -293,7 +293,7 @@ immediate in one of four routines.
   0x1B47C0 — `ElfWeaponPatches.PatchCircleEffects`, hook in `DunPatches`), which applies the same ten effects with
   every figure read from `CodeCaves.CircleTable` (0x01FAF900; pnach-seeded vanilla while its owner word is 0). The
   two "to max" circles can also drop RewardCount items into the bag while there is room. `MagicCircles` writes a set;
-  `CircleBoost` (ownership passive: Crysknife or Magical Hammer owned ×2, both ×3, `MagicCircles.Boosted(m)`) writes
+  `CircleAmplifier` (ownership passive: Crysknife or Magical Hammer owned ×2, both ×3, `MagicCircles.Boosted(m)`) writes
   the boosted one. The table's FAVOUR word (the Secret Armlet owned, `SecretArmlet`) has the cave deal the bad circles
   as good ones: 6 → 1, 8 → 3, 9 → 4, 7's losses become gains of the
   same roll (capped 99), and 5 slows every enemy (gooey timer, +0x14 of the slot block, = SlowFrames) instead of

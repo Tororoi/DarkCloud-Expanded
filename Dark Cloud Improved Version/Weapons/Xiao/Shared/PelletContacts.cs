@@ -20,7 +20,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int Fresh = int.MinValue;
 
         /// <summary>The cave is in this ISO (the contact call is hooked).</summary>
-        internal static bool Native => (uint)Memory.ReadInt(0x20000000L + 0x001ABD88) == (0x0C000000u | (CodeCaves.DebugIfCave.PelletContact >> 2));
+        internal static bool Native => (uint)Memory.ReadInt(0x20000000L + 0x001ABD88) == (0x0C000000u | (DebugIfCave.PelletContact >> 2));
 
         /// <summary>Move a consumer's cursor to now: only contacts from here on are its. A consumer that polls only while its own
         /// pellet flies must sync as it fires, or the first poll hands it a record left by an earlier pellet — often in the same

@@ -9,7 +9,7 @@
 # state machine below on chara slot 1 (the cat copy, resident and hidden until bound). The mod arms it, times the
 # landing pause (state 5 → 6) and ends the run; everything per-frame is here.
 #
-# STATES (Mailbox.CatState +0x98):
+# STATES (CatBlock.CatState +0x98):
 #   0 idle   3 waiting (armed: bind the next NEW pellet)   1 following the pellet (growing)   2 pellet ended early
 #   4 falling (broke away at full size)   5 landing (land clip playing; momentum until the paws touch)   6 running
 #   10 ready (in place)   7 take-off (in place until CatRampStart, then forward momentum ramps to full by CatRampEnd)
@@ -17,7 +17,7 @@
 #   Flying targets (target height − floor > CatFlyThreshold): straight from the ready into the ballistic arc of state 4
 #   (vh = Δh/T + g·T/2) in the float-up pose (CatFloatKey, +0x154) until the apex, the fall pose after — the town
 #   ladder jump's ready → vertical leap → fall → land sequence.
-# MAILBOX (the cat's own block at guest 0x01FB4000 + the offsets below — CodeCaveAddresses.Mailbox.CatBase. The
+# MAILBOX (the cat's own block at guest 0x01FB4000 + the offsets below — CodeCaveAddresses.CatBlock.CatBase. The
 # offsets start at 0x94 for historical reasons; ⚠ they must NOT be read from the PNACH mailbox page, whose 0x100+
 # span is the AI-stub table. $t0 = 0x01FB0000, offsets 0x40xx.):
 #   +0x94 CatPelletSlot int  bound pellet slot + 1 (0 = none; page boots zero-filled)      +0x9C CatGrowFrames int

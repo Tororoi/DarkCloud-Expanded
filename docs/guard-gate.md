@@ -23,7 +23,7 @@ CheckDmg's window-flag load (main 0x1DAC78, `addu at,v0,at`; its `lh` delay slot
      bolt, Hercules' strike (and the Super Steve spheres that fire them).
    The mark shares the no-drain mark's high half (0x4B49), which is all the no-drain caves test: a crushing hit of
    Ungaga's bills no weapon HP either. `CCollisionData::Set` (0x1B57A0) clears +0x9C on every entry the engine makes
-   (`ElfWeaponPatches.PatchSetClearsMark`: its dead first `sw zero,0x20(a1)` at 0x1B5858 retargeted to +0x9C) — vanilla
+   (`ElfDamagePatches.PatchSetClearsMark`: its dead first `sw zero,0x20(a1)` at 0x1B5858 retargeted to +0x9C) — vanilla
    never wrote it, so the cat's mark rode on into the next pellet planted in the same entry and that pellet passed the
    guard. The cat cave stamps its mark after its own Set; the mod still clears the mark when it retires an entry.
 2. **`tools/stubs/guard_mask.s`** (0x1B4390) — `CodeCaves.GuardMask` (0x01FAFCB0, one byte per slot) has the window's bit

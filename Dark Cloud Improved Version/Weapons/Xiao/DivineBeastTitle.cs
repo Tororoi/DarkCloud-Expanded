@@ -92,13 +92,13 @@ namespace Dark_Cloud_Improved_Version
         internal const float  LandStopFrame = 219f, LandEndFrame = 227f;   // the paws touch at 219 (the land clip's lead-in aligns it with the touchdown)
         // The WINGED cat pounces from 50 units, and keeps
         // re-aiming at the target past the apex until it has fallen halfway from the apex to the floor (the cave's height
-        // rule, Mailbox.CatTrackHalf). Dormant chest-mimics keep the 30-unit range.
+        // rule, CatBlock.CatTrackHalf). Dormant chest-mimics keep the 30-unit range.
         private const float  PounceRangeWinged = 50f;
         private const float  LandClipStart = 215f, LandClipSpeed = 0.36f;   // KEY 69 in build_cat_pack.py (frames/frame)
         // The clip lowers the cat itself (hips 5.5 → 4.6 over 215..219), so it must start this many frames BEFORE the
         // physical touchdown for the paws to meet the floor at 219; the cave predicts the touchdown from the fall.
         internal const float  LandLeadFrames = (LandStopFrame - LandClipStart) / LandClipSpeed;
-        internal static float CatScale => _look.Scale;                  // the cat's size for this look; the cave grows the cat to this via Mailbox.CatScaleMul
+        internal static float CatScale => _look.Scale;                  // the cat's size for this look; the cave grows the cat to this via CatBlock.CatScaleMul
         /// <summary>The ground speeds and glow are stated for the 1.0 cat and scale with its size, so the walk clip keeps
         /// the same rate whatever the look's size.</summary>
         private static float Stride => CatScale;
@@ -184,7 +184,7 @@ namespace Dark_Cloud_Improved_Version
         private const string ElementGlowDisc = "catglowp";
         // Per weapon: the Divine Beast Title keeps its blue glow, cyan tint and NO wings; the Angel Shooter wears the wings
         // with a WHITE glow and a neutral add; the Angel Gear the wings with a GOLD glow and a gold-white add. Every look
-        // draws the SAME 8-bit disc, differing only in the palette row (PalRow → Mailbox.CatGlowPalRow; the rows themselves
+        // draws the SAME 8-bit disc, differing only in the palette row (PalRow → CatBlock.CatGlowPalRow; the rows themselves
         // are build_cat_pack.GLOW_LOOKS 6-8). Wings are two mesh nodes the copy hides by zeroing their geometry.
         internal sealed class WeaponLook { public int PalRow; public float[] Tint; public bool Wings; public bool Cape; public float Range = PounceRange; public bool Track; public float Scale = 1.0f; }
         private const int SuperSteveShooterKey = -2, SuperSteveGearKey = -3;   // Super Steve's look per sphere, keyed privately so a sphere swap rebuilds the copy
@@ -441,10 +441,10 @@ namespace Dark_Cloud_Improved_Version
         {
             // EVERY look draws the same 8-bit disc and differs only in the palette row the cave paints into it. Row 0
             // means "derive it from the equipped element", which is what the cape look wants.
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, _look.Cape ? 0 : _look.PalRow);
+            Memory.WriteInt(CatBlock.CatGlowPalRow, _look.Cape ? 0 : _look.PalRow);
             byte[] nm = new byte[16]; Encoding.ASCII.GetBytes(ElementGlowDisc).CopyTo(nm, 0);
-            Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowReady, 0);
+            Memory.WriteBytesBatch(CatBlock.CatGlowName, nm);
+            Memory.WriteInt(CatBlock.CatGlowReady, 0);
         }
 
         /// <summary>Paint the flat texture's palette. build_cat_pack.flat_tim2 bakes the cape as 32×32 pixels that are ALL
@@ -479,10 +479,10 @@ namespace Dark_Cloud_Improved_Version
         /// (cape − cat); every other cloth in the game is untouched.</summary>
         internal static void TintCape()
         {
-            if (_capeObj == 0) { Memory.WriteUInt(CodeCaves.Mailbox.CatCapeCloth, 0); return; }
+            if (_capeObj == 0) { Memory.WriteUInt(CatBlock.CatCapeCloth, 0); return; }
             Array.Copy(ElementLooks[ElementNow()].Tint, _capeTint, 3);   // seed before the first write: SpawnCape calls this
             WriteCapeTint(1f);                                           // before WatchElementLook has run
-            Memory.WriteUInt(CodeCaves.Mailbox.CatCapeCloth, Memory.ToGuest(_capeObj));
+            Memory.WriteUInt(CatBlock.CatCapeCloth, Memory.ToGuest(_capeObj));
             Log($"cape tint: ambient ({_capeTint[0]:F0},{_capeTint[1]:F0},{_capeTint[2]:F0}) for its draw alone, as a delta off the cat's ({_look.Tint[0]:F0},{_look.Tint[1]:F0},{_look.Tint[2]:F0})");
         }
 
@@ -490,7 +490,7 @@ namespace Dark_Cloud_Improved_Version
         private static void WriteCapeTint(float lit)
         {
             for (int i = 0; i < 3; i++)
-                Memory.WriteFloat(CodeCaves.Mailbox.CatCapeTint + i * 4, (_capeTint[i] - _catTint[i]) * lit);
+                Memory.WriteFloat(CatBlock.CatCapeTint + i * 4, (_capeTint[i] - _catTint[i]) * lit);
         }
 
         // ───────────────────────────────────────── charge + launch ─────────────────────────────────────────
@@ -588,7 +588,7 @@ namespace Dark_Cloud_Improved_Version
             Log($"look for weapon {_weapon}: glow row {(_look.Cape ? "element" : _look.PalRow.ToString())}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy), mask {(_look.Cape ? "on" : "off")} (n{_maskMeshIdx})");
             _native = (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew;
             if (!_native && !_nativeWarned) { _nativeWarned = true; Log("pellet-catcher cave not in this ISO (re-patch) — using the thread follower"); }
-            if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }
+            if (_native) { Memory.WriteInt(CatBlock.CatPelletSlot, 0); Memory.WriteInt(CatBlock.CatState, 0); }
             _phase = Phase.Resident; _phaseStart = GameClock.Now; _hitDone = false; _fadeFrom = default;
             SetKey(KeyLeap);
             Maintain();
@@ -633,11 +633,11 @@ namespace Dark_Cloud_Improved_Version
             if (++_hitElemTick >= HitElemEvery)
             {
                 _hitElemTick = 0;
-                if (Memory.ReadInt(CodeCaves.Mailbox.CatHitDamage) != 0)
+                if (Memory.ReadInt(CatBlock.CatHitDamage) != 0)
                 {
                     uint live = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
                     uint want = (live != 0 && (live & (live - 1)) == 0) ? live : 0u;      // one pure element bit or none
-                    if (Memory.ReadInt(CodeCaves.Mailbox.CatHitAttr) != (int)want) WriteHitStamps();
+                    if (Memory.ReadInt(CatBlock.CatHitAttr) != (int)want) WriteHitStamps();
                 }
             }
             long s = SlotAddr();
@@ -661,7 +661,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (s + DungeonCharaDraw.CharaRampB, 0);
             Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 1);
             Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)Slot * 4, _held ? 1 : 0);   // a hold keeps the slot unstepped
-            Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 1);
+            Memory.WriteInt  (Mailbox.MirageSceneGate, 1);
         }
 
         /// <summary>Take the cat off screen: unregister the draw slot, zero its opacity and model pointer, detach the cape
@@ -671,7 +671,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!Active) return;
             DisarmCave();
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowOn, 0); _glowFadeFrom = DateTime.MinValue;    // PollCave stops with Active — switch the glow off here
+            Memory.WriteInt(CatBlock.CatGlowOn, 0); _glowFadeFrom = DateTime.MinValue;    // PollCave stops with Active — switch the glow off here
             if (_pelletSlot >= 0)                                                // cat gone while its pellet still flies: give the sprite back
             {
                 if (Memory.ReadInt(PlayerShotPool.FlagAddr(_pool, _pelletSlot)) != 0) Memory.WriteFloat(PlayerShotPool.ScaleAddr(_pool, _pelletSlot), 1f);
@@ -685,10 +685,10 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(s + CCharacter.NpcOpacity, 0f);
             Memory.WriteUInt (s + CCharacter.CharModel, 0);
             Memory.WriteInt  (s + CCharacter.ClothList, 0); _capeObj = 0; _capeRest = null;        // the cape list lives in OUR cave: never leave it on a slot we hand back
-            Memory.WriteUInt (CodeCaves.Mailbox.CatCapeCloth, 0);                // …and the recolour cave stops matching a dead pointer
+            Memory.WriteUInt (CatBlock.CatCapeCloth, 0);                // …and the recolour cave stops matching a dead pointer
             RetagCatTextures(SlotTextureGroup, HerTextureBlock);
             Active = false; _key = -1; _target = -1; _weapon = -1;
-            if (!SlingshotProp.Active) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 2);   // after Active=false: Mirage's loop owns it again
+            if (!SlingshotProp.Active) Memory.WriteInt(Mailbox.MirageSceneGate, 2);   // after Active=false: Mirage's loop owns it again
             _lastDespawn = GameClock.Now;
             Log("cat copy down");
         }
@@ -710,10 +710,7 @@ namespace Dark_Cloud_Improved_Version
             uint elem = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
             uint attr = (elem != 0 && (elem & (elem - 1)) == 0) ? elem : 0u;      // one pure element bit or none
             byte[] e = CollisionPool.PlayerHitEntry(x, h, y, radius, baseDmg, attr);
-            void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
-            F(0x80, ox); F(0x84, oh); F(0x88, oy);                                  // kick origin (a point)
-            F(0x90, KickStrength); F(0x94, KickDecay);                              // kick strength, decay
-            BitConverter.GetBytes(CatKickType).CopyTo(e, 0x98);                     // type 2 = melee-style reaction
+            CollisionPool.SetKick(e, ox, oh, oy, KickStrength, KickDecay, CatKickType);   // thrown from the cat, the melee-style reaction
             BitConverter.GetBytes(CodeCaves.CrushMark).CopyTo(e, CodeCaves.NoDrainMarkOff);   // through any guard (the ISO's guard gate)
             CollisionPool.Plant(pool, slot, e);
             lock (_planted) _planted.Add((slot, PlantedLifeTicks, false));
@@ -752,7 +749,7 @@ namespace Dark_Cloud_Improved_Version
                         }
                         else
                         {
-                            Memory.WriteInt(CodeCaves.Mailbox.CatHitLatch, 0);
+                            Memory.WriteInt(CatBlock.CatHitLatch, 0);
                             Log($"contact was not accepted (entry {idx} gone, no enemy took it — invincible or guarding) — no hit, still flying");
                         }
                         _planted.RemoveAt(i); continue;
@@ -761,7 +758,7 @@ namespace Dark_Cloud_Improved_Version
                     if (pool != 0) CollisionPool.Deactivate(pool, idx);
                     if (native)
                     {   // never consumed: the enemy was invulnerable or the sphere's hurt window was closed — not spent; the cave may contact again
-                        Memory.WriteInt(CodeCaves.Mailbox.CatHitLatch, 0);
+                        Memory.WriteInt(CatBlock.CatHitLatch, 0);
                         Log($"contact did not connect within {PlantedLifeTicks} ticks (entry {idx}) — no hit, still flying");
                     }
                     _planted.RemoveAt(i);

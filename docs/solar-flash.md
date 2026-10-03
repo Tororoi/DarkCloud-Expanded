@@ -22,7 +22,7 @@ from `WeaponThreads`) drives it with three helpers in `Weapons/Toan/SunSword/`.
   the free runtime band) whose two DrawVu1 slots point at `ElfCave.SolarBladeTint`: six words in the ELF cave band's
   last gap (`ElfWeaponPatches.PatchSolarBladeTint`) that load CVisualVu1's DrawVu1 overloads (0x135000 / 0x134BC0) into
   t9 and jump into the BODY of the Divine Beast cat's mask-tint cave (`ElfCave.CatMaskTint` + 0x18), which adds
-  `Mailbox.CatCapeTint` to the ambient, calls whatever t9 holds, and restores. Toan's sword and Xiao's cat are never live
+  `CatBlock.CatCapeTint` to the ambient, calls whatever t9 holds, and restores. Toan's sword and Xiao's cat are never live
   together, so the cave body and the tint word are the blade's here. The tint is the charge fraction × 200 per channel;
   `Clear` zeroes it and puts the class vtable back. The blade frame is found by `Weapons.ResolveBladeFrame("c01w10")` →
   `LocateModelFrame` (the template name sits at node + 0x118; the visual is the node's `GeomPtr`). A skinned visual would

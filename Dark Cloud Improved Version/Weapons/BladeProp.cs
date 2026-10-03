@@ -2,32 +2,19 @@ using System;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>
-    /// A free-standing COPY of Toan's equipped sword, drawn wherever it is put — Big Bang's judgement blade, hung
-    /// point-down over a locked-on enemy. The same engine-drawn weapon copy Xiao's Guardian Reflector and the Matador
-    /// use (<see cref="SlingshotProp"/>) and Ungaga's Mirage clone wears (<see cref="CharacterClone"/>), with the parts
-    /// only a slingshot needs left out:
-    ///  · TREE: the weapon's CFrame tree deep-copied into the WeaponCave, links re-based, root left WORLD-rooted (no
-    ///    parent), so the chara slot's own position / yaw / scale place it and nothing per frame is needed to hold it.
-    ///  · MESH: the sword's visual is a rigid CVisualVu1, and it is COPIED — visual object and VU packet both — into
-    ///    the prop mesh cave, exactly as the slingshot prop copies its skinned mesh. Sharing the live visual drew both
-    ///    swords through ONE packet: whichever draw wrote it last placed both, and the copy flickered between the
-    ///    target and Toan's hand with every gate steady. (The rigid object is 0x20 B — CVisual plus four words — and
-    ///    its +0x18/+0x1C are the VU pointer and size the skinned class inherits, so the recipe is CopyMesh's minus
-    ///    the MDT block.) Made while the blade is primed, the copy inherits the tinted vtable and draws tinted too.
-    ///  · MOTION: none. The slot's channels are cleared and its motion id held at −1, so the character step
-    ///    early-outs and the pose is the one baked below the root: the sword's own grip rotation turned to point
-    ///    DOWN, at <see cref="Spawn"/>'s scale.
-    ///  · SLOT 3: the clone-weapon chara slot, whose texture pass the patched group formula gives the weapon's own
-    ///    atlas. Never co-wielded with the other props — they belong to other characters — but guarded anyway.
-    ///  · FADE: NpcOpacity, 0..128, driven by <see cref="Alpha"/>.
-    /// </summary>
+    /// <summary>A free-standing COPY of a rigid model, drawn by the engine in chara slot 3 wherever it is put
+    /// (docs/big-bang.md): the equipped sword as the judgement blade (<see cref="JudgementBlade"/>: Big Bang, the Sword of
+    /// Zeus) or any root handed to <see cref="Spawn"/> — the Big Bang shot's bomb model, Babel's Spear, the Terra Sword's
+    /// and the Cactus's parts. The same engine-drawn weapon copy Xiao's Guardian Reflector and the Matador use
+    /// (<see cref="SlingshotProp"/>) and Ungaga's Mirage clone wears (<see cref="CharacterClone"/>), with the parts only
+    /// a slingshot needs left out: tree, rigid mesh and slot copied, no motion (the pose is baked below the root), the
+    /// fade NpcOpacity 0..128 through <see cref="Alpha"/>.</summary>
     internal static class BladeProp
     {
         internal static bool Active { get; private set; }
         /// <summary>GUEST address of the copy's root CFrame (0 when down) — the glow's anchor.</summary>
         internal static uint RootGuest => Active ? _rootGuest : 0u;
-        /// <summary>DIAGNOSTIC: where the engine last posed the copy's root (its world-matrix translation) and who it
+        /// <summary>DIAGNOSTIC (JudgementBlade's hover trace, behind DebugDiagnostics): where the engine last posed the copy's root (its world-matrix translation) and who it
         /// thinks its parent is — against where the slot says it should be.</summary>
         internal static string Where()
         {
@@ -53,7 +40,7 @@ namespace Dark_Cloud_Improved_Version
         private static uint  _rootGuest, _liveRoot, _playerRoot;
         private static int   _nodeCount;
         private static float _scale;
-        private static bool  _fromWeapon;                 // copied from the equipped weapon (else from a root handed in: the bomb model)
+        private static bool  _fromWeapon;                 // copied from the equipped weapon (else from a root handed in: the bomb model, a georama part)
 
         /// <summary>Put the copy up at <paramref name="scale"/>, invisible until <see cref="Alpha"/> lifts it: the equipped
         /// weapon's model (<paramref name="rootGuest"/> 0) pointing straight down, or the model rooted at
@@ -217,7 +204,7 @@ namespace Dark_Cloud_Improved_Version
             // The PNACH's chara-loop gate, shared with the slingshot prop and the cat: 1 = extra slots drawn. Mirage's
             // loop writes 2 here every tick a dungeon has no decoy, and stands down only for copies it knows about —
             // this one is on that list, because a 1 and a 2 alternating is a slot drawn every other frame.
-            Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 1);
+            Memory.WriteInt  (Mailbox.MirageSceneGate, 1);
             return true;
         }
 
@@ -235,15 +222,17 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (s + DungeonCharaDraw.CharaActive, 0);
             Memory.WriteInt  (s + DungeonCharaDraw.CharaMotionA, 0);
             Memory.WriteFloat(s + CCharacter.NpcOpacity, 0f);
-            Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 2);                 // restore vanilla gates
+            Memory.WriteInt  (Mailbox.MirageSceneGate, 2);                 // restore vanilla gates
             Active = false; _pinned = 0;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "blade copy down");
         }
 
         private static long SlotAddr() => DungeonCharaDraw.CharaArray + (long)Slot * DungeonCharaDraw.CharaStride;
 
-        /// <summary>The weapon's CFrame tree (WeaponObjGlobal → obj +0xBC = model root), deep-copied into the
-        /// WeaponCave with its child/sibling/parent links re-based, root parent cleared: world-rooted.</summary>
+        /// <summary>The model's CFrame tree (the equipped weapon's — WeaponObjGlobal → obj +0xBC = model root — or the root
+        /// handed in), deep-copied into the WeaponCave with its child/sibling/parent links re-based, root parent cleared:
+        /// world-rooted, so the chara slot's own position / yaw / scale place it and nothing per frame is needed to hold
+        /// it.</summary>
         private static bool CopyTree(uint rootGuest)
         {
             if (rootGuest == 0)
@@ -298,9 +287,12 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
-        /// <summary>Every copied node's rigid visual gets its own object and VU packet in the prop mesh cave, and the
-        /// node is pointed at the copy. Refuses (no spawn) if nothing rigid was found or the cave is full — a shared
-        /// packet is the flicker, so drawing shared is not a fallback worth having.</summary>
+        /// <summary>Every copied node's rigid CVisualVu1 gets its own object and VU packet in the prop mesh cave, exactly as
+        /// the slingshot prop copies its skinned mesh, and the node is pointed at the copy: the rigid object is 0x20 B
+        /// (CVisual plus the four words CVisualVu1's operator= copies) and its +0x18/+0x1C are the VU pointer and size the
+        /// skinned class inherits, so the recipe is CopyMesh's minus the MDT block. A copy made while the blade is tinted
+        /// inherits the tinted vtable and draws tinted too. Refuses (no spawn) if nothing rigid was found or the cave is
+        /// full — a shared packet places both copies wherever the last draw wrote it, so drawing shared is not a fallback.</summary>
         private static bool CopyRigidMesh()
         {
             const int VisualSize = 0x20;                     // CVisual base + the four words CVisualVu1's operator= copies
@@ -340,7 +332,10 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The chara slot: cloned from the live weapon object (a valid CCharacter — vtable, light block,
-        /// cloth stub), re-aimed at the copied tree, no motion, no tint, invisible until faded in.</summary>
+        /// cloth stub), re-aimed at the copied tree, no motion (channels cleared, motion id −1, so the character step
+        /// early-outs and the pose is the one baked below the root), no tint, invisible until faded in. Slot 3 is the
+        /// clone-weapon slot, whose texture pass the patched group formula gives the weapon's own atlas; the other props
+        /// belong to other characters and are never co-wielded, but <see cref="Spawn"/> guards against them anyway.</summary>
         private static bool RegisterSlot()
         {
             uint wpnObj = Memory.ReadGuestPtr(EquippedWeapon.WeaponObjGlobal);
@@ -377,8 +372,8 @@ namespace Dark_Cloud_Improved_Version
             long r = Memory.ToMmu(_rootGuest);
             float[] m = new float[9];
             for (int i = 0; i < 9; i++) m[i] = Memory.ReadFloat(r + CFrameVu1.LocalMatrix + (i / 3) * 0x10 + (i % 3) * 4);
-            // R_x(+90°): y → z, z → −y — row1' = row2, row2' = −row1. (The other sign hung it point-UP: the
-            // sword's authored grip already carries a half-turn, so the quarter-turn goes the other way.)
+            // R_x(+90°): y → z, z → −y — row1' = row2, row2' = −row1. The sword's authored grip already carries a
+            // half-turn, so +90° is what points it DOWN (−90° is BakeUpward).
             float[] o = { m[0], m[1], m[2],  m[6], m[7], m[8],  -m[3], -m[4], -m[5] };
             for (int i = 0; i < 9; i++) Memory.WriteFloat(r + CFrameVu1.LocalMatrix + (i / 3) * 0x10 + (i % 3) * 4, o[i]);
             Memory.WriteInt(r + CFrameVu1.WorldCacheA, 0);

@@ -26,16 +26,16 @@ namespace Dark_Cloud_Improved_Version
         private static readonly Word[] Words =
         {
             // Run_TrapCircle → the magic-circle cave (the vanilla body behind it is never entered again).
-            new(CircleHookAddr,     CircleHookOrig,     MipsAsm.J(CodeCaves.DebugIfCave.CircleEffects), "magic circles: Run_TrapCircle → the circle cave (j)"),
+            new(CircleHookAddr,     CircleHookOrig,     MipsAsm.J(DebugIfCave.CircleEffects), "magic circles: Run_TrapCircle → the circle cave (j)"),
             new(CircleHookAddr + 4, CircleHookSlotOrig, 0x00000000u,                                     "magic circles: its delay slot (nop)"),
             // A hit carrying reaction 5 is presented as guarded instead of ignored (see AutoGuardHookAddr above).
             new(AutoGuardHookAddr, AutoGuardHookOrig, AutoGuardHookNew, "auto-guard: CheckHitUser-return hook"),
             new(AutoGuardSlotAddr, AutoGuardSlotOrig, AutoGuardSlotNew, "auto-guard: displaced move"),
             new(AutoGuardOldAddr, AutoGuardOldHook, AutoGuardOldVanilla, "auto-guard: retire the dispatch hook"),
             new(AutoGuardOldSlotAddr, AutoGuardOldSlotHook, AutoGuardOldSlotVanilla, "auto-guard: retire its displaced load"),
-            // Toan's stride (ElfWeaponPatches.PatchStrideScale): the key handler's `li a0,0x40; jal StatusCheck` becomes
+            // Toan's stride (ElfToanMeleePatches.PatchStrideScale): the key handler's `li a0,0x40; jal StatusCheck` becomes
             // `jal cave; li a0,0x40` — the cave scales the move vector for motion 33 and tail-jumps into the check.
-            new(0x01DB0F68, 0x24040040, 0x0C000000u | (CodeCaves.DebugInfoCave.StrideScale >> 2), "stride: move-vector hook (jal cave)"),
+            new(0x01DB0F68, 0x24040040, MipsAsm.Jal(DebugInfoCave.StrideScale), "stride: move-vector hook (jal cave)"),
             new(0x01DB0F6C, 0x0C06C64C, 0x24040040, "stride: the displaced li a0,0x40 in the delay slot"),
             // Passive HEAL ability (weapon flag 0x800) cadence: heal tick compares its frame counter with
             // `slti v0,v0,0xF0` (240 f = 4 s, dun 0x1DB8234); 0xB4 = 180 f = 3 s for every HEAL weapon.
@@ -43,8 +43,8 @@ namespace Dark_Cloud_Improved_Version
             new(HealCadenceAddr, HealCadenceOrig, HealCadenceNew, "heal-ability cadence 4 s → 3 s"),
             // Xiao's attack-gauge refill multiplier (motionDrive: `lui v0,0x3fc0; mtc1 v0,f0`, v0 dead after)
             // → `lui v0,HI; lwc1 f0,LO(v0)` of Mailbox.ShieldGaugeRate (pnach-seeded 1.5 = vanilla while idle).
-            new(0x01DB8090, 0x3C023FC0, 0x3C020000u | (uint)((CodeCaves.Mailbox.ShieldGaugeRate - 0x20000000) >> 16),    "gauge refill multiplier → mailbox word (lui)"),
-            new(0x01DB8094, 0x44820000, 0xC4400000u | (uint)((CodeCaves.Mailbox.ShieldGaugeRate - 0x20000000) & 0xFFFF), "gauge refill multiplier → mailbox word (lwc1 f0)"),
+            new(0x01DB8090, 0x3C023FC0, 0x3C020000u | (uint)((Mailbox.ShieldGaugeRate - 0x20000000) >> 16),    "gauge refill multiplier → mailbox word (lui)"),
+            new(0x01DB8094, 0x44820000, 0xC4400000u | (uint)((Mailbox.ShieldGaugeRate - 0x20000000) & 0xFFFF), "gauge refill multiplier → mailbox word (lwc1 f0)"),
             // Xiao's per-shot WHP factor: BattleActionPlay_Jinn passes SwordDmgCheck1 an immediate 1.0 (`lui v0,0x3f80; mtc1 v0,f12`)
             // at each of its two fire paths → `lui v0,HI; lwc1 f12,LO(v0)` of Mailbox.XiaoShotWhpFactor (pnach-seeded 1.0 = vanilla;
             // ChargedShotWhp writes the charge's factor while the shot is held).
@@ -53,17 +53,17 @@ namespace Dark_Cloud_Improved_Version
             new(XiaoShotWhpSiteB,     0x3C023F80, XiaoShotWhpPatchedWord0, "Xiao shot WHP factor → mailbox word (lui, path B)"),
             new(XiaoShotWhpSiteB + 4, 0x44826000, XiaoShotWhpPatchedWord1, "Xiao shot WHP factor → mailbox word (lwc1 f12, path B)"),
             // The camera pass's epilogue `jr ra` (its `addiu sp,sp,0x480` before and nop delay slot after are untouched) → `j` the
-            // camera-pin cave (ElfWeaponPatches.PatchCameraPin), which returns through the same ra.
-            new(0x01DBF9BC, 0x03E00008, MipsAsm.J(CodeCaves.DebugInfoCave.CameraPin), "camera pass epilogue → camera-pin cave (j)"),
+            // camera-pin cave (ElfFrameChainPatches.PatchCameraPin), which returns through the same ra.
+            new(0x01DBF9BC, 0x03E00008, MipsAsm.J(DebugInfoCave.CameraPin), "camera pass epilogue → camera-pin cave (j)"),
             // The charge lunge's per-frame gravity (the dungeon key process: `lwc1 f0,-0x7f80(gp); sub.s f0,f2,f0` on the flight's
-            // vertical speed) → `jal` the lunge-gravity step cave (ElfWeaponPatches.PatchLungeGravity), which does both with the
+            // vertical speed) → `jal` the lunge-gravity step cave (ElfToanMeleePatches.PatchLungeGravity), which does both with the
             // gravity scaled by (1 + CodeCaves.LungeGravityExtra). ra is the process's own, reloaded by its epilogue.
-            new(0x01DB3638, 0xC7808080, MipsAsm.Jal(CodeCaves.DebugInfoCave.LungeGravityStep), "lunge gravity → step cave (jal)"),
+            new(0x01DB3638, 0xC7808080, MipsAsm.Jal(DebugInfoCave.LungeGravityStep), "lunge gravity → step cave (jal)"),
             // The dungeon loop's step and draw of the LIVE main-character effect (`lw a0,-0x6304(gp); jal Step/Draw__12CSHOT_EFFECT`)
-            // → the second-effect caves (ElfWeaponPatches.PatchSecondEffect): the live instance as before, then the second one
+            // → the second-effect caves (ElfConfusePatches.PatchSecondEffect): the live instance as before, then the second one
             // while CodeCaves.SecondEffectLive is set.
-            new(0x01DB8740, 0x0C06B060, MipsAsm.Jal(CodeCaves.DebugIfCave.SecondEffectStep), "second effect: live-instance step → cave (jal)"),
-            new(0x01DAEB90, 0x0C06AFC8, MipsAsm.Jal(CodeCaves.DebugIfCave.SecondEffectDraw), "second effect: live-instance draw → cave (jal)"),
+            new(0x01DB8740, 0x0C06B060, MipsAsm.Jal(DebugIfCave.SecondEffectStep), "second effect: live-instance step → cave (jal)"),
+            new(0x01DAEB90, 0x0C06AFC8, MipsAsm.Jal(DebugIfCave.SecondEffectDraw), "second effect: live-instance draw → cave (jal)"),
             new(0x01DB363C, 0x46001001, 0x00000000, "lunge gravity: the displaced sub.s (now the cave's delay slot)"),
             // The lock-on reach factor table (six floats by character, dun 0x1DC1B20; SetNearLockOnTarget and setTargetCursor each
             // copy it to the stack with `lui v0,0x1DC; addiu v0,v0,0x1B20; lq/ld`) → the mod's copy in runtime data
@@ -111,8 +111,8 @@ namespace Dark_Cloud_Improved_Version
             new(CatFollowHookAddr, CatFollowHookOrig, CatFollowHookNew, "cat pellet follower hook (jal step__5CSHOT → cave)"),
             // Divine Beast cat glow: the draw loop's two torch passes → the glow cave's entries, which perform the pass
             // and then draw the cat's glow disc with the same routine (ElfCatPatches.PatchCatGlowDraw writes the cave).
-            new(0x01DAEBF8, 0x0C071030, 0x0C000000u | (CodeCaves.ElfCave.CatGlowDrawEntryA >> 2), "cat glow hook A (jal DrawFire__11CDungeonMap → cave)"),
-            new(0x01DAEC10, 0x0C070F30, 0x0C000000u | (CodeCaves.ElfCave.CatGlowDrawEntryB >> 2), "cat glow hook B (jal DrawFireFreeStyle → cave)"),
+            new(0x01DAEBF8, 0x0C071030, MipsAsm.Jal(ElfCave.CatGlowDrawEntryA), "cat glow hook A (jal DrawFire__11CDungeonMap → cave)"),
+            new(0x01DAEC10, 0x0C070F30, MipsAsm.Jal(ElfCave.CatGlowDrawEntryB), "cat glow hook B (jal DrawFireFreeStyle → cave)"),
             // Mirage haze: the draw loop's raster pass → the haze cave, which performs the pass and then draws one raster at
             // the clone's root (ElfPatches.PatchMirageHazeDraw writes the cave).
             new(MirageHazeHookAddr, MirageHazeHookOrig, MirageHazeHookNew, "mirage haze hook (jal DrawRaster__11CDungeonMap → cave)"),
@@ -162,21 +162,21 @@ namespace Dark_Cloud_Improved_Version
         // calls PropPelletFollow (the Matador's charged shot), which calls the COPY-QUEUE cave — that services the cat's mesh
         // copy when one is pending and jumps on to CatPelletFollow, where the displaced step__5CSHOT runs — then each places
         // its own thing. Every frame with nothing to do the chain reads a few zero words and falls straight through.
-        internal const uint CatFollowHookNew  = 0x0C000000u | (CodeCaves.DebugInfoCave.SharedShotsStep >> 2);
+        internal const uint CatFollowHookNew  = 0x0C000000u | (DebugInfoCave.SharedShotsStep >> 2);
         internal const long CatFollowHookAddrMmu = 0x20000000L + CatFollowHookAddr;
 
         internal const uint MirageHazeHookAddr = 0x01DAEBCC;
         internal const uint MirageHazeHookOrig = 0x0C071184;                                   // jal 0x1C4610 DrawRaster__11CDungeonMap
-        internal const uint MirageHazeHookNew  = 0x0C000000u | (CodeCaves.ElfCave.MirageHazeDraw >> 2);
+        internal const uint MirageHazeHookNew  = 0x0C000000u | (ElfCave.MirageHazeDraw >> 2);
         internal const long MirageHazeHookAddrMmu = 0x20000000L + MirageHazeHookAddr;
 
         internal const uint PlayerSpearHookA = 0x01DB39AC, PlayerSpearHookB = 0x01DB3E58;         // the player's move: jal MoveCheck__12CMonstorUnitFPfPfi (delay slot nop)
         internal const uint PlayerMoveCheckCall = 0x0C077208;                                      // jal 0x1DC820
-        internal const uint PlayerSpearHookNew  = 0x0C000000u | (CodeCaves.DebugIfCave.PlayerSpearBlock >> 2);
+        internal const uint PlayerSpearHookNew  = 0x0C000000u | (DebugIfCave.PlayerSpearBlock >> 2);
 
         internal const uint RockShadowHookAddr = 0x01DADDD4;                                       // Draw_MainUnitShadow (a0 = 0x40 loaded before; delay slot nop)
         internal const uint RockShadowHookOrig = 0x0C04C2CC;                                       // jal 0x130B30 MGEndDrawShadow
-        internal const uint RockShadowHookNew  = 0x0C000000u | (CodeCaves.DebugIfCave.RockShadow >> 2);
+        internal const uint RockShadowHookNew  = 0x0C000000u | (DebugIfCave.RockShadow >> 2);
         internal const long RockShadowHookAddrMmu = 0x20000000L + RockShadowHookAddr;
 
         internal const uint XiaoShotWhpSiteA = 0x01DBCC58, XiaoShotWhpSiteB = 0x01DBCDD0;   // the two `lui v0,0x3f80` feeding SwordDmgCheck1 in BattleActionPlay_Jinn
@@ -184,8 +184,8 @@ namespace Dark_Cloud_Improved_Version
         internal const uint LockOnTableWord0 = 0x3C020000u | ((CodeCaves.LockOnFactorTableGuest + 0x8000u) >> 16);
         internal const uint LockOnTableWord1 = 0x24420000u | (CodeCaves.LockOnFactorTableGuest & 0xFFFFu);
         internal const long LockOnTableHookAddrMmu = 0x20000000L + 0x01DC01A0;
-        internal const uint XiaoShotWhpPatchedWord0 = 0x3C020000u | (uint)((CodeCaves.Mailbox.XiaoShotWhpFactor - 0x20000000) >> 16);
-        internal const uint XiaoShotWhpPatchedWord1 = 0xC44C0000u | (uint)((CodeCaves.Mailbox.XiaoShotWhpFactor - 0x20000000) & 0xFFFF);
+        internal const uint XiaoShotWhpPatchedWord0 = 0x3C020000u | (uint)((Mailbox.XiaoShotWhpFactor - 0x20000000) >> 16);
+        internal const uint XiaoShotWhpPatchedWord1 = 0xC44C0000u | (uint)((Mailbox.XiaoShotWhpFactor - 0x20000000) & 0xFFFF);
         internal const long XiaoShotWhpPatchAddrMmu = 0x20000000L + XiaoShotWhpSiteA;
         internal const uint BorrowedLoadHookAddr    = 0x01DB9568;                          // OpB_InitProcess: jal MemoryMapDump after the species loop
         internal const uint MemoryMapDumpCall       = 0x0C76B01C;                          // jal 0x1DAC070
@@ -200,19 +200,19 @@ namespace Dark_Cloud_Improved_Version
         /// prologue word.</summary>
         private static readonly Cave[] Caves =
         {
-            new(CodeCaves.DunCave.CatGuardBypass, CodeCaves.DunCave.CatGuardBypassSpan, 0x27BDFFF0, "catGuardBypass.bin", "guard-bypass cave over MemoryMapDump"),
+            new(DunCave.CatGuardBypass, DunCave.CatGuardBypassSpan, 0x27BDFFF0, "catGuardBypass.bin", "guard-bypass cave over MemoryMapDump"),
         };
         internal const uint HealCadenceAddr = 0x01DB8234;                                 // the heal tick's `slti v0,v0,THRESHOLD`: low half = the period in frames
         internal const uint HealCadenceOrig = 0x284200F0;
         internal const uint HealCadenceNew  = 0x284200B4;
         internal const long HealCadenceAddrMmu = 0x20000000L + HealCadenceAddr;
         // BtCheckDamageProc's CheckHitUser RETURN, hooked so a reaction-5 entry is answered with a guard spark and
-        // then reported as no hit at all (ElfWeaponPatches.PatchAutoGuardMatch holds the cave and the reasoning).
+        // then reported as no hit at all (ElfDamagePatches.PatchAutoGuardMatch holds the cave and the reasoning).
         // The displaced `move s0,v0` goes into the call's delay slot, where v0 is still the matched index.
         internal const uint AutoGuardHookAddr  = 0x01DBB0E0, AutoGuardSlotAddr = 0x01DBB0E4;
         internal const uint AutoGuardHookOrig  = 0x70408628;                               // move s0,v0
         internal const uint AutoGuardSlotOrig  = 0x2402FFFF;                               // addiu v0,zero,-1
-        internal const uint AutoGuardHookNew   = 0x0C000000u | (CodeCaves.DebugInfoCave.AutoGuardMatch >> 2);
+        internal const uint AutoGuardHookNew   = 0x0C000000u | (DebugInfoCave.AutoGuardMatch >> 2);
         internal const uint AutoGuardSlotNew   = AutoGuardHookOrig;                        // the displaced move
         // …and the earlier attempt, at the reaction dispatch, put back: an ISO patched with that build still carries
         // it, and it would keep calling a cave this one no longer maintains.
@@ -223,12 +223,12 @@ namespace Dark_Cloud_Improved_Version
 
         internal const uint SsIconHookAddr = 0x01DB0364;
         internal const uint SsIconHookOrig = 0x0C06C13C;                                   // jal 0x1B04F0 topStatusInfo
-        internal const uint SsIconHookNew  = 0x0C000000u | (CodeCaves.ElfCave.SuperSteveIconDraw >> 2);
+        internal const uint SsIconHookNew  = 0x0C000000u | (ElfCave.SuperSteveIconDraw >> 2);
         internal const long SsIconHookAddrMmu = 0x20000000L + SsIconHookAddr;
         internal const uint SsIconCopyHookAddr = 0x01DAE608;                               // the overlay's two jal DngActiveWeaponTextureCopy sites
         internal const uint SsIconCopyHookAddr2 = 0x01DAE36C;                              //   (the second sits beside the item copy in the step path)
         internal const uint SsIconCopyHookOrig = 0x0C08A9AC;                               // jal 0x22A6B0
-        internal const uint SsIconCopyHookNew  = 0x0C000000u | (CodeCaves.ElfCave.SuperSteveIconCopy >> 2);
+        internal const uint SsIconCopyHookNew  = 0x0C000000u | (ElfCave.SuperSteveIconCopy >> 2);
 
         internal static void Apply(FileStream fs, Rec dun, Action<string> progress)
         {
@@ -248,10 +248,7 @@ namespace Dark_Cloud_Improved_Version
             }
             foreach (var c in Caves)
             {
-                using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                    .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch." + c.Resource)
-                    ?? throw new IOException($"Embedded EE function missing: {c.Resource} (run tools/stubs/build_ee_stubs.py and rebuild)");
-                using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+                byte[] b = ElfCaveWriter.Embedded(c.Resource);
                 if (b.Length < 8 || b.Length % 4 != 0 || b.Length > c.Span)
                     throw new IOException($"{c.Resource} malformed ({b.Length} B) or too big for its {c.Span} B host — {c.What}.");
                 uint rel = c.Addr - LoadBase;

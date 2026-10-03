@@ -5,51 +5,40 @@ using System.IO;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>Queens' trees — georama part 12 (mapinfo.cfg GRD_PARTS 12, sub-file e03t01 of gedit\e03\scene.scn) — whole, in the
-    /// item-model cash (CashModel), for Super Steve's Desert Bloom (CactusSpike). Built from the town's own data once a session, off
+    /// item-model cash (CashModel), for Super Steve's Desert Bloom (Cactus). Built from the town's own data once a session, off
     /// the ISO:
     ///  · the MODEL is the part's display block, e03t01_0.mds — the sub-file's first MDS block, up to its second (the part's
     ///    collision block); its offsets are block-relative, so the block stands alone (16,304 B). Sixteen nodes under the root
     ///    `null4` (at the origin): two trees — trunk `cyl28__s` at (0, 8), 51 tall, its crown `ha__a7f`; trunk `cyl283__s` at
     ///    (−10, −11), 72.5 tall, its crown `ha2__a7f` — ten grass sprites `k1__a40by` … `k10__a40by` scattered between them, and a
-    ///    50×50 grass square `grid__a7f` at y 0.1 (x −31 … 19, z −26 … 24, centred (−6, −1)) whose mesh is DROPPED (textured to
-    ///    match Queens' ground, it looked wrong on a dungeon floor). More than BladeProp's eight-node cave: the copy goes to its
+    ///    50×50 grass square `grid__a7f` at y 0.1 (x −31 … 19, z −26 … 24, centred (−6, −1)) whose mesh is DROPPED (it is textured
+    ///    as Queens' paving; docs/cactus-spike.md, Lessons). More than BladeProp's eight-node cave: the copy goes to its
     ///    large-tree cave;
-    ///  · its TEXTURE is e03b04 (the trees and the sprites; e03b10 was the dropped grass square's) of the building bank e03b01.img in
-    ///    gedit\e03\img.pak — 256×256 8-bit. The bank handed to the cash holds a <see cref="TexSize"/>² stand-in (nearest texel,
-    ///    CLUT kept, row-major under the IMG magic; the source bank is IM2, un-swizzled here) — once loaded, their entries are pointed
-    ///    at the full 256² pictures kept outside the cash (<see cref="CashModel.FullTexture"/>).</summary>
+    ///  · its TEXTURE is e03b04 (the trees and the sprites) of the building bank e03b01.img in gedit\e03\img.pak — 256×256 8-bit.
+    ///    The bank handed to the cash holds a <see cref="TexSize"/>² stand-in (nearest texel, CLUT kept, row-major under the IMG
+    ///    magic; the source bank is IM2, un-swizzled here) — once loaded, its entry is pointed at the full 256² picture kept outside
+    ///    the cash (<see cref="CashModel.FullTexture"/>).</summary>
     internal static class QueensTrees
     {
         private const string Tag = "[QueensTrees] ";
         internal const int  CashKey = 30000;                         // the cash entry's label: no item has this id
         private const int   TexSize = 8;                          // the stand-ins only need their entries: the full pictures replace them
         private const string SubFile = "e03t01", TexBank = "e03b01.img", Scene = @"gedit\e03\scene.scn", ImgPak = @"gedit\e03\img.pak";
-        private static readonly string[] Textures = { "e03b04" };   // the trees and the sprites (e03b10, the grass square's, goes with it)
-        private const string Ground = "grid__a7f";                 // Queens' paving-matched grass square: dropped, it looked wrong on a dungeon floor
+        private static readonly string[] Textures = { "e03b04" };   // the trees and the sprites
+        private const string Ground = "grid__a7f";                 // Queens' grass square, textured as its paving: its mesh is dropped
 
-        private static readonly CashModel M = new CashModel(Tag, CashKey, "Queens trees", Files) { FullTexture = Full, FullOffset = 0x320000 };   // past the rock's (IwaModel, +0x300000)
-        private static List<(string, int, int, byte[], byte[])> _full;
+        private static readonly CashModel M = CashModel.BuiltOnce(Tag, CashKey, "Queens trees", "built from Queens", () => (BuildModel(), BuildTextures()))
+                                                      .WithFullTexture(Full, 0x320000);   // past the rock's (IwaModel, +0x300000)
+        private static List<(string name, int w, int h, byte[] pixels, byte[] clut)> _full;
 
-        /// <summary>The two textures whole (row-major, CLUTs as the bank has them) — what the stand-ins' entries are pointed at.</summary>
-        private static List<(string, int, int, byte[], byte[])> Full() { Files(); return _full; }
-        private static byte[] _mds, _img;
-        private static bool _built, _failed;
+        /// <summary>Each texture in <see cref="Textures"/> whole (row-major, its CLUT as the bank has it) — what its stand-in's entry is pointed at.</summary>
+        private static List<(string name, int w, int h, byte[] pixels, byte[] clut)> Full() { M.Files(); return _full; }
 
         internal const int WeaponPassBlock = CashModel.WeaponPassBlock;
         internal static uint Root() => M.Root();
         internal static void Forget() => M.Forget();
         internal static void KeepTextures() => M.KeepTextures(WeaponPassBlock);
         internal static void ReleaseTextures() => M.ReleaseTextures();
-
-        private static (byte[] mds, byte[] img) Files()
-        {
-            if (!_built && !_failed)
-            {
-                try { _mds = BuildModel(); _img = BuildTextures(); _built = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"built from Queens: model {_mds.Length} B, textures {_img.Length} B"); }
-                catch (Exception e) { _failed = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "could not be built: " + e.Message); }
-            }
-            return _built ? (_mds, _img) : (null, null);
-        }
 
         /// <summary>The part's display block: the scene's sub-file directory (0x30-byte entries from 0x10: name, then offset and
         /// size at +0x10 / +0x14) gives the sub-file; its first two 16-aligned `MDS\0` blocks are the display and collision models.</summary>
@@ -79,7 +68,7 @@ namespace Dark_Cloud_Improved_Version
             return mds;
         }
 
-        /// <summary>The two textures from the building bank, each resampled to TexSize², in a bank of their own.</summary>
+        /// <summary>Each texture in <see cref="Textures"/> from the building bank, resampled to TexSize², in a bank of its own; the full picture kept.</summary>
         private static byte[] BuildTextures()
         {
             byte[] pak = GameDataFiles.TryReadEntry(ImgPak) ?? throw new IOException(ImgPak + " not readable");
@@ -94,17 +83,8 @@ namespace Dark_Cloud_Improved_Version
             }
             if (bankBytes == null) throw new IOException($"{TexBank} not in img.pak");
             var bank = new CatPackBakes.Bank(bankBytes);
-            bool swizzled = bank.Magic[2] == (byte)'2';
-            var items = new List<(string, byte[])>();
-            var full = new List<(string, int, int, byte[], byte[])>();
-            foreach (string t in Textures)
-            {
-                items.Add((t, CashModel.ResampleTim8(bank.Block(t), swizzled, TexSize)));
-                var (w, h, px, clut) = CashModel.ReadTim8(bank.Block(t), swizzled);
-                full.Add((t, w, h, px, clut));
-            }
-            _full = full;
-            return CatPackBakes.Bank.Build(new[] { (byte)'I', (byte)'M', (byte)'G', (byte)0 }, items);
+            _full = CashModel.FullPictures(bank, Textures);
+            return CashModel.StandInBank(bank, TexSize, Textures);
         }
     }
 }

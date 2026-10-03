@@ -3,23 +3,22 @@ using System.Collections.Generic;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>A round shadow on the floor for a prop the engine draws none for — the Terra Sword's boulder, the Cactus's
-    /// Desert Bloom (cactus and palm). One at a time: the ISO's rock-shadow cave (DebugIfCave.RockShadow, in Draw_MainUnitShadow's
-    /// pass) draws the frame CodeCaves.RockShadow names with MGDrawShadowFast while its flag is set.
+    /// <summary>A round shadow on the floor for a prop the engine draws none for — the Terra Sword's boulder, Desert Bloom's cactus
+    /// (docs/terra-sword.md, "The rock's shadow"). One at a time: the ISO's rock-shadow cave (DebugIfCave.RockShadow, in
+    /// Draw_MainUnitShadow's pass) draws the frame CodeCaves.RockShadow names with MGDrawShadowFast while its flag is set.
     ///
     /// The frame is a flat unit disc (<see cref="DiscSegments"/> segments, y 0, the fan wound both ways) loaded by LoadMDSFile as a
     /// SHADOW model (kind 8: CVisualShadow — a lit mesh drawn in shadow mode comes out garbled). It lives in an item-cash entry of
     /// its own (label <see cref="CashKey"/>, one for every user): the disc loaded there by SetCashModel as a plain model with an 8×8
     /// stand-in of its material's texture, then again as the shadow model into the same entry's allocator (CashModel.ShadowRoot).
-    /// The cash is the game's own allocation for the floor — menus do not load into it (they do into the dungeon read buffer: a disc
-    /// kept there was overwritten by the party screen's ally models, and drawn behind the menu it reset the game) — so the shadow
-    /// stays up through a pause. Its MDS borrows iwa.mds's header, node and materials, the MDT rebuilt (MdtCarve). Placed as a
+    /// ⚠ Not the dungeon read buffer: menus load into it. The cash is the game's own allocation for the floor, so the shadow stays
+    /// up through a pause. Its MDS borrows iwa.mds's header, node and materials, the MDT rebuilt (MdtCarve). Placed as a
     /// character's shadow frame is (CFrame's SetScale / SetRotation / SetPosition fields): AT the floor, the point handed to the draw
     /// <see cref="Drop"/> below it — the player's own convention (DrawShadow__10CCharacter); its TRS scale is the radius.</summary>
     internal static class GroundShadow
     {
         private const string Tag = "[GroundShadow] ";
-        internal const int   CashKey = 30002;                  // the cash entry's label: no item has this id (the palm 30000, the rock 30001)
+        internal const int   CashKey = 30002;                  // the cash entry's label: no item has this id (Queens' trees 30000, the rock 30001)
         private const int    DiscSegments = 16;
         private const int    StandInSize = 8;                  // the lit disc's texture (never drawn: only its entry must exist)
         private const int    ShadowNeedUnits = DiscSegments * 2 * 6 + 0x80;   // ~96 B of shadow VU data per triangle (both faces) + 2 KB

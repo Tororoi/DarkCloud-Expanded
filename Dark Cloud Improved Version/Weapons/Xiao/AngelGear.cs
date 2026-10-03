@@ -99,7 +99,7 @@ namespace Dark_Cloud_Improved_Version
         // it): the app takes ownership (ShieldGaugeOwner = 1) only while the shield is up or broken, writing 0
         // to hold the bar and a small value so the ENGINE refills it over CooldownSeconds (no per-tick
         // writes); a full bar = the slingshot may respawn. Ownership is released otherwise (self-healing).
-        private const long   GaugeRateWord = CodeCaves.Mailbox.ShieldGaugeRate;
+        private const long   GaugeRateWord = Mailbox.ShieldGaugeRate;
         private const long   GaugeAddr = 0x21DC44C8;
         private const int    ShieldHits = 5;
         private const float  GaugePerHit = 100f / ShieldHits;
@@ -116,8 +116,8 @@ namespace Dark_Cloud_Improved_Version
         // from then on the block distance is a DATA word: 6.0 vanilla, RingRadius while the shield is up.
         private const long   BlockPatchAddr = 0x201DCFD0;
         private static readonly uint[] BlockPristine = { 0x3C0340C0u, 0x44830800u };
-        private static readonly uint[] BlockPatched  = { 0x3C030000u | (uint)((CodeCaves.Mailbox.ShieldBlockAddend - 0x20000000) >> 16),
-                                                          0xC4610000u | (uint)((CodeCaves.Mailbox.ShieldBlockAddend - 0x20000000) & 0xFFFF) };
+        private static readonly uint[] BlockPatched  = { 0x3C030000u | (uint)((Mailbox.ShieldBlockAddend - 0x20000000) >> 16),
+                                                          0xC4610000u | (uint)((Mailbox.ShieldBlockAddend - 0x20000000) & 0xFFFF) };
         private const float  VanillaBlockAddend = 6f;
         // ENGINE-SIDE CATCH (no per-tick collision checks). checkCollision (0x1AB740) is every
         // shot's hit-the-player test; its player-position load (`lui $v0,0x1ea; addiu $a1,$v0,0x1d30` @0x1AB828,
@@ -127,8 +127,8 @@ namespace Dark_Cloud_Improved_Version
         // the catch. Shield down → pointer = the player global (vanilla).
         private const long   ShotPatchAddr = 0x201AB828;
         private static readonly uint[] ShotPristine = { 0x3C0201EAu, 0x24451D30u };
-        private static readonly uint[] ShotPatched  = { 0x3C050000u | (uint)((CodeCaves.Mailbox.ShotHitTarget - 0x20000000) >> 16),
-                                                         0x8CA50000u | (uint)((CodeCaves.Mailbox.ShotHitTarget - 0x20000000) & 0xFFFF) };
+        private static readonly uint[] ShotPatched  = { 0x3C050000u | (uint)((Mailbox.ShotHitTarget - 0x20000000) >> 16),
+                                                         0x8CA50000u | (uint)((Mailbox.ShotHitTarget - 0x20000000) & 0xFFFF) };
         private const float  EngineCatchNear = 20f;      // a claimed shot that died within this of the pouch was caught there
         private const float PullLength   = 2.5f;   // pouch draw travel, weapon units at x1 (authored 4.2)
         private const float PropScale    = 2f;     // giant factor for the slingshot copy (4 read too big)
@@ -195,7 +195,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void Start()
         {
             if (_thread != null && _thread.IsAlive) return;
-            try { Memory.WriteFloat(GaugeRateWord, VanillaXiaoRefillMul); Memory.WriteInt(CodeCaves.Mailbox.ShieldGaugeOwner, 0); _rateWritten = VanillaXiaoRefillMul; _ownerWritten = 0; }   // vanilla until a shield stands
+            try { Memory.WriteFloat(GaugeRateWord, VanillaXiaoRefillMul); Memory.WriteInt(Mailbox.ShieldGaugeOwner, 0); _rateWritten = VanillaXiaoRefillMul; _ownerWritten = 0; }   // vanilla until a shield stands
             catch (Exception e) { Console.WriteLine(Tag + "gauge seed failed: " + e.Message); }
             _thread = new Thread(Loop) { IsBackground = true, Name = "AngelGear" };
             _thread.Start();
@@ -726,10 +726,11 @@ namespace Dark_Cloud_Improved_Version
                 BitConverter.GetBytes(ptr).CopyTo(ptrs, s * CodeCaves.PtrStride);
             }
             bool first = !RingActive;
-            RingActive = true;                                   // Mirage's writer stands down from here
-            if (first && _blockArmed) Memory.WriteFloat(CodeCaves.Mailbox.ShieldBlockAddend, RingRadius);   // bodies stop at the ring
+            RingActive = true;
+            if (first) AggroTable.Claim(AggroTable.Holder.ShieldRing);                        // the table is the ring's while it is up
+            if (first && _blockArmed) Memory.WriteFloat(Mailbox.ShieldBlockAddend, RingRadius);   // bodies stop at the ring
             Memory.WriteBytesBatch(SlingshotProp.RingTable, ring);
-            Memory.WriteBytesBatch(CodeCaves.PtrTable, ptrs);
+            AggroTable.Write(AggroTable.Holder.ShieldRing, ptrs);
             if (first) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"shield ring up (R={RingRadius:F1}, {ringed} enemies ringed)");
         }
 
@@ -737,10 +738,8 @@ namespace Dark_Cloud_Improved_Version
         private static void ReleaseRing()
         {
             if (!RingActive) return;
-            var ptrs = new byte[RingSlots * CodeCaves.PtrStride];
-            for (int s = 0; s < RingSlots; s++) BitConverter.GetBytes(StbExternCmd.PlayerPosGuest).CopyTo(ptrs, s * CodeCaves.PtrStride);
-            Memory.WriteBytesBatch(CodeCaves.PtrTable, ptrs);
-            if (_blockArmed) Memory.WriteFloat(CodeCaves.Mailbox.ShieldBlockAddend, VanillaBlockAddend);
+            AggroTable.Release(AggroTable.Holder.ShieldRing);                                 // every slot back on the player
+            if (_blockArmed) Memory.WriteFloat(Mailbox.ShieldBlockAddend, VanillaBlockAddend);
             RingActive = false;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "shield ring released");
         }
@@ -752,9 +751,9 @@ namespace Dark_Cloud_Improved_Version
         private static void SetGaugeRate(float k)
         {
             int owner = k == VanillaXiaoRefillMul ? 0 : 1;
-            if (owner == 1 && _ownerWritten != 1) { Memory.WriteInt(CodeCaves.Mailbox.ShieldGaugeOwner, 1); _ownerWritten = 1; }
+            if (owner == 1 && _ownerWritten != 1) { Memory.WriteInt(Mailbox.ShieldGaugeOwner, 1); _ownerWritten = 1; }
             if (k != _rateWritten) { Memory.WriteFloat(GaugeRateWord, k); _rateWritten = k; }
-            if (owner == 0 && _ownerWritten != 0) { Memory.WriteInt(CodeCaves.Mailbox.ShieldGaugeOwner, 0); _ownerWritten = 0; }
+            if (owner == 0 && _ownerWritten != 0) { Memory.WriteInt(Mailbox.ShieldGaugeOwner, 0); _ownerWritten = 0; }
         }
 
         /// <summary>Multiplier that makes the engine's own refill — max(1, speed/30) per frame — fill the bar
@@ -779,7 +778,7 @@ namespace Dark_Cloud_Improved_Version
                 uint w0 = (uint)Memory.ReadInt(BlockPatchAddr), w1 = (uint)Memory.ReadInt(BlockPatchAddr + 4);
                 if (w0 == BlockPatched[0] && w1 == BlockPatched[1])
                 {
-                    Memory.WriteFloat(CodeCaves.Mailbox.ShieldBlockAddend, VanillaBlockAddend);   // stale value from a dead session
+                    Memory.WriteFloat(Mailbox.ShieldBlockAddend, VanillaBlockAddend);   // stale value from a dead session
                     _blockArmed = true;
                     return;
                 }
@@ -790,7 +789,7 @@ namespace Dark_Cloud_Improved_Version
                     _blockWarned = true;
                     return;
                 }
-                Memory.WriteFloat(CodeCaves.Mailbox.ShieldBlockAddend, VanillaBlockAddend);   // data first...
+                Memory.WriteFloat(Mailbox.ShieldBlockAddend, VanillaBlockAddend);   // data first...
                 Memory.WriteUInt(BlockPatchAddr,     BlockPatched[0]);                           // ...then lui (a half-applied pair is harmless this way round)
                 Memory.WriteUInt(BlockPatchAddr + 4, BlockPatched[1]);
                 _blockArmed = true;
@@ -808,7 +807,7 @@ namespace Dark_Cloud_Improved_Version
                 uint w0 = (uint)Memory.ReadInt(ShotPatchAddr), w1 = (uint)Memory.ReadInt(ShotPatchAddr + 4);
                 if (w0 == ShotPatched[0] && w1 == ShotPatched[1])
                 {
-                    Memory.WriteUInt(CodeCaves.Mailbox.ShotHitTarget, StbExternCmd.PlayerPosGuest);
+                    Memory.WriteUInt(Mailbox.ShotHitTarget, StbExternCmd.PlayerPosGuest);
                     _shotArmed = true;
                     return;
                 }
@@ -819,7 +818,7 @@ namespace Dark_Cloud_Improved_Version
                     _shotWarned = true;
                     return;
                 }
-                Memory.WriteUInt(CodeCaves.Mailbox.ShotHitTarget, StbExternCmd.PlayerPosGuest);   // pointer first...
+                Memory.WriteUInt(Mailbox.ShotHitTarget, StbExternCmd.PlayerPosGuest);   // pointer first...
                 Memory.WriteUInt(ShotPatchAddr,     ShotPatched[0]);                               // ...then lui $a1
                 Memory.WriteUInt(ShotPatchAddr + 4, ShotPatched[1]);                               // ...then lw $a1
                 _shotArmed = true;
@@ -836,7 +835,7 @@ namespace Dark_Cloud_Improved_Version
             uint target = solid ? SlingshotProp.ShotTargetGuest : 0u;
             bool want = target != 0;
             if (want == _shotRedirected) return;
-            Memory.WriteUInt(CodeCaves.Mailbox.ShotHitTarget, want ? target : StbExternCmd.PlayerPosGuest);
+            Memory.WriteUInt(Mailbox.ShotHitTarget, want ? target : StbExternCmd.PlayerPosGuest);
             _shotRedirected = want;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (want ? $"shots now collide with the pouch (0x{target:X})" : "shots collide with her again"));
         }

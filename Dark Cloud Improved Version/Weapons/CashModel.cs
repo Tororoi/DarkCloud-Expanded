@@ -3,13 +3,11 @@ using System.Collections.Generic;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>A model loaded into the game's own item-model cash so that a copy of it can be drawn (BladeProp) or grafted:
-    /// the Bomb (BombModel), Queens' trees (QueensTrees). The game loads an active item's model from the item menu — the
-    /// two files into the menu's read buffer, then SetCashModel, which allocates, uploads the texture block and builds the
-    /// frames — and that is exactly what is done here, from the mod: the files written into the dungeon loader's read buffer
-    /// (idle between floor loads; the menu's buffer exists only while a menu is open), SetCashModel called through the
-    /// call-request cave. SetCashModel only stores the item id as the entry's label, so a model of the mod's own takes a
-    /// label no item has. Each cash entry's allocator is 0x9C5 units (40,016 B, GameInit): the model, its built frames and a
+    /// <summary>A model in the game's own item-model cash (CMainItemModel; docs/cash-models.md), so that copies of it can be drawn
+    /// (BladeProp) or grafted. Loaded as the item menu loads an active item's model: the two files written into the dungeon
+    /// loader's read buffer (idle between floor loads; the menu's buffer exists only while a menu is open), then SetCashModel
+    /// through the call-request cave. The entry is labelled with <c>itemKey</c> — an item's id, or for a model of the mod's own
+    /// an id no item has. Each cash entry's allocator is 0x9C5 units (40,016 B, GameInit): the model, its built frames and a
     /// copy of the texture bank must fit it. The cash is emptied on a floor change, so the root is checked before every use
     /// and reloaded when it is gone.</summary>
     internal sealed class CashModel
@@ -21,12 +19,72 @@ namespace Dark_Cloud_Improved_Version
         internal CashModel(string tag, int itemKey, string what, Func<(byte[] mds, byte[] img)> files)
         { Tag = tag; _key = itemKey; _what = what; _files = files; }
 
+        /// <summary>The model's two files as the loader gets them (null when unreadable).</summary>
+        internal (byte[] mds, byte[] img) Files() => _files();
+
+        /// <summary>A model whose two files <paramref name="build"/> makes once a session (throwing when it cannot): the first call
+        /// builds and logs them under <paramref name="tag"/>; a failure is logged once and not retried.</summary>
+        internal static CashModel BuiltOnce(string tag, int itemKey, string what, string source, Func<(byte[] mds, byte[] img)> build)
+        {
+            byte[] mds = null, img = null; bool built = false, failed = false;
+            return new CashModel(tag, itemKey, what, () =>
+            {
+                if (!built && !failed)
+                {
+                    try
+                    {
+                        (mds, img) = build();
+                        built = true;
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + tag + $"{what} model {source}: model {mds.Length} B, texture bank {img.Length} B");
+                    }
+                    catch (Exception e) { failed = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + tag + $"the {what} model could not be built: " + e.Message); }
+                }
+                return built ? (mds, img) : (null, null);
+            });
+        }
+
+        /// <summary>A model that is a .chr pack's own files: <paramref name="model"/> (an MDS) and <paramref name="bank"/> (an IMG/IM2
+        /// bank) in <paramref name="pack"/>, an ISO path — the bank as it is, or as <paramref name="transformBank"/> makes it (a
+        /// stand-in bank when its textures are too big for the cash, <see cref="StandInBank"/>). Built once a session.</summary>
+        internal static CashModel FromChrPack(string tag, int itemKey, string what, string pack, string model, string bank, Func<byte[], byte[]> transformBank = null)
+            => BuiltOnce(tag, itemKey, what, "read from " + pack, () =>
+            {
+                byte[] chr = GameDataFiles.TryReadEntry(pack) ?? throw new System.IO.IOException(pack + " not readable");
+                var p = ChrPack.Parse(chr);
+                byte[] mds = (p.Find(model) ?? throw new System.IO.IOException(pack + " lacks " + model)).Payload;
+                byte[] img = (p.Find(bank) ?? throw new System.IO.IOException(pack + " lacks " + bank)).Payload;
+                return (mds, transformBank == null ? img : transformBank(img));
+            });
+
         /// <summary>Textures too big for the cash entry (whose allocator holds the texture bank's copy): the model is loaded with small
         /// stand-ins of the same names, then those entries are pointed at the full pictures, kept outside the cash (see
         /// <see cref="ApplyFullTexture"/>). Each: name, width, height (powers of two), 8-bit row-major pixels, the 1 KB CLUT.</summary>
         internal Func<List<(string name, int w, int h, byte[] pixels, byte[] clut)>> FullTexture;
         /// <summary>Where in the dungeon loader's read buffer this model's full textures are kept (each model its own span).</summary>
         internal int FullOffset = 0x300000;
+
+        /// <summary>This model with <see cref="FullTexture"/> set (and <see cref="FullOffset"/>, when given).</summary>
+        internal CashModel WithFullTexture(Func<List<(string name, int w, int h, byte[] pixels, byte[] clut)>> full, int? offset = null)
+        { FullTexture = full; if (offset != null) FullOffset = offset.Value; return this; }
+
+        /// <summary>An IMG bank (row-major pixels) of the pictures <paramref name="names"/> of <paramref name="bank"/>, each resampled to
+        /// <paramref name="n"/>² (nearest texel) with its CLUT kept: what the cash is handed in place of textures too big for its entry;
+        /// once the model is loaded their entries are pointed at the full pictures (<see cref="FullPictures"/>, <see cref="FullTexture"/>).</summary>
+        internal static byte[] StandInBank(CatPackBakes.Bank bank, int n, params string[] names)
+        {
+            var items = new List<(string, byte[])>();
+            foreach (string t in names) items.Add((t, Tim8.ResampleTim8(bank.Block(t), bank.Swizzled, n)));
+            return CatPackBakes.Bank.Build(new[] { (byte)'I', (byte)'M', (byte)'G', (byte)0 }, items);
+        }
+
+        /// <summary>The pictures <paramref name="names"/> of <paramref name="bank"/> whole — row-major, CLUTs as the bank has them — in
+        /// <see cref="FullTexture"/>'s shape.</summary>
+        internal static List<(string name, int w, int h, byte[] pixels, byte[] clut)> FullPictures(CatPackBakes.Bank bank, params string[] names)
+        {
+            var full = new List<(string name, int w, int h, byte[] pixels, byte[] clut)>();
+            foreach (string t in names) { var (w, h, px, clut) = Tim8.ReadTim8(bank.Block(t), bank.Swizzled); full.Add((t, w, h, px, clut)); }
+            return full;
+        }
 
         private uint _root;                                 // the cash root last loaded (0 = none)
         private int  _cash = -1;
@@ -40,7 +98,7 @@ namespace Dark_Cloud_Improved_Version
             long m = Memory.ToMmu(self);
             if (_cash >= 0 && Memory.ReadGuestPtr(m + ItemModels.CashRootOffset + _cash * 4) == _root
                 && Memory.ReadInt(m + ItemModels.CashItemOffset + _cash * 4) == _key && Memory.IsValidGuest(_root)) return _root;
-            // Already in the cash (an active-item Bomb, or a load of ours the bookkeeping lost)?
+            // Already in the cash (the game's own load under the same label, or a load of ours the bookkeeping lost)?
             for (int i = 0; i < ItemModels.CashCount; i++)
             {
                 uint r = Memory.ReadGuestPtr(m + ItemModels.CashRootOffset + i * 4);
@@ -108,7 +166,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>A safe-side estimate of what SetCashModel will take from the entry's allocator (16-byte units): the texture bank's
         /// copy, a 0x270 frame per node, a visual (with its 64-byte alignment) per mesh, and per sub-mesh ~16 B per record per stream
-        /// of VU data + 64 (the budget viewer's figure), padded 15% — the rock's estimates ~33.5 KB against the ~32.9 KB it takes.</summary>
+        /// of VU data + 64, padded 15% (docs/cash-models.md).</summary>
         private static int EstimateUnits(byte[] mds, byte[] img)
         {
             int nodes = (int)IsoBytes.U32(mds, 8), table = (int)IsoBytes.U32(mds, 0xC), meshes = 0;
@@ -135,14 +193,11 @@ namespace Dark_Cloud_Improved_Version
             { Memory.WriteUInt(TextureManager.Base + TextureManager.Cursor, _cursorSaved); _winBase = 0; _winSize = 0; }
         }
 
-        // ── THE TEXTURE'S HOME. SetCashModel loads the bomb's texture through the cash's block (0x38 + cash), and every block's
-        // window is packed up from the same VRAM base — the enemy, effect and weapon blocks over the same pages; the last upload
-        // before a draw wins. A copy drawn in the clone slot binds before that slot's own upload lands (its draw is in the packet
-        // the GS reads first), and the apple shot's pass uploads the apple's own textures over those pages: the bomb sampled
-        // whichever texture held them — the slingshot's atlas, the apple's. So, as the Divine Beast cat's textures: the entry's
-        // TEX0 (its pixels and its CLUT) is moved to a window RESERVED above every block's top, taken off the manager's downward
-        // cursor so nothing is ever handed out on top of it, and the same TEX0 word is patched in the model's own draw packet —
-        // which every copy (BladeProp) and graft (the apple shot) draws from. Once uploaded there, the pages are the bomb's for good.
+        // ── THE TEXTURE'S HOME (docs/cash-models.md). SetCashModel loads the texture through the cash's block (0x38 + cash), and
+        // every block's window is packed up from the same VRAM base — the enemy, effect and weapon blocks over the same pages; the
+        // last upload before a draw wins. So the entry's TEX0 (its pixels and its CLUT) is moved to a window RESERVED above every
+        // block's top, taken off the manager's downward cursor so nothing is ever handed out on top of it, and the same TEX0 word
+        // is patched in the model's own draw packet — which every copy and graft draws from.
         private uint _placedRoot;                                 // the root whose texture was placed (0 = none)
         private uint _winBase, _winSize, _cursorSaved;            // the reserved window, and the cursor before it was taken
         private const uint  WindowAlign = 0x20;                          // 32 GS blocks = one 8 KB page
@@ -216,14 +271,14 @@ namespace Dark_Cloud_Improved_Version
             return (patched, visuals);
         }
 
-        // ── THE FULL TEXTURE, OUTSIDE THE CASH. The texture manager uploads an entry (ReloadTexture 0x133070) from its own fields:
-        // width +2, height +4, bytes per texel +6 (u16), the level-0 pixels at +0x38 (mipmaps +0x3C…, 0 here), the CLUT at +0x48,
-        // a swizzled flag at +0x4C, and its VRAM placement from the TEX0 word (+0x28: TBP, TBW bits 14–19, TW 26–29, TH 30–33, CBP
-        // from bit 37). So the stand-in's entry is re-pointed at the full picture — kept high in the dungeon loader's read buffer
-        // (about 4 MB; idle in play, but MENUS load into it — the party screen streams ally models over this span — so the data is
-        // written again after any pause or menu, see KeepTextures; the cash loads use only its first 0xFA10 + an image) — and its sizes and TEX0
-        // rewritten, CBP just past the pixels; the model's packet gets the same TEX0 (swept), and PlaceTextures then reserves a
-        // window that big above every block. Every tick a copy is drawn the data is checked and re-written if anything overwrote it.
+        // ── THE FULL TEXTURE, OUTSIDE THE CASH (docs/cash-models.md). The texture manager uploads an entry (ReloadTexture 0x133070)
+        // from its own fields: width +2, height +4, bytes per texel +6 (u16), the level-0 pixels at +0x38 (mipmaps +0x3C…, 0 here),
+        // the CLUT at +0x48, a swizzled flag at +0x4C, and its VRAM placement from the TEX0 word (+0x28: TBP, TBW bits 14–19, TW
+        // 26–29, TH 30–33, CBP from bit 37). The stand-in's entry is re-pointed at the full picture — kept at FullOffset in the
+        // dungeon loader's read buffer (about 4 MB; the cash loads use only its first 0xFA10 + an image; menus load into it, so the
+        // data is written again after any pause or menu, see KeepTextures) — its sizes and TEX0 rewritten, CBP just past the
+        // pixels; the model's packet gets the same TEX0 (swept), and PlaceTextures then reserves a window that big above every
+        // block. Every tick a copy is drawn the data is checked and re-written if anything overwrote it.
         private uint _fullFor, _windowMin;
         private DateTime _lastKeep;
         private const int KeepGapMs = 100;                         // the users tick every 16 ms: a longer gap was a pause or a menu
@@ -342,12 +397,11 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        // ── THE COPY'S UPLOAD. A chara-slot copy (BladeProp) is drawn in the clone-weapon slot, and the apple shot in the main
-        // effect's pass; each pass reloads ITS block before it draws, never the cash's. While a copy is up the bomb's entries are
-        // RE-TAGGED into that pass's block, and the block is marked unloaded every tick so its uploader re-sends every entry —
-        // ours among them (the trick the Sun Sword's disc uses to stay uploaded); with the window above, one upload is enough,
-        // and the rest are cheap. Tagged back when the copy goes. The cash's own block is kept unloaded too, so the game's own
-        // draw of a thrown Bomb (the same cash model) re-sends it there.
+        // ── THE COPY'S UPLOAD (docs/cash-models.md). A copy is drawn in another pass — a chara-slot copy (BladeProp) in the
+        // clone-weapon slot's, a graft in the main effect's — and each pass reloads ITS block before it draws, never the cash's.
+        // While a copy is up the model's entries are RE-TAGGED into that pass's block, and the block is marked unloaded every tick
+        // so its uploader re-sends every entry, ours among them; tagged back when the copy goes. The cash's own block is kept
+        // unloaded too, so the game's own draw of the cash model (a thrown item) re-sends it there.
         private const int CashBlockBase = 0x38;
         internal const int WeaponPassBlock = 0x1D;                        // the clone slot's group under the per-chara formula (chara 3 → 0x11 + 12)
         internal const int MainEffectBlock = 0x10;                        // the main-character effect's (a borrowed shot's)
@@ -380,7 +434,7 @@ namespace Dark_Cloud_Improved_Version
             _lastKeep = DateTime.UtcNow;
             Tick();
         }
-        /// <summary>Every tick the sphere is on: the cash's block re-sent whenever its own pass runs (a thrown Bomb drawn by the game).</summary>
+        /// <summary>Every tick a user is on: the cash's block re-sent whenever its own pass runs (the game's own draw of the cash model).</summary>
         internal void Tick()
         {
             if (_placedRoot == 0 || _cash < 0) return;
@@ -392,63 +446,6 @@ namespace Dark_Cloud_Improved_Version
             if (_bound.Count == 0) return;
             foreach (long e in _bound) Memory.WriteUShort(e + TextureManager.EntryBlock, (ushort)(CashBlockBase + _cash));
             _bound.Clear();
-        }
-
-        /// <summary>One 8-bit TIM2 picture resampled to <paramref name="n"/>² (nearest texel: 8-bit indices cannot be blended), row-major: the header kept but for its sizes, the CLUT kept whole.
-        /// TIM2 picture header (after the 16-byte file header): total +0 (header + 4 × image size in every file of this game), CLUT size +4, image size +8, header size +0xC (u16),
-        /// image type +0x13 (5 = 8-bit), width +0x14, height +0x16 (u16); the pixels follow the header, the CLUT the pixels.</summary>
-        /// <summary>An 8-bit TIM2 picture whole: its size, its pixels row-major (un-swizzled from the GS block order when
-        /// <paramref name="swizzled"/>), and its CLUT bytes as the file has them.</summary>
-        internal static (int w, int h, byte[] pixels, byte[] clut) ReadTim8(byte[] tim, bool swizzled)
-        {
-            const int pic = 0x10;
-            if (tim.Length < pic + 0x30 || tim[0] != 'T' || tim[1] != 'I' || tim[2] != 'M' || tim[3] != '2') throw new System.IO.IOException("not a TIM2 picture");
-            int clutSz = (int)IsoBytes.U32(tim, pic + 4), imgSz = (int)IsoBytes.U32(tim, pic + 8), hdrSz = IsoBytes.U16(tim, pic + 0xC);
-            int w = IsoBytes.U16(tim, pic + 0x14), h = IsoBytes.U16(tim, pic + 0x16);
-            if (tim[pic + 0x13] != 5 || imgSz != w * h) throw new System.IO.IOException($"not an 8-bit picture ({w}×{h}, {imgSz} B)");
-            byte[] px = tim.AsSpan(pic + hdrSz, imgSz).ToArray();
-            if (swizzled) px = Unswizzle8(px, w, h);
-            return (w, h, px, tim.AsSpan(pic + hdrSz + imgSz, clutSz).ToArray());
-        }
-
-        internal static byte[] ResampleTim8(byte[] tim, bool swizzled, int n)
-        {
-            const int pic = 0x10;
-            if (tim.Length < pic + 0x30 || tim[0] != 'T' || tim[1] != 'I' || tim[2] != 'M' || tim[3] != '2') throw new System.IO.IOException("not a TIM2 picture");
-            int clutSz = (int)IsoBytes.U32(tim, pic + 4), imgSz = (int)IsoBytes.U32(tim, pic + 8), hdrSz = IsoBytes.U16(tim, pic + 0xC);
-            int w = IsoBytes.U16(tim, pic + 0x14), h = IsoBytes.U16(tim, pic + 0x16);
-            if (tim[pic + 0x13] != 5 || imgSz != w * h) throw new System.IO.IOException($"not an 8-bit picture ({w}×{h}, {imgSz} B)");
-            byte[] px = tim.AsSpan(pic + hdrSz, imgSz).ToArray();
-            if (swizzled) px = Unswizzle8(px, w, h);
-            var outPx = new byte[n * n];
-            for (int y = 0; y < n; y++) for (int x = 0; x < n; x++)
-                outPx[y * n + x] = px[((y * h + h / 2) / n) * w + (x * w + w / 2) / n];   // the texel under each new texel's centre
-            var outp = new byte[pic + hdrSz + n * n + clutSz];
-            Array.Copy(tim, 0, outp, 0, pic + hdrSz);
-            IsoBytes.U32(outp, pic + 0, (uint)(hdrSz + 4 * n * n));                      // the files' own convention: header + 4 × image (the bomb's 0x10030, these 0x40030)
-            IsoBytes.U32(outp, pic + 8, (uint)(n * n));
-            IsoBytes.U16(outp, pic + 0x14, (ushort)n);
-            IsoBytes.U16(outp, pic + 0x16, (ushort)n);
-            Array.Copy(outPx, 0, outp, pic + hdrSz, n * n);
-            Array.Copy(tim, pic + hdrSz + imgSz, outp, pic + hdrSz + n * n, clutSz);
-            return outp;
-        }
-
-        /// <summary>PSMT8 pixels from the GS's block order to row-major (CanalRipple's un-swizzle).</summary>
-        internal static byte[] Unswizzle8(byte[] data, int w, int h)
-        {
-            var outp = new byte[w * h];
-            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++)
-            {
-                int blockLoc = (y & ~0xF) * w + (x & ~0xF) * 2;
-                int swapSel = (((y + 2) >> 2) & 0x1) * 4;
-                int posY = (((y & ~3) >> 1) + (y & 1)) & 0x7;
-                int colLoc = posY * w * 2 + ((x + swapSel) & 0x7) * 4;
-                int bn = ((y >> 1) & 1) + ((x >> 2) & 2);
-                int src = blockLoc + colLoc + bn;
-                if (src < data.Length) outp[y * w + x] = data[src];
-            }
-            return outp;
         }
     }
 }

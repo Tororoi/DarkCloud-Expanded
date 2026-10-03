@@ -115,7 +115,7 @@ namespace Dark_Cloud_Improved_Version
         // +0x024: body HEIGHT — confirmed in-game: GetScrPosFromChar anchors the off-lock marker/name above the body.
         internal float? BodyHeight;
         // THE ENEMY'S HEIGHT above its root, AUTHORED (not from the disc): the judgement blade's tip hangs 6 above it
-        // (BigBang.HoverHeightFor, scaled with a grown miniboss). Started as the top of each species' highest hurt sphere
+        // (JudgementBlade.HoverHeightFor, scaled with a grown miniboss). Started as the top of each species' highest hurt sphere
         // in the bind pose; corrected by hand species by species with the monster atlas's "tip above root" slider.
         internal float? HeightFromRoot;
         // +0x028: body DEPTH (60 ground, 0 ranged/flying) — only the _GET_NPC_BODY_SIZE script getter; gameplay-inert.

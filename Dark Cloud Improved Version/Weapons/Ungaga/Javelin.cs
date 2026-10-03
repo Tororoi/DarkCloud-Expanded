@@ -18,13 +18,7 @@ namespace Dark_Cloud_Improved_Version
         private const int    SettleTicks = 2;      // live this many ticks before it is changed
 
         /// <summary>Ungaga with the Javelin, or Xiao with Super Steve and a Javelin sphere.</summary>
-        internal static bool Wielded()
-        {
-            int ch = Player.CurrentCharacterNum();
-            if (ch == Player.UngagaId) return Player.Weapon.GetCurrentWeaponId() == Items.javelin;
-            if (ch == Player.XiaoId) return Player.Weapon.GetCurrentWeaponId() == Items.supersteve && SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.javelin;
-            return false;
-        }
+        internal static bool Wielded() => UngagaWeapon.WieldsOrSphere(Items.javelin);
 
         public static void MarineEffect()
         {

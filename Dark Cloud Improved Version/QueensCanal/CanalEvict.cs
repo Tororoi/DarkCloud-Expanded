@@ -19,7 +19,7 @@ namespace Dark_Cloud_Improved_Version
         // Direct _MAP_JUMP: the Queens time-change is script EVENT 132 (RunEvent 0x84, GameMode 0xe). Rather
         // than queue a new event via start_event_no (which would run only AFTER 132 ends), we set the map-jump
         // on the CURRENTLY running event — NextMapNo + arrival StartEventNo + the return code EdEventMode reads.
-        private const long  CanalEvictFlag = CodeCaves.Mailbox.CanalEvict; // native fade-hook reads this on the fully-black frame
+        private const long  CanalEvictFlag = Mailbox.CanalEvict; // native fade-hook reads this on the fully-black frame
         private const float CanalBankY     = 31f;                        // afternoon (medium) tide height: caught = BELOW the
                                                                           //   incoming waterline (banks/ladder-top are ≈70, well above)
         private const float CanalZPad      = 60f;                        // canal wall z≈±50 + padding; the basin is the only

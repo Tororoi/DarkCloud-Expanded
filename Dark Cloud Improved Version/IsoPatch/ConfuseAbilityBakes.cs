@@ -6,7 +6,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// The "Confuse" weapon ability (bit 0x4000 of the ability word — Effect2 bit 0x40) as the menus show it: its name in the
-    /// system message bank and its icon in the status window's icon sheet. ElfWeaponPatches.PatchConfuseAbility points the menus
+    /// system message bank and its icon in the status window's icon sheet. ElfConfusePatches.PatchConfuseAbility points the menus
     /// at both (the SPECIAL list's loop reaches bit 14, whose name is message 0x45) and gives Babel's Spear the bit.
     ///
     /// NAME: message 0x45 ("Confuse") added to the four English system banks (meswin\system_1.mes / systeme.bin and the system14
@@ -128,13 +128,12 @@ namespace Dark_Cloud_Improved_Version
             return rgba;
         }
 
-        /// <summary>Each RGBA pixel as the sheet's nearest palette entry (its CLUT in the PS2's CSM1 order: index bits 3 and 4 swap);
+        /// <summary>Each RGBA pixel as the sheet's nearest palette entry (its CLUT in the PS2's CSM1 order, <see cref="Tim8.Csm1Index"/>);
         /// a transparent pixel (alpha < 128) as the Heal tile's corner entry, the tiles' clear one.</summary>
         private static byte[] ToIndices(byte[] rgba, byte[] file, int clut)
         {
-            static int Csm1(int i) => (i & ~0x18) | ((i & 0x08) << 1) | ((i & 0x10) >> 1);
             var pal = new (int r, int g, int b)[256];
-            for (int i = 0; i < 256; i++) { int o = clut + Csm1(i) * 4; pal[i] = (file[o], file[o + 1], file[o + 2]); }
+            for (int i = 0; i < 256; i++) { int o = clut + Tim8.Csm1Index(i) * 4; pal[i] = (file[o], file[o + 1], file[o + 2]); }
             byte clear = HealCell[0];
             var outp = new byte[Tile * Tile];
             for (int k = 0; k < outp.Length; k++)
@@ -144,7 +143,7 @@ namespace Dark_Cloud_Improved_Version
                 int best = 0, bestD = int.MaxValue;
                 for (int i = 0; i < 256; i++)
                 {
-                    if (file[clut + Csm1(i) * 4 + 3] == 0) continue;                          // never a clear entry for a solid pixel
+                    if (file[clut + Tim8.Csm1Index(i) * 4 + 3] == 0) continue;                // never a clear entry for a solid pixel
                     int dr = pal[i].r - r, dg = pal[i].g - g, db = pal[i].b - b, d = dr * dr + dg * dg + db * db;
                     if (d < bestD) { bestD = d; best = i; if (d == 0) break; }
                 }
@@ -161,16 +160,8 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
-        /// <summary>A pixel's byte in PSMT8 block order (the sheet's width): the inverse of reading the GS's 32-bit blocks row-major.</summary>
-        private static int Swizzled(int x, int y)
-        {
-            int bl = (y & ~0xF) * SheetW + (x & ~0xF) * 2;
-            int ss = (((y + 2) >> 2) & 1) * 4;
-            int py = (((y & ~3) >> 1) + (y & 1)) & 7;
-            int cl = py * SheetW * 2 + ((x + ss) & 7) * 4;
-            int bn = ((y >> 1) & 1) + ((x >> 2) & 2);
-            return bl + cl + bn;
-        }
+        /// <summary>A pixel's byte in PSMT8 block order at the sheet's width.</summary>
+        private static int Swizzled(int x, int y) => Tim8.BlockOffset(x, y, SheetW);
 
         private static readonly byte[] Tim2 = { (byte)'T', (byte)'I', (byte)'M', (byte)'2' };
         private static int IndexOf(byte[] a, byte[] p, int from)

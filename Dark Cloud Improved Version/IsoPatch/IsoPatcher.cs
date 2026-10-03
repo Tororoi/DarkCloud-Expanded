@@ -117,7 +117,7 @@ namespace Dark_Cloud_Improved_Version
             return Path.Combine(xdg, "PCSX2", "cheats");
         }
 
-        internal static string Patch(string stockIso, string outDir, Action<string> progress)
+        internal static string Patch(string stockIso, string outDir, Action<string> progress, bool publishPnach = true)
         {
             if (string.IsNullOrWhiteSpace(stockIso) || !File.Exists(stockIso))
                 throw new FileNotFoundException("Stock ISO not found. Select your Dark Cloud (USA) .iso first.");
@@ -168,8 +168,8 @@ namespace Dark_Cloud_Improved_Version
             progress("Baking borrowed shot effects …");
             BakeBorrowedShots(outIso, progress);
 
-            progress("Publishing pnach to PCSX2 …");
-            ReshipPnach(crc);
+            if (publishPnach) { progress("Publishing pnach to PCSX2 …"); ReshipPnach(crc); }
+            else progress("pnach not published (--no-pnach)");
             return outIso;   // the caller sets the final informative message (avoids overwriting it)
         }
 

@@ -17,16 +17,17 @@ namespace Dark_Cloud_Improved_Version
     ///   • MMU  (0x21xxxxxx) — what Memory.Read*/Write* take.
     ///   • Guest(0x01xxxxxx) — what the GAME sees, i.e. what we bake into pointers/instructions.
     ///
+    /// The rules this map follows (page isolation / PINE write safety, address-ordered tables, NextFree,
+    /// capacity beside the cave, the monster-pool carve) and the incidents behind them: docs/code-caves.md.
+    ///
     /// ── MAP (guest) ───────────────────────────────────────────────────────────────────────────────────
-    /// Everything below 0x01FB4300 lives in ONE proven-clean heap tail (CodeCaveScanner, 68 sessions).
-    /// It is now packed so that the clone's mesh cave fits the LARGEST character (Goro), which makes all six
-    /// clonable. The room came from three places: capping the AI stubs at 32 slots, trimming the node pool
-    /// 128→96 bones (Osmond's 84 is the real max), and packing the decoy tables out of a 0x10000 hole.
+    /// Everything below 0x01FB4300 lives in ONE proven-clean heap tail (CodeCaveScanner, 68 sessions),
+    /// packed so that the clone's mesh cave fits the LARGEST character (Goro): all six are clonable.
     ///
     ///   0x01F10000  PNACH mailbox — 4-byte flag slots, see <see cref="Mailbox"/> (its NextFree marks the
     ///               next unclaimed slot — do not trust any prose copy of it)
     ///   0x01F10040  Town-camera scratch: stick ease @+0x00, E_prev quad @+0x10 (16B) — written per frame
-    ///               by the ISO-baked camera function (boot-zeroed; moved here off its code page, 2026-08)
+    ///               by the ISO-baked camera function (boot-zeroed)
     ///   0x01F10100  AI stubs      32 × 0x400                       → ends 0x01F18100
     ///
     ///   Mirage — decoy aggro redirect:
@@ -54,714 +55,16 @@ namespace Dark_Cloud_Improved_Version
     ///   0x01400000  EnemyModelInjector param/code block — a SEPARATE region, deep in main BSS.
     ///
     /// A SECOND band holds the ISO-baked ELF caves: a mod-created PT_LOAD segment at guest
-    /// 0x01FB0000–0x01FB2000 (the hijacked phdr3 — see <see cref="ElfCave"/>). Loader-loaded at boot,
-    /// so direct j/jal into it is legal; the scanner's heap-tail claim already covers it, and THIS FILE
-    /// is its only registry. ⚠ 0x228BB0–0x22A210 is NOT free: it is the live dungeon character-change screen,
-    /// however dead it looks.
-    /// ⚠ PAGE-ISOLATION RULE: the segment's HOST PAGES (16KB granularity — Apple Silicon; 4KB on Intel)
-    /// must contain NO runtime-written data. Once any cave on a page executes, PCSX2 compiles and
-    /// WRITE-PROTECTS that page; the next PINE write to any address sharing it SIGBUSes the PINE server
-    /// thread — a hard crash. This happened: the segment's first home 0x01FAE700 shared its page with
-    /// the live water-redraw mailboxes @0x01FAE600-610 → PINE SIGBUS at 0x1FAE60C every Queens session.
+    /// 0x01FB0000–0x01FB4000 (the hijacked phdr3 — <see cref="ElfCave"/>, its only registry). Loader-loaded
+    /// at boot, so direct j/jal into it is legal; the scanner's heap-tail claim covers it. Its host pages hold
+    /// NO runtime-written data (the page-isolation rule, stated on ElfCave). ⚠ 0x228BB0–0x22A210 is NOT
+    /// free: it is the live dungeon character-change screen, however dead it looks.
     /// </summary>
     internal static class CodeCaves
     {
-        // ── PNACH mailboxes ──────────────────────────────────────────────────────────────────────────
-        /// <summary>
-        /// The 4-byte flag slots at 0x01F10000 that the mod WRITES and the PNACH conditionals READ.
-        /// EVERY slot must be unique — two systems on one slot silently corrupt each other, and the symptom
-        /// shows up in the *other* system (this is not hypothetical: a reserved-but-unimplemented fishing flag
-        /// was sitting on Mirage's scene-gate slot; had it ever been wired up, writing 1 to boost the fishing
-        /// radius would have read as "decoy up" and NOP'd the chara-loop gates with no clone present).
-        ///
-        ///   +0x00 eventpoint   +0x04 sun/moon    +0x08 nearNPC     +0x0C xiaoFlag
-        ///   +0x10 nearNPC(2)   +0x14 insideMayor +0x18 element     +0x1C clock
-        ///   +0x20 pnachActive  +0x24 PINE probe (MemoryFunctions)  +0x28 option1   +0x2C option2
-        ///   +0x30 option3      +0x34 option4     +0x38 MIRAGE scene gate           +0x3C fish cam height
-        ///   +0x40 camera stick (EXTERNAL — off-limits)             +0x44 cape char ptr
-        ///   +0x48 line distp below   +0x50-0x5F camera E_prev (EXTERNAL — off-limits)
-        ///   +0x60 canal evict  +0x64 camera rest H  +0x68 cam gather count  +0x6C fish wall latch
-        ///   +0x70 idle-motion override  +0x74 block ladder  +0x78 refusal requested  +0x7C "!" Y boost
-        ///   +0x80 idle-motion flags (bit1 = play-once)
-        ///   +0x84.. FREE (<see cref="NextFree"/> is authoritative — this prose is a courtesy copy)
-        /// </summary>
-        internal static class Mailbox
-        {
-            // EVERY slot is declared here, deliberately. The 13 that were "documented" in the header comment but
-            // never given a constant were being written as RAW LITERALS across five feature files — which is
-            // exactly how a fishing flag once ended up squatting on Mirage's scene gate. A map that only exists
-            // as prose does not prevent collisions; a constant does. Claim the next slot by taking NextFree and
-            // moving it, and never write a bare 0x21F100xx anywhere else.
-            internal const long Base = 0x21F10000;
-
-            internal const long EventPoint   = Base + 0x00; // TownCharacter
-            internal const long SunMoon      = Base + 0x04; // TownCharacter
-            internal const long NearNpc      = Base + 0x08; // TownCharacter
-            internal const long XiaoFlag     = Base + 0x0C; // TownCharacter
-            internal const long NearNpc2     = Base + 0x10; // TownCharacter
-            internal const long InsideMayor  = Base + 0x14; // TownCharacter
-            internal const long Element      = Base + 0x18; // Dayuppy
-            internal const long Clock        = Base + 0x1C; // TownCharacter
-            internal const long PnachActive  = Base + 0x20; // MainMenuThread
-            internal const long PineProbe    = Base + 0x24; // MemoryFunctions / MainMenuThread / ModWindow
-            internal const long Option1      = Base + 0x28; // ModWindow
-            internal const long Option2      = Base + 0x2C; // ModWindow
-            internal const long Option3      = Base + 0x30; // ModWindow
-            internal const long Option4      = Base + 0x34; // ModWindow
-
-            /// <summary>Mirage 3-state gate, read every frame by the PNACH: 1 = decoy up (NOP the chara-loop
-            /// gates so the clone draws + steps), 2 = in a dungeon with no decoy (RESTORE the vanilla words —
-            /// PNACH conditionals do NOT auto-revert), 3 = decoy up but PAUSED (drawn, frozen), 0 = town.
-            /// Also gates the fire-raster tuning patches (sprite size / dist gate / distortion amplitude).</summary>
-            internal const long MirageSceneGate = Base + 0x38;
-
-            /// <summary>FISHING CAMERA HEIGHT (float). <c>EdMoveChara</c> hard-codes <c>SetHeight(40.0)</c> for
-            /// fishing (`lui $2,0x4220` @0x16C2DC); <see cref="IsoPatcher"/>'s PatchFishingCameraHeight rewrites
-            /// those two instructions to load this word instead, so the height becomes per-spot data. 40 = the
-            /// vanilla fishing angle (looking down into the water); the Queens CANAL spot uses the standard town
-            /// height 5 because there you stand IN the water and the downward view is counterproductive.
-            /// ⚠ The patched code reads this EVERY FRAME while fishing, in EVERY town — it must never be 0 or
-            /// the camera drops to height 0. Seeded at mod start (MainMenuThread) and re-asserted per tick.</summary>
-            internal const long FishCamHeight = Base + 0x3C;
-
-            /// <summary>Canal tide-evict flag. CanalTide writes 1 the instant the tide turns while the player is
-            /// caught in the drained Queens canal; the EdFadeInOut fade-hook (IsoPatcher.PatchCanalEvictFadeHook,
-            /// stub @<see cref="ElfCave.CanalEvictFadeHook"/>) reads it on the exact fully-black frame and requests
-            /// the _MAP_JUMP to the East Harbor dock, then clears it. So the mod only maintains the flag — native code owns the timing.</summary>
-            /// <summary>⚠ RESERVED — NOT a mailbox slot. The ISO-baked town-camera collision function
-            /// (tools/stubs/town_camera_collision.s, hooked into EdMoveChara) uses guest 0x01F10040 as its
-            /// smoothed right-stick scratch (one float, rewritten every camera frame) and 0x01F10050–5F
-            /// as its persisted swept-slide origin E_prev. Those functions grabbed the page directly,
-            /// bypassing this allocator, so these bytes are OFF-LIMITS: the mailbox must never hand them
-            /// out. CanalEvict USED to live at 0x40 and collided — a non-zero stick value read as a set
-            /// evict flag false-warped the player to the dock (and the mod's per-tick flag writes stomped
-            /// the camera's stick). CanalEvict now lives at 0x60, past E_prev.</summary>
-            internal const long CameraStick = Base + 0x40;   // external (town_camera_collision.s) — do not reuse
-            internal const long CameraEprev = Base + 0x50;   // external, 16 bytes (0x50-0x5F) — do not reuse
-
-            /// <summary>Player CCharacter ptr for the low-tide cape early-draw. CanalTide arms this alongside the
-            /// body's model root (MizuRedrawFramePtr); the capeEarlyDraw cave (IsoPatcher.PatchCapeEarlyDraw,
-            /// reached by redirecting the refraction EARLY_STUB's `jal MGDraw`) reads it to walk char+0xC74 and
-            /// Draw__6CCloth each cloth piece EARLY — so the cape survives the falls' Z-write like the body.
-            /// The cave bakes the guest form 0x01F10044.</summary>
-            internal const long CapeCharPtr = Base + 0x44;
-
-            /// <summary>Fishing rope BELOW-bobber rest length (float). The split caves (IsoPatcher.PatchFishLineSplit)
-            /// select this vs the existing distp @0x202A1FA4 (=above) per segment at anchor 18, so hook depth
-            /// (bobber→hook) is tuned independently of cast reach (rod→bobber). The cave bakes the guest form
-            /// 0x01F10048. Mod seeds/tunes it while fishing; MUST be > 0 (0 collapses the hang).</summary>
-            internal const long LineDistpBelow = Base + 0x48;
-
-            /// <summary>Canal tide-evict flag (relocated from 0x40 — see <see cref="CameraStick"/> for why).
-            /// CanalTide writes 1 the instant the tide turns while the player is caught in the drained Queens
-            /// canal; the EdFadeInOut fade-hook (IsoPatcher.PatchCanalEvictFadeHook, stub @<see cref="ElfCave.CanalEvictFadeHook"/>)
-            /// reads it on the exact fully-black frame, requests the _MAP_JUMP to the East Harbor dock, then clears it.
-            /// The fade-hook bakes the guest form 0x01F10060 (tools/stubs/canal_evict_fade_hook.s) — keep in sync.</summary>
-            internal const long CanalEvict = Base + 0x60;
-
-            /// <summary>Town-camera RESTING eye height (float), read EVERY frame by the town-camera collision fn
-            /// (town_camera_collision.s: `lw $t0,0x24($t3)` where $t3=0x01F10040 → this word @0x01F10064) as its
-            /// REST_H height target. Data-driven so the fishing rest height is a TARGET the camera eases to, not
-            /// EdMoveChara's per-frame SetHeight clamp (which desynced the swept-slide and pinned the distance in
-            /// with no recovery). The mod (CustomFishingSpot.PinFishCamHeight) writes the town rest (5) normally
-            /// and the active spot's fishing height while a session is live. ⚠ Read every frame in EVERY town —
-            /// seeded at startup and re-asserted per tick; a 0 here would drop the camera to the pivot.</summary>
-            internal const long CameraRestH = Base + 0x64;
-
-            /// <summary>TRUE per-frame camera-gather CCPoly count (int), written by the cameraNormSide stub
-            /// (tools/stubs/camera_norm_side.s) from $s8 at town-camera cave entry. ⚠ The WorkBuffer struct's
-            /// `used` field is NOT a fill level — EdMoveChara resets it and Alloc(2000) re-reserves the whole
-            /// buffer every frame, so `used`==2000 merely means "the gather ran" (the old Queens
-            /// "used=2000 = saturated" dumps measured the alloc, not the count). Only updates while the town
-            /// camera cave runs (stale in menus/dungeons).</summary>
-            internal const long CamGatherCount = Base + 0x68;   // external (camera_norm_side.s) — do not reuse
-
-            /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            /// <summary>Per-cast wall latch for the Queens FishLineClamp (camera_norm_side.s): written by
-            /// the cave while NOT casting — 1 = the bobber dangles inside the canal region (|z|&lt;60, floor-
-            /// spot stances) so the flight wall clamp arms; 0 = bank stance, walls stay off (no line snap).</summary>
-            internal const long FishWallLatch = Base + 0x6C;
-
-            /// <summary>Town-character idle-motion override (the swapped-in cat's idle→sit). The ELF cave
-            /// <c>ElfPatches.PatchIdleMotionOverride</c> intercepts EdMoveChara's grounded LOCOMOTION store
-            /// <c>*(char+0xc68) = motion</c> (0 = idle / 1 = run / 2 = walk, @0x16a6a8): when the motion the
-            /// engine computed is 0 (idle) AND this word is non-zero, the cave stores THIS value instead (e.g.
-            /// the sit motion index), so an idle town character plays the override animation. Run/walk (1/2) and
-            /// a 0 here pass through unchanged — vanilla. The cave reads the GUEST form 0x01F10070; the mod
-            /// writes MMU 0x21F10070 (= guest + 0x20000000). 0 = off. Owned by the mod's idle→sit timer logic.</summary>
-            internal const long IdleMotionOverride = Base + 0x70;
-
-            /// <summary>Town ladder-mount block (the swapped-in non-Toan ally must never climb — the mount
-            /// loads a Toan-rigged climb overlay onto a foreign model → crash). The ELF cave
-            /// <c>ElfPatches.PatchLadderRefusal</c> redirects EdMoveChara's single ladder-mount call
-            /// (<c>jal EdInitHashigo</c> @0x16c0fc) plus the climbing-flag set (<c>li s8,1</c> @0x16c104) to a
-            /// cave: when this word is 0 it mounts exactly as vanilla (calls EdInitHashigo + sets the climbing
-            /// flag s8=1 → DAT_01d1970c); when non-zero it SKIPS both (no mount, s8 stays -1 = not climbing) and
-            /// raises <see cref="RefusalRequested"/>. The cave reads the GUEST form 0x01F10074; the mod writes MMU
-            /// 0x21F10074 (= guest + 0x20000000). 0 = off (vanilla ladders). Set once per town by the swap logic.</summary>
-            internal const long BlockLadder = Base + 0x74;
-
-            /// <summary>Ladder-refusal request (one-shot). The <c>PatchLadderRefusal</c> cave sets this to 1 when
-            /// (and only when) a mount was actually attempted-and-blocked — i.e. under the SAME PadDown(Cross)
-            /// press condition that would have mounted in vanilla, so it fires once per Cross press, not every
-            /// frame the ally merely stands by the ladder. The mod polls MMU 0x21F10078, plays the shake-head
-            /// refusal, then clears it back to 0. Only <see cref="BlockLadder"/> being non-zero can raise it.</summary>
-            internal const long RefusalRequested = Base + 0x78;
-
-            // 0x70-0x7C were retired freeze-hunt diagnostic mailboxes (alloc probe / breadcrumb / shadow-skip);
-            // those ELF hooks + their mod-side readers were removed 2026-09, and the slots were RECLAIMED by the
-            // town-swap behavior mailboxes above/below (0x70 idle, 0x74/0x78 ladder, 0x7C "!" boost).
-
-            /// <summary>Player "!" event-trigger mark HEIGHT boost (float). A swapped-in ally with different
-            /// proportions (the cat) sits lower, so the exclamation mark pokes through its mesh. The ELF cave
-            /// <c>ElfPatches.PatchExclamationHeight</c> redirects the PLAYER mark's final Y store in
-            /// <c>EdDrawSysCursor</c> (<c>swc1 f0,0x94(sp)</c> @0x17cf5c, the store of
-            /// <c>fStack_c + *(Chara+0xb4) + 3.0 + sinf(a)*0.5</c>) to a cave that adds THIS word to the Y before
-            /// storing it — so the mark rides `vanilla Y + boost`. The cave reads the GUEST form 0x01F1007C; the
-            /// mod writes MMU 0x21F1007C (= guest + 0x20000000). 0.0 = vanilla (bit-exact for real positions);
-            /// a positive float lifts the cat's mark clear. NPC cursors (the earlier loop) are untouched. Owned by
-            /// the ally-swap logic: seed 0.0 for Toan, the cat's clearance for the cat.</summary>
-            internal const long ExclamationYBoost = Base + 0x7C;
-
-            /// <summary>Motion FLAGS the idle-motion cave writes to char+0xc64 alongside an override
-            /// (<see cref="IdleMotionOverride"/>). CCharacter::Step reads +0xc64 as native playback flags —
-            /// bit0 (1) = freeze, bit1 (2) = PLAY ONCE then hold the LAST frame (the engine's own one-shot,
-            /// used by the land animation), bit2 (4) = restart from the clip start (self-clearing). 0 = loop
-            /// (vanilla). Only applied while an override index is armed; run/walk frames keep the vanilla
-            /// zeroing. Contract: the mod arms flags WITH the index and zeroes BOTH on release — a stray
-            /// (index=0, flags=2) combo freezes idle on its last frame. Cave reads GUEST 0x01F10080; mod
-            /// writes MMU 0x21F10080. Sit = 0 (loops); refusal = 2 (one shake, hold neutral).</summary>
-            internal const long IdleMotionFlags = Base + 0x80;
-
-            /// <summary>ENEMY-VS-PLAYER BLOCK ADDEND (float). <c>CMonstorUnit::MoveCheck2</c> (0x1DCDD0) stops an
-            /// enemy's scripted movement when its next position is within (its move radius +0x1E414 + 6.0) of
-            /// the player; the 6.0 is a per-site immediate (`lui $v1,0x40c0; mtc1 $v1,$f1` @0x1DCFD0).
-            /// AngelGear.ArmBlockPatch rewrites those two words (cold) to load THIS word instead, so the
-            /// block distance becomes data: 6.0 = vanilla, RingRadius while Angel Gear's shield is up (enemies
-            /// and their scripted lunges stop at the slingshot). Cave reads GUEST 0x01F10084. ⚠ Read every
-            /// enemy step in every dungeon once armed — must never be 0/garbage; seeded 6.0 at arm.</summary>
-            internal const long ShieldBlockAddend = Base + 0x84;
-
-            /// <summary>SHOT-VS-PLAYER TARGET POINTER. <c>checkCollision</c> (0x1AB740) is every shot's "did I hit
-            /// the player" test; it loads her position global with `lui $v0,0x1ea; addiu $a1,$v0,0x1d30` @0x1AB828.
-            /// AngelGear.ArmShotPatch rewrites those two words (cold) to `lui $a1,HI; lw $a1,LO($a1)` — a
-            /// POINTER read from this word: 0x01EA1D30 (vanilla) or, while Angel Gear's shield is solid, the copy's
-            /// pouch-node world translation (engine-refreshed every draw) — so enemy shots collide with the POUCH
-            /// natively, no per-frame writes. Cave reads GUEST 0x01F10088. ⚠ Read by every enemy shot every frame
-            /// once armed — must always hold a valid vec4 address; seeded to the player global at arm.</summary>
-            internal const long ShotHitTarget = Base + 0x88;
-
-            /// <summary>Angel Gear shield: who drives <see cref="ShieldGaugeRate"/>. 0 = nobody — the pnach re-seeds
-            /// the rate to 1.5 (vanilla) every frame; 1 = the app (shield up / broken) owns it. Guest 0x01F1008C.</summary>
-            internal const long ShieldGaugeOwner = Base + 0x8C;
-            /// <summary>Xiao's ATTACK-GAUGE REFILL MULTIPLIER (float). The ISO's dun.bin patch (DunPatches) makes the
-            /// overlay refill `gauge += max(1, speed/30) × THIS` instead of the immediate 1.5 (@0x1DB8090/94).
-            /// 1.5 = vanilla, 0 = hold (the shield's HP bar), small = slow refill after a break. Guest 0x01F10090.
-            /// ⚠ LIVES HERE, NOT IN THE ELF CAVE SEGMENT: a PINE write into a page holding executed cave code
-            /// SIGBUSes PCSX2. The mailbox page holds no code.</summary>
-            internal const long ShieldGaugeRate = Base + 0x90;
-
-            /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            /// <summary>The Divine Beast cat's runtime block: guest 0x01FB4094..0x01FB4193 inside the spare 0x1FB4000 span
-            /// (only BobberPtr uses its first four bytes). The cat's words were first laid out in THIS mailbox page from
-            /// +0x94, and grew past +0x100 — which is the AI-stub table (AiStubBase 0x1F10100): clip frames, range,
-            /// hit slot and diagnostics were being shared with and wiped by it. Same offsets, new base.</summary>
-            internal const long CatBase = 0x21FB4000;
-
-            /// <summary>Divine Beast cat ↔ the native pellet catcher/follower (ElfCave.CatPelletFollow; DivineBeastTitle.cs).
-            /// The cat copy sits resident and hidden in chara slot 1. At the charge threshold the mod writes the growth
-            /// reciprocal and the head rest offset (cat space × cat scale), zeroes frames/slot, and sets state 3 (waiting);
-            /// the cave then binds the next NEW pellet on its birth frame (slot+1, state 1, opacity 128) and owns slot 1's
-            /// position and scale every frame until that pellet ends (slot 0, state 2 → the mod fades and re-hides).</summary>
-            internal const long CatPelletSlot  = CatBase + 0x94;   // int, bound pellet slot + 1; 0 = none (page boots zero-filled)
-            internal const long CatState       = CatBase + 0x98;   // int: 0 idle, 1 following, 2 pellet ended, 3 waiting for a new pellet
-            internal const long CatGrowFrames  = CatBase + 0x9C;   // int, frames since bound (cave increments)
-            internal const long CatGrowInv     = CatBase + 0xA0;   // float, 1 / growth frames
-            internal const long CatHeadX       = CatBase + 0xA4;   // float ×3: head rest offset in CAT space (x, height, z)
-            internal const long CatHeadH       = CatBase + 0xA8;
-            internal const long CatHeadZ       = CatBase + 0xAC;
-            internal const long CatSeenMask    = CatBase + 0xB0;   // int, active pellet-slot bits last frame (cave)
-            // States 4 (falling) / 5 (landed) / 6 (running): at full size the cave breaks the cat away from the pellet
-            // (expiring it), falls it with the pellet's forward speed, snaps it to CatFloorH on the landing frame and,
-            // once the mod sets state 6, runs it at ½ the pellet speed toward CatTargetPtr (or straight).
-            internal const long CatVx          = CatBase + 0xB4;   // float ×3: fall velocity, captured at the breakaway (cave)
-            internal const long CatVh          = CatBase + 0xB8;
-            internal const long CatVz          = CatBase + 0xBC;
-            internal const long CatGravity     = CatBase + 0xC0;   // float, units/frame² (mod)
-            internal const long CatFloorH      = CatBase + 0xC4;   // float, landing height (mod)
-            internal const long CatRunSpeed    = CatBase + 0xC8;   // float, ½·|pellet horizontal speed| (cave)
-            internal const long CatTargetPtr   = CatBase + 0xCC;   // uint, guest address of the target's position vector, 0 = none (mod)
-            internal const long CatDirX        = CatBase + 0xD0;   // float ×2: unit run direction (cave; the mod faces the cat along it)
-            internal const long CatDirZ        = CatBase + 0xD4;
-            internal const long CatGrowN       = CatBase + 0xD8;   // int, growth frames (mod)
-            // State 5 (landing): the land clip plays straight through; the cave reads the copy's live motion frame (slot 1
-            // +0xC20 → MOTION_TYPE +0x10) and keeps the fall's forward momentum until the paws-touch frame, then runs the
-            // moment the clip reaches its end (or wraps).
-            internal const long CatLandStopFrame = CatBase + 0xDC; // float, clip frame where the paws touch — momentum stops (mod)
-            internal const long CatLandEndFrame  = CatBase + 0xE0; // float, clip end frame — straight into the run (mod)
-            internal const long CatPrevFrame     = CatBase + 0xE4; // float, motion frame seen last time (cave; wrap detection)
-            internal const long CatLandLead      = CatBase + 0xE8; // float, frames before the predicted touchdown at which the land clip starts (mod)
-            internal const long CatMoveKey       = CatBase + 0xEC; // int, motion key played while moving after the landing (mod: the brisk walk)
-            internal const long CatMoveFrac      = CatBase + 0xF0; // float, ground speed after the landing as a fraction of the pellet's speed (mod)
-            internal const long CatProbeUp       = CatBase + 0xF4; // float, floor probe reach above the cat (mod)
-            internal const long CatProbeDown     = CatBase + 0xF8; // float, floor probe reach below the cat (mod)
-            internal const long CatProbeFront    = CatBase + 0xFC; // float, extra floor cast this far AHEAD of the root along its direction (mod)
-            internal const long CatProbeBack     = CatBase + 0x100; // float, … and this far BEHIND; the cat stands on the highest of the three casts
-            // Clip rate while moving: the cave writes slot +0xC60 (motion-speed override) = min(base + perSpeed · ground
-            // speed, max) — the town's own walk mapping for this rig (EdMoveChara: 0.8·(0.2 + stick) capped 0.85 with
-            // ground 1.6·stick → 0.16 + 0.5·ground). Not planted feet; the ratio the designers tuned. A forward wall
-            // probe stops the cat (CatBlocked = 1, idle key).
-            internal const long CatRateBase      = CatBase + 0x104; // float, clip rate at zero speed (mod: 0.16)
-            internal const long CatRatePerSpeed  = CatBase + 0x108; // float, clip rate per unit of ground speed (mod: 0.5)
-            internal const long CatRateMax       = CatBase + 0x10C; // float, clip rate cap (mod: 0.85)
-            internal const long CatReserved110   = CatBase + 0x110; // (was the run key; unused)
-            internal const long CatIdleKey       = CatBase + 0x114; // int, stand key (mod)
-            internal const long CatBlocked       = CatBase + 0x118; // int, 1 while a wall stops the cat (cave)
-            // Pounce + hit: within CatPounceRange of its target the cave plays the take-off, then leaps an arc of
-            // CatPounceFrames at the target's live position and lands as usual. While riding, falling or landing it
-            // tests its root and a point ahead against every enemy's body spheres (the pellet code's own table);
-            // a touch freezes it (state 9) and names the enemy in CatHitSlot for the mod to deal the damage.
-            internal const long CatPounceRange   = CatBase + 0x11C; // float (mod)
-            internal const long CatPounceFrames  = CatBase + 0x120; // float, leap flight frames (mod)
-            internal const long CatTakeoffEnd    = CatBase + 0x124; // float, take-off clip end frame (mod, 204)
-            internal const long CatHitRadius     = CatBase + 0x128; // float, the cat's touch radius (mod)
-            internal const long CatHitSlot       = CatBase + 0x12C; // int, enemy slot + 1 the cat touched (cave → mod; 0 none)
-            // The pounce's clip frames: ready (in place) → take-off, in place until CatRampStart, forward momentum ramping
-            // to full by CatRampEnd → leap at full momentum → landing. V = distance ÷ CatPounceTravel (the momentum-frames
-            // the clips cover). A target higher than CatFlyThreshold above the floor gets the ballistic arc instead.
-            internal const long CatReadyEnd      = CatBase + 0x130; // float, ready clip end frame (mod, 105)
-            internal const long CatRampStart     = CatBase + 0x134; // float, take-off frame where the forward ramp starts (mod, 194)
-            internal const long CatRampInv       = CatBase + 0x138; // float, 1 / (ramp end − ramp start) (mod)
-            internal const long CatRampEnd       = CatBase + 0x13C; // float, take-off frame of full momentum (mod, 198; informational)
-            internal const long CatLeapEnd       = CatBase + 0x140; // float, leap clip end frame (mod, 214)
-            internal const long CatPounceTravel  = CatBase + 0x144; // float, momentum-frames covered by take-off + leap + landing (mod)
-            internal const long CatFlyThreshold  = CatBase + 0x148; // float, target height above the floor that makes it a flying target (mod)
-            internal const long CatPounceV       = CatBase + 0x14C; // float, this pounce's full momentum (cave)
-            internal const long CatPounceFly     = CatBase + 0x150; // int, 1 = flying-target pounce (cave)
-            internal const long CatFloatKey      = CatBase + 0x154; // int, the vertical-leap key held while rising on a flying pounce (mod, 71)
-            internal const long CatDbgDist       = CatBase + 0x158; // float, distance compared when the cave decided to pounce (cave, diagnostics)
-            internal const long CatDbgRange      = CatBase + 0x15C; // float, the range it compared against (cave, diagnostics)
-            internal const long CatReadyStart    = CatBase + 0x160; // float, ready clip start frame (mod, 95) — clip-end tests ignore frames outside [start, end+1]
-            internal const long CatTakeoffStart  = CatBase + 0x164; // float, take-off clip start frame (mod, 190)
-            internal const long CatLeapStart     = CatBase + 0x168; // float, leap clip start frame (mod, 205)
-            internal const long CatPounceMaxDist = CatBase + 0x16C; // float, farthest a pounce may still launch at after the ready (mod, 2× range)
-            internal const long CatDbgTrig       = CatBase + 0x170; // float ×4 (diagnostics): cat x, cat y, target x, target y at the pounce trigger (cave)
-            internal const long CatDbgReady      = CatBase + 0x180; // float ×5 (diagnostics): the same four at the end of the ready, then its distance (cave)
-            internal const long CatMoveAbs       = CatBase + 0x194; // float, absolute ground speed after the landing (units/frame); > 0 overrides CatMoveFrac (mod)
-            internal const long CatLeapTravel    = CatBase + 0x198; // float, momentum-frames from the leap's start to the paws-touch frame (mod); the leap is re-sized to the live distance ÷ this
-            internal const long CatHitSphere     = CatBase + 0x19C; // int, the enemy body sphere the touch test met (cave); the hit entry is planted on it
-            internal const long CatSitKey        = CatBase + 0x1A0; // int, the sit clip's key — with no target the cat sits in place (mod)
-            internal const long CatPounceGravity = CatBase + 0x1A4; // float, the ground pounce's arc gravity (mod)
-            internal const long CatLeapRate      = CatBase + 0x1A8; // float, the leap clip's motion-speed override during a ground pounce (mod)
-            internal const long CatPounceGround  = CatBase + 0x1AC; // int, 1 while a ground pounce is airborne (cave): the fall block uses CatPounceGravity
-            internal const long CatFloatLaunch   = CatBase + 0x1B0; // float, the float-up frame where the feet leave the ground (mod): the vertical leap is computed there
-            internal const long CatFloatStart    = CatBase + 0x1B4; // float, the float-up clip's first frame (mod)
-            internal const long CatFloatRate     = CatBase + 0x1B8; // float, the float-up's motion-speed override (mod)
-            internal const long CatFallBlend     = CatBase + 0x1BC; // float, MOTION_STATE blend increment for the float-up → fall fade (mod, 1/steps)
-            internal const long CatBlendDefault  = CatBase + 0x1C0; // float, the increment put back when the land clip starts (mod, 0.1)
-            internal const long CatHitEntry      = CatBase + 0x1C4; // int, the damage entry the cave planted natively, index + 1 (cave → mod)
-            internal const long CatHitLatch      = CatBase + 0x1C8; // int, 1 while a planted entry is unresolved (cave sets, mod clears if it never connects)
-            internal const long CatHitDamage     = CatBase + 0x1CC; // int, the entry's base damage = pellet damage + attack (mod, at bind)
-            internal const long CatHitAttr       = CatBase + 0x1D0; // int, the entry's element attribute bits (mod, at bind)
-            internal const long CatKickStrength  = CatBase + 0x1D4; // float (mod)
-            internal const long CatKickDecay     = CatBase + 0x1D8; // float (mod)
-            internal const long CatHeadNode      = CatBase + 0x1DC; // uint, guest address of the copy's cat_kao frame (mod, at spawn): the contact point is its posed world position
-            internal const long CatFallBlendFrames = CatBase + 0x1E0; // float, the float-up → fall fade length in steps (mod): the cave times the switch so the fade ends as the land clip starts
-            internal const long CatGlowOn        = CatBase + 0x1E4; // int, 1 while the cat is up (mod): the glow cave draws
-            internal const long CatGlowScale     = CatBase + 0x1E8; // float, the torch routine's scale argument (mod; × the fade)
-            internal const long CatGlowFlags     = CatBase + 0x1EC; // int, 1 = glow pair, 2 = flickering flame sprite, 3 = both (mod)
-            internal const long CatGlowNodeA     = CatBase + 0x1F0; // uint, guest address of the copy's cat_kosibone frame (mod, at spawn)
-            internal const long CatGlowNodeB     = CatBase + 0x1F4; // uint, guest address of the copy's cat_sebone2 frame (mod, at spawn)
-            internal const long CatGlowReady     = CatBase + 0x1F8; // int, the cave bound its textures (cave; the mod clears it per charge)
-            internal const long CatGlowPull      = CatBase + 0x1FC; // float, how far toward the camera the sprite is pulled (mod; the torches use 15)
-            internal const long CatGlowObject    = CatBase + 0x200; // the cave's CFireOmni object, 0x40 B
-            internal const long CatGlowLift      = CatBase + 0x240; // float, added to the glow's height (mod; negative lowers it)
-            internal const long CatAimPos        = CatBase + 0x244; // float3 x,h,z: the point the cat walks to / jumps at — the target's biggest body sphere (mod, per tick); CatTargetPtr points here
-            internal const long CatHoldReady     = CatBase + 0x254; // int: 1 = the cave holds the ready crouch on its last frame instead of leaping (mod: the target cannot be hit yet)
-            internal const long CatScaleMul      = CatBase + 0x250; // float: the cat's full size — the cave multiplies it into its growth k while the cat rides the pellet (mod writes DivineBeastTitle.CatScale at spawn; 0 = unset → the cave uses 1.0)
-            internal const long CatGlowName      = CatBase + 0x258; // char[16], NUL-terminated: the glow disc's texture entry — always "catglowp" now, because every look shares one 8-bit disc and differs only in the palette row (see CatGlowPalRow); the glow cave binds it (mod writes it, then clears CatGlowReady)
-            internal const long CatTrackHalf     = CatBase + 0x268; // float: 0 = the flying pounce re-aims until the apex; > 0 = keep re-aiming past the apex until halfway down to the floor (the winged cat, mod)
-            internal const long CatCapeCloth     = CatBase + 0x288; // uint: the cape's CCloth (guest) — the ONE cloth ElfCave.CatCapeTint recolours (mod; 0 = none)
-            internal const long CatCapeTint      = CatBase + 0x28C; // float3: added to the global ambient for that cloth alone, so the cape carries a colour of its own (mod)
-            internal const long CatApexH         = CatBase + 0x270; // float: the pounce's launch height, then the highest height while rising = the apex (cave)
-            internal const long CatPaletteTexEntry = CatBase + 0x29C; // uint, the CTexture entry ElfCave.CatPalette last found for catcape (cave; verified by name each frame, so a stale one costs one re-scan)
-            internal const long CatGlowPalRow     = CatBase + 0x2A4; // int, ONE-based palette row the glow cave should paint
-                                                                     // (0 = derive it from the equipped element, which is what the
-                                                                     // cape look wants); 7/8/9 = Divine Beast Title / Angel Shooter /
-                                                                     // Angel Gear
-            internal const long CatGlowPalTexEntry = CatBase + 0x2A0; // uint, the CTexture entry ElfCave.CatGlowPalette last found for catglowp (cave; same by-name verification) — ⚠ the page ends at CatBase + 0x300
-            /// <summary>Mirage's heat shimmer, drawn by ElfCave.MirageHazeDraw at the clone: 1 = draw it (written LAST);
-            /// the clone's root CFrame (guest) whose posed world translation places it; a height added to that
-            /// (negative lowers it — the raster is built to rise above its anchor).</summary>
-            internal const long MirageHazeOn   = Base + 0x94;
-            internal const long MirageHazeNode = Base + 0x98;
-            internal const long MirageHazeLift = Base + 0x9C;
-            /// <summary>Super Steve's sphere icon on the dungeon HUD: 1 = on (written LAST); the screen position and drawn
-            /// size ElfCave.SuperSteveIconDraw draws at. The icon itself is kept in itempack's spare cell (64, 32) by
-            /// ElfCave.SuperSteveIconCopy from the equipped record alone — nothing in that path reads the mailbox, so a
-            /// save loaded straight into a dungeon is served by the entry-time copy. Steve — the equipped weapon's
-            /// icon — is at (29, 388), 32 × 32.</summary>
-            internal const long SsIconOn    = Base + 0xA0;
-            internal const long SsIconX     = Base + 0xA4;
-            internal const long SsIconY     = Base + 0xA8;
-            internal const long SsIconSize  = Base + 0xAC;
-            /// <summary>Counters the two caves bump — the draw cave's draws issued; the copy cave's calls, calls with wepicon
-            /// registered, and copies issued — reported once in SuperSteve.DriveSphereIcon's log line.</summary>
-            internal const long SsIconDiagDraws      = Base + 0xB0;
-            internal const long SsIconDiagCopyCalls  = Base + 0xB4;
-            internal const long SsIconDiagSheetSeen  = Base + 0xB8;
-            internal const long SsIconDiagCopies     = Base + 0xBC;
-            /// <summary>A chara-slot prop riding one of Xiao's pellets (ElfCave.PropPelletFollow; SlingshotProp in projectile
-            /// mode on chara slot 3): the pellet slot + 1 (written LAST; 0 = off), a height lift, a yaw added per frame, and
-            /// the cave's "the pellet ended" word (it clears the slot itself; the mod fades the prop).</summary>
-            internal const long PropFollowSlot  = Base + 0xC0;
-            internal const long PropFollowLift  = Base + 0xC4;
-            internal const long PropFollowSpin  = Base + 0xC8;
-            internal const long PropFollowEnded = Base + 0xCC;
-            /// <summary>The Matador's charged pellet, for DunCave.CatGuardBypass: a Xiao-owned damage entry whose base damage
-            /// (+0x34) equals this word passes an enemy's guard window. 0 = no charged pellet out.</summary>
-            internal const long PelletCrushDamage = Base + 0xD0;
-            /// <summary>…and the kick that cave stamps on it (step__5CSHOT plants pellets with none): strength and decay,
-            /// as SetKickBack takes them (Goro's hammer swing: 2.5 / 0.1).</summary>
-            internal const long PelletKickStrength = Base + 0xD4;
-            internal const long PelletKickDecay    = Base + 0xD8;
-            /// <summary>…and the kick's origin (x, height, y): CheckDmg shoves along (enemy point − origin), so a point well behind
-            /// the pellet on its flight line makes the shove follow the flight. For a PelletKickDamage entry the cave reads it as an
-            /// OFFSET from the entry's own sphere centre instead (Dragon's Y: back along the flight; BombShot/Baselard: 0).</summary>
-            internal const long PelletKickOrigin   = Base + 0xDC;
-            /// <summary>A pellet-planted entry (Xiao-owned) with THIS base damage gets the kick above WITHOUT passing the guard
-            /// window — Dragon's Y's ball. 0 = none.</summary>
-            internal const long PelletKickDamage   = Base + 0xF0;
-            /// <summary>Xiao's per-shot WHP factor (float): the ISO's dun.bin patch (DunPatches) makes her fire routine pass THIS
-            /// to SwordDmgCheck1 instead of its immediate 1.0 — 1.0 = vanilla, ChargedShotWhp's 1.5 / 2.25 while a charged shot
-            /// is held. While the owner word is 0 (the app is not running it) the PNACH re-seeds 1.0 every frame.</summary>
-            internal const long XiaoShotWhpFactor = Base + 0xE8;
-            internal const long XiaoShotWhpOwner  = Base + 0xEC;
-            /// <summary>The item id whose basefx01 cell every player pellet is drawn as (DebugInfoCave.PelletSprite, hooked into
-            /// draw__5CSHOT): Super Steve carrying a slingshot's SynthSphere shows that slingshot's pellet. 0 = the equipped
-            /// weapon's (vanilla).</summary>
-            internal const long PelletSpriteId    = Base + 0xF4;
-            /// <summary>Osmond's flamethrower (CSHOT_FIREBAR, gun mode 2: the Blessing Gun and the Skunk): the spacing of its 24
-            /// flame particles along the aim, in units — the reach is 23 × this. The ISO's ELF patch makes Set and Init read it
-            /// here instead of their immediate 2.0; the PNACH re-seeds 2.0 every frame while the owner word is 0, the mod sets
-            /// the owner to 1 and writes 4.0 while the Skunk is equipped (Skunk).</summary>
-            internal const long FlameSpacing      = Base + 0xF8;
-            internal const long FlameSpacingOwner = Base + 0xFC;
-            internal const long NextFree = Base + 0x100;  // ⚠ FULL: +0x100 = AiStubBase — the next runtime word goes to the free band below the ELF caves (CodeCaves, 0x21FAF4B0..)
-        }
-
-        /// <summary>Caves that live INSIDE dun.bin (DunPatches writes their bytes over dead overlay code; the main-ELF hooks
-        /// that jump to them run only in dungeons, where the overlay is resident).</summary>
-        internal static class DunCave
-        {
-            /// <summary>tools/stubs/cat_guard_bypass.s over MemoryMapDump's body (a printf-only debug routine whose three callers
-            /// DunPatches nops): the cat's hits and the Matador's charged pellet ignore an enemy's guard window; Dragon's Y's
-            /// shot gets its kick without the bypass (main-ELF hook 0x1DAC78, ElfCatPatches.PatchCatGuardBypass).</summary>
-            internal const uint CatGuardBypass = 0x01DAC070;   // 332 B → 0x1DAC1BC = MemoryMapDump's whole span
-            internal const uint CatGuardBypassSpan = 0x14C;
-        }
-
-        /// <summary>A cave INSIDE a second dead main-ELF function: the body of DebugInfomationIF (0x1B47C0, 3,712 B), the
-        /// developers' debug overlay INPUT handler, reached only from the overlay's debug key (dun 0x1DB5150, mode 0xDD).
-        /// ElfWeaponPatches.PatchCircleEffects turns its first two words into `jr ra; li v0,0` — that caller reads "nothing
-        /// pressed" — and writes the cave from +8.</summary>
-        internal static class DebugIfCave
-        {
-            internal const uint Host = 0x001B47C0, HostSpan = 3712, VanillaWord0 = 0x27BDFFE0;   // `addiu sp,sp,-0x20`
-            /// <summary>tools/stubs/circle_effects.s: the magic circles, every magnitude from CodeCaves.CircleTable; dun.bin's
-            /// Run_TrapCircle (0x1DBFA70) jumps here (DunPatches).</summary>
-            internal const uint CircleEffects = Host + 0x8;
-            /// <summary>ElfWeaponPatches.PatchCallRequest: a native call the mod asks for (CodeCaves.CallRequest), the tail of the
-            /// camera-pin chain (after the WHP bill).</summary>
-            internal const uint CallRequest   = Host + 0x610;  // 0x1B4DD0, 116 B → 0x1B4E44 (the circle cave ends at 0x1B4DC4)
-            /// <summary>ElfWeaponPatches.PatchPelletSprite: the item id a player pellet's sprite cell is taken from — Mailbox.PelletSpriteId
-            /// when set, else the equipped weapon's (draw__5CSHOT's hook at 0x1ABC74 calls it).</summary>
-            internal const uint PelletSprite  = Host + 0x690;  // 0x1B4E50, 56 B → 0x1B4E88
-            /// <summary>ElfWeaponPatches.PatchPelletPlant: a player pellet's contact plants its damage entry natively — or, for a pellet
-            /// whose damage word (pool +0x2E0) is NEGATIVE, plants nothing and simply ends (step__5CSHOT's plant call at 0x1ABE04 lands
-            /// here). The mod writes −1 into a pellet that must hurt nothing itself (ZeusShot: the bolt is the hit).</summary>
-            internal const uint PelletPlant   = Host + 0x6D0;  // 0x1B4E90, 28 B → 0x1B4EAC
-            /// <summary>ElfWeaponPatches.PatchPelletContact: a player pellet's contact test made natively, and every contact recorded in
-            /// CodeCaves.PelletContact — the pellet's slot, what it met (3 an enemy, 1 a wall) and the point (an enemy's hit-sphere centre)
-            /// — on the engine's own frame (step__5CSHOT's contact call at 0x1ABD88 lands here).</summary>
-            internal const uint PelletContact = Host + 0x700;  // 0x1B4EC0, 96 B → 0x1B4F20
-            /// <summary>ElfWeaponPatches.PatchGemDamage: a thrown gem's burst damage (30 × (dungeon + 1)) multiplied by
-            /// CodeCaves.GemDamageFactor on its way into the burst (the item-throw step's SetDmg call for a gem lands here); 0 = vanilla.</summary>
-            internal const uint GemDamage     = Host + 0x760;  // 0x1B4F20, 32 B → 0x1B4F40
-            /// <summary>ElfWeaponPatches.PatchSecondEffect: the dungeon loop's step and draw of the LIVE main-character effect
-            /// (dun 0x1DB8740 / 0x1DAEB90, `lw a0,-0x6304(gp); jal Step/Draw__12CSHOT_EFFECT`) land here: the live instance as
-            /// before, then the SECOND instance (0x01E97BC0) as well while CodeCaves.SecondEffectLive is set — an effect an
-            /// ability borrowed into it beside the character's own (Babel's Spear's shockwave) is stepped and drawn.</summary>
-            internal const uint SecondEffectStep = Host + 0x780;  // 0x1B4F40, 64 B → 0x1B4F80
-            internal const uint SecondEffectDraw = Host + 0x7C0;  // 0x1B4F80, 64 B → 0x1B4FC0
-            /// <summary>ElfWeaponPatches.PatchBladeSpin: chained after the blade-fall cave (whose two exits jump here instead of
-            /// the WHP bill), once a dungeon frame: chara slot 3's yaw += CodeCaves.BladeSpin (radians a frame; 0 = off), wrapped
-            /// to ±π — the engine's own frame turns the judgement blade / Babel's spear copy.</summary>
-            internal const uint BladeSpin        = Host + 0x800;  // 0x1B4FC0, 112 B → 0x1B5030
-            /// <summary>tools/stubs/spear_block.s (ElfWeaponPatches.PatchSpearBlock): Step__12CMonstorUnit's `jal MoveChecMonster` (main
-            /// 0x1DE344) lands here — the engine's enemy-versus-enemy block, then the same test against CodeCaves.SpearBlock's sphere
-            /// while it is armed: a unit heading into it is turned along it at the same speed, sliding round (Babel's risen spear is solid).</summary>
-            internal const uint SpearBlock       = Host + 0x870;  // 0x1B5030, 392 B → 0x1B51B8
-            /// <summary>ElfWeaponPatches.PatchUngagaNoDrain: CheckDmg's two weapon-HP drain calls (main 0x1DB388 for a landed hit,
-            /// 0x1DAE94 for a guarded one) land here. An entry of Ungaga's (owner 4) planted by his charge EFFECT (class word +0x38
-            /// non-zero — his swings plant 0) or marked by the mod (+0x9C == CodeCaves.NoDrainMark: Babel's spikes) bills nothing;
-            /// everything else goes on to SwordDmgCheck1 as before. The charge's own per-shot bill (0.8, in UngagaKey_Play) stays.</summary>
-            internal const uint NoDrainLanded    = Host + 0xA00;  // 0x1B51C0, 72 B → 0x1B5208 (the entry at *NowColData + s6)
-            internal const uint NoDrainGuarded   = Host + 0xA50;  // 0x1B5210, 72 B → 0x1B5258 (the entry at *NowColData + s1)
-            /// <summary>tools/stubs/player_spear_block.s (ElfWeaponPatches.PatchSpearBlock, hooked by DunPatches): the player's move's two
-            /// `jal MoveCheck__12CMonstorUnitFPfPfi` (dun 0x1DB39AC / 0x1DB3E58) land here — the engine's player-versus-enemy block,
-            /// then CodeCaves.SpearBlock's sphere while it is armed: velocity into the column is dropped, the part along it kept.</summary>
-            internal const uint PlayerSpearBlock = Host + 0xAA0;  // 0x1B5260, 232 B → 0x1B5348
-            /// <summary>tools/stubs/shot_spear_block.s (ElfWeaponPatches.PatchSpearBlock): Step__12CSHOT_EFFECT's `jal checkCollision`
-            /// (main 0x1AC3E8) lands here — the engine's test, then, for a shot that is not the player's (victim mask ≠ 2) and met
-            /// nothing, CodeCaves.SpearBlock's column (floor − 2 … top): a wall hit where the shot stands.</summary>
-            internal const uint ShotSpearBlock   = Host + 0xB90;  // 0x1B5350, 268 B → 0x1B545C
-            /// <summary>tools/stubs/rock_shadow.s (ElfWeaponPatches.PatchRockShadow, hooked by DunPatches): Draw_MainUnitShadow's
-            /// `jal MGEndDrawShadow` (dun 0x1DADDD4) lands here — one extra MGDrawShadowFast for the frame CodeCaves.RockShadow names
-            /// while its flag is set (the Terra Sword's boulder), then the displaced call.</summary>
-            internal const uint RockShadow       = Host + 0xCA0;  // 0x1B5460, 68 B → 0x1B54A4
-            /// <summary>tools/stubs/fall_drive.s (ElfWeaponPatches.PatchFallDrive): the blade fall's MODE 4 — falling and following,
-            /// its stop able to follow a float, and CodeCaves.FallDrive's drive rows — between the blade-fall cave and the spin cave.</summary>
-            internal const uint FallDrive        = Host + 0xCF0;  // 0x1B54B0, 364 B → 0x1B561C (the host ends at 0x1B5640)
-            /// <summary>tools/stubs/confuse_name.s (ElfWeaponPatches.PatchConfuseAbility): the status window's SPECIAL list names ability bit
-            /// 14 ("Confuse") from system message 0x45 — NowWeaponStatus's `addiu a0,a3,0x45` (main 0x20B8A8) jumps here.</summary>
-            internal const uint ConfuseName      = Host + 0xE5C;  // 0x1B561C, 28 B → 0x1B5638
-            /// <summary>Where the guard-crush cave first sat (0x1B5600): an ISO patched then has its hook here, accepted on re-patching.</summary>
-            internal const uint GuardCrushFirst  = Host + 0xE40;
-        }
-
-        /// <summary>A cave INSIDE a dead main-ELF function: the body of DebugInfomationDraw (0x1B3780, 3,952 B), the developers'
-        /// on-screen debug overlay. ElfWeaponPatches.PatchSharedShots turns its first word into `jr ra` — its one caller (dun.bin's
-        /// DrawProcess, behind a debug flag) returns at once — and writes the cave from +8. The band (<see cref="ElfCave"/>) is
-        /// full and may not grow; a dead function's body is the home for a cave of this size.</summary>
-        internal static class DebugInfoCave
-        {
-            internal const uint Host = 0x001B3780, HostSpan = 3952, VanillaWord0 = 0x27BDFE90;   // `addiu sp,sp,-0x170`
-            /// <summary>tools/stubs/shared_shots.s: the monster shot pack's five slots shared among every shot config a floor
-            /// needs (<see cref="SharedShots"/>, block <see cref="SharedShotBlock"/>). Entry points at fixed offsets: +8 the
-            /// dungeon step loop's chain head (DunPatches.CatFollowHookNew), +0x10/+0x18 Step__12CMonstorUnit's two fire sites
-            /// (0x1DEED0 / 0x1DEFD8), +0x20 SetupBaseModel's two pack calls (0x1E01B0 / 0x1E0224).</summary>
-            internal const uint SharedShots      = Host + 0x8;    // 2,864 B → 0x1B42B8 (PelletSprite follows; the host ends at 0x1B4700)
-            internal const uint SharedShotsStep  = Host + 0x8;
-            internal const uint SharedShotsFire0 = Host + 0x10;
-            internal const uint SharedShotsFire1 = Host + 0x18;
-            internal const uint SharedShotsEnter = Host + 0x20;
-            /// <summary>tools/stubs/pellet_sprite.s: the item id a player pellet's sprite cell is taken from — Mailbox.PelletSpriteId
-            /// when set, else the equipped weapon's (the hook at draw__5CSHOT 0x1ABC74).</summary>
-            internal const uint PelletSprite     = Host + 0xB40;  // 0x1B42C0, 32 B → 0x1B42E0 — RETIRED: the sprite cave lives in DebugIfCave.PelletSprite now (this span is left as an older ISO has it)
-            /// <summary>tools/stubs/steel_level_up.s: the Steel Slingshot's level-up bonus is +2 endurance and twice the max-WHP
-            /// roll — four entries at fixed offsets, one per hooked add in SetLevelUpWeaponData (B endurance, C max WHP) and
-            /// WeaponLevelUpValueCalc (D endurance, E max WHP).</summary>
-            internal const uint SteelLevelUp     = Host + 0xB60;  // 0x1B42E0, 176 B → 0x1B4390
-            /// <summary>tools/stubs/guard_mask.s (ElfWeaponPatches.PatchGuardMask): the guard gate's second link — a window whose bit is
-            /// set in CodeCaves.GuardMask's byte for the enemy passes; anything else goes on to the cat's guard-bypass cave.</summary>
-            internal const uint GuardMask        = Host + 0xC10;  // 0x1B4390, 60 B → 0x1B43CC (AutoGuardMatch at 0x1B43E0)
-            internal const uint SteelLevelUpB = SteelLevelUp, SteelLevelUpC = SteelLevelUp + 0x8, SteelLevelUpD = SteelLevelUp + 0x10,
-                                SteelLevelUpE = SteelLevelUp + 0x18;
-            /// <summary>tools-free, 172 B: AUTO-GUARD, hooked at BtCheckDamageProc's CheckHitUser return. An entry whose
-            /// reaction is 5 is consumed there and reported as NO HIT, after stamping the guard spark and ringing the
-            /// clang — so the handler never runs at all. That matters beyond the damage: on ANY matched hit, before it
-            /// looks at the reaction, the handler zeroes the player's action word (0x1DC4490, which ToanKey_Play reads),
-            /// which knocked Toan out of a charge even when the hit did nothing to him.</summary>
-            internal const uint AutoGuardMatch = Host + 0xC60;   // 0x1B43E0, 172 B → 0x1B448C (the host ends at 0x1B4700)
-            /// <summary>52 B: the STRIDE cave (ElfWeaponPatches.PatchStrideScale) — scales the player's per-frame move
-            /// vector by CodeCaves.StrideScale while motion 33 plays, then tail-jumps into the status check it displaced.</summary>
-            internal const uint StrideScale    = Host + 0xD10;   // 0x1B4490, 52 B → 0x1B44C4
-            /// <summary>44 B: the CAMERA PIN cave (ElfWeaponPatches.PatchCameraPin) — the dungeon camera pass's epilogue
-            /// jumps here (DunPatches, dun 0x1DBF9BC); while CodeCaves.CameraPin's flag is set the camera's height field
-            /// is recomputed every frame so that the camera stays at the pinned WORLD HEIGHT while its follow point rises
-            /// and falls with Toan (the Sword of Zeus's lunge); distance and angle stay the engine's. Falls straight
-            /// through when the flag is clear.</summary>
-            internal const uint CameraPin      = Host + 0xD50;   // 0x1B44D0, 44 B → 0x1B44FC (the host ends at 0x1B4700)
-            /// <summary>2 × 24 B: the LUNGE GRAVITY caves (ElfWeaponPatches.PatchLungeGravity). Toan's charge lunge is a
-            /// parabola: ToanKey_Play seeds its vertical speed from the shared 0.1 gravity (ParabolicInitialVector, 40
-            /// frames) and the dungeon key process takes 0.1 off it every frame. Both sites go through a cave that scales
-            /// that gravity by (1 + CodeCaves.LungeGravityExtra): the flight's height scales with it, its length does
-            /// not — the Sword of Zeus's level-2 lunge jumps higher in the same frames. 0 = vanilla.</summary>
-            internal const uint LungeGravitySeed = Host + 0xD80;   // 0x1B4500 → main hook (the parabola's seed)
-            internal const uint LungeGravityStep = Host + 0xDA0;   // 0x1B4520 → dun hook (the per-frame gravity)
-            /// <summary>92 B: the BLADE FALL cave (ElfWeaponPatches.PatchBladeFall), chained after the camera-pin cave so it
-            /// runs once a frame at the end of the dungeon camera pass. While CodeCaves.BladeFall's flag is 1 it steps the
-            /// judgement blade's fall — vy += g, y −= vy, stopped at the floor, where the flag becomes 2 — and writes the
-            /// copy's slot height: the fall is the engine's own frame, not a mod thread racing it.</summary>
-            internal const uint BladeFall      = Host + 0xDC0;   // 0x1B4540, 168 B → 0x1B45E8
-            internal const uint WhpBill        = Host + 0xE70;   // 0x1B45F0, 88 B → 0x1B4648 (the host ends at 0x1B46F0)
-            /// <summary>tools/stubs/guard_crush.s (ElfWeaponPatches.PatchGuardCrush): the GUARD GATE — CheckDmg's guard-window hook lands
-            /// here first; an entry carrying CodeCaves.CrushMark passes every guard window, anything else goes on to
-            /// <see cref="GuardMask"/> and then the cat's guard-bypass cave.</summary>
-            internal const uint GuardCrush     = Host + 0xED0;   // 0x1B4650, 56 B → 0x1B4688
-            /// <summary>tools/stubs/follow.s (ElfWeaponPatches.PatchFollow): CodeCaves.FollowTable's points carried with units, every
-            /// frame — between the fall-drive cave and the blade-spin cave.</summary>
-            internal const uint Follow         = Host + 0xF10;   // 0x1B4690, 96 B → 0x1B46F0 (the host's end)
-        }
-
-        /// <summary>Caves inside two dead main-ELF functions: DebugItemGetKey (0x22B240, 880 B) and DebugItemGetDraw (0x22B5B0, 516 B),
-        /// the item menu's debug item-get screen — only ever entered in item-menu sub-mode 5 (0x1D9EC08), which nothing in the
-        /// ELF or the overlay sets. ElfWeaponPatches.PatchConfuseProc makes both return at once (Key with −1, its "leave" value)
-        /// and writes the caves after.</summary>
-        internal static class DebugItemCave
-        {
-            internal const uint Host = 0x0022B240, HostSpan = 880 + 516, DrawHost = 0x0022B5B0;
-            internal const uint KeyWord0 = 0x27BDFFC0, DrawWord0 = 0x27BDFF50;   // `addiu sp,sp,-0x40` / `addiu sp,sp,-0xB0`
-            /// <summary>tools/stubs/confuse_proc.s: the Confuse ability's on-hit roll (CheckDmg 0x1DBAA4 jumps here).</summary>
-            internal const uint ConfuseProc = Host + 0x8;     // 0x22B248, 160 B → 0x22B2E8
-            /// <summary>The resident stars instance stepped / drawn after the second-effect caves (ElfWeaponPatches.PatchSecondEffect
-            /// ends each in a jump here), behind CodeCaves.StarsGate.</summary>
-            internal const uint StarsStep = Host + 0xC0;      // 0x22B300, 144 B → 0x22B390 (the construct check + the gate)
-            internal const uint StarsDraw = Host + 0x160;     // 0x22B3A0, 112 B → 0x22B410 (the Key host ends at 0x22B5B0)
-        }
-
-        // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
-        /// <summary>
-        /// Every ISO-baked cave in the ELF. They live in a NEW loadable segment the ISO patcher creates by
-        /// rewriting SCUS_971.11's degenerate 4th program header (phdr3: PT_LOAD filesz=0 memsz=0 — a linker
-        /// placeholder) to load file span 0x2AF000..0x2B1000 (dead .reldun debug data past every phdr's file
-        /// extent — PCSX2 never reads it) at guest 0x01FB0000..0x01FB2000 (see ElfPatches.HijackPhdr3CaveSegment).
-        /// The guest band sits inside the scanner-proven-clean heap tail (0x1F10000..0x1FB4300, ModReserved),
-        /// below FishLineShallow.BobberPtr @0x01FB4000. The bytes are loaded by the ELF LOADER at boot — cold,
-        /// before any recompilation — so a direct j/jal into them is legal (unlike runtime-written heap
-        /// caves, which crash the recompiler; docs/cave-code-execution.md).
-        ///
-        /// ⚠ PAGE ISOLATION IS LOAD-BEARING. The segment starts 16KB-ALIGNED, and its host pages
-        /// [0x1FB0000, 0x1FB4000) (16KB granularity — Apple Silicon; 4KB on Intel) must NEVER hold
-        /// runtime-written data: once any cave on a page executes, PCSX2 compiles + WRITE-PROTECTS the
-        /// page, and the app's next PINE write to anything sharing it SIGBUSes the PINE server thread —
-        /// a hard crash. This happened: the segment's first home 0x01FAE700 shared its 4KB page
-        /// with the live mizu mailboxes @0x01FAE600-610; QueensSpray ran every Queens frame, and the next
-        /// MizuRedrawTexGroup write faulted at 0x1FAE60C. So 0x1FB2000..0x1FB4000 is reserved for future
-        /// SEGMENT growth or ISO-baked read-only data ONLY — never hand it out as a runtime mailbox/cave.
-        /// The nearest runtime-written words: BobberPtr @0x01FB4000 (its own 4KB and 16KB page) above,
-        /// the mizu mailboxes / MeshCave margin below 0x01FAE614.
-        ///
-        /// ⚠ THE OLD HOME 0x228BB0–0x22A210 IS LIVE DUNGEON CODE — NEVER PLACE ANYTHING THERE AGAIN.
-        /// It was believed dead ("the CharaChange screen this mod never reaches"), but it is the dungeon
-        /// SELECT quick-menu's character-change screen: CharaChangeLoop @0x228BB0 / CharaChangeKey @0x228E90 /
-        /// CharaChangeDraw @0x229740, CALLED FROM THE dun.bin OVERLAY (file offset 0x1DD0) — which is why
-        /// main-ELF-only xref analysis mislabeled it unreachable. The caves overwrote it and broke the
-        /// dungeon SELECT menu. The region must stay byte-for-byte VANILLA.
-        ///
-        /// ⚠ THE OVERLAP FAILURE MODE IS ALSO REAL: PatchIdleMotionOverride was first placed at what is now
-        /// FishLineSplit+0x40 — inside fishlineSplitCaves.bin — and every Queens fishing session hung on a
-        /// black screen. It byte-verified cleanly because the check ran on a VANILLA ELF, where the fishline
-        /// bin doesn't exist yet. So: claim <see cref="NextFree"/>, keep this table in ADDRESS ORDER with the
-        /// cave's SIZE and END, and never place a cave from a patch-local literal. Bin-backed sizes are the
-        /// .bin file's byte size (Resources/isoPatch); hand-built sizes are the instruction-word count × 4.
-        ///
-        ///   0x1FB0000  CanalEvictFadeHook   64 B → 0x1FB0040   canalEvictFadeHook.bin
-        ///   0x1FB0050  QueensSpray         180 B → 0x1FB0104   queensSprayCave.bin
-        ///   0x1FB0150  SprayBiasShim        60 B → 0x1FB018C   sprayBiasShim.bin
-        ///   0x1FB0190  CapeEarlyDraw       124 B → 0x1FB020C   capeEarlyDraw.bin
-        ///   0x1FB0210  FishLineSplit        88 B → 0x1FB0268   fishlineSplitCaves.bin (step entry @+0x2C)
-        ///   0x1FB0270  FishLineUncastGate  148 B → 0x1FB0304   fishlineUncastGate.bin
-        ///   0x1FB0350  CameraNormSideBank 2128 B → 0x1FB0BA0   cameraNormSide.bin (multi-entry, see below)
-        ///   0x1FB0BD0  StiltsHeal           88 B → 0x1FB0C28   stiltsHeal.bin
-        ///   0x1FB0C50  WaterOrderGate       88 B → 0x1FB0CA8   waterOrderGate.bin
-        ///   0x1FB0CD0  LadderRefusal        52 B → 0x1FB0D04   hand-built (PatchLadderRefusal)
-        ///   0x1FB0D10  ExclamationHeight    24 B → 0x1FB0D28   hand-built (PatchExclamationHeight)
-        ///   0x1FB0D50  IdleMotionOverride   36 B → 0x1FB0D74   hand-built (PatchIdleMotionOverride)
-        ///   0x1FB0D90  CatPelletFollow    4256 B → 0x1FB1E30   catPelletFollow.bin
-        ///   0x1FB1E30  PropPelletFollow    156 B → 0x1FB1ECC   propPelletFollow.bin
-        ///   0x1FB1ED0  BorrowedShotsEnter  296 B → 0x1FB1FF8   borrowedShotsEnter.bin (the HEAD; its tail is at 0x1FB3F40)
-        ///   (the second band, 0x1FB2000 →, is the table in <see cref="ElfCave"/> below)
-        /// </summary>
-        internal static class ElfCave
-        {
-            /// <summary>Guest bounds of the hijacked-phdr3 segment; RegionEnd − RegionStart is its p_filesz/p_memsz.
-            /// RegionStart must stay 16KB-aligned (page isolation — see the class doc) and 0x80-aligned (p_align).</summary>
-            internal const uint RegionStart = 0x01FB0000;
-            internal const uint RegionEnd   = 0x01FB4000;   // ⚠ the band can NEVER grow past this: 0x1FB4000.. is runtime data (TownAddresses.BobberPtr, then Mailbox.CatBase) — code there crashes PCSX2 (a PINE write into a compiled page)
-            /// <summary>ELF-file offset the segment loads from (span RegionEnd−RegionStart, zero-filled at patch
-            /// time; formerly .reldun debug bytes — outside every phdr's file extent, never read at runtime).</summary>
-            internal const uint SegmentFileOff = 0x002AD000;   // 0x4000 B of dead .reldun (0x29FE60..0x2B11C8) — was 0x2AF000 for 0x2000
-
-            internal const uint CanalEvictFadeHook = 0x01FB0000;   // 64 B → 0x1FB0040
-            internal const uint QueensSpray        = 0x01FB0050;   // 180 B → 0x1FB0104
-            internal const uint SprayBiasShim      = 0x01FB0150;   // 60 B → 0x1FB018C
-            internal const uint CapeEarlyDraw      = 0x01FB0190;   // 124 B → 0x1FB020C
-            internal const uint FishLineSplit      = 0x01FB0210;   // 88 B → 0x1FB0268 (init entry; ONE bin, two caves)
-            internal const uint FishLineSplitStep  = 0x01FB023C;   //   the step cave inside it (@+0x2C)
-            internal const uint FishLineUncastGate = 0x01FB0270;   // 148 B → 0x1FB0304
-
-            /// <summary>ONE 2128-byte bin (cameraNormSide.bin / camera_norm_side.s) with several entry points —
-            /// the whole span 0x1FB0350–0x1FB0BA0 is occupied, not just the labeled words: gather-count export
-            /// @0x1FB0350, winding-agnostic normal SubA @0x1FB0390 / SubB @0x1FB0450, FishLineClamp wrapper
-            /// @0x1FB0550 (jal'd from 0x16D314), the v10 settled-gated bobber cave @0x1FB0910, and the
-            /// uki ground-store bank sub @0x1FB0AE0. Keep entry offsets in sync with the .s when reassembling.</summary>
-            internal const uint CameraNormSideBank = 0x01FB0350;   // 2128 B → 0x1FB0BA0
-            internal const uint CamBankFishLineClamp = 0x01FB0550;
-            internal const uint CamBankSettledCave   = 0x01FB0910;
-            internal const uint CamBankUkiGroundSub  = 0x01FB0AE0;
-
-            internal const uint StiltsHeal         = 0x01FB0BD0;   // 88 B → 0x1FB0C28
-            internal const uint WaterOrderGate     = 0x01FB0C50;   // 88 B → 0x1FB0CA8
-            internal const uint LadderRefusal      = 0x01FB0CD0;   // 52 B → 0x1FB0D04
-            internal const uint ExclamationHeight  = 0x01FB0D10;   // 24 B → 0x1FB0D28
-            internal const uint IdleMotionOverride = 0x01FB0D50;   // 36 B → 0x1FB0D74
-            /// <summary>Divine Beast cat pellet catcher + follower (tools/stubs/cat_pellet_follow.s): takes the dungeon
-            /// step loop's `jal step__5CSHOT` (dun 0x1DB874C), performs it, tracks which pellet slots are active, and when
-            /// armed (<see cref="Mailbox.CatState"/> = 3) binds chara slot 1 to the next NEW pellet on its birth frame,
-            /// then places it every frame (head on the pellet, growth scale, sprite fade) until that pellet ends.</summary>
-            internal const uint CatPelletFollow    = 0x01FB0D90;   // 4256 B → 0x1FB1E30 (PropPelletFollow follows directly) (frame 0x80, sq/lq saves)
-            /// <summary>A chara-slot prop on one of Xiao's pellets (tools/stubs/prop_pellet_follow.s): the Matador's charged shot.
-            /// Now the hook's target (DunPatches.CatFollowHookNew): calls CatCopyQueue — the cat's chain, which performs the
-            /// displaced step__5CSHOT — then places chara slot 3 on the pellet Mailbox.PropFollowSlot names.</summary>
-            internal const uint PropPelletFollow   = 0x01FB1E30;   // 156 B → 0x1FB1ECC
-            // CatGuardBypass lives in dun.bin now — see DunCave.CatGuardBypass
-            /// <summary>Xiao melee-type flinch (tools/stubs/xiao_melee_flinch.s): CheckDmg's \"Xiao's hits never stagger\" rule,
-            /// re-entered from main-ELF 0x1DB410 (CheckDmg is ELF code, not the dun overlay) so that a Xiao-owned entry with a melee-type kick (+0x98 == 2, the Divine Beast cat)
-            /// takes the normal flinch decision; plain pellets (kick 0) are unchanged. Returns to 0x1DB420.</summary>
-            internal const uint XiaoMeleeFlinch    = 0x01FB2250;   // 40 B → 0x1FB2278 (moved from 0x1FB1FA0 to let CatGuardBypass grow; an ISO patched then is re-hooked)
-            /// <summary>Divine Beast cat glow (tools/stubs/cat_glow_draw.s): hooked in place of the dungeon draw loop's two torch
-            /// passes (dun 0x1DAEBF8 / 0x1DAEC10), performs them, then draws the `catglow` disc at the cat's torso with the torch
-            /// routine. +0x00 = the "catglow" name, +0x08 = entry A (DrawFire), +0x20 = entry B (DrawFireFreeStyle).</summary>
-            internal const uint CatGlowDraw        = 0x01FB2000;   // 476 B → 0x1FB21DC (second band; the sphere-percent cave follows at 0x1FB21E0)
-            internal const uint CatGlowDrawEntryA  = CatGlowDraw + 0x08;
-            internal const uint CatGlowDrawEntryB  = CatGlowDraw + 0x20;
-            /// <summary>Cat sphere percentage (tools/stubs/cat_sphere_percent.s): CheckDmg's per-attacker damage-% load
-            /// (main-ELF 0x1DC084) re-entered so a Xiao-owned hit whose kick type equals the sphere's spare[1]
-            /// (`_SET_BODY_COL_PARA(1, kick)`, disc-baked on Minotaur Joe's face for the cat's kick 2) reads spare[0] instead
-            /// of her column. Returns to 0x1DC08C.</summary>
-            internal const uint CatSpherePercent   = 0x01FB21E0;   // 112 B → 0x1FB2250
-
-            /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
-            /// (address order, size, end) so the next placement can see it.</summary>
-            /// <summary>The Sun Sword's blade under its own ambient (SolarBlade): two 3-word entries that load the DrawVu1
-            /// overloads of CVisualVu1 (the rigid-mesh class a weapon model is; 0x135000 / 0x134BC0) into t9 and jump into the
-            /// BODY of <see cref="CatMaskTint"/> (+0x18, past its own two entries), which does the ambient add generically and
-            /// calls whatever t9 holds. Written as words by ElfWeaponPatches.PatchSolarBladeTint.</summary>
-            internal const uint SolarBladeTint     = 0x01FB2278;   // 24 B → 0x1FB2290
-            /// <summary>The name-plate getter's body with a hide gate (ElfWeaponPatches.PatchNameDrawGate): six words —
-            /// `lh v0,flag(gp); lui/lw at,NameHide; nor at,zero,at; jr ra; and v0,v0,at`.</summary>
-            internal const uint NameDrawGate       = 0x01FB2290;   // 24 B → 0x1FB22A8
-            // 0x01FB22A8..0x1FB22BC (20 B) FREE
-            internal const uint CatCapeTint        = 0x01FB22C0;   // 176 B → 0x1FB2370: the cape's cloth draws under its own ambient
-            internal const uint CatMaskTint        = 0x01FB2370;   // 228 B → 0x1FB2454: the mask's MESH does too, via a private vtable
-            internal const uint CatCopyQueue       = 0x01FB2480;   // 584 B → 0x1FB26C8: the cat's mesh copy, done inside the machine; its tail also calls CatPalette
-            /// <summary>The cape/mask element colour, repainted in the machine (cat_palette.s). The six colours are the
-            /// cave's first six words and the CODE starts at +0x18 — that offset is what the copy-queue cave calls.</summary>
-            internal const uint CatPalette         = 0x01FB2700;   // 344 B → 0x1FB2858: the colour table, then the code
-            internal const uint CatPaletteEntry    = CatPalette + 0x18;   // the entry point, past the colour table
-            /// <summary>The GLOW disc's six per-element palettes: 512 B each, in element order (00 Fire … 05 None). Pure
-            /// DATA, written at patch time by ElfCatPatches.PatchCatGlowPalettes from the blob `build_cat_pack.py --palettes`
-            /// bakes off the same index map as the disc — regenerate BOTH together, or the ramp will not match the
-            /// pixels. Patch-time data in a code page is fine; a RUNTIME write here would SIGBUS PCSX2.</summary>
-            internal const uint CatGlowPalTables   = 0x01FB2880;   // 4608 B → 0x1FB3A80 (9 rows: 6 elements + 3 weapon looks)
-            internal const uint CatGlowPalette     = 0x01FB3A80;   // the cave that copies one table into the disc's CLUT
-            internal const uint MirageHazeDraw     = 0x01FB3C40;   // 152 B → 0x1FB3CD8: one more raster, at the Mirage clone (dun hook in DunPatches)
-            internal const uint SuperSteveIconDraw = 0x01FB3CE0;   // 200 B → 0x1FB3DA8: the sphere's weapon icon over Steve on the HUD (dun hook in DunPatches)
-            internal const uint SuperSteveIconCopy = 0x01FB3DC0;   // 356 B → 0x1FB3F24: …and the copy that keeps the CURRENT sphere's icon in the HUD sheet (on every DngActiveWeaponTextureCopy call: four menu paths + two overlay sites)
-            /// <summary>Keeps the borrowed shot config in BorrowedShotBlock entered in the MAIN-CHARACTER effect instance
-            /// (ShotEffectPack.CharaMainEffect; tools/stubs/borrowed_shots_enter.s): the head of the step chain
-            /// (DunPatches.CatFollowHookNew) — calls PropPelletFollow, then re-enters the instance whenever the loader refilled
-            /// it or the mod seeded another config, from a signed region it carves from the monster pool. Two pieces: the head
-            /// here and the tail at <see cref="BorrowedShotsEnterTail"/> (the head ends in a `b` to it).</summary>
-            internal const uint BorrowedShotsEnter     = 0x01FB1ED0;   // 296 B → 0x1FB1FF8 (the first band's end is 0x1FB2000)
-            internal const uint BorrowedShotsEnterTail = 0x01FB3F40;   // 176 B → 0x1FB3FF0 (the band's end is 0x1FB4000)
-            internal const uint NextFree = RegionEnd;    // the band is FULL; the last gap: 0x1FB2290..0x1FB22BC (44 B)
-        }
-
-        /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
-        internal const long MirageSceneGateFlag = Mailbox.MirageSceneGate;
+        // The sibling registries: <see cref="Mailbox"/> (the PNACH mailbox page), <see cref="ElfCave"/> (the ISO-baked
+        // segment), DunCave / DebugIfCave / DebugInfoCave / DebugItemCave (dead-function hosts), <see cref="CatBlock"/>
+        // and <see cref="WaterRedraw"/> (runtime words).
 
         // ── HarderEnemyAI: per-species STB stubs ─────────────────────────────────────────────────────
         // One self-contained stub per SPLICED SPECIES on a floor (not per live enemy — nothing is shareable,
@@ -778,11 +81,8 @@ namespace Dark_Cloud_Improved_Version
         internal const int  SolarStubBlock  = 0x300;                                                // per species
         internal const int  SolarStubBlocks = (AiStubMaxSlots - AiStubSolarSlot) * AiStubStride / SolarStubBlock;   // 10, within 0x21F16100..0x21F18100
 
-        // ── Mirage: decoy aggro redirect ─────────────────────────────────────────────────────────────
-        // A cave's CAPACITY lives with the cave, deliberately. Divorcing "how big is it" from "how much do we
-        // put in it" is how you get a silent overrun, and this band has already produced two: HarderEnemyAI's
-        // stubs growing unbounded toward PtrTable, and the clone's per-bone buffers (sized for Ungaga's 67
-        // bones) being overrun by Xiao's 79 — which scribbled over the grafted weapon's root CFrame.
+        // A cave's CAPACITY (size or slot count) is declared beside its address, never back-computed from the
+        // gap to the next cave, and the code that fills it bounds-checks against that constant.
         // ── Queens waterfall spray table ─────────────────────────────────────────────────────────────
         // Populated by CanalTide each Queens tick, read every frame by the queensSprayCave (hooked into MainDraw
         // @0x17c5a0). Layout: word[0] = emitter count, then `count` × 32-byte entries { pos x,y,z,w; spread x,y,z,w }.
@@ -798,6 +98,7 @@ namespace Dark_Cloud_Improved_Version
         // re-zeros it after the loop, so Matataki's own spray (same EffectWaterSpray) stays unbiased. 3 floats.
         internal const long QueensSprayBias       = 0x21F18300;       // cave bakes physical 0x01F18300
 
+        // ── Mirage: decoy aggro redirect ─────────────────────────────────────────────────────────────
         internal const long PtrTable      = 0x21F19000;   // per-slot target POINTER table (entry = an address to read a position from)
         internal const uint PtrTableGuest = 0x01F19000;   // baked into the cave stubs as `lui a1, PtrTable>>16`
         internal const int  PtrStride     = 4;            // one pointer per enemy slot
@@ -834,8 +135,7 @@ namespace Dark_Cloud_Improved_Version
         /// Capacity: 3 × CCloth(0x8550) = 0x18FF0 → ends 0x21F430F0, safely BELOW ClothBufCave @0x21F44000.</summary>
         internal const int  ClothObjSlots  = 3;
 
-        /// <summary>Cloth draw buffers. The size is declared HERE, beside the address: a size back-computed from the gap
-        /// to the next cave puts "how big is it" in a different file, which is the split this registry exists to prevent.</summary>
+        /// <summary>Cloth draw buffers; the size is declared here, beside the address.</summary>
         internal const long ClothBufCave   = 0x21F44000;
         internal const int  ClothBufSize   = 0x5000;       // → ends 0x21F49000 = ClothAnchorCave
         internal const uint ClothBufGuest  = 0x01F44000;
@@ -849,8 +149,8 @@ namespace Dark_Cloud_Improved_Version
 
         // ── The clone's PER-BONE buffers — sized by NODE COUNT, so they must fit the LARGEST character ──
         // Three of these scale with bone count and sit immediately before their neighbours, so sizing them
-        // against ONE character silently overruns the next cave along (Xiao's 79 bones did exactly that to the
-        // weapon tree). Each carries an explicit size, and CharacterClone REFUSES to spawn past MaxCloneNodes.
+        // against ONE character silently overruns the next cave along. Each carries an explicit size, and
+        // CharacterClone REFUSES to spawn past MaxCloneNodes.
         internal const long MotionCave      = 0x21F4E000;
         internal const long MotionCaveGuest = 0x01F4E000;
         internal const int  MotionCaveSize  = 0x0600;    // CCharacter.MotionSlots(8) × MotionStructSize(0xC0)
@@ -871,15 +171,14 @@ namespace Dark_Cloud_Improved_Version
         internal const int MaxCloneNodes = MaxNodes;
 
         // ── EnemyModelInjector: NO CAVE. ────────────────────────────────────────────────────────────
-        // ⚠ 0x01400000 in main BSS is NOT verified free — it was only ever eyeballed as a zero block, never swept by the
-        // code-cave scanner. It is deliberately NOT laundered into CodeCaveScanner.ModReserved, which would make the
-        // sweeper treat the region as ours and stop reporting the truth about it.
+        // ⚠ 0x01400000 in main BSS is NOT verified free — never swept by the code-cave scanner, only seen as a zero
+        // block. It is deliberately NOT in CodeCaveScanner.ModReserved, which would make the sweeper treat the
+        // region as ours and stop reporting the truth about it.
         // The feature is dormant (EnemyModelInjector.Enabled == false) and must be given a
         // scanner-verified cave from this file before it is ever switched on.
 
         /// <summary>Software-skinned meshes. Sized for the WORST CASE character — GORO at 0x57B30 — so ALL SIX
-        /// are clonable. (It was 0x34000 and excluded Goro/Ruby/Osmond; the room came from capping the AI stubs
-        /// at 32 slots, trimming the node pool 128→96, and packing the decoy tables.)</summary>
+        /// are clonable.</summary>
         internal const long MeshCave       = 0x21F56400;
         internal const long MeshCaveGuest  = 0x01F56400;
         internal const int  MeshCaveSize   = 0x58000;    // → ends 0x21FAE400, 0x5F00 clear of the band top (0x1FB4300)
@@ -908,32 +207,30 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CatOverflowCaveSize  = (int)(MotionCave - ClothObjCave);                        // 0x23F00
 
         // ── 0x21FB4000 .. 0x21FB4300 (guest 0x01FB4000, 0x300 B, top of the MeshCave margin) ─────────────
-        // +0x00 (4 B) NOW HOLDS the shallow-fishing bobber-anchor global (TownAddresses.FishLineShallow.BobberPtr):
+        // +0x00 (4 B) holds the shallow-fishing bobber-anchor global (TownAddresses.FishLineShallow.BobberPtr):
         //   the cold-patched FishLineStep reads game-addr 0x01FB4000 for the bobber's point address, and a data
-        //   write here toggles vanilla point[18] vs shallow point[20]. The rest of the block is spare. (It once
-        //   held the old ClsMes catch/menu scratch, now baked into each town's mes by IsoPatcher.) Inside the
-        //   CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so the sweeper still shows it clean.
+        //   write here toggles vanilla point[18] vs shallow point[20]. The rest of the block is the cat's
+        //   (<see cref="CatBlock"/>). Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300).
 
-        // ── 0x21FB0000 .. 0x21FB2000: the ELF-baked cave SEGMENT (<see cref="ElfCave"/>) ─────────────────
-        // Loader-loaded CODE from the hijacked phdr3 — no runtime writes belong here, or ANYWHERE on its
-        // 16KB host pages 0x21FB0000..0x21FB4000 (page isolation — a PINE write to a page holding compiled
-        // code SIGBUSes PCSX2's PINE thread; see the ElfCave doc). 0x21FB2000..0x21FB4000 is therefore
-        // reserved for future segment growth / ISO-baked read-only data ONLY.
+        // ── 0x21FB0000 .. 0x21FB4000: the ELF-baked cave SEGMENT (<see cref="ElfCave"/>) ─────────────────
+        // Loader-loaded CODE from the hijacked phdr3 — no runtime writes belong anywhere on its 16KB host
+        // pages (page isolation, stated on ElfCave; docs/code-caves.md). 0x21FB2000..0x21FB4000 is reserved
+        // for segment growth / ISO-baked read-only data ONLY.
+
+        // ── 0x21FAE600 .. 0x21FB0000: the RUNTIME-DATA span under the ELF cave segment ───────────────────
+        // What remains of the MeshCave margin — the last heap-tail span free for runtime data. Its pages
+        // already carry runtime-written words (WaterRedraw, the blocks below), so a PINE write here cannot
+        // fault the way one into a code page does. Inside the ModReserved heap-tail claim, so it stays clean.
         //
-        /// <summary>The cat's mesh-copy QUEUE (ElfCave.CatCopyQueue reads it). Data, not code, and deliberately NOT in the
-        /// mailbox page: that page ends at 0x1FB4300 and the cat's words already reach +0x290, leaving no room. This span is
-        /// the documented free remainder of the MeshCave margin, on pages that already carry runtime-written words, so a PINE
-        /// write here cannot fault the way one into a code page does. +0x00 job count (0 = idle), jobs from +0x10, 0x30 B
-        /// each: src, dst, size, then two (src, size, dst) rebase specs.</summary>
+        /// <summary>The cat's mesh-copy QUEUE (ElfCave.CatCopyQueue reads it). Data, not code, in the runtime-data span.
+        /// +0x00 job count (0 = idle), jobs from +0x10, 0x30 B each: src, dst, size, then two (src, size, dst) rebase specs.</summary>
         internal const long CatCopyQueue      = 0x21FAE620;
         internal const uint CatCopyQueueGuest = 0x01FAE620;
         internal const int  CatCopyQueueJobs  = 48;            // 48 × 0x30 + 0x10 = 0x910 B of the span below — the
                                                                // texture relocation needs one job per block per moved texture
         internal const int  CatCopyJobStride  = 0x30;
         // The jobs end at +0x910 (0x21FAEF30), just short of BorrowedShotBlock (0x21FAEF40). A find/replace job's old→new pair
-        // table is NOT after them: the job names it (+0x10), and it lives at CatCopyPairs — sitting past the jobs, it wrote the
-        // cat's texture pairs over the borrowed shot's block every time the cat was built (Babel's shockwave then never entered,
-        // and a re-request built the effect from the trashed config — a crash).
+        // table is NOT after them: the job names it (+0x10), and it lives at CatCopyPairs.
         /// <summary>How many old→new pairs a sweep can carry. MUST cover every name in CatTextures.CatTextureNames —
         /// there are TEN. A name that does not fit is silently dropped, and a dropped name's register keeps pointing into her
         /// old block (catcape is one the MASK draws with: dropped, the mask draws black). The count is checked against this
@@ -980,26 +277,14 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly float[] LockOnFactorVanilla = { 1.2f, 1.4f, 1.1f, 1.5f, 1.0f, 1.8f };
 
         /// <summary>A private copy of __vt__13CVisualMDTVu1 (32 B) for the Sun Sword's blade mesh: its two DrawVu1 slots point
-        /// at ElfCave.CatMaskTint, so the blade draws under the ambient Mailbox.CatCapeTint adds (SolarBlade). Toan's sword and
+        /// at ElfCave.CatMaskTint, so the blade draws under the ambient CatBlock.CatCapeTint adds (SolarBlade). Toan's sword and
         /// Xiao's cat are never live together, so the cave and its tint word are free for the blade.</summary>
         internal const long SolarBladeVtable      = 0x21FAF4B0;
         internal const uint SolarBladeVtableGuest = 0x01FAF4B0;
-        /// <summary>A run of STB-VM YIELD ops ending in `push 0; RET` (no longer used — SolarScript drives
-        /// blinded enemies through their own AI label instead; 12 B each): a blinded enemy's
-        /// script PC is parked here each tick, so its AI does nothing while the engine keeps stepping its motion. Bytecode the
-        /// VM reads — data, never executed as EE code.</summary>
-        internal const long SolarYieldBlock       = 0x21FAF4D0;
-        internal const uint SolarYieldBlockGuest  = 0x01FAF4D0;
-        internal const int  SolarYieldBlockBytes  = 0xF0;      // 20 ops
-
-        /// <summary>One CFrameVu1 (0x270 B) with no geometry and no children: the model of Solar Flash's carrier chara slot.
-        /// The slot has to be DRAWABLE for the scene draw to service its texture group, and this is a real node the draw can
-        /// walk that renders nothing at all — an invisible character, rather than a blank slot the loop may skip.</summary>
-        internal const long SolarCarrierNode      = 0x21FAF5C0;
-        internal const uint SolarCarrierNodeGuest = 0x01FAF5C0;
+        // 0x21FAF4D0..0x21FAF830 FREE
 
         /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
-        /// <c>ElfWeaponPatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's
+        /// <c>ElfToanMeleePatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's
         /// (vanilla 12.0). ToanKey_Play built both with `lui v0,imm; mtc1 v0,f12` (0x241AC0 / 0x241B90) and hands
         /// the result to CCollisionData::Set as the sphere radius, so an ability that writes here resizes the
         /// engine's OWN charge-attack hit — no mod-side hit detection and no planted spheres.
@@ -1012,7 +297,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The hit REACTION every item-bomb explosion carries — chest traps and anything thrown, and
         /// (by the look of it) Halloween's pumpkin. SetBombEffect passed a literal 3 (the unguardable knockdown);
-        /// <c>ElfWeaponPatches.PatchBombReaction</c> makes it read this word instead, so an ability can make bomb
+        /// <c>ElfDamagePatches.PatchBombReaction</c> makes it read this word instead, so an ability can make bomb
         /// blasts inert (a reaction outside {2,3,4} is ignored by the player's damage handler) without touching the
         /// shot configs, which bombs do not use. ⚠ Seeded to the vanilla 3 at startup and restored by anything that
         /// changes it: 0 here would also be inert, i.e. bombs would stop working for everyone.</summary>
@@ -1045,16 +330,16 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>TOAN'S STRIDE on motion 33 (the guard walk), as an EXTRA fraction of the engine's own: the player
         /// key handler builds his per-frame move vector (X in f21, Z in f20 at dun 0x1DB0F68) and the stride cave
-        /// (ElfWeaponPatches.PatchStrideScale, hooked there by DunPatches) adds this × that vector back onto it while
+        /// (ElfToanMeleePatches.PatchStrideScale, hooked there by DunPatches) adds this × that vector back onto it while
         /// the current motion is 33 — the stride grows, the animation plays at its own rate. 0 (fresh memory) is
         /// vanilla; the Sword of Zeus writes 0.3 while a lock is held and 0 otherwise.</summary>
         internal const long StrideScale      = 0x21FAF870;
         internal const uint StrideScaleGuest = 0x01FAF870;
 
-        /// <summary>THE DUNGEON CAMERA'S HEIGHT is regulated every frame by the camera pass (OpC_MotionProcess, dun
-        /// 0x1DBF300): nearer than 60 to Toan it climbs 0.5 a frame; farther, it decays toward a rest of 5.0 at 0.05 ×
-        /// the excess per frame (0.15..0.5), never below a floor of 1.6. A write to the height field is undone within
-        /// frames; a hold needs the cave below.</summary>
+        // THE DUNGEON CAMERA'S HEIGHT is regulated every frame by the camera pass (OpC_MotionProcess, dun 0x1DBF300):
+        // nearer than 60 to Toan it climbs 0.5 a frame; farther, it decays toward a rest of 5.0 at 0.05 × the excess per
+        // frame (0.15..0.5), never below a floor of 1.6. A write to the height field is undone within frames; a hold
+        // needs the cave below.
         /// <summary>THE CAMERA PIN: a world HEIGHT (+4; +0/+8 unused) and a flag (+0xC). While the flag is set the
         /// camera-pin cave (DebugInfoCave.CameraPin, run at the end of the dungeon camera pass every frame) sets the
         /// follow camera's height field so that it sits at exactly that world height whatever its follow point does —
@@ -1095,7 +380,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  WhpBillFactor = 0x0, WhpBillMagic = 0x4;
         internal const uint WhpBillMagicValue = 0x4C494257;   // "WBIL"
 
-        /// <summary>TOAN'S MELEE KICK STRENGTHS as data (ElfWeaponPatches.PatchMeleeKickStrength). ToanKey_Play hands
+        /// <summary>TOAN'S MELEE KICK STRENGTHS as data (ElfToanMeleePatches.PatchMeleeKickStrength). ToanKey_Play hands
         /// SetKickBack an immediate strength for five of its seven hits — combo hit 3 (1.5), hit 4 (2.0), hit 5, the
         /// lunge and the whirlwind (3.0 each); hits 1 and 2 read the shared 1.2 word (MeleeKick.Strength12) — so those
         /// five become words here: +0x0 hit 3, +0x4 hit 4, +0x8 hit 5, +0xC lunge, +0x10 whirlwind, +0x14 owner (the
@@ -1201,7 +486,7 @@ namespace Dark_Cloud_Improved_Version
         /// high half is <see cref="NoDrainMark"/>'s, which is all the no-drain caves test — an Ungaga crushing hit bills no weapon HP.</summary>
         internal const uint CrushMark = 0x4B495243;   // "CRIK"
 
-        // 0x21FAFC90..0x21FAFCB0: the follow cave's first single entry — the table below replaced it (unused).
+        // 0x21FAFC90..0x21FAFCB0 FREE
 
         /// <summary>The guard gate's per-enemy window mask (DebugInfoCave.GuardMask, written by GuardGate): one byte per slot, bit w set =
         /// enemy window w blocks nothing (7 = none of its windows).</summary>
@@ -1234,41 +519,6 @@ namespace Dark_Cloud_Improved_Version
         internal const long StarsGate   = 0x21FAFFF0;   // 16 B (to the ELF cave segment)
         internal const uint StarsGateGuest = 0x01FAFFF0;
         internal const int  StarsGateLive = 0x0, StarsGateBase = 0x4, StarsGateMark = 0x8, StarsGateInstance = 0xC;
-        // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
-        // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
-        // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.
-
-        /// <summary>Town water "submerged tint" redraw — see <c>IsoPatcher.PatchWaterRedraw</c> /
-        /// <c>PatchDrawWaterCompaction</c>. The redraw CODE lives baked inside MainDraw/DrawWater's own
-        /// ELF footprint (the draw is MOVED to after the character, not duplicated — a duplicate call
-        /// overflowed the shared per-frame VIF1 packet buffer and crashed); these two words are plain
-        /// runtime DATA the baked code reads/writes, so BSS is fine here (unlike code, data doesn't need
-        /// to exist before boot).
-        /// +0x00 <c>WaterRedrawPendingFlag</c> — MainDraw's payload-start STUB sets it when the GameMode
-        /// gate matches (instead of drawing there); the hook-site cave checks and unconditionally clears
-        /// it (every frame, whether set or not, so no stale state survives into a non-matching frame)
-        /// to decide whether to `jal` the relocated draw payload.
-        /// +0x04 <c>DrawWaterHelperRaScratch</c> — the DrawWater vtable-call-bracket helper's own $ra
-        /// stash, needed because it makes two nested calls and neither survives in a register (no free
-        /// callee-saved slot in DrawWater's frame, and its sp-relative locals rule out the helper opening
-        /// a second stack frame).</summary>
-        internal const uint WaterRedrawPendingFlag     = 0x01FAE600;
-        internal const uint DrawWaterHelperRaScratch   = 0x01FAE604;
-
-        /// <summary>Low-tide mizu-reorder mailbox — see <c>IsoPatcher.PatchWaterRedraw</c>'s MIZU_STUB and
-        /// <c>CanalTide</c>. The baked stub (hosted in the compacted GameMode gate) reads these at the
-        /// post-character hook: if FramePtr is nonzero it ReloadTexture(TexGroup)s and MGDraw()s that frame
-        /// — drawing the (scene-pass-hidden) water mesh AFTER the player so its own semi-transparent
-        /// texture blends over the submerged body. C# owns both words: TexGroup is written BEFORE FramePtr
-        /// (the pointer is the stub's gate), and FramePtr is zeroed on map change / frame loss / non-low
-        /// tide. BSS = zero at boot = feature off until armed.</summary>
-        internal const long MizuRedrawFramePtr      = 0x21FAE608;   // MMU (C# writes)
-        internal const uint MizuRedrawFramePtrGuest = 0x01FAE608;   // guest (baked into the stub)
-        internal const long MizuRedrawTexGroup      = 0x21FAE60C;
-        internal const uint MizuRedrawTexGroupGuest = 0x01FAE60C;
-        /// <summary>Water-redraw payload dynamic-return slot (waterOrderGate.bin: COND/SHIM write it,
-        /// RET_THUNK `jr`s through it). EE-side only — C# never touches it.</summary>
-        internal const uint WaterRedrawReturnSlotGuest = 0x01FAE610;
     }
 
 }

@@ -31,10 +31,9 @@ namespace Dark_Cloud_Improved_Version
         internal static BorrowedEffect Effect()
         {
             if (_fx != null) return _fx;
-            _fx = BorrowedShots.CustomConfig(Template, Name, muzzleMotion: 0, flyMotion: -1, impactMotion: -1, expireMotion: -1, dir: Dir, instance: 0);   // instance 0: its own cache key — StarsLane names the instance
+            _fx = BorrowedShots.VisualOnly(Template, Name, muzzleMotion: 0, flyMotion: -1, impactMotion: -1, expireMotion: -1, dir: Dir, instance: 0);   // instance 0: its own cache key — StarsLane names the instance
             if (_fx == null) return null;
             _fx.SubShots = StarsLane.SubShots;
-            for (int ph = 0; ph < 4; ph++) BorrowedShots.SetPhaseRadius(_fx, ph, 0f);
             return _fx;
         }
 
@@ -82,7 +81,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool Start(int slot, long inst, byte[] cfg)
         {
             long p = EnemyAddresses.CharObjects.PosAddr(slot);
-            float x = Memory.ReadFloat(p), h = Memory.ReadFloat(p + 4) + TerraSword.HeadHeight(slot) + Lift, y = Memory.ReadFloat(p + 8);
+            float x = Memory.ReadFloat(p), h = Memory.ReadFloat(p + 4) + EnemyBody.HeadHeight(slot) + Lift, y = Memory.ReadFloat(p + 8);
             if (!BorrowedShots.BurstIn(cfg, inst, x, h, y, 0, MinScale)) return false;          // all eight busy
             var st = new Star { Sub = Memory.ReadInt(inst + ShotEffectPack.OffLastIdx), From = GameClock.Now };
             _stars[slot] = st;
@@ -95,14 +94,8 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
-        private static void Restart(long inst, Star st)
-        {
-            long o = Obj(inst, st);
-            Memory.WriteInt  (o + ShotEffectPack.ObjMotId, 0);
-            Memory.WriteInt  (o + ShotEffectPack.ObjMotFlag, 6);
-            Memory.WriteFloat(o + ShotEffectPack.ObjFrame, First);
-            Memory.WriteFloat(o + ShotEffectPack.ObjMotSpd, Rate);
-        }
+        /// <summary>The star's one clip from its first frame at its rate.</summary>
+        private static void Restart(long inst, Star st) => ShotEffects.SetClip(Obj(inst, st), 0, First, Rate);
 
         private static void Keep(int slot, long inst)
         {

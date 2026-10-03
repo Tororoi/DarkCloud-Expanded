@@ -97,8 +97,8 @@ namespace Dark_Cloud_Improved_Version
                 // A player-model swap is in flight — keep the cave OFF the (rebuilding) model root, or it
                 // draws a stale/half-built root and hangs. Force-disarm both mailboxes; make the cape
                 // re-settle after. Arm re-arms with the fresh root once the swap event completes.
-                Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);
-                Memory.WriteInt(CodeCaves.Mailbox.CapeCharPtr, 0);
+                Memory.WriteInt(WaterRedraw.MizuRedrawFramePtr, 0);
+                Memory.WriteInt(Mailbox.CapeCharPtr, 0);
                 _capeStableTicks = 0;
                 return;
             }
@@ -155,9 +155,9 @@ namespace Dark_Cloud_Improved_Version
 
                         // GROUP + cape char ptr before the FRAME pointer — the pointer is the stub's gate, so
                         // neither must be observable as stale while the pointer is live.
-                        Memory.WriteInt(CodeCaves.MizuRedrawTexGroup, PlayerTexGroup);
-                        Memory.WriteInt(CodeCaves.Mailbox.CapeCharPtr, capeReady ? (int)chara : 0);
-                        Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, (int)root);
+                        Memory.WriteInt(WaterRedraw.MizuRedrawTexGroup, PlayerTexGroup);
+                        Memory.WriteInt(Mailbox.CapeCharPtr, capeReady ? (int)chara : 0);
+                        Memory.WriteInt(WaterRedraw.MizuRedrawFramePtr, (int)root);
                         armed = true;
                         if (!_loggedArm) { Log($"early-player draw armed (model root 0x{root:X}, tex group {PlayerTexGroup})"); _loggedArm = true; }
                         if (!capeReady && !_loggedCapeGate) { Log($"cape early-draw gated (cloth chain unsettled: list 0x{clothList:X}, ok={clothOk}, stable={_capeStableTicks})"); _loggedCapeGate = true; }
@@ -165,7 +165,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
             }
-            if (!armed) { Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0); Memory.WriteInt(CodeCaves.Mailbox.CapeCharPtr, 0); if (!low) _loggedArm = false; }
+            if (!armed) { Memory.WriteInt(WaterRedraw.MizuRedrawFramePtr, 0); Memory.WriteInt(Mailbox.CapeCharPtr, 0); if (!low) _loggedArm = false; }
         }
 
         internal static void Reset()

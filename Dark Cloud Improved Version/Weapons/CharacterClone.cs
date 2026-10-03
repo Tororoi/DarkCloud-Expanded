@@ -846,7 +846,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static void DespawnInternal()
         {
-            // (CodeCaves.MirageSceneGateFlag is driven by the Loop now: 2 in-dungeon → PNACH restores vanilla gates, 0 in town.)
+            // (Mailbox.MirageSceneGate is driven by the Loop now: 2 in-dungeon → PNACH restores vanilla gates, 0 in town.)
             if (_cloneSlot < 0) return;
             long slot = DungeonCharaDraw.CharaArray + (long)_cloneSlot * DungeonCharaDraw.CharaStride;
             Memory.WriteInt (DungeonCharaDraw.CharaRegistry + (long)_cloneSlot * 4, 0);   // unregister (draw)

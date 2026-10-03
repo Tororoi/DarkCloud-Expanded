@@ -30,7 +30,7 @@ namespace Dark_Cloud_Improved_Version
         private const byte   WalkingMode = 1;      // Addresses.dungeonMode: on the floor, nothing loading
         private static long  _list, _seenList;     // the list the step was raised in (MMU; 0 = none), and the one seen last tick
 
-        internal static bool Wielded() => Player.CurrentCharacterNum() == Player.UngagaId && Player.Weapon.GetCurrentWeaponId() == Items.partisan;
+        internal static bool Wielded() => UngagaWeapon.Wields(Items.partisan);   // Ungaga's hand only: the sphere's form is Shamshir's (DriveSphere)
 
         public static void QuickSwingEffect()
         {

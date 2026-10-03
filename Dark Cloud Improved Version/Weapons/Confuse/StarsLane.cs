@@ -3,19 +3,11 @@ using System;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// The RESIDENT stars instance (docs/confuse-ability.md): a CSHOT_EFFECT of the mod's own, carved from the monster pool once per
-    /// floor (the pool is a bump allocator the floor's load resets), stepped and drawn every dungeon frame by the second-effect
-    /// caves' continuation (ElfWeaponPatches.StarsTail) behind CodeCaves.StarsGate, and entered with the spinning stars
-    /// (ConfusionStars.Effect, 8 sub-shots) once per floor — so every confused enemy can wear them on any floor, whatever the
-    /// weapons, items and character effects in use.
-    ///
-    /// Entering goes through the ISO's loader cave (ElfCave.BorrowedShotsEnter), which serves ONE request block, BorrowedShots':
-    /// on each new floor, before that block's own effect is requested again, the block is saved, the stars' request written
-    /// (the stars' config, the container, the stars instance, its own fresh region carved from the monster pool above it), the cave
-    /// answers, and the block is put back as it was; the stars' config is copied to CodeCaves.StarsCfg and the instance pointed at
-    /// it (the block's config changes under it), and the gate is opened with the instance and the region's base and mark (the
-    /// step/draw caves check the region is still the floor's: its "BSHT" signature and the monster pool at or past the mark — the
-    /// instance lies below the region, so a pool rewound under it fails the same check). Leaving the floor closes the gate.
+    /// The RESIDENT stars instance (docs/confuse-ability.md, Phase 3): a CSHOT_EFFECT of the mod's own, carved from the monster pool
+    /// once per floor, constructed by the stars step cave (CodeCaves.StarsConstruct), entered with the spinning stars
+    /// (ConfusionStars.Effect, 8 sub-shots) through the ISO's loader cave (ElfCave.BorrowedShotsEnter) by borrowing BorrowedShots'
+    /// request block, and stepped and drawn every dungeon frame by the second-effect caves' continuation
+    /// (ElfConfusePatches.StarsTail) behind CodeCaves.StarsGate. Leaving the floor closes the gate.
     /// </summary>
     internal static class StarsLane
     {
@@ -92,14 +84,12 @@ namespace Dark_Cloud_Improved_Version
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the stars' textures were cleared by a main-effect entry — entering them again");
                     }
                     if (_live || _tries >= MaxTries || GameClock.Now < _retryAt) return false;
-                    // Only while the dungeon plays plainly, and has for a moment: the cave reads the stars' file into the loader's read
-                    // buffer, which the menus load into too (the quick character select's quickchr.pac) — a request written as a
-                    // menu opens waits out the held step and is served once the menu's step resumes, over the menu's data.
+                    // Only after the dungeon has played plainly for QuietSeconds: the cave reads into the loader's read buffer, which
+                    // the menus load into too (docs/confuse-ability.md).
                     if (!Quiet()) { _quietSince = default; return false; }
                     if (_quietSince == default) _quietSince = GameClock.Now;
                     if ((GameClock.Now - _quietSince).TotalSeconds < QuietSeconds) return false;
-                    // Never while another request is in flight: the cave reads the block across frames (it loads the file and waits
-                    // on the disc), so a block changed under it mixes two requests — the data of one under the config of the other.
+                    // Never while another request is in flight (the cave reads the block across frames).
                     if (Memory.ReadUInt(CodeCaves.BorrowedShotBlock) == CodeCaves.BorrowedShotMagic && Memory.ReadInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotState) == 0) return false;
                     if (!Constructed()) return false;                                                   // carved between requests: the cave is the pool's other mid-floor allocator
                     var fx = ConfusionStars.Effect();
@@ -166,8 +156,8 @@ namespace Dark_Cloud_Improved_Version
                 _retryAt = GameClock.Now.AddSeconds(RetrySeconds);
                 return false;
             }
-            // No answer yet, and a menu is opening: the step is held, so the cave has not started on it — withdrawn (safe while held)
-            // before the menu's own step would serve it over the menu's data, and asked again once the dungeon is quiet.
+            // No answer yet and a menu is opening: withdrawn while the cave has not begun on it (docs/confuse-ability.md), asked
+            // again once the dungeon is quiet.
             if (!Quiet() && !CaveStarted())
             {
                 Abort("a menu opened before the cave answered — withdrawn, asked again later");
@@ -180,9 +170,6 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
-        /// <summary>This floor's instance, carved from the top of the monster pool (zeroed; the pool's used counter bumped past
-        /// it). Only between requests: the loader cave is the pool's only other mid-floor allocator, and it carves only while a
-        /// request is in flight. False (no stars on this floor) when the instance and the stars' region would not both fit.</summary>
         /// <summary>Whether the cave has begun on the request: it carves (the allocator's base filled in) or reuses the region (its
         /// used count zeroed) before anything else — from then on the block must not change until it answers.</summary>
         private static bool CaveStarted()
@@ -240,6 +227,9 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
+        /// <summary>This floor's instance, carved from the top of the monster pool (zeroed; the pool's used counter bumped past
+        /// it), only between requests (docs/confuse-ability.md). False (no stars on this floor) when the instance and the stars'
+        /// region would not both fit.</summary>
         private static bool CarveInstance()
         {
             long pool = DataPools.Monstor;

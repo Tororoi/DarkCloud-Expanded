@@ -66,7 +66,7 @@ namespace Dark_Cloud_Improved_Version
             _active = true; _start = GameClock.Now;
             Write(1f, 1f, RestDim);
             float tint = Memory.ReadFloat(CCharacter.Base + CCharacter.CharaTint);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] flash: {Describe()}; from dim {fromDim:0.00} ({(wasDimming ? "a dim was up" : "no dim up")}), her tint {tint:0}, light ({FlashColour[0]:0},{FlashColour[1]:0},{FlashColour[2]:0}) fog amount {FogAmount:0.00}");
+            if (DebugDiagnostics.Enabled) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SunSword] flash: {Describe()}; from dim {fromDim:0.00} ({(wasDimming ? "a dim was up" : "no dim up")}), her tint {tint:0}, light ({FlashColour[0]:0},{FlashColour[1]:0},{FlashColour[2]:0}) fog amount {FogAmount:0.00}");
         }
 
         /// <summary>The floor's light set, captured; false (and logged) if it does not look like one.</summary>

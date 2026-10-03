@@ -42,7 +42,7 @@ namespace Dark_Cloud_Improved_Version
         /// draw packets (the engine rebuilds the packet from the particles every draw), the anchor re-pointed at the copy's
         /// cat_sebone2 where the rest lattice was authored, no body capsules, the Verlet "previous" seeded from "current" so
         /// the first step is quiet, and the copy's +0xC74 pointing at a one-entry list. Her own list entry is zeroed so she
-        /// neither steps nor draws it. The dungeon chara loop steps every slot's cloth while MirageSceneGateFlag == 1 (the
+        /// neither steps nor draws it. The dungeon chara loop steps every slot's cloth while Mailbox.MirageSceneGate == 1 (the
         /// Mirage pnach's ClothStep swap), which the cat already sets; Draw__10CCharacter draws the list.</summary>
         internal static void SpawnCape()
         {

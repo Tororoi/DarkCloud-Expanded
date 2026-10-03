@@ -88,11 +88,11 @@ namespace Dark_Cloud_Improved_Version
             // The kick, as the Matador's: the bypass cave stamps it on this damage's entries, out of each one's own sphere moved back
             // along the flight (horizontal: CheckDmg drops the height from the shove).
             float vl = MathF.Sqrt(vx * vx + vy * vy);
-            if (vl > 1e-4f) Memory.WriteVec3(CodeCaves.Mailbox.PelletKickOrigin, -vx / vl * KickOriginBack, 0f, -vy / vl * KickOriginBack);
-            else Memory.WriteVec3(CodeCaves.Mailbox.PelletKickOrigin, 0f, 0f, 0f);
-            Memory.WriteFloat(CodeCaves.Mailbox.PelletKickStrength, KickStrength);
-            Memory.WriteFloat(CodeCaves.Mailbox.PelletKickDecay, KickDecay);
-            Memory.WriteInt  (CodeCaves.Mailbox.PelletKickDamage, damage);
+            if (vl > 1e-4f) Memory.WriteVec3(Mailbox.PelletKickOrigin, -vx / vl * KickOriginBack, 0f, -vy / vl * KickOriginBack);
+            else Memory.WriteVec3(Mailbox.PelletKickOrigin, 0f, 0f, 0f);
+            Memory.WriteFloat(Mailbox.PelletKickStrength, KickStrength);
+            Memory.WriteFloat(Mailbox.PelletKickDecay, KickDecay);
+            Memory.WriteInt  (Mailbox.PelletKickDamage, damage);
             if (BorrowedShots.Fire(Shot(element), x, h, y, vx, vh, vy, damage, Memory.ReadInt(PlayerShotPool.LifetimeAddr(pool, slot))))
             {
                 Memory.WriteInt(PlayerShotPool.FlagAddr(pool, slot), 0);                    // the pellet gives way to the shot
@@ -130,7 +130,7 @@ namespace Dark_Cloud_Improved_Version
             => element >= 0 && element < ShotEffectPack.DragonsYCfg.Length ? BorrowedShots.TableConfig(ShotEffectPack.DragonsYCfg[element]) : null;
 
         /// <summary>The weapon or the floor went: no charge held, no kick mark.</summary>
-        internal static void Stop() { _holding = false; _armedUntil = DateTime.MinValue; ChargeTint.Clear(); Memory.WriteInt(CodeCaves.Mailbox.PelletKickDamage, 0); }
+        internal static void Stop() { _holding = false; _armedUntil = DateTime.MinValue; ChargeTint.Clear(); Memory.WriteInt(Mailbox.PelletKickDamage, 0); }
 
         // ── Dragon's Y ─────────────────────────────────────────────────────────────────────
         /// <summary>Xiao's Dragon's Y thread: hands every tick to <see cref="DragonsY.Drive"/> (the charged shot) while the

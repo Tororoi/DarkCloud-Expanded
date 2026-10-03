@@ -10,7 +10,14 @@ using static Dark_Cloud_Improved_Version.ElfCameraPatches;
 using static Dark_Cloud_Improved_Version.ElfWaterPatches;
 using static Dark_Cloud_Improved_Version.ElfFishingPatches;
 using static Dark_Cloud_Improved_Version.ElfCatPatches;
+using static Dark_Cloud_Improved_Version.ElfDeadFunctionPatches;
+using static Dark_Cloud_Improved_Version.ElfShotPackPatches;
+using static Dark_Cloud_Improved_Version.ElfDamagePatches;
+using static Dark_Cloud_Improved_Version.ElfFrameChainPatches;
+using static Dark_Cloud_Improved_Version.ElfToanMeleePatches;
+using static Dark_Cloud_Improved_Version.ElfConfusePatches;
 using static Dark_Cloud_Improved_Version.ElfWeaponPatches;
+using static Dark_Cloud_Improved_Version.ElfCaveWriter;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -18,8 +25,10 @@ namespace Dark_Cloud_Improved_Version
     /// ELF (SCUS_971.11) patching: the boot cave that registers fishsign.img, ElfPatchAndCrc (program-header
     /// resolve + the ordered Patch* dispatch + new PCSX2 CRC), and the small cave-stub hooks (tide-evict
     /// fade, Queens spray, spray bias). The fishing ELF patches live in ElfFishingPatches; camera and
-    /// water-visual patches in ElfCameraPatches / ElfWaterPatches; the cat's in ElfCatPatches and the weapon
-    /// abilities' in ElfWeaponPatches.
+    /// water-visual patches in ElfCameraPatches / ElfWaterPatches; the cat's in ElfCatPatches; the dead-function
+    /// hosts' takeover in ElfDeadFunctionPatches; the shot pack's in ElfShotPackPatches, the damage pipeline's in
+    /// ElfDamagePatches, the camera-pass frame chain's in ElfFrameChainPatches, Toan's melee in ElfToanMeleePatches,
+    /// the Confuse ability's in ElfConfusePatches and the per-weapon odds and ends in ElfWeaponPatches.
     /// </summary>
     internal static class ElfPatches
     {
@@ -74,8 +83,8 @@ namespace Dark_Cloud_Improved_Version
             // [ElfCave.RegionStart, ElfCave.RegionEnd) ↔ file [SegmentFileOff, +size)), else the main
             // phdr0 linear map. HijackPhdr3CaveSegment (below) creates the former BEFORE any cave write.
             long ElfOff(uint va) =>
-                (va >= CodeCaves.ElfCave.RegionStart && va < CodeCaves.ElfCave.RegionEnd)
-                    ? elfIso + CodeCaves.ElfCave.SegmentFileOff + (va - CodeCaves.ElfCave.RegionStart)
+                (va >= ElfCave.RegionStart && va < ElfCave.RegionEnd)
+                    ? elfIso + ElfCave.SegmentFileOff + (va - ElfCave.RegionStart)
                     : elfIso + pOff + (va - pVa);
 
             // Create the cave segment FIRST — every ElfCave-targeted write below lands in its file span.
@@ -91,6 +100,7 @@ namespace Dark_Cloud_Improved_Version
             Wr(fs, ElfOff(BootCaveAddr), cave);
             WrU32(fs, ElfOff(DETOUR_VA), J(BootCaveAddr));
 
+            PatchClaimDeadFunctionHosts(fs, ElfOff);     // the dead debug functions that host caves (DebugInfomationDraw, DebugItemGetKey/Draw, DebugInfomationIF) return at once — before every cave patch; nothing else writes their first words
             PatchFishingLoadFish(fs, ElfOff);
             PatchFishBox(fs, ElfOff);
 
@@ -140,13 +150,13 @@ namespace Dark_Cloud_Improved_Version
             PatchPelletPlant(fs, ElfOff);                 // a player pellet whose damage word is negative plants nothing on contact — it just ends (ZeusShot's bolt pellets)
             PatchPelletContact(fs, ElfOff);               // every player pellet contact recorded (slot, enemy or wall, the point) for the mod, on the engine's frame
             PatchGemDamage(fs, ElfOff);                   // a thrown gem's burst damage × CodeCaves.GemDamageFactor (the Crysknife doubles it)
-            PatchConfuseProc(fs, ElfOff);                // the Confuse ability's on-hit roll (and the dead debug item host the stars caves share)
+            PatchConfuseProc(fs, ElfOff);                // the Confuse ability's on-hit roll (in the dead debug item host the stars caves share)
             PatchSecondEffect(fs, ElfOff);                // the second main-character effect instance stepped and drawn beside the live one on demand (Babel's Spear)
             PatchSpearBlock(fs, ElfOff);
             PatchRockShadow(fs, ElfOff);
             PatchUngagaNoDrain(fs, ElfOff);               // Ungaga's charge-effect hits and Babel's spikes cost no weapon HP (the charge's per-shot bill stays)                  // a solid column enemies cannot walk through, while armed (Babel's risen spear)
             PatchSteelLevelUp(fs, ElfOff);                // the Steel Slingshot's level-ups: endurance and max WHP grow twice as much
-            PatchCircleEffects(fs, ElfOff);               // the magic circles, every magnitude from CodeCaves.CircleTable (the cave over DebugInfomationIF; the dun hook is in DunPatches)
+            PatchCircleEffects(fs, ElfOff);               // the magic circles, every magnitude from CodeCaves.CircleTable (the cave in DebugInfomationIF's body; the dun hook is in DunPatches)
             PatchCallRequest(fs, ElfOff);                 // a native call the mod posts (CodeCaves.CallRequest), made from the camera pass once a frame (the chain's tail)
             PatchFlameSpacing(fs, ElfOff);                // Osmond's flamethrower reach from a mailbox word (the Skunk doubles it)
             PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
@@ -182,9 +192,9 @@ namespace Dark_Cloud_Improved_Version
         // would otherwise persist), so this MUST run before any ElfCave-targeted cave write.
         internal static void HijackPhdr3CaveSegment(FileStream fs, long elfIso, uint phoff, ushort phent, ushort phnum, uint elfSize)
         {
-            const uint SegVa   = CodeCaves.ElfCave.RegionStart;
-            const uint SegOff  = CodeCaves.ElfCave.SegmentFileOff;
-            const uint SegSize = CodeCaves.ElfCave.RegionEnd - CodeCaves.ElfCave.RegionStart;   // 0x4000 (it can never grow past 0x1FB4000 — runtime data there)
+            const uint SegVa   = ElfCave.RegionStart;
+            const uint SegOff  = ElfCave.SegmentFileOff;
+            const uint SegSize = ElfCave.RegionEnd - ElfCave.RegionStart;   // 0x4000 (it can never grow past 0x1FB4000 — runtime data there)
 
             if (phnum != 4)
                 throw new IOException($"Expected 4 ELF program headers, got {phnum} — wrong ISO/version.");
@@ -234,18 +244,14 @@ namespace Dark_Cloud_Improved_Version
         // (Stub = tools/stubs/canal_evict_fade_hook.s → Resources/isoPatch/canalEvictFadeHook.bin.)
         internal static void PatchCanalEvictFadeHook(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint StubAddr = CodeCaves.ElfCave.CanalEvictFadeHook;   // registry: CodeCaveAddresses.ElfCave
+            const uint StubAddr = ElfCave.CanalEvictFadeHook;   // registry: CodeCaveAddresses.ElfCave
             const uint HookAddr = 0x00189970;   // EdFadeInOut fade-out `fade_end = 1` store
             if (RdU32(fs, ElfOff(HookAddr)) != 0xAF83920C)
                 throw new IOException($"Canal-evict hook site 0x{HookAddr:X} is not vanilla `sw $v1,-0x6df4($gp)` — unmodified Dark Cloud (USA) ISO expected.");
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.canalEvictFadeHook.bin")
-                ?? throw new IOException("Embedded EE function missing: canalEvictFadeHook.bin (reassemble tools/stubs/canal_evict_fade_hook.s and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            byte[] b = Embedded("canalEvictFadeHook.bin", "Embedded EE function missing: canalEvictFadeHook.bin (reassemble tools/stubs/canal_evict_fade_hook.s and rebuild)");
             if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0xAF83920C)
                 throw new IOException($"canalEvictFadeHook.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(StubAddr + (uint)i), U32(b, i));
+            WriteBytes(fs, ElfOff, StubAddr, b);
             WrU32(fs, ElfOff(HookAddr), Jal(StubAddr));   // store → jal stub; delay slot `clear $s4` runs first (harmless loop init)
         }
 
@@ -310,23 +316,16 @@ namespace Dark_Cloud_Improved_Version
         // draws one raster at the Mirage clone's root when the mailbox says so.
         internal static void PatchMirageHazeDraw(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint CaveAddr = CodeCaves.ElfCave.MirageHazeDraw;
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.mirageHazeDraw.bin")
-                ?? throw new IOException("Embedded EE function missing: mirageHazeDraw.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            const uint CaveAddr = ElfCave.MirageHazeDraw;
+            byte[] b = Embedded("mirageHazeDraw.bin");
             if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u)   // opens its frame: addiu sp,sp,-0x20
                 throw new IOException($"mirageHazeDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             // The two words that make it THIS cave: the "alpha01" string's address (ori a1,a1,0xA0E8) and the draw call
             // (jal DrawRaster__9CFireOmni 0x162310). A wrong immediate in either fails invisibly — nothing drawn, no error.
-            bool name = false, draw = false;
-            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == 0x34A5A0E8u) name = true; if (w == 0x0C0588C4u) draw = true; }
+            bool name = ContainsWord(b, 0x34A5A0E8u), draw = ContainsWord(b, 0x0C0588C4u);
             if (!name || !draw)
                 throw new IOException("mirageHazeDraw.bin lacks the \"alpha01\" address or the DrawRaster call — it would draw nothing.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
-                throw new IOException("mirageHazeDraw.bin overruns its cave — move ElfCave.NextFree.");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            WriteBytes(fs, ElfOff, CaveAddr, b, ElfCave.NextFree, "mirageHazeDraw.bin overruns its cave — move ElfCave.NextFree.");
         }
 
         internal static void PatchIdleMotionOverride(FileStream fs, Func<uint, long> ElfOff)
@@ -335,13 +334,13 @@ namespace Dark_Cloud_Improved_Version
             // NOT a hand-picked literal — a first placement sat inside the fishline-split bin and clobbered the
             // rope step-cave's tail → every Queens fishing session hung on entry. The ELF cave-segment map
             // lives in CodeCaveAddresses.ElfCave — place new caves from THERE, never from a patch-local literal.
-            const uint CaveAddr = CodeCaves.ElfCave.IdleMotionOverride;
-            uint mbGuest = (uint)(CodeCaves.Mailbox.IdleMotionOverride - 0x20000000);   // 0x01F10070 (guest form the cave reads)
+            const uint CaveAddr = ElfCave.IdleMotionOverride;
+            uint mbGuest = (uint)(Mailbox.IdleMotionOverride - 0x20000000);   // 0x01F10070 (guest form the cave reads)
 
             if (RdU32(fs, ElfOff(HookAddr)) != Sw(s0, 0xc68, s2))   // 0xAE500C68
                 throw new IOException($"Idle-motion hook site 0x{HookAddr:X} is not vanilla `sw s0,0xc68(s2)` — unmodified Dark Cloud (USA) ISO expected.");
 
-            uint mbFlagsGuest = (uint)(CodeCaves.Mailbox.IdleMotionFlags - 0x20000000);   // 0x01F10080 — same upper half as the index mailbox
+            uint mbFlagsGuest = (uint)(Mailbox.IdleMotionFlags - 0x20000000);   // 0x01F10080 — same upper half as the index mailbox
             uint[] cave = {
                 Move(v0, s0),                                          // v0 = motion (default: as the engine computed)
                 Bne(s0, zero, 5), 0,                                   // motion != 0 (run/walk) → keep it; branch to the store. delay = nop
@@ -351,8 +350,7 @@ namespace Dark_Cloud_Improved_Version
                 Sw(at, 0xc64, s2),                                     // re-write char+0xc64 (the hook's delay slot zeroed it) — 0 = vanilla loop
                 Jr(ra), Sw(v0, 0xc68, s2),                             // return to 0x16a6b0; delay slot stores the motion id to char+0xc68
             };
-            for (int i = 0; i < cave.Length; i++)
-                WrU32(fs, ElfOff(CaveAddr + (uint)(i * 4)), cave[i]);
+            WriteWords(fs, ElfOff, CaveAddr, cave);
 
             WrU32(fs, ElfOff(HookAddr), Jal(CaveAddr));   // store → jal cave; delay slot `sw zero,0xc64(s2)` runs first (harmless — c64 is zeroed either way)
         }
@@ -381,9 +379,9 @@ namespace Dark_Cloud_Improved_Version
             const uint HookAddr      = 0x0016C0FC;   // EdMoveChara ladder mount `jal EdInitHashigo`
             const uint EdInitHashigo = 0x0016D720;   // the mount (loads the climb overlay)
             const uint AfterFlag     = 0x0016C108;   // return target: `li s4,1`, one past the `li s8,1` climbing-flag set
-            const uint CaveAddr      = CodeCaves.ElfCave.LadderRefusal;   // registry: CodeCaveAddresses.ElfCave
-            uint blockGuest   = (uint)(CodeCaves.Mailbox.BlockLadder      - 0x20000000);   // 0x01F10074 (guest form the cave reads)
-            uint refusalGuest = (uint)(CodeCaves.Mailbox.RefusalRequested - 0x20000000);   // 0x01F10078 (guest form the cave sets)
+            const uint CaveAddr      = ElfCave.LadderRefusal;   // registry: CodeCaveAddresses.ElfCave
+            uint blockGuest   = (uint)(Mailbox.BlockLadder      - 0x20000000);   // 0x01F10074 (guest form the cave reads)
+            uint refusalGuest = (uint)(Mailbox.RefusalRequested - 0x20000000);   // 0x01F10078 (guest form the cave sets)
 
             if (RdU32(fs, ElfOff(HookAddr)) != Jal(EdInitHashigo))   // 0x0C05B5C8
                 throw new IOException($"Ladder-mount hook site 0x{HookAddr:X} is not vanilla `jal EdInitHashigo` — unmodified Dark Cloud (USA) ISO expected.");
@@ -399,8 +397,7 @@ namespace Dark_Cloud_Improved_Version
                 Sw(v0, (int)(refusalGuest & 0xFFFF), at),                    // *RefusalRequested = 1 (at still = mailbox page)
                 J(AfterFlag), 0,                                             // return WITHOUT mount, s8 untouched (stays -1); delay nop
             };
-            for (int i = 0; i < cave.Length; i++)
-                WrU32(fs, ElfOff(CaveAddr + (uint)(i * 4)), cave[i]);
+            WriteWords(fs, ElfOff, CaveAddr, cave);
 
             WrU32(fs, ElfOff(HookAddr), Jal(CaveAddr));   // jal EdInitHashigo → jal cave; delay slot @0x16c100 (nop) runs first
         }
@@ -427,8 +424,8 @@ namespace Dark_Cloud_Improved_Version
         internal static void PatchExclamationHeight(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint HookAddr = 0x0017CF5C;   // EdDrawSysCursor PLAYER-mark final Y store `swc1 f0,0x94(sp)`
-            const uint CaveAddr = CodeCaves.ElfCave.ExclamationHeight;   // registry: CodeCaveAddresses.ElfCave
-            uint mbGuest = (uint)(CodeCaves.Mailbox.ExclamationYBoost - 0x20000000);   // 0x01F1007C (guest form the cave reads)
+            const uint CaveAddr = ElfCave.ExclamationHeight;   // registry: CodeCaveAddresses.ElfCave
+            uint mbGuest = (uint)(Mailbox.ExclamationYBoost - 0x20000000);   // 0x01F1007C (guest form the cave reads)
 
             if (RdU32(fs, ElfOff(HookAddr)) != Swc1(f0, 0x94, sp))   // 0xE7A00094
                 throw new IOException($"Exclamation-height hook site 0x{HookAddr:X} is not vanilla `swc1 f0,0x94(sp)` — unmodified Dark Cloud (USA) ISO expected.");
@@ -440,8 +437,7 @@ namespace Dark_Cloud_Improved_Version
                 Swc1(f0, 0x94, sp),                         // displaced original store → auStack_10+4
                 Jr(ra), 0,                                  // return to 0x17cf64 (jal+8); delay slot nop
             };
-            for (int i = 0; i < cave.Length; i++)
-                WrU32(fs, ElfOff(CaveAddr + (uint)(i * 4)), cave[i]);
+            WriteWords(fs, ElfOff, CaveAddr, cave);
 
             WrU32(fs, ElfOff(HookAddr), Jal(CaveAddr));   // store → jal cave; delay slot @0x17cf60 (lwc1 f1,a_1906) runs first, unchanged
         }
@@ -454,18 +450,14 @@ namespace Dark_Cloud_Improved_Version
         // one-word swap. (Stub = tools/stubs/queens_spray_cave.s → Resources/isoPatch/queensSprayCave.bin.)
         internal static void PatchQueensSprayHook(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint StubAddr = CodeCaves.ElfCave.QueensSpray;   // registry: CodeCaveAddresses.ElfCave
+            const uint StubAddr = ElfCave.QueensSpray;   // registry: CodeCaveAddresses.ElfCave
             const uint HookAddr = 0x0017C5A0;   // MainDraw `jal EditEffectStep2` (convergence point before DrawEffect)
             if (RdU32(fs, ElfOff(HookAddr)) != 0x0C059B78)   // = jal 0x00166de0
                 throw new IOException($"Queens-spray hook site 0x{HookAddr:X} is not vanilla `jal EditEffectStep2` — unmodified Dark Cloud (USA) ISO expected.");
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.queensSprayCave.bin")
-                ?? throw new IOException("Embedded EE function missing: queensSprayCave.bin (reassemble tools/stubs/queens_spray_cave.s and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            byte[] b = Embedded("queensSprayCave.bin", "Embedded EE function missing: queensSprayCave.bin (reassemble tools/stubs/queens_spray_cave.s and rebuild)");
             if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x27BDFFE0)   // first insn = addiu $sp,$sp,-0x20
                 throw new IOException($"queensSprayCave.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(StubAddr + (uint)i), U32(b, i));
+            WriteBytes(fs, ElfOff, StubAddr, b);
             WrU32(fs, ElfOff(HookAddr), Jal(StubAddr));   // jal EditEffectStep2 → jal queensSprayCave (which re-does that call)
         }
 
@@ -476,18 +468,14 @@ namespace Dark_Cloud_Improved_Version
         // this is transparent there. (Stub = tools/stubs/spray_bias_shim.s → Resources/isoPatch/sprayBiasShim.bin.)
         internal static void PatchSprayBiasShim(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint StubAddr = CodeCaves.ElfCave.SprayBiasShim;   // registry: CodeCaveAddresses.ElfCave
+            const uint StubAddr = ElfCave.SprayBiasShim;   // registry: CodeCaveAddresses.ElfCave
             const uint HookAddr = 0x00165184;   // EffectWaterSpray `jal EnterEffect`
             if (RdU32(fs, ElfOff(HookAddr)) != 0x0C059260)   // = jal 0x00164980 (EnterEffect)
                 throw new IOException($"Spray-bias hook site 0x{HookAddr:X} is not vanilla `jal EnterEffect` — unmodified Dark Cloud (USA) ISO expected.");
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.sprayBiasShim.bin")
-                ?? throw new IOException("Embedded EE function missing: sprayBiasShim.bin (reassemble tools/stubs/spray_bias_shim.s and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            byte[] b = Embedded("sprayBiasShim.bin", "Embedded EE function missing: sprayBiasShim.bin (reassemble tools/stubs/spray_bias_shim.s and rebuild)");
             if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x3C0801F2)   // first insn = lui $t0,0x1f2
                 throw new IOException($"sprayBiasShim.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(StubAddr + (uint)i), U32(b, i));
+            WriteBytes(fs, ElfOff, StubAddr, b);
             WrU32(fs, ElfOff(HookAddr), Jal(StubAddr));   // jal EnterEffect → jal sprayBiasShim (which re-does that call)
         }
 

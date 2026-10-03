@@ -18,13 +18,7 @@ namespace Dark_Cloud_Improved_Version
         private static readonly bool[] _poisoned = new bool[EnemyAddresses.FloorSlots.Count];
 
         /// <summary>Ungaga with the Scorpion, or Xiao with Super Steve and a Scorpion sphere.</summary>
-        internal static bool Wielded()
-        {
-            int ch = Player.CurrentCharacterNum();
-            if (ch == Player.UngagaId) return Player.Weapon.GetCurrentWeaponId() == Items.scorpion;
-            if (ch == Player.XiaoId) return Player.Weapon.GetCurrentWeaponId() == Items.supersteve && SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.scorpion;
-            return false;
-        }
+        internal static bool Wielded() => UngagaWeapon.WieldsOrSphere(Items.scorpion);
 
         public static void VenomEffect()
         {

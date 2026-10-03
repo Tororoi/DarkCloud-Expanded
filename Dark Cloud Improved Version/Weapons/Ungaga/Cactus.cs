@@ -4,33 +4,21 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Cactus — "Desert Bloom": its guard raises a giant copy of the cactus out of the ground <see cref="AheadDistance"/> in front of Ungaga,
-    /// point up with only its top showing, as Babel's Spear raises its spear (<see cref="BabelsSpear"/>, whose pieces this reuses):
-    /// the guard pose held as long as the Mirage's clone takes to appear (Mirage.GuardChargeMs) summons it, one per hold; a new hold
-    /// while one stands takes that one down at once and raises it anew at the new spot, as a new Mirage cast replaces the
-    /// decoy. It rises in a poof of smoke — e03's cutscene effect e228ex (baked onto the dead dun/effect/zibaku_t
-    /// name and borrowed into the second main-character instance, which the second-effect caves step and draw), its one clip
-    /// (frames 1–50) at 0.6 (its own is 0.2), half size, turned to Ungaga's facing, faded out by the mod from frame <see cref="FxFadeFrom"/> to <see cref="FxEnd"/> (SubShotFade).
-    /// In it the cactus comes out at <see cref="SpawnScale"/>× by the clip's frame <see cref="FxEmergedFrame"/> (the blade-fall
-    /// cave's ease on the engine's frames), then grows linearly to <see cref="PeakScale"/>× by frame <see cref="FxPeakFrame"/> and
-    /// settles back to <see cref="Scale"/>× by frame <see cref="FxRisenFrame"/> (a touch of squash and stretch), its root moved with the scale so the same length of it stays out and its base on the spot. It stands without turning, is
-    /// solid to enemies, the player and enemy shots (the spear-block caves, <see cref="BlockRadius"/>), and every enemy touching it takes
-    /// Babel's spike rate — a sixth of the weapon's attack every <see cref="HitSeconds"/>, thrown off to half the Baselard's distance, no weapon HP. It stands
-    /// <see cref="StandSeconds"/> from the summon, then fades out over <see cref="FadeSeconds"/> (solid and hurting until gone).
+    /// <summary>Cactus — "Desert Bloom" (docs/cactus-spike.md): the guard pose held Mirage.GuardChargeMs raises a giant copy of the
+    /// cactus out of the floor <see cref="AheadDistance"/> ahead of the wielder, one per hold (a new hold while one stands moves it),
+    /// on Babel's Spear's pieces (<see cref="BabelsSpear"/>: the blade-fall, blade-spin and spear-block caves, <see cref="BladeProp"/>).
+    /// It rises in a poof of smoke (e228ex on the dead dun/effect/zibaku_t, in the second main-character instance), grows from
+    /// <see cref="SpawnScale"/> through <see cref="PeakScale"/> to <see cref="Scale"/> on the clip's frames (<see cref="Drive"/>), stands
+    /// solid to enemies, the player and enemy shots (<see cref="Solid"/>), pricks every enemy touching it at Babel's spike rate
+    /// (<see cref="Hit"/>, no weapon HP), and after <see cref="StandSeconds"/> fades out over <see cref="FadeSeconds"/>.
     ///
-    /// The copy is <see cref="BladeProp"/>'s (untinted: it draws in the room's own light), in one of two <see cref="Form"/>s:
-    ///  · UNGAGA's (<see cref="CactusForm"/>): the equipped Cactus, baked point-up — c10w13 runs −9.7 … +11.7 along its axis (the
-    ///    tip, dcol0, at 11.68) — at 3×, 6.8 model units of its top above the floor;
-    ///  · SUPER STEVE's with a Cactus sphere (<see cref="TreesForm"/>): Queens' two trees and their grass, whole (<see cref="QueensTrees"/>,
-    ///    in the item-model cash — not Ungaga's weapon, and none of Xiao's own memory), authored upright, all of it out (74.3 tall),
-    ///    at 0.7×, turned +90° from Xiao's facing, the grass square's centre (model −6, −1) on the spot — the part's root is at the
-    ///    model's origin and a copy's root translation is the chara slot's position, so the offset is the root's, turned and scaled.
-    ///    It hurts nothing and casts no shadow: solid to enemies, the player and enemy shots, it is a wall for a ranged fighter to
-    ///    shoot from behind.
-    /// The scales run in the same proportions (a thirtieth of full size out, 3.4 / 3 at the peak).</summary>
-    internal static class CactusSpike
+    /// The copy is untinted (it draws in the room's own light), in one of two <see cref="Form"/>s: Ungaga's equipped Cactus baked
+    /// point-up (<see cref="CactusForm"/>), or — Super Steve with a Cactus sphere — Queens' trees from the item-model cash
+    /// (<see cref="TreesForm"/>, <see cref="QueensTrees"/>), which hurt nothing and cast no shadow: a wall for a ranged fighter to
+    /// shoot from behind. Both forms rise in the same proportions (SpawnRatio, PeakRatio).</summary>
+    internal static class Cactus
     {
-        private const string Tag = "[CactusSpike] ";
+        private const string Tag = "[Cactus] ";
         private const int    TickMs         = 16;
         private const float  AheadDistance  = 10f;
         private const float  SpawnRatio     = 0.1f / 3f;   // it emerges at this share of its full size…
@@ -42,9 +30,12 @@ namespace Dark_Cloud_Improved_Version
         /// about the vertical from the wielder's facing, and its round shadow's radius and centre along the model's z (model units).</summary>
         private sealed record Form(string Name, float Scale, float Top, float ExposedModel, float BaseX, float BaseZ, float BlockRadius, bool Trees, float Turn,
                                    float ShadowRadius, float ShadowZ);
-        private static readonly Form CactusForm = new("cactus", 3f,   11.7f, 6.8f,  0f, 0f, 6f, false, 0f, 1.8f, 0f);         // ±2.5 across at 1× with its arms (±7.5 at 3×); the shadow its body's 1.8 (spikes 2.25–2.75 left out)
-        // Queens' two trees and their grass, whole: centred on the spot by the grass square's centre (model −6, −1); the column covers
-        // both trunks (their bases 21.5 model units apart, ~15 at 0.7×, about the spot); turned a quarter from the facing; no shadow.
+        // The equipped Cactus: c10w13 runs −9.7 … +11.7 along its axis (the tip, dcol0, at 11.68), 6.8 model units of its top out; ±2.5 across
+        // at 1× with its arms (±7.5 at 3×); the shadow its body's 1.8 (spikes 2.25–2.75 left out).
+        private static readonly Form CactusForm = new("cactus", 3f,   11.7f, 6.8f,  0f, 0f, 6f, false, 0f, 1.8f, 0f);
+        // Queens' two trees and their grass, whole (authored upright, 74.3 tall, all of it out): centred on the spot by the grass square's
+        // centre (model −6, −1); the column covers both trunks (their bases 21.5 model units apart, ~15 at 0.7×, about the spot); turned a
+        // quarter from the facing; no shadow.
         private static readonly Form TreesForm  = new("Queens trees", 0.7f, 74.3f, 74.3f, -6f, -1f, 9.5f, true, (float)(Math.PI / 2), 0f, 0f);
         private static Form F = CactusForm;
         private static bool _xiao;
@@ -70,26 +61,19 @@ namespace Dark_Cloud_Improved_Version
         private const float  HitShare       = 1f / 6f; // Babel's spike: a sixth of the weapon's attack…
         private const double HitSeconds     = 0.25;    // …every 60° of its 240°/s turn
         private const float  HitRadius      = 6f;
-        private const int    ShellLifeTicks = 10;      // ticks (16 ms) a planted hit stays before it is withdrawn
-        private const int    ShellPoolReserve = 16;    // free pool entries always left to the engine
+        private const int    ShellLifeTicks = 10;      // ticks (16 ms) a planted hit stays before it is withdrawn (EnemyHit leaves the engine its pool reserve)
 
         private static bool     _up, _emerged, _peaked, _risen;
         private static float    _curScale;                     // the copy's scale now (its shadow follows it)
         private static DateTime _summoned, _lastHit;
         private static float    _sx, _sy, _ground, _yaw;
         private static bool     _guardLatched; private static DateTime _guardSince;
-        private static readonly List<(int idx, int ticks)> _shells = new();
+        private static readonly PlantedHits _shells = new(clearMark: true);   // its hits carry the no-drain mark: zeroed as they are withdrawn
         private static BorrowedEffect _fx;
         private static int _sub = -1;                  // the sub-shot playing the smoke (−1 = none)
 
         /// <summary>Desert Bloom's wielder: Ungaga with the Cactus, or Xiao with Super Steve and a Cactus sphere.</summary>
-        internal static bool Wielded()
-        {
-            int ch = Player.CurrentCharacterNum();
-            if (ch == Player.UngagaId) return Player.Weapon.GetCurrentWeaponId() == Items.cactus;
-            if (ch == Player.XiaoId) return Player.Weapon.GetCurrentWeaponId() == Items.supersteve && SuperSteve.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.cactus;
-            return false;
-        }
+        internal static bool Wielded() => UngagaWeapon.WieldsOrSphere(Items.cactus);
 
         /// <summary>The effect this weapon wants in the SECOND main-character instance: the smoke, whenever Desert Bloom is
         /// wielded (<see cref="Wielded"/>). Every phase radius zeroed: it is the visual only. Its one clip is the muzzle motion: the engine
@@ -97,17 +81,12 @@ namespace Dark_Cloud_Improved_Version
         internal static BorrowedEffect WantedShot()
         {
             if (!Wielded()) return null;
-            if (_fx == null)
-            {
-                _fx = BorrowedShots.CustomConfig(FxTemplate, FxName, muzzleMotion: 0, flyMotion: -1, impactMotion: -1, expireMotion: -1,
-                                                 dir: BorrowedShots.EffectDir, instance: ShotEffectPack.CharaMainEffectCrash);
-                if (_fx == null) return null;
-                for (int ph = 0; ph < 4; ph++) BorrowedShots.SetPhaseRadius(_fx, ph, 0f);
-            }
+            _fx ??= BorrowedShots.VisualOnly(FxTemplate, FxName, muzzleMotion: 0, flyMotion: -1, impactMotion: -1, expireMotion: -1,
+                                             dir: BorrowedShots.EffectDir, instance: ShotEffectPack.CharaMainEffectCrash);
             return _fx;
         }
 
-        public static void SpikeEffect()
+        public static void DesertBloomEffect()
         {
             int ch = Player.CurrentCharacterNum();
             _xiao = ch == Player.XiaoId;
@@ -115,13 +94,13 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"guard {Mirage.GuardChargeMs} ms → a {F.Name} rises {AheadDistance:F0} ahead for {StandSeconds:F0} s");
             try
             {
-                // Ends the moment the active character changes — checked every tick, a menu open or not: the copy's slot was
-                // cloned from this character's objects, and an ally switch reloads them under it (drawn behind the menu, it read
-                // freed memory and reset the game). A Cactus sphere on Super Steve keeps Wielded() true across the switch, so the
-                // character is what is watched; the thread starts again for the new one, with its own form.
+                // Ends the moment the active character changes — checked every tick, a menu open or not: the copy's slot is cloned
+                // from this character's objects, which an ally switch reloads under it (docs/cactus-spike.md, Lessons). A Cactus
+                // sphere on Super Steve keeps Wielded() true across the switch, so the character is what is watched; the thread
+                // starts again for the new one, with its own form.
                 while (Wielded() && Player.InDungeonFloor() && Player.CurrentCharacterNum() == ch)
                 {
-                    GroundShadow.Guard();                                                   // its shadow off the moment play stops (menus load over its memory)
+                    GroundShadow.Guard();                                                   // its shadow off outside play (the character-change screen, an event, a floor change)
                     if (!Player.CheckDunIsPausedOrMenu())
                     {
                         Charge();
@@ -136,9 +115,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static void Charge()
         {
-            bool guarding = (Memory.ReadUShort(Addresses.buttonInputs) & (ushort)Button.R1) != 0;
-            int  mid = Memory.ReadInt(CCharacter.Base + CCharacter.MotionId);
-            bool inPose = guarding && (mid == Mirage.GuardLoopMotion || mid == Mirage.GuardMoveMotion);
+            var (guarding, inPose) = GuardWatch.HoldPose();
             if (!guarding) { _guardLatched = false; _guardSince = default; return; }   // released: a new hold can summon again
             if (!inPose || _guardLatched) return;
             if (_guardSince == default) { _guardSince = GameClock.Now; return; }
@@ -163,14 +140,8 @@ namespace Dark_Cloud_Improved_Version
             _curScale = SpawnScale;
             BladeProp.Place(rx, RootHeight(0f, SpawnScale), ry, CopyYaw);
             BladeProp.Alpha(1f);
-            // The rise, on the engine's frames (Babel's): the blade-fall cave steps y −= vy, vy += g each frame; v0 = 2D/T and
-            // g = v0/T reach zero together at the top. Its stop test is disarmed with a stop far below.
-            float frames = EmergeSeconds * 60f, d = RootHeight(1f, SpawnScale) - RootHeight(0f, SpawnScale), v0 = 2f * d / frames, g = v0 / frames;
-            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallY, RootHeight(0f, SpawnScale));
-            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallVy, -v0);
-            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallG, g);
-            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallStop, -1e9f);
-            Memory.WriteInt  (CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFalling);
+            // The rise, on the engine's frames (Babel's): the blade-fall cave's ease from buried to out, at the spawn size.
+            BladeFall.StartEase(RootHeight(0f, SpawnScale), RootHeight(1f, SpawnScale), EmergeSeconds * 60f);
             _up = true; _summoned = GameClock.Now; _lastHit = default;
             FxStartPlay();
             Player.FlashChargeComplete();
@@ -192,8 +163,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The copy's yaw: the wielder's facing at the summon plus the form's turn, wrapped to ±π — the engine's
-        /// angle-to-matrix diverges past that (the blade-spin cave wraps for the same reason), and a facing past π/2 plus the trees'
-        /// quarter turn landed there, turning about a quarter of the summons wrong.</summary>
+        /// angle-to-matrix diverges past that (the blade-spin cave wraps for the same reason).</summary>
         private static float CopyYaw
         {
             get
@@ -246,7 +216,7 @@ namespace Dark_Cloud_Improved_Version
                 for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
                 {
                     if (!Enemies.IsLive(s)) continue;
-                    if (BigBang.NearestHitSphereEdge(s, EnemyAddresses.FloorSlots.SlotAddr(s, 0), _sx, _sy) > BlockRadius + HitReach) continue;
+                    if (EnemyBody.NearestHitSphereEdge(s, EnemyAddresses.FloorSlots.SlotAddr(s, 0), _sx, _sy) > BlockRadius + HitReach) continue;
                     Hit(s);
                 }
             }
@@ -261,51 +231,26 @@ namespace Dark_Cloud_Improved_Version
             GroundShadow.Show(_sx + (float)Math.Sin(CopyYaw) * d, _ground, _sy + (float)Math.Cos(CopyYaw) * d, F.ShadowRadius * _curScale);
         }
 
-        /// <summary>Grown and settled: the column armed (enemies, the player and enemy shots) at the full size.</summary>
-        private static void Solid()
-        {
-            Memory.WriteFloat(CodeCaves.SpearBlock + CodeCaves.SpearBlockX, _sx);
-            Memory.WriteFloat(CodeCaves.SpearBlock + CodeCaves.SpearBlockH, _ground);
-            Memory.WriteFloat(CodeCaves.SpearBlock + CodeCaves.SpearBlockY, _sy);
-            Memory.WriteFloat(CodeCaves.SpearBlock + CodeCaves.SpearBlockR, BlockRadius);
-            Memory.WriteFloat(CodeCaves.SpearBlock + CodeCaves.SpearBlockTop, _ground + Exposed);   // enemy shots stop below its top
-            Memory.WriteInt  (CodeCaves.SpearBlock + CodeCaves.SpearBlockFlag, 1);
-        }
+        /// <summary>Grown and settled: the column armed (enemies, the player and enemy shots) at the full size, its top where the
+        /// exposed part ends.</summary>
+        private static void Solid() => SpearBlock.Arm(_sx, _ground, _sy, BlockRadius, _ground + Exposed);
 
         /// <summary>One player-hit sphere on a touching enemy's body at a sixth of the weapon's attack, thrown away from the cactus to half
         /// the Baselard's distance (Baselard.HalfKickStrength), marked so the
         /// ISO's no-drain caves bill no weapon HP for it (Babel's spike).</summary>
         private static void Hit(int slot)
         {
-            long pool = CollisionPool.Resolve();
-            if (pool == 0 || CollisionPool.FreeCount(pool) <= ShellPoolReserve) return;
-            int idx = CollisionPool.TakeFreeSlot(pool);
-            if (idx < 0) return;
-            BigBang.BodyCentre(slot, EnemyAddresses.FloorSlots.SlotAddr(slot, 0), out float cx, out float ch, out float cy, out float cr);
             int attack = Math.Max(1, (int)Math.Round(Memory.ReadUShort(WeaponHave.BattleWeaponRecord + WeaponHave.EffAttackOffset) * HitShare));
-            byte[] e = CollisionPool.PlayerHitEntry(cx, ch, cy, Math.Max(HitRadius, cr), attack, 0);
-            void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
-            F(0x80, _sx); F(0x84, _ground); F(0x88, _sy);                                   // thrown away from the cactus…
-            F(0x90, Baselard.HalfKickStrength); F(0x94, Baselard.KickDecay);                 // …half the Baselard's distance
-            BitConverter.GetBytes(2).CopyTo(e, 0x98);                                         // kick type 2: away from that point
-            BitConverter.GetBytes(CodeCaves.NoDrainMark).CopyTo(e, CodeCaves.NoDrainMarkOff);
-            CollisionPool.Plant(pool, idx, e);
-            _shells.Add((idx, ShellLifeTicks));
+            int idx = EnemyHit.TryPlant(slot, attack, HitRadius,
+                                        new EnemyHit.Kick(_sx, _ground, _sy, Baselard.HalfKickStrength, Baselard.KickDecay),   // thrown away from the cactus, half the Baselard's distance
+                                        mark: CodeCaves.NoDrainMark);
+            if (idx < 0) return;
+            _shells.Add(idx, ShellLifeTicks);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"pricked enemy slot {slot} for {attack} (entry {idx})");
         }
 
-        private static void RetireShells()
-        {
-            if (_shells.Count == 0) return;
-            long pool = CollisionPool.Resolve();
-            for (int i = _shells.Count - 1; i >= 0; i--)
-            {
-                var (idx, ticks) = _shells[i];
-                if (--ticks > 0) { _shells[i] = (idx, ticks); continue; }
-                if (pool != 0) { Memory.WriteInt(pool + idx * CollisionPool.Stride + CodeCaves.NoDrainMarkOff, 0); CollisionPool.Deactivate(pool, idx); }   // the mark goes with it
-                _shells.RemoveAt(i);
-            }
-        }
+        /// <summary>Planted hits the engine has not consumed within their life are withdrawn.</summary>
+        private static void RetireShells() => _shells.Expire();
 
         // ── the smoke ──
         private static long FxObj => _fx.Instance + ShotEffectPack.OffObj + _sub * ShotEffectPack.ObjStride;
@@ -318,15 +263,12 @@ namespace Dark_Cloud_Improved_Version
             _sub = Memory.ReadInt(_fx.Instance + ShotEffectPack.OffLastIdx);
             long o = FxObj;
             SubShotFade.Set(o, 1f);                                                   // a sub-shot a previous smoke faded, back to full
-            Memory.WriteInt  (o + ShotEffectPack.ObjMotId, 0);
-            Memory.WriteInt  (o + ShotEffectPack.ObjMotFlag, 6);
-            Memory.WriteFloat(o + ShotEffectPack.ObjFrame, FxStart);
-            Memory.WriteFloat(o + ShotEffectPack.ObjMotSpd, FxRate);                  // absolute (its own KEY is 0.2)
+            ShotEffects.SetClip(o, 0, FxStart, FxRate);                               // the rate absolute (its own KEY is 0.2)
             TurnRoot(o);
             Memory.WriteInt(CodeCaves.SecondEffectLive, 1);                           // the second instance stepped and drawn (the second-effect caves)
         }
 
-        /// <summary>The smoke turned to Ungaga's facing about the vertical through its model's ROOT frame (null7: no motion track
+        /// <summary>The smoke turned to the wielder's facing about the vertical through its model's ROOT frame (null7: no motion track
         /// touches it), its local 3×3 set to the engine's RotMatrixY — row 0 = (cos, 0, −sin), row 2 = (sin, 0, cos), so its local +Z faces
         /// (sin, cos), the forward the summon steps along — and its world
         /// cache dropped, as BladeProp bakes its copies upright. An absolute write: the sub-shot's model is reused burst to burst.
@@ -336,7 +278,7 @@ namespace Dark_Cloud_Improved_Version
             uint root = Memory.ReadGuestPtr(obj + CCharacter.CharModel);
             if (!Memory.IsValidGuest(root)) return;
             long r = Memory.ToMmu(root);
-            float c = (float)Math.Cos(_yaw), sn = (float)Math.Sin(_yaw);                  // Ungaga's facing, the one the cactus was summoned along
+            float c = (float)Math.Cos(_yaw), sn = (float)Math.Sin(_yaw);                  // the wielder's facing, the one the cactus is summoned along
             float[] m = { c, 0f, -sn,  0f, 1f, 0f,  sn, 0f, c };
             for (int i = 0; i < 9; i++) Memory.WriteFloat(r + CFrameVu1.LocalMatrix + (i / 3) * 0x10 + (i % 3) * 4, m[i]);
             Memory.WriteInt(r + CFrameVu1.WorldCacheA, 0);
@@ -370,7 +312,7 @@ namespace Dark_Cloud_Improved_Version
             FxEnd_();
             if (!_up) return;
             Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
-            Memory.WriteInt(CodeCaves.SpearBlock + CodeCaves.SpearBlockFlag, 0);             // passable again
+            SpearBlock.Disarm();                                                            // passable again
             GroundShadow.Hide();
             BladeProp.Despawn();
             if (_xiao) QueensTrees.ReleaseTextures();                                        // the trees' textures back in the cash's own block
@@ -381,9 +323,7 @@ namespace Dark_Cloud_Improved_Version
         private static void End()
         {
             TakeDown();
-            long pool = CollisionPool.Resolve();
-            foreach (var (idx, _) in _shells) if (pool != 0) { Memory.WriteInt(pool + idx * CollisionPool.Stride + CodeCaves.NoDrainMarkOff, 0); CollisionPool.Deactivate(pool, idx); }
-            _shells.Clear();
+            _shells.WithdrawAll();
             _guardLatched = false; _guardSince = default;
             if (_xiao) QueensTrees.Forget();
             GroundShadow.Forget();                                                   // a floor change empties the cash: loaded again when next wanted

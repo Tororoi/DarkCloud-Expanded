@@ -61,12 +61,12 @@ namespace Dark_Cloud_Improved_Version
                 if (want != 0 && want != _anchor)
                 {
                     Memory.WriteInt(CodeCaves.GlowPellet, pelletSlot >= 0 ? pelletSlot + 1 : 0);   // a pellet, or the frames below
-                    if (pelletSlot < 0) { Memory.WriteUInt(CodeCaves.Mailbox.CatGlowNodeA, want); Memory.WriteUInt(CodeCaves.Mailbox.CatGlowNodeB, want); }
-                    Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, lift);
-                    Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, pull);
+                    if (pelletSlot < 0) { Memory.WriteUInt(CatBlock.CatGlowNodeA, want); Memory.WriteUInt(CatBlock.CatGlowNodeB, want); }
+                    Memory.WriteFloat(CatBlock.CatGlowLift, lift);
+                    Memory.WriteFloat(CatBlock.CatGlowPull, pull);
                     _anchor = want;
                 }
-                if (palRow > 0 && palRow != _palRow) { Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, palRow); _palRow = palRow; }   // repainted for its new user
+                if (palRow > 0 && palRow != _palRow) { Memory.WriteInt(CatBlock.CatGlowPalRow, palRow); _palRow = palRow; }   // repainted for its new user
                 KeepAlive(); return;
             }
             _disc = disc;
@@ -75,19 +75,19 @@ namespace Dark_Cloud_Improved_Version
             if (root == 0) return;                                       // no posed bone yet: try again next tick
             Memory.WriteInt(CodeCaves.GlowPellet, pelletSlot >= 0 ? pelletSlot + 1 : 0);
             Reserve();                                                   // …and give the disc a home that is actually uploaded, BEFORE the cave binds it
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 0);
-            if (palRow > 0) Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, palRow);
+            Memory.WriteInt  (CatBlock.CatGlowOn, 0);
+            if (palRow > 0) Memory.WriteInt(CatBlock.CatGlowPalRow, palRow);
             _palRow = palRow;
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, growSeconds <= 0 ? _scaleMax : 0f);   // …from nothing, Tick swelling it over GrowSeconds — or full size at once
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, Flags);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, pull);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, lift);
-            Memory.WriteUInt (CodeCaves.Mailbox.CatGlowNodeA, pelletSlot >= 0 ? 0u : root);   // a pellet anchor leaves the frames unset: the cave reads the pool
-            Memory.WriteUInt (CodeCaves.Mailbox.CatGlowNodeB, pelletSlot >= 0 ? 0u : root);
+            Memory.WriteFloat(CatBlock.CatGlowScale, growSeconds <= 0 ? _scaleMax : 0f);   // …from nothing, Tick swelling it over GrowSeconds — or full size at once
+            Memory.WriteInt  (CatBlock.CatGlowFlags, Flags);
+            Memory.WriteFloat(CatBlock.CatGlowPull, pull);
+            Memory.WriteFloat(CatBlock.CatGlowLift, lift);
+            Memory.WriteUInt (CatBlock.CatGlowNodeA, pelletSlot >= 0 ? 0u : root);   // a pellet anchor leaves the frames unset: the cave reads the pool
+            Memory.WriteUInt (CatBlock.CatGlowNodeB, pelletSlot >= 0 ? 0u : root);
             byte[] nm = new byte[16]; System.Text.Encoding.ASCII.GetBytes(_disc).CopyTo(nm, 0);
-            Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowReady, 0);        // bind the disc
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 1);           // armed last
+            Memory.WriteBytesBatch(CatBlock.CatGlowName, nm);
+            Memory.WriteInt  (CatBlock.CatGlowReady, 0);        // bind the disc
+            Memory.WriteInt  (CatBlock.CatGlowOn, 1);           // armed last
             _on = true; _fading = false; _driven = false; _k = growSeconds <= 0 ? 1f : 0f; _shownAt = GameClock.Now; _grow = Math.Max(0.01, growSeconds);
             // Where the anchor really sits, so any residual offset is one measurement rather than another guess: the cave
             // places the sprite at the node's posed world position (world matrix translation row), and his feet are the
@@ -117,7 +117,7 @@ namespace Dark_Cloud_Improved_Version
             }
             else if (_driven) return;                                    // Drive holds its size
             else k = (float)Math.Min(1.0, (GameClock.Now - _shownAt).TotalSeconds / _grow);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, _scaleMax * k);
+            Memory.WriteFloat(CatBlock.CatGlowScale, _scaleMax * k);
             _k = k;
         }
         /// <summary>Its size set by hand, 0..1 — a glow growing with something else's own progress (the charge
@@ -128,7 +128,7 @@ namespace Dark_Cloud_Improved_Version
             _driven = true;
             k = Math.Max(0f, Math.Min(1f, k));
             if (Math.Abs(k - _k) < 0.01f) return;
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, _scaleMax * k);
+            Memory.WriteFloat(CatBlock.CatGlowScale, _scaleMax * k);
             _k = k;
         }
         private static float _fadeFrom = 1f;
@@ -154,9 +154,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Down, and the disc back where it loaded.</summary>
         internal static void Hide()
         {
-            if (_palRow != 0) { Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, PalRowNone); _palRow = 0; }   // the cave repaints the disc for whoever uses it next
+            if (_palRow != 0) { Memory.WriteInt(CatBlock.CatGlowPalRow, PalRowNone); _palRow = 0; }   // the cave repaints the disc for whoever uses it next
             if (!_on) return;
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowOn, 0);
+            Memory.WriteInt(CatBlock.CatGlowOn, 0);
             Memory.WriteInt(CodeCaves.GlowPellet, 0);
             Release();
             _on = false; _fading = false;

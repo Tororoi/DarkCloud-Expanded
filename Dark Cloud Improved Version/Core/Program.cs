@@ -10,7 +10,9 @@ namespace Dark_Cloud_Improved_Version
         public static void Main(string[] args)
         {
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
-            if (args.Length > 0 && args[0] == "postbake") { Environment.Exit(IsoPostBakes.RunCli(args)); return; }   // dev: one ISO post-step, no UI
+            if (args.Length > 0 && args[0] == "postbake") { Environment.Exit(IsoPostBakes.RunCli(args)); return; }
+            if (args.Length > 2 && args[0] == "patch")                                                                  // dev: the whole ISO patch on a scratch copy — `patch <stock iso> <out dir> [--no-pnach]` (verifying a refactor byte for byte; --no-pnach leaves the PCSX2 cheats folder alone)
+            { Console.WriteLine(IsoPatcher.Patch(args[1], args[2], m => Console.WriteLine(m), publishPnach: Array.IndexOf(args, "--no-pnach") < 0)); return; }   // dev: one ISO post-step, no UI
             Console.WriteLine("Dark Cloud Enhanced - Created by Wordofwind, Dayuppy, MikeZorD, and Plgue");
             Console.WriteLine("Version 1.xxx - Release");
             ModWindow.Mode = ParseLaunchMode(args);

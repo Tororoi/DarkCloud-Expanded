@@ -4,13 +4,10 @@ using System.Threading;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// The Confuse weapon ability (docs/confuse-ability.md) on the mod's side: the ISO's roll (tools/stubs/confuse_proc.s, inside
-    /// CheckDmg beside Poison and Stop: a flat 5 % on any enemy but a boss, as Critical's 1 %) raises a byte per enemy in
-    /// CodeCaves.ConfuseProc; this loop confuses each such enemy for <see cref="ProcSeconds"/> (Confusion: it goes after the
-    /// nearest enemy, or the player when the player is nearest; whoever it hits turns on it until its confusion ends, then
-    /// on its next attacker still confused, else back to the player) and clears the byte. It also ticks Confusion whenever any
-    /// enemy is confused (a weapon that confuses — Babel's Spear, the Terra nut — ticks it too; the passes are rate-limited) and
-    /// drives the stars over the confused (ConfusionStars, in the resident stars instance).
+    /// The Confuse weapon ability's loop (docs/confuse-ability.md), from app start, each tick on a floor: every enemy the ISO's roll
+    /// (tools/stubs/confuse_proc.s) flagged in CodeCaves.ConfuseProc is confused for <see cref="ProcSeconds"/> and its byte
+    /// cleared; Confusion is ticked whenever any enemy is confused (or it owns the aggro table); the stars over the confused are
+    /// driven (ConfusionStars, in the resident stars instance).
     /// </summary>
     internal static class ConfuseAbility
     {
@@ -46,7 +43,7 @@ namespace Dark_Cloud_Improved_Version
                         if (!Player.CheckDunIsPausedOrMenu())
                         {
                             Procs();
-                            Diagnose();
+                            if (DebugDiagnostics.Enabled) Diagnose();
                             if (Confusion.AnyConfused() || Confusion.OwnsTable) Confusion.Tick();
                             ConfusionStars.Drive(Confusion.IsConfused);
                         }
@@ -57,7 +54,7 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        // TEMP diagnostic: what the equipped weapon's battle copy and each enemy's last hit carry (the roll reads the latter).
+        // DIAGNOSTIC (behind DebugDiagnostics): what the equipped weapon's battle copy and each enemy's last hit carry (the roll reads the latter).
         private static int _wepWord = -1;
         private static readonly int[] _hitWord = new int[16];
         private static void Diagnose()

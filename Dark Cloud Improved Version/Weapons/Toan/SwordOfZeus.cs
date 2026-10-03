@@ -3,56 +3,48 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Sword of Zeus — Solar Harvest and Solar Flash from the Sun Sword line, with lightning: the whirlwind
-    /// IS the cat-zap bolt (`gedit/s99/chara/lightning.chr`, the scene actor the Divine Beast Cave cutscene strikes
-    /// the cat with), and the primed flash brings that bolt down on enemies — on the locked target with every swing
-    /// of the combo while locked on, or on each of the nearest <see cref="MaxStrikes"/> within <see cref="StrikeReach"/>
-    /// when not. A bolt's damage is Big Bang's falloff blast at its foot at half its steps (the bolt itself touches nothing); the flash
-    /// carries no hit of its own (SunSword.ZeusFlash) and stuns the floor the way the Sun Sword's does. A full CHARGE
-    /// attack is a bolt as well (<see cref="ChargeTick"/>): the room darkens as the meter fills, the level-2 release
-    /// plays the LUNGE, and the bolt comes down ahead of Toan as its clip ends its dash.</summary>
+    /// <summary>Sword of Zeus — Solar Harvest and Solar Flash (SunSword.ZeusFlash) with lightning: the whirlwind IS the
+    /// bolt (`gedit/s99/chara/lightning.chr`), and the primed flash brings it down on the locked target with every swing
+    /// of the combo, or on each of the nearest <see cref="MaxStrikes"/> within <see cref="StrikeReach"/> when not locked
+    /// on. A bolt touches nothing itself: its damage is Big Bang's falloff blast at its foot at <see cref="BlastScale"/>.
+    /// A full charge attack is a bolt as well (<see cref="ChargeTick"/>). Xiao's Zeus sphere fires the same bolt (ZeusShot).
+    /// (docs/sword-of-zeus.md)</summary>
     internal static class SwordOfZeus
     {
         private const int    TickMs = 30;
         // ── the bolt ────────────────────────────────────────────────────────────────────
-        // Toan's whirlwind visual IS the main-character effect instance, so seeding it with lightning.chr REPLACES the
-        // whirl with the bolt and the engine fires it on the spin by itself (the same borrowing Big Bang does with
-        // explosion.chr). The container is the cutscene's scene actor, loaded by path from its own directory — the
-        // loader takes any container whose cfg record carries its name. Its motion list is two KEYs over the same
-        // frames 10-30: KEY 0 at speed 0 (a held pose, 止め) and KEY 1 at 0.2 — the strike. Only the MUZZLE phase names
-        // a motion, the whirl's own shape (c01_fuusya is "muzzle motion 0, nothing after").
+        // Toan's whirlwind visual is a sub-shot of the main-character effect instance, so seeding it with lightning.chr
+        // REPLACES the whirl with the bolt and the engine fires it on the spin by itself (as Big Bang does with
+        // explosion.chr). lightning.chr is the Divine Beast Cave cutscene's scene actor, loaded by path from its own
+        // directory. Its motion list is two KEYs over frames 10-30: KEY 0 at speed 0 (a held pose, 止め) and KEY 1 at
+        // 0.2 — the strike. Only the MUZZLE phase names a motion, as the whirl's own shape does.
         private const int    LightningTemplate = 5;                  // a stock config's shape; the name and motions are replaced
         private const string LightningName     = "lightning", LightningDir = "gedit/s99/chara/";
         private const short  StrikeMotion      = 1;
-        // THE CUTSCENE'S OWN STRIKE (dun/script/d01/event.stb label 90, the cat zapped into an atla): the actor is
-        // loaded hidden at _SET_NPC_SCALE(5, 5) holding motion 0, then at the moment — _PLAY_SE(390), _NPC_DRAW(1, 5),
-        // _SET_NPC_MOTION(5, 1) played through, _SET_NPC_POS(5, x, 0, y) at the cat's GROUND point, _NPC_DRAW(0, 5).
-        // Its cards rise from the origin (nodes at +4.5 and +10 up), so it stands ON the ground under the target,
-        // not centred on the body. ONE scale path for every bolt, strike or whirl: the root frame's local 3×3, held
-        // the way the stock whirl and Big Bang's explosion.chr are (a VERTEX_ANIME mesh is only transformed by its
-        // root's local matrix). ⚠ Writing the CCharacter scale (+0x90) on the engine-fired whirl object reset the
-        // game mid-spin; and telling the strike's object from the whirl's by that field failed too — the engine
-        // re-fires the whirl into whichever sub-shot is free, scale and all.
-        private const float  LightningScale    = 10.0f;   // on the root hold; the cutscene's ×5 on the actor scale read about half this
+        // The actor's cards rise from its origin (nodes at +4.5 and +10 up): it stands ON the ground under the target,
+        // so a strike is played at the enemy's ground point. ONE scale path for every bolt, strike or whirl: the root
+        // frame's local 3×3 (a VERTEX_ANIME mesh is only transformed by its root's local matrix), as the stock whirl and
+        // Big Bang's explosion.chr are held. ⚠ The CCharacter scale (+0x90) is never written on these sub-shots: the
+        // engine re-fires the whirl into whichever one is free, scale and all, and a +0x90 write there crashes the game.
+        private const float  LightningScale    = 10.0f;   // on the root hold
         private const ushort StrikeSe          = 390;   // the cutscene's thunderclap
         private const float  StrikeReach       = 300f;  // not locked on: enemies this far from Toan are in reach (the flash's radius, about the draw distance)
         private const int    MaxStrikes        = 6;     // …and this many of the nearest take a bolt each
         private const float  BlastScale        = 0.5f;  // the bolt's blast, against Big Bang's falloff steps (½× … 2× attack)
         private const float  StrikeWhp         = 10f;   // weapon HP a bolt costs, before the weapon's Endurance scales it down (WeaponWhp: the engine's own drain takes it)
-        // lightning.mds's root is `null2`. ⚠ Only its FIRST FIVE bytes are the name at runtime: the word after "null"
-        // read `2 ??` on the live copy (whatever followed the NUL in the frame's name field), where explosion.chr's
-        // `null3` happened to be NUL-padded — an 8-byte compare never matched and the whirl stayed 1×.
+        // lightning.mds's root is `null2`. ⚠ Only its FIRST FIVE bytes are the name at runtime: the frame's name field is
+        // not NUL-padded past the NUL, so the root is matched as the word "null" + the byte '2', never as 8 bytes.
         private const uint   RootWord = 0x6C6C756E;                          // "null"
         private const byte   RootDigit = (byte)'2';
         private static bool IsBoltRoot(long root) =>
             Memory.ReadUInt(root + CFrameVu1.Name) == RootWord && Memory.ReadByte(root + CFrameVu1.Name + 4) == RootDigit;
         private static BorrowedEffect _lightning;
 
-        /// <summary>The judgement blade, for this sword: hung over the locked target while primed (BigBang.JudgementTick),
+        /// <summary>The judgement blade, for this sword: hung over the locked target while primed (JudgementBlade.JudgementTick),
         /// with the red ring for its glow, the fall darkening from this sword's dim, no enemy turned to watch it. Let go
         /// as the primed combo's FIRST swing begins, paced by the swing so it is in the ground to the HILT at the
         /// swing's hit frame; there it is gone at once and the bolt comes down on the target.</summary>
-        internal static readonly BigBang.JudgementOwner Judgement = new BigBang.JudgementOwner
+        internal static readonly JudgementBlade.JudgementOwner Judgement = new JudgementBlade.JudgementOwner
         {
             WeaponId = Items.swordofzeus, Glow = ToanGlowBakes.ZeusName, Profile = SunSword.ZeusFlash, Redirect = false, ToTheHilt = true,
             Land = (slot, x, h, y) => { if (!StrikeAt(x, h, y, slot)) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] the blade landed but no bolt was free"); },
@@ -106,38 +98,19 @@ namespace Dark_Cloud_Improved_Version
             if (!BorrowedShots.Burst(_lightning, x, h, y, 0, 1f)) return false;   // 1×: the root hold sizes every bolt alike
             MaintainScale();                                                        // …before its first frame
             SeSeq.Play(StrikeSe, 90);
-            BigBang.LastBlast = (x, h, y);
-            BigBang.PlantFalloff(x, h, y, noKickSlot: noKickSlot, damageScale: BlastScale, guardBreak: true);   // the bolt crushes any guard (the ISO's guard gate)
+            BlastFalloff.LastBlast = (x, h, y);
+            BlastFalloff.PlantFalloff(x, h, y, noKickSlot: noKickSlot, damageScale: BlastScale, guardBreak: true);   // the bolt crushes any guard (the ISO's guard gate)
             if (bill) WeaponWhp.Drain(weapon, StrikeWhp, "[Zeus] bolt ");   // taken by the engine's own drain, as a landed hit's is (a volley bills once, StrikeNearest)
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] lightning at ({x:F0},{h:F0},{y:F0})");
             return true;
         }
 
-        // ── the charge attack ───────────────────────────────────────────────────────────
-        // Charge level 2 is DISABLED while Toan charges with this sword: the whirlwind-unlock word ToanKey_Play reads
-        // is zeroed for the length of the wind-up (and put back the moment it is over — it is save data), so the game
-        // never reaches its own level 2 and every release is the LUNGE. The sword keeps its own level 2 instead: the
-        // room darkens from the moment he starts charging, the way the guard charge darkens it — half the Zeus
-        // profile's prime dim by level 1, the rest over the ChargeLevel2Seconds held past it — and at the end of that
-        // hold the stock charge-complete flash fires on him, the release is flagged as a bolt, and the judgement
-        // blade (fading in over the same hold) hangs ChargeHoverHeight over the spot the bolt will land —
-        // the locked target, or ChargeBoltAhead units ahead of him (moving with him while he holds the charge). The
-        // blade is let go so that it reaches the ground — hilt in — as the lunge's END state comes up, which is when
-        // the bolt comes down where it fell. The lunge is the same length every time: ChargeLungeFrames from its dash
-        // to its end state (measured at ~0.64 s: a 0.45 s fall from the dash start reached the ground 163-212 ms
-        // before the bolt, at 30 ms ticks), so the drop comes ChargeFallFrames before that end, and every charge
-        // looks the same. (The fall state just before the end is only a few frames — too late to drop on.) The log
-        // prints the gap between the hilt reaching the ground and the bolt. The blade whitens across the wind-up the
-        // way the guard charge whitens it, so the copy, made at level 2, carries the charge's tint. The lunge runs through five action states (PlayerAction.InLunge); the tick the
-        // END one (ActionLungeEnd: clip 17 from frame 196) comes up, the bolt comes down ChargeBoltAhead units ahead
-        // of Toan with the strike's blast, and the flash goes off — the same white and
-        // pulse, two-second ease back to normal light and 5 s blinding as every strike. A charge let go
-        // early plays whatever it earned and the dim simply lifts. Stands aside while Solar Flash owns the blade.
+        // ── the charge attack (ChargeTick) ──────────────────────────────────────────────
         private const float  ChargeBoltAhead   = 40f;   // units ahead of Toan the bolt lands
         private const float  LungeHigher       = 0.5f;  // the level-2 lunge's extra gravity (CodeCaves.LungeGravityExtra): 1.5× the height in the same frames
         private const float  ChargeHoverHeight = 45f;   // the blade's grip this far above the spot ahead of Toan (over a locked target: the lock-on hover's own height)
         private const int    ChargeLungeFrames = 38;    // the lunge, dash state to end state — the same every time
-        private const int    ChargeFallFrames  = 19;    // the fall, hover to hilt-in-the-ground: the bolt comes ChargeLungeFrames − this after the dash begins (two frames' margin: the log said 21 was still in the air)
+        private const int    ChargeFallFrames  = 19;    // the fall, hover to hilt-in-the-ground: the drop comes ChargeLungeFrames − this after the dash begins (two frames' margin)
         private const double ChargeFallSeconds = ChargeFallFrames / 60.0, ChargeDropAfterDash = (ChargeLungeFrames - ChargeFallFrames) / 60.0;
         private const float  ChargeDimFrom     = 1.0f;  // the meter as the charge starts (ToanKey_On resets it to 1.0) …
         private const float  ChargeLevel1      = 1.5f;  // … and at level 1 (the game's lunge threshold): half the dim is on, and the blade appears
@@ -148,6 +121,16 @@ namespace Dark_Cloud_Improved_Version
         private static int   _unlockWas, _chargeTarget = -1;
         private static float _chargeX, _chargeH, _chargeY;   // where the bolt will land (the hover's spot, frozen at the drop)
 
+        /// <summary>The charge attack, per tick. While Toan winds up, PlayerAction.WhirlwindUnlock is zeroed (put back
+        /// the tick the release is read — it is save data), so every release is the LUNGE; the room dims from
+        /// <see cref="ChargeDimFrom"/> to half the Zeus prime dim at <see cref="ChargeLevel1"/> and to full over
+        /// <see cref="ChargeLevel2Seconds"/> held past it, the blade whitening with it. At that hold the stock
+        /// charge-complete flash fires, CodeCaves.LungeGravityExtra = <see cref="LungeHigher"/>, and the judgement blade
+        /// hangs <see cref="ChargeHoverHeight"/> over the landing spot (<see cref="ChargeAim"/>), fading in with the hold.
+        /// In the lunge the blade is let go <see cref="ChargeDropAfterDash"/> after the dash so its hilt is in the ground
+        /// as the END state (PlayerAction.ActionLungeEnd: clip 17 from frame 196) comes up; that tick the bolt comes down
+        /// where it fell, with a strike's flash (SunSword.StrikeFlash), the camera pinned through the lunge (CameraHold).
+        /// A charge let go short of level 2 plays what it earned and the dim lifts. Stands aside while SunSword.FlashArmed.</summary>
         private static void ChargeTick()
         {
             int action = Memory.ReadInt(PlayerAction.ChargeActionState);
@@ -181,7 +164,7 @@ namespace Dark_Cloud_Improved_Version
                 if (_chargeLevel1At != default)
                 {
                     ChargeAim();
-                    BigBang.PointAlpha(held);
+                    JudgementBlade.PointAlpha(held);
                 }
                 return;
             }
@@ -191,7 +174,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (_chargeTarget < 0 && !_chargeDropped)
                 {   // the blade ahead of him stops riding him as he lunges: the bolt lands under where it hangs
-                    var spot = BigBang.PointFreeze(); _chargeX = spot.x; _chargeH = spot.h; _chargeY = spot.y;
+                    var spot = JudgementBlade.PointFreeze(); _chargeX = spot.x; _chargeH = spot.h; _chargeY = spot.y;
                 }
                 if (!_chargeFull) { ChargeStandDown(); return; }                // a level-1 lunge: nothing more to it
                 if (!_chargeBoltDue) { _chargeBoltDue = true; _chargeBoltFired = false; _chargeDashAt = default; CameraHold.Pin(); }   // the camera held at its height through the lunge
@@ -202,20 +185,20 @@ namespace Dark_Cloud_Improved_Version
                     _chargeDropped = true; _chargeDropAt = GameClock.Now;
                     if (_chargeTarget >= 0 && Enemies.IsLive(_chargeTarget))
                     { long tp = EnemyAddresses.CharObjects.PosAddr(_chargeTarget); _chargeX = Memory.ReadFloat(tp); _chargeH = Memory.ReadFloat(tp + 4); _chargeY = Memory.ReadFloat(tp + 8); }
-                    BigBang.PointDrop(ChargeFallSeconds);
+                    JudgementBlade.PointDrop(ChargeFallSeconds);
                 }
                 if (_chargeBoltFired) return;
                 // The room plunges to black from the dash to the bolt: the falling blade drives it (BigBang's fall
                 // thread, the same ramp), or — no blade — the clock does over the same ChargeFallSeconds.
-                if (_chargeDropped && !BigBang.Dropping && action != PlayerAction.ActionLungeEnd)
+                if (_chargeDropped && !JudgementBlade.Dropping && action != PlayerAction.ActionLungeEnd)
                     SolarLighting.DimRamp(SunSword.ZeusFlash.PrimeDim, (float)((GameClock.Now - _chargeDropAt).TotalSeconds / ChargeFallSeconds));
                 if (action != PlayerAction.ActionLungeEnd) return;
                 _chargeBoltFired = true;
                 float cursor = Memory.ReadFloat(PlayerAction.AnimFrameCursor);
                 if (!_chargeDropped) ChargeAim();                                // no dash seen: aim now
                 float x = _chargeX, h = _chargeH, y = _chargeY;
-                double gap = BigBang.PointLandedAt == default ? double.NaN : (GameClock.Now - BigBang.PointLandedAt).TotalSeconds;
-                BigBang.PointEnd();                                              // still in the air: gone now
+                double gap = JudgementBlade.PointLandedAt == default ? double.NaN : (GameClock.Now - JudgementBlade.PointLandedAt).TotalSeconds;
+                JudgementBlade.PointEnd();                                              // still in the air: gone now
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + (double.IsNaN(gap) ? "[Zeus] charge bolt with the blade still falling — ChargeFallSeconds is too long" : $"[Zeus] charge bolt {gap * 1000:F0} ms after the blade reached the ground"));
                 if (!StrikeAt(x, h, y, _chargeTarget)) { ChargeStandDown(); return; }
                 SunSword.StrikeFlash(SunSword.ZeusFlash);                        // the white easing back to normal light, his pulse, and the 5 s blinding — a strike's flash
@@ -246,13 +229,13 @@ namespace Dark_Cloud_Improved_Version
                 _chargeY = Memory.ReadFloat(Addresses.dunPositionY) + ChargeBoltAhead * (float)Math.Cos(yaw);
                 _chargeH = Memory.ReadFloat(Addresses.dunPositionZ);
             }
-            BigBang.PointHover(Judgement, _chargeTarget, _chargeX, _chargeH, _chargeY, ChargeHoverHeight, ridesPlayer: true);   // ahead of him: the cave carries it as he walks
+            JudgementBlade.PointHover(Judgement, _chargeTarget, _chargeX, _chargeH, _chargeY, ChargeHoverHeight, ridesPlayer: true);   // ahead of him: the cave carries it as he walks
         }
         private static void ChargeStandDown()
         {
             Memory.WriteFloat(CodeCaves.LungeGravityExtra, 0f);
             CameraHold.Unpin();                                                  // broken or spent: the camera follows again
-            BigBang.PointFade(); _chargeDropped = false; _chargeTarget = -1;     // a blade not yet let go fades out; one in the air is gone
+            JudgementBlade.PointFade(); _chargeDropped = false; _chargeTarget = -1;     // a blade not yet let go fades out; one in the air is gone
             if (!SunSword.FlashArmed) SolarBlade.Clear();                        // the charge's white off the blade (a primed flash keeps its own)
             if (_unlockZeroed) RestoreUnlock();
             if (_chargeDimming) { SolarLighting.EndDim(); _chargeDimming = false; }
@@ -310,16 +293,16 @@ namespace Dark_Cloud_Improved_Version
                 try
                 {
                     byte f = Memory.ReadByte(Addresses.checkFloor);
-                    if (f != floor) { if (floor != 0xFF) { BigBang.ReleaseJudgement(); CameraHold.Unpin(); } floor = f; }
+                    if (f != floor) { if (floor != 0xFF) { JudgementBlade.ReleaseJudgement(); CameraHold.Unpin(); } floor = f; }
                     ToanLockOn.HoldReach("[Zeus] ");                                  // Big Bang's reach, inherited
                     if (LightningSeeded) MaintainScale();
-                    if (!Player.CheckDunIsPausedOrMenu()) { ChargeTick(); if (Player.CurrentCharacterNum() == Player.ToanId) BigBang.JudgementTick(Judgement); }
-                    BigBang.ExpireShells();                                            // the bolt's blast entries, once spent
-                    BigBang.ReleaseRedirectWhenDue();
+                    if (!Player.CheckDunIsPausedOrMenu()) { ChargeTick(); if (Player.CurrentCharacterNum() == Player.ToanId) JudgementBlade.JudgementTick(Judgement); }
+                    BlastFalloff.ExpireShells();                                            // the bolt's blast entries, once spent
+                    EnemyFacing.ReleaseRedirectWhenDue();
                 }
                 catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] tick error: " + ex.Message); }
             }
-            ChargeStandDown(); CameraHold.Unpin(); BigBang.ReleaseJudgement(); BigBang.ReleaseRedirect();
+            ChargeStandDown(); CameraHold.Unpin(); JudgementBlade.ReleaseJudgement(); EnemyFacing.ReleaseRedirect();
             ToanLockOn.ReleaseReach();
         }
 
@@ -338,35 +321,40 @@ namespace Dark_Cloud_Improved_Version
                 if (!Memory.IsValidGuest(ptr)) continue;
                 long root = Memory.ToMmu(ptr);
                 if (!IsBoltRoot(root))
-                {   // DIAGNOSTIC: what this sub-shot's model is called, for the one log line below
-                    byte[] nm = Memory.ReadBytesBatch(root + CFrameVu1.Name, 8);
-                    seen.Add($"#{slot}:{(nm == null ? "?" : System.Text.Encoding.ASCII.GetString(nm).TrimEnd('\0'))}");
+                {
+                    if (DebugDiagnostics.Enabled)
+                    {   // DIAGNOSTIC: what this sub-shot's model is called, for the one log line below
+                        byte[] nm = Memory.ReadBytesBatch(root + CFrameVu1.Name, 8);
+                        seen.Add($"#{slot}:{(nm == null ? "?" : System.Text.Encoding.ASCII.GetString(nm).TrimEnd('\0'))}");
+                    }
                     continue;
                 }
                 matched = true;
                 float m00 = Memory.ReadFloat(root + ShotEffectPool.CFrameLocal3x3[0]);
                 if (!_bindRead)
-                {   // the authored bind is the identity; anything else is a root a previous hold (this session's or an earlier
-                    // mod run's, PCSX2 running on) left scaled — not the bind
+                {   // the authored bind is the identity; a root already scaled is a previous hold's, not the bind
                     if (Math.Abs(m00 - 1f) > 0.05f) continue;
                     for (int k = 0; k < 9; k++) _bind[k] = Memory.ReadFloat(root + ShotEffectPool.CFrameLocal3x3[k]);
                     _bindRead = true;
                 }
-                state.Add($"#{slot}: active {Memory.ReadUShort(ShotEffectPack.CharaMainEffect + ShotEffectPack.OffActive + slot * 2)} charScale {Memory.ReadFloat(obj + CCharacter.CharScale):F2} m00 {m00:F2} root 0x{ptr:X}");
+                if (DebugDiagnostics.Enabled) state.Add($"#{slot}: active {Memory.ReadUShort(ShotEffectPack.CharaMainEffect + ShotEffectPack.OffActive + slot * 2)} charScale {Memory.ReadFloat(obj + CCharacter.CharScale):F2} m00 {m00:F2} root 0x{ptr:X}");
                 if (Math.Abs(m00 - _bind[0] * LightningScale) <= 0.01f) continue;
                 for (int k = 0; k < 9; k++)
                     Memory.WriteFloat(root + ShotEffectPool.CFrameLocal3x3[k], _bind[k] * LightningScale);
                 Memory.WriteInt(root + CFrameVu1.WorldCacheA, 0);
                 if (!_scaleLogged) { _scaleLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] bolt sub-shot #{slot} held ×{LightningScale:F0} on its root (null2 at 0x{ptr:X})"); }
             }
-            // DIAGNOSTIC, once per whirl: every bolt sub-shot's state as the spin starts
-            bool whirl = Memory.ReadInt(PlayerAction.ChargeActionState) == PlayerAction.ActionWhirlwind;
-            if (whirl && !_whirlLogged && state.Count > 0) { _whirlLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] whirl sub-shots: " + string.Join(" | ", state)); }
-            if (!whirl) _whirlLogged = false;
-            if (!matched && seen.Count > 0 && !_rootsLogged)
-            {   // DIAGNOSTIC, once: the instance holds models but none is the bolt — the whirl's object is not being reached
-                _rootsLogged = true;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] no lightning root among the sub-shots: " + string.Join(" ", seen));
+            if (DebugDiagnostics.Enabled)
+            {
+                // DIAGNOSTIC, once per whirl: every bolt sub-shot's state as the spin starts
+                bool whirl = Memory.ReadInt(PlayerAction.ChargeActionState) == PlayerAction.ActionWhirlwind;
+                if (whirl && !_whirlLogged && state.Count > 0) { _whirlLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] whirl sub-shots: " + string.Join(" | ", state)); }
+                if (!whirl) _whirlLogged = false;
+                if (!matched && seen.Count > 0 && !_rootsLogged)
+                {   // DIAGNOSTIC, once: the instance holds models but none is the bolt — the whirl's object is not being reached
+                    _rootsLogged = true;
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] no lightning root among the sub-shots: " + string.Join(" ", seen));
+                }
             }
         }
         private static bool _whirlLogged;

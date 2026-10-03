@@ -95,20 +95,6 @@ namespace Dark_Cloud_Improved_Version
         internal const int Count      = 6; // element 0-5
     }
 
-    /// <summary>
-    /// The player's ACTION / CHARGE state machine — one set of globals shared by every character's attack, which
-    /// is why Toan's melee charge and Xiao's shot both live here: they are literally the same
-    /// <see cref="ChargeActionState"/> word with different action ids.
-    ///
-    /// (These used to sit inside a class called "WeaponCollision", so anything that merely wanted to know whether
-    /// the player was charging had to reach into the collision system to find out.)
-    /// </summary>
-    /// <summary>The words Toan's melee hits take their KNOCKBACK from. ToanKey_Play calls SetKickBack(strength, decay)
-    /// as each hit's collision is planted; the kick moves the enemy `strength` a frame, less `decay` each frame, so it
-    /// travels ≈ strength² / (2·decay). Strengths: hits 1–2 the shared 1.2 word (read from ten places in the ELF, Goro's
-    /// smash among them); hits 3–5, the lunge and the whirlwind bake theirs as immediates, made data by the ISO patch
-    /// (CodeCaves.MeleeKickWords). Decays: three words — 0.2 for hits 1–2, 0.3 for hits 3 and 5 and both charge attacks,
-    /// 0.4 for hit 4. Set as a whole and put back by <see cref="MeleeKick"/>.</summary>
     /// <summary>The thrown-item and bomb-effect objects (dungeon).</summary>
     internal static class ItemModels
     {
@@ -132,6 +118,12 @@ namespace Dark_Cloud_Improved_Version
         internal const ushort BombSe = 0x6C;
     }
 
+    /// <summary>The words Toan's melee hits take their KNOCKBACK from. ToanKey_Play calls SetKickBack(strength, decay)
+    /// as each hit's collision is planted; the kick moves the enemy `strength` a frame, less `decay` each frame, so it
+    /// travels ≈ strength² / (2·decay). Strengths: hits 1–2 the shared 1.2 word (read from ten places in the ELF, Goro's
+    /// smash among them); hits 3–5, the lunge and the whirlwind bake theirs as immediates, made data by the ISO patch
+    /// (CodeCaves.MeleeKickWords). Decays: three words — 0.2 for hits 1–2, 0.3 for hits 3 and 5 and both charge attacks,
+    /// 0.4 for hit 4. Set as a whole and put back by <see cref="MeleeKick"/>.</summary>
     internal static class MeleeKickWords
     {
         internal const long  Strength12 = 0x202A1AF8, Decay12 = 0x202A1C50, Decay35 = 0x202A1A80, Decay4 = 0x202A1B5C;
@@ -139,12 +131,17 @@ namespace Dark_Cloud_Improved_Version
         internal const float VanillaDecay12 = 0.2f, VanillaDecay35 = 0.3f, VanillaDecay4 = 0.4f;
     }
 
+    /// <summary>
+    /// The player's ACTION / CHARGE state machine — one set of globals shared by every character's attack, which
+    /// is why Toan's melee charge and Xiao's shot both live here: they are literally the same
+    /// <see cref="ChargeActionState"/> word with different action ids.
+    /// </summary>
     internal static class PlayerAction
     {
 
         // ── Charge attack state (ToanKey_Play, RE'd from SCUS_971.11) ──
         // Drives HeavensCloud.TyphoonEffect's charge ramp + MaintainEnemyHitbox's whirl gate. See
-        // Weapons.IsChargingWhirlwind / IsWhirlwindActive and the toan-charge-states memory.
+        // Weapons.IsChargingWhirlwind / IsWhirlwindActive.
         internal const long ChargeActionState = 0x21DC4494; // DAT_01dc4494 action id (values below)
         internal const int  ActionWindup      = 0xE;        // charge wind-up (meter accumulates; lunge OR whirlwind)
         internal const int  ActionLunge       = 0xF;        // charge lunge executing: the wind-up clip (15)…
@@ -173,12 +170,16 @@ namespace Dark_Cloud_Improved_Version
         // releases → what makes the 0xC hold advance to the 0xD shoot. Forcing it = fire now (no hold).
         internal const long XiaoShotReleaseFlag = 0x21DC4498;
         // ── Lock-on (SetNearLockOnTarget dun 0x1DC0160 / LockOffTargte 0x1DBFCE0, gp-relative globals) ──
-        // iGpffff9d94 = the locked-on MONSTOR SLOT (0..15; -1 = none), uGpffff9d90 = 1 while a lock is held.
+        // Three words: iGpffff9d94 = the locked-on MONSTOR SLOT (0..15; -1 = none), gp−0x6268 = the lock button's
+        // held TOGGLE, uGpffff9d90 = Xiao's shot-path flag. "Locked on, and to whom" is <see cref="LockHeld"/>: the
+        // slot a real one AND <see cref="LockOnHeld"/> up — the slot alone also holds the nearest CANDIDATE while no
+        // lock is held.
         internal const long LockOnTargetSlot = 0x202A3584;
         /// <summary>⚠ Not a general "locked on" flag: it reads 0 for TOAN the whole time he holds a lock (measured
         /// with a live target slot held for seconds). It rises on Xiao's shot path, which is the only reason Dragon's
-        /// Y can gate on it. For "is the player locked on, and to whom", use <see cref="LockOnTargetSlot"/> alone —
-        /// LockOffTargte (dun 0x1DBFCE0) returns it to −1 on release.</summary>
+        /// Y can gate on it. For "is the player locked on, and to whom", use <see cref="LockHeld"/>
+        /// (<see cref="LockOnHeld"/> + <see cref="LockOnTargetSlot"/>); LockOffTargte (dun 0x1DBFCE0) returns the slot
+        /// to −1 on release.</summary>
         internal const long LockOnActive     = 0x202A3580;
         /// <summary>THE HELD LOCK: the lock button TOGGLES this word (0 ↔ 1) in the player key handler (dun 0x1DB29B4)
         /// whenever <see cref="LockOnTargetSlot"/> holds a candidate, and every frame setTargetCursor(this) runs — 0 has
@@ -386,9 +387,7 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>
     /// The equipped weapon's MODEL — the live <c>NowWeapon</c> object, its <c>CFrameVu1</c> tree, and the
     /// <c>dcol*</c> "damage-collision" frames that define melee REACH (full notes: docs/weapon-reach.md).
-    ///
-    /// This is the only part of the old "WeaponCollision" class that was ever really about collision — and note
-    /// even the CFrame node offsets here duplicate <see cref="CFrameVu1"/>, which is the real owner of that struct.
+    /// The CFrame node offsets here duplicate <see cref="CFrameVu1"/>, the owner of that struct.
     /// </summary>
     internal static class WeaponModel
     {
@@ -410,7 +409,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int   DcolNameToLocalX = 0xE8;       // local-matrix X (Y at +0xEC, Z at +0xF0)
         internal const int   DcolNameToLocalZ = 0xF0;       // local-matrix Z (the reach)
 
-        // ── Runtime weapon-model SCALE (visual blade + dcol collision, together) — CONFIRMED 2026-06-30 ──
+        // ── Runtime weapon-model SCALE (visual blade + dcol collision, together) — CONFIRMED live ──
         // The equipped weapon's model root is *(*NowWeapon + 0xBC) (NowWeapon = 0x202A34F0); it is a CFrameVu1
         // TEMPLATE node (name@0, NOT the +0x118 runtime CFrame). CFrameVu1 layout: name@0, LOCAL matrix 3x3 at
         // +0xB8 (row-major, rows of 0x10 → diagonal at +0xB8/+0xCC/+0xE0), LOCAL translation at +0xE8/+0xEC/+0xF0
@@ -424,7 +423,6 @@ namespace Dark_Cloud_Improved_Version
         // then write factor to its local-3x3 DIAGONAL (+0xB8/+0xCC/+0xE0; bind is identity so factor*identity).
         // CONFIRMED: this grows the visual blade AND the melee hit reach by `factor`, and is STABLE (the engine
         // does NOT re-pose this template node) — a pure data write, mid-game safe, NO EE-code patch, NO crash.
-        // This is the clean lever the old dcol1-only / code-immediate reach hacks were working around.
         internal const long NowWeaponPtr           = 0x202A34F0; // → native ptr to NowWeapon record
         internal const int  WeaponModelRootOffset  = 0xBC;       // NowWeapon + 0xBC → native ptr to model root CFrameVu1
         internal const int  Vu1LocalMatrixDiag0    = 0xB8;       // CFrameVu1 local 3x3 m00 (m11 +0x14=0xCC, m22 +0x28=0xE0)
@@ -432,9 +430,6 @@ namespace Dark_Cloud_Improved_Version
         internal const int  Vu1LocalMatrixDiag2    = 0xE0;
         internal const int  Vu1LocalTransX         = 0xE8;       // CFrameVu1 local translation (Y +0xEC, Z +0xF0)
         internal const int  Vu1LocalTransZ         = 0xF0;
-
-        /// <summary>Heaven's Cloud's visible-blade mesh frame name ("w14\0"). Scaling this frame's local 3x3
-        /// grows the blade + its dcol collision children together (the runtime reach lever above).</summary>
     }
 
     /// <summary>
@@ -583,13 +578,6 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class WeaponMenu
     {
-
-
-
-
-
-
-
         // Rollover display behavior (all RE'd, all native — nothing to patch):
         //   • Weapon menu panel (DrawWeaponStatusTag 0x1FA0B0): gauge width (abs<<7)/max is
         //     CLAMPED to 0x7E — the bar pins at full length while the NUMBERS draw raw
@@ -632,11 +620,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int  BreakStateAnimation   = 5;
         internal const int  BreakStateWindDown    = 6;
 
-        // ⚠ LESSON: PINE writes to EE CODE pages crash PCSX2 outright — the first
-        // value-changing poke to a hot instruction killed the emulator the same second (log:
-        // 19:24:09). Identical-value writes were benign. ALL patching must stay data-only; the
-        // 7 Branch Sword status-break effect is therefore implemented post-hoc on the sphere
-        // (see AttachBoard below + SevenBranchSword.SevenfoldRiteEffect), not by patching
+        // ⚠ PINE writes to EE CODE pages crash PCSX2 (docs/code-caves.md § PINE write safety): everything in
+        // this class is poked as DATA only. The 7 Branch Sword status-break effect is applied post-hoc on the
+        // sphere (AttachBoard below + SevenBranchSword.SevenfoldRiteEffect), not by patching
         // WeaponStatusBreakEnable/SetStatusBreak.
 
         /// <summary>The status-break stat-transfer factor: a DATA float (0.6f) at native 0x2A1890,
@@ -784,8 +770,7 @@ namespace Dark_Cloud_Improved_Version
     internal static class AttachBoard
     {
         /// <summary>= status base 0x21CD954C + 0x84FC (the board sits right after the six
-        /// characters' weapon arrays: 0x450C + 6×0xAA8 = 0x84FC). Same address the mod has
-        /// long used as <see cref="Addresses.firstBagAttachment"/>.</summary>
+        /// characters' weapon arrays: 0x450C + 6×0xAA8 = 0x84FC) = <see cref="Addresses.firstBagAttachment"/>.</summary>
         internal const long Base      = Addresses.firstBagAttachment; // 0x21CE1A48
         internal const int  Stride    = 0x20;
         internal const int  ScanCount = Player.inventorySizeAttachments + 2; // 42, mirrors Player.GetBagAttachments

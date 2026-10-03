@@ -11,22 +11,23 @@ namespace Dark_Cloud_Improved_Version
     /// Toan's are through his swing. The pellet landing on an enemy plunges the room to black over
     /// SolarLighting.RampFrames and then the flash goes off from the impact — the light hit on every enemy in reach of
     /// it, the 5 s blinding with their guards broken, the ease back to normal light — exactly the Sun Sword's
-    /// (SunSword.FlashAt, SunSword.SolarShotFlash). The flash goes off wherever the pellet ENDS — an enemy (spared the light
+    /// (SunSword.FlashAt, SolarShot.FlashProfile). The flash goes off wherever the pellet ENDS — an enemy (spared the light
     /// hit, its share is the pellet's), a wall, or the end of its range; only a pellet still out after <see cref="MissSeconds"/>
     /// lets the dim ease back with the charge spent. Driven from Super Steve's sphere dispatch; Solar Harvest is
     /// inherited alongside it there.</summary>
     internal static class SolarShot
     {
+        /// <summary>Super Steve with a Sun Sword sphere (SolarShot): the Sun Sword's flash from Xiao's shot — the same share
+        /// and blinding, the room darkening as she charges; her disc is the cat's (the only one resident for her), painted
+        /// the Angel Gear cat's gold; the weapon brightened is the slingshot's mesh.</summary>
+        internal static readonly SunSword.SolarProfile FlashProfile = new SunSword.SolarProfile(
+            Items.supersteve, 0.25f, SuperSteveRig.GlowDisc, SuperSteveRig.WeaponModel, 0, 0, "SolarShot",
+            primeDim: 0.35f);                                                        // its WHP is the shot's, taken as the pellet leaves (ChargedShotWhp)
         private const string Tag = "[SolarShot] ";
-        internal const string GlowDisc    = "catglowp";   // the cat's disc: the one glow disc resident while Xiao is the active character
-        internal const int    GlowGoldRow = 9;            // the glow cave's ONE-based palette row: 1–5 the elements, 6 none, 7 the Divine Beast blue, 8 the Angel Shooter white, 9 the Angel Gear gold — the Sun Sword's colour
-        internal const string WeaponModel = "c04w13";     // Super Steve's dungeon rig (item 312 = c04w13.chr): what SolarBlade whitens
         private const double  ChargeSeconds = 2.0;        // guard held this long primes the shot
         private const float   PelletScale = 10f;          // the charged pellet's sprite
         private const float   GlowPull = 10f;             // the disc pulled toward the camera this far on the pellet (the discs' usual 5, and 5 more to clear the sprite)
         private const double  MissSeconds = 3.0;          // a pellet out this long without landing on anything: the charge is spent
-        private const float   HitProximity = 20f;         // the pellet died this close to an enemy's HIT SPHERE edge = it landed on it (contact is at 2 + the sphere's radius; its position is read once a tick, up to two frames — ten units — before)
-        internal const float  GlowSize = 0.75f;           // the disc wider than the ×10 stone (45 units at 1.0 — 0.4 sat behind the 20-unit sprite): on the pouch while primed at the same size, so it looks the same when it rides the pellet
         private const int     PouchNode = 4;              // the slingshot rig's pouch bone, null24: the fifth node from the root (SlingshotProp's layout)
         private const float   ShotWhp = 5f;               // weapon HP the charged pellet costs as it leaves, before Endurance (the Sun Sword's flash bill)
         private const float   SwingBase = 1.5f;           // a shot factor of 1 is this much WHP at zero Endurance
@@ -39,16 +40,16 @@ namespace Dark_Cloud_Improved_Version
         private static bool  _contactWarned;
         private static int   _contactSeen = PelletContacts.Fresh;
         private static float _lastX, _lastH, _lastY;      // where it was last seen (its impact point once it dies)
-        private static readonly bool[] _seen = new bool[PlayerShotPool.SlotCount];
-        private static readonly List<(int slot, int ticks)> _planted = new List<(int, int)>();
+        private static readonly PelletWatch _pellets = new PelletWatch();
+        private static readonly PlantedHits _planted = new();   // the flash's light hits, withdrawn on their ticks
         /// <summary>Every tick (16 ms) while Super Steve carries the sphere; <paramref name="active"/> false holds everything
         /// as it stands. <see cref="Stop"/> ends it when the sphere or the weapon goes.</summary>
         internal static void Drive(bool active)
         {
             SunSword.BlindTick();                                                 // the ease and the blinding run whoever fired them
-            SunSword.ExpireHits(_planted);
+            _planted.Expire();
             if (!active) return;
-            var p = SunSword.SolarShotFlash;
+            var p = SolarShot.FlashProfile;
             SolarLighting.ToanTintOwned = _phase == Phase.Charging || _phase == Phase.Primed;   // her tint is the charge's while it is held
             switch (_phase)
             {
@@ -62,9 +63,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     if (SunSword.BlindRunning || !GuardWatch.IsGuarding()) { Dissipate(SunSword.BlindRunning ? "a blinding" : $"guard down (motion {Memory.ReadInt(CCharacter.Base + CCharacter.MotionId)})"); break; }
                     double held = (GameClock.Now - _holdStart).TotalSeconds;
-                    SolarBlade.Set((float)(held / ChargeSeconds), p.Model, p.Frame, p.Unlit, p.BladeWhite);
-                    SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim * (float)Math.Min(1.0, held / ChargeSeconds));
-                    ChargeTint.Ramp(ChargeSeconds - held);
+                    GuardCharge.Frame(p, held, ChargeSeconds);                                // its profile dims (PrimeDim 0.35)
                     if (held >= ChargeSeconds - SolarGlow.GrowSeconds) { ShowPouchGlow(); SolarGlow.Tick(); }
                     if (held >= ChargeSeconds)
                     {
@@ -83,7 +82,7 @@ namespace Dark_Cloud_Improved_Version
                     ShowPouchGlow(); SolarGlow.Tick();
                     SunSword.HoldPrimedTint(p, 1f);
                     ChargedShotWhp.Arm(ShotWhp / SwingBase);                          // the next pellet's bill, taken by the engine as it leaves
-                    int slot = NewPellet();
+                    int slot = _pellets.NewPellet();
                     if (slot >= 0) Fire(slot);
                     break;
                 }
@@ -101,7 +100,7 @@ namespace Dark_Cloud_Improved_Version
                         if (c.Enemy)
                         {
                             _hitSlot = PelletContacts.EnemyAtSphere(c); _lastX = c.X; _lastH = c.H; _lastY = c.Y;
-                            if (_hitSlot < 0) _hitSlot = EnemyAt(c.X, c.Y);
+                            if (_hitSlot < 0) _hitSlot = PelletWatch.EnemyAt(c.X, c.Y);
                             _phase = Phase.HitPending; _hitAt = GameClock.Now;
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"pellet met slot {_hitSlot} at ({c.X:F0},{c.H:F0},{c.Y:F0}) (the engine's contact)");
                             break;
@@ -122,7 +121,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     if (!live)
                     {   // it ended with no record (an enemy, or nothing at all — its range): the plunge to black, then the flash where it ended
-                        _hitSlot = EnemyAt(_lastX, _lastY);
+                        _hitSlot = PelletWatch.EnemyAt(_lastX, _lastY);
                         _phase = Phase.HitPending; _hitAt = GameClock.Now;
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"pellet ended at ({_lastX:F0},{_lastH:F0},{_lastY:F0})" + (_hitSlot >= 0 ? $" on slot {_hitSlot}" : " on nothing") + " — the flash there");
                         break;
@@ -152,22 +151,7 @@ namespace Dark_Cloud_Improved_Version
             if (!Memory.IsValidGuest(wpn)) return;
             uint root = Memory.ReadGuestPtr(Memory.ToMmu(wpn) + 0xBC);
             if (!Memory.IsValidGuest(root)) return;
-            SolarGlow.Show(GlowDisc, anchor: root + (uint)(PouchNode * CFrameVu1.NodeStride), lift: 0f, palRow: GlowGoldRow, scale: GlowSize);
-        }
-
-        /// <summary>The first pellet to appear since the last look (a new live pool slot), or −1.</summary>
-        private static int NewPellet()
-        {
-            long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
-            if (!Memory.IsValidGuest(pool)) return -1;
-            int found = -1;
-            for (int i = 0; i < PlayerShotPool.SlotCount; i++)
-            {
-                bool live = Memory.ReadInt(PlayerShotPool.FlagAddr(pool, i)) != 0;
-                if (live && !_seen[i]) { _seen[i] = true; if (found < 0) found = i; }
-                else if (!live) _seen[i] = false;
-            }
-            return found;
+            SolarGlow.Show(SuperSteveRig.GlowDisc, anchor: root + (uint)(PouchNode * CFrameVu1.NodeStride), lift: 0f, palRow: SuperSteveRig.GlowGoldRow, scale: SuperSteveRig.GlowSize);
         }
 
         /// <summary>The charged pellet: its sprite at <see cref="PelletScale"/>, the disc moved from her pouch onto the pellet itself
@@ -181,7 +165,7 @@ namespace Dark_Cloud_Improved_Version
             _slot = slot; _firedAt = GameClock.Now; _phase = Phase.Flying;
             PelletContacts.Sync(ref _contactSeen);                                 // only contacts from here on are this pellet's
             ChargeTint.Clear();
-            SolarGlow.Show(GlowDisc, lift: 0f, palRow: GlowGoldRow, scale: GlowSize, pelletSlot: slot, pull: GlowPull);   // re-hung onto the pellet
+            SolarGlow.Show(SuperSteveRig.GlowDisc, lift: 0f, palRow: SuperSteveRig.GlowGoldRow, scale: SuperSteveRig.GlowSize, pelletSlot: slot, pull: GlowPull);   // re-hung onto the pellet
             if (!PelletContacts.Native && !_contactWarned) { _contactWarned = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the pellet-contact cave is not in this ISO — the landing is read from where the pellet died (re-patch the ISO)"); }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"charged pellet: slot {slot}, ×{PelletScale:0} sprite, the disc on it");
         }
@@ -192,36 +176,20 @@ namespace Dark_Cloud_Improved_Version
         private static void Dissipate(string why = "spent")
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"charge dissipates ({why}) — phase {_phase}, dim {SolarLighting.LastDim:0.00}, guarding {GuardWatch.IsGuarding()}, blinding {SunSword.BlindRunning}");
-            SunSword.HoldPrimedTint(SunSword.SolarShotFlash, 0f);
+            SunSword.HoldPrimedTint(SolarShot.FlashProfile, 0f);
             SolarBlade.Clear(); ChargeTint.Clear(); SolarGlow.Fade(); SolarLighting.EndDim(); EndPellet();
             _phase = Phase.Idle;
-        }
-
-        /// <summary>The live enemy whose nearest hit sphere's edge is within HitProximity of (x, y) — the one the pellet died on
-        /// (a big enemy's root can be far from where the pellet met its body); −1 for none.</summary>
-        private static int EnemyAt(float x, float y)
-        {
-            int best = -1; float bestD = HitProximity;
-            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
-            {
-                if (!Enemies.IsLive(s) || Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) <= 0) continue;
-                float d = BigBang.NearestHitSphereEdge(s, EnemyAddresses.FloorSlots.SlotAddr(s, 0), x, y);
-                if (d < bestD) { bestD = d; best = s; }
-            }
-            return best;
         }
 
         /// <summary>The sphere or the weapon went: everything down, a blinding of hers ended, the hit entries withdrawn.</summary>
         internal static void Stop()
         {
-            if (_phase != Phase.Idle) SunSword.HoldPrimedTint(SunSword.SolarShotFlash, 0f);
+            if (_phase != Phase.Idle) SunSword.HoldPrimedTint(SolarShot.FlashProfile, 0f);
             SolarBlade.Clear(); ChargeTint.Clear(); SolarGlow.Hide(); SolarLighting.Restore(); EndPellet();
             SunSword.EndBlinding();
-            long pool = CollisionPool.Resolve();
-            foreach (var (slot, _) in _planted) if (pool != 0) CollisionPool.Deactivate(pool, slot);
-            _planted.Clear();
+            _planted.WithdrawAll();
             SolarLighting.ToanTintOwned = false;
-            Array.Clear(_seen, 0, _seen.Length);
+            _pellets.Reset();
             _phase = Phase.Idle; _slot = -1;
         }
     }

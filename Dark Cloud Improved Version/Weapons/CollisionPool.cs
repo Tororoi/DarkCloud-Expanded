@@ -30,6 +30,14 @@ namespace Dark_Cloud_Improved_Version
         internal const int  Owner      = 0x58;        // enemy swings: slot*5+200
         internal const int  GateA      = 0x70, GateB = 0x74;   // the entry is open to CheckHitUser while these are equal
         internal const uint HurtsPlayerMask = 1;
+        // The kick words of a hit on an ENEMY (CheckDmg's path): the point the victim is pushed away from, how hard, how fast
+        // the push fades, and the kick type. Written by SetKick; PlayerHitEntry leaves them zero (no kick: the reaction without a shove).
+        internal const int  KickOriginOff   = 0x80;   // vec3 (x, h, y)
+        internal const int  KickStrengthOff = 0x90;   // float
+        internal const int  KickDecayOff    = 0x94;   // float
+        internal const int  KickTypeOff     = 0x98;   // int
+        internal const int  KickWordsSize   = KickTypeOff + 4 - KickOriginOff;   // 0x1C: the whole run, copied as one by Confusion's friendly fire
+        internal const int  KickTypeAway    = 2;      // thrown away from the origin, with the melee-style reaction (flinch + shove) — the type Toan's sword hits carry
 
         private const long BattleWeaponStats = WeaponHave.BattleWeaponRecord + 0x1C;   // anti-category bytes (entry +0x64 points here)
         private const long BattleWeaponFlags = WeaponHave.BattleWeaponRecord + 0xEE;   // ability flags (entry +0x6C)
@@ -73,7 +81,8 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>A player-attack sphere at (x, h, y): the form CheckDmg accepts as one of the player's own hits — damage
         /// <paramref name="baseDmg"/> before the enemy's defence, the equipped weapon's stats and ability flags, and
-        /// <paramref name="attr"/> as its element bit (0 = none). Kick words (+0x80..+0x98) are left zero for the caller.</summary>
+        /// <paramref name="attr"/> as its element bit (0 = none). Kick words (+0x80..+0x98) are left zero for the caller
+        /// (<see cref="SetKick"/>).</summary>
         internal static byte[] PlayerHitEntry(float x, float h, float y, float radius, int baseDmg, uint attr)
         {
             var e = new byte[Stride];
@@ -92,6 +101,30 @@ namespace Dark_Cloud_Improved_Version
             I(0x64, (int)(BattleWeaponStats - 0x20000000)); I(0x68, -1); I(0x6C, Memory.ReadShort(BattleWeaponFlags));
             I(GateA, 0); I(GateB, 0); F(0x8C, 1f);
             return e;
+        }
+
+        /// <summary>The kick words of a hit on an enemy, into a <see cref="PlayerHitEntry"/> before it is planted: the victim is
+        /// pushed away from (x, h, y) at <paramref name="strength"/>, fading by <paramref name="decay"/>, with reaction
+        /// <paramref name="type"/> (<see cref="KickTypeAway"/>). A strength of 0 with the words written is the reaction without
+        /// the shove; the words left unwritten is no reaction at all.</summary>
+        internal static void SetKick(byte[] entry, float x, float h, float y, float strength, float decay, int type = KickTypeAway)
+        {
+            BitConverter.GetBytes(x).CopyTo(entry, KickOriginOff);
+            BitConverter.GetBytes(h).CopyTo(entry, KickOriginOff + 4);
+            BitConverter.GetBytes(y).CopyTo(entry, KickOriginOff + 8);
+            BitConverter.GetBytes(strength).CopyTo(entry, KickStrengthOff);
+            BitConverter.GetBytes(decay).CopyTo(entry, KickDecayOff);
+            BitConverter.GetBytes(type).CopyTo(entry, KickTypeOff);
+        }
+
+        /// <summary>A planted entry taken back: its no-drain / crush mark word (+0x9C) zeroed when <paramref name="clearMark"/>
+        /// (Set__CCollisionData never writes it, so a mark left behind would ride into the entry's next use), then the entry
+        /// deactivated. Nothing when the pool is not allocated.</summary>
+        internal static void Withdraw(long pool, int slot, bool clearMark)
+        {
+            if (pool == 0) return;
+            if (clearMark) Memory.WriteInt(pool + slot * Stride + CodeCaves.NoDrainMarkOff, 0);
+            Deactivate(pool, slot);
         }
 
         /// <summary>A sphere at (x, h, y) that hurts the PLAYER — the form BtCheckDamageProc (dun 0x1DBAFD0) accepts as

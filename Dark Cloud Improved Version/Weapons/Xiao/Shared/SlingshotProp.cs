@@ -148,7 +148,7 @@ namespace Dark_Cloud_Improved_Version
             _projectile = true; _tint = tint; _dim = dim;
             _scale = scale; _up = 0f; _ahead = 0f; _pull = 0f;
             _orbit = 0f;
-            Memory.WriteInt(CodeCaves.Mailbox.PropFollowSlot, 0);                   // no pellet carries it: the Matador's follower off
+            Memory.WriteInt(Mailbox.PropFollowSlot, 0);                   // no pellet carries it: the Matador's follower off
             if (!CopyTree() || !CopyMesh() || !RegisterSlot()) return false;
             long s = SlotAddr();
             Memory.WriteVec3(s + CCharacter.CharRot, 0f, 0f, 0f);
@@ -371,7 +371,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (s + DungeonCharaDraw.CharaRampB, 0);
             Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 1);
             Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)Slot * 4, Held ? 1 : 0);
-            Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 1);            // scene + chara step unlocked
+            Memory.WriteInt  (Mailbox.MirageSceneGate, 1);            // scene + chara step unlocked
             if (_projectile) return;
             long r = Memory.ToMmu(_rootGuest);
             if ((Memory.ReadGuestPtr(r + CFrameVu1.Parent)) != _playerRoot)
@@ -387,7 +387,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (s + DungeonCharaDraw.CharaActive, 0);
             Memory.WriteInt  (s + DungeonCharaDraw.CharaMotionA, 0);
             Memory.WriteFloat(s + CCharacter.NpcOpacity, 0f);
-            Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 2);            // restore vanilla gates
+            Memory.WriteInt  (Mailbox.MirageSceneGate, 2);            // restore vanilla gates
             Active = false;
             _orbit = 0f; _projectile = false;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "weapon copy down");

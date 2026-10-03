@@ -16,8 +16,7 @@ namespace Dark_Cloud_Improved_Version
         private const double ChargeSeconds        = 1.5;    // guard held this long primes the blade
         internal const float FlashRadius          = 300f;   // the hit and the blinding reach this far from Toan
         private const float  FlashDamageFraction  = 0.25f;  // the hit's base damage, as a fraction of the weapon's attack
-        private const float  KickStrength = 2.0f, KickDecay = 0.3f;   // the hit's shove, sized like Toan's heavier combo hits
-        private const int    KickTypeMelee        = 2;      // +0x98: the melee-style reaction (flinch + shove)
+        private const float  KickStrength = 2.0f, KickDecay = 0.3f;   // the hit's shove, sized like Toan's heavier combo hits (kick type CollisionPool.KickTypeAway: the melee-style reaction)
         private const int    HitLifeTicks         = 3;      // the planted spheres are withdrawn after this many ticks
         private const float  PerEnemyRadius       = 25f;    // each enemy's own sphere: centred on it, so overlap is certain
         internal const float FlashPulseSpeed      = 90f;    // Toan's own white pulse at the flash (the change effect's rate)
@@ -80,19 +79,6 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>Super Steve with a Sun Sword sphere (SolarShot): the Sun Sword's flash from Xiao's shot — the same share
-        /// and blinding, the room darkening as she charges; her disc is the cat's (the only one resident for her), painted
-        /// the Angel Gear cat's gold; the weapon brightened is the slingshot's mesh.</summary>
-        internal static readonly SolarProfile SolarShotFlash = new SolarProfile(
-            Items.supersteve, 0.25f, SolarShot.GlowDisc, SolarShot.WeaponModel, 0, 0, "SolarShot",
-            primeDim: 0.35f);                                                        // its WHP is the shot's, taken as the pellet leaves (ChargedShotWhp)
-        /// <summary>Super Steve with a Big Bang sphere (BombShot): Big Bang's flash — twice the Sun Sword's share, the cool
-        /// light — from where her bomb lands; no dim while she primes (the room darkens only along the fall, or the four frames
-        /// before a shot's flash); no disc on her (the bomb carries its own).</summary>
-        internal static readonly SolarProfile BombShotFlash = new SolarProfile(
-            Items.supersteve, 0.50f, null, SolarShot.WeaponModel, 0, 0, "BombShot", fog: 0.8f,
-            light: new[] { 236f, 226f, 255f }, fogRgb: new[] { 242f, 236f, 255f },
-            primeDim: 0f, bladeGlowOnly: true);                                     // no dim while it primes: the darkening is the fall's, or the four frames before a shot's flash
 
         internal static readonly SolarProfile SunSwordFlash = new SolarProfile(
             Items.sunsword, 0.25f, ToanGlowBakes.GlowName, SolarBlade.SunSwordModel, 0, 0, "SunSword",
@@ -115,12 +101,6 @@ namespace Dark_Cloud_Improved_Version
             primeDim: 0.5f,                                                          // darker than Big Bang's 0.35 (k is darkness: 1 = full dim)
             easeSeconds: 2.0,                                                        // a strike's flash, gone in two seconds — back to the floor's own light, not onto a rest dim
             holdsPrimedTint: false);                                                 // its flash costs nothing — each bolt does (StrikeWhp)
-        /// <summary>Super Steve with a Sword of Zeus sphere (ZeusShot): the Sword of Zeus's look on her slingshot — its dim, its
-        /// electric light, the two-second ease, no white on her while primed, no disc, no hit of its own (the bolts' blasts do).</summary>
-        internal static readonly SolarProfile ZeusShotFlash = new SolarProfile(
-            Items.supersteve, 0f, null, SolarShot.WeaponModel, 0, 0, "ZeusShot", fog: 0.8f,
-            light: new[] { 228f, 240f, 255f }, fogRgb: new[] { 238f, 246f, 255f },
-            primeDim: 0.5f, easeSeconds: 2.0, holdsPrimedTint: false);
 
         /// <summary>True while a Solar Flash charge is building, held or going off — Big Bang's own charge-attack tint
         /// stands aside for it rather than fighting it for the blade.</summary>
@@ -129,10 +109,10 @@ namespace Dark_Cloud_Improved_Version
         private enum Phase { Idle, Charging, Primed, Windup, Dropping, Dissipating, Chain }
         private static SolarState   _live;        // the running flash's state, for the questions below
         private static SolarProfile _liveProfile;
-        /// <summary>Is <paramref name="weaponId"/>'s Solar Flash currently PRIMED (charge held, swing not yet made)? Big
-        /// Bang hangs its judgement blade over the lock-on target during exactly this.</summary>
         /// <summary>The running flash's phase and weapon, for diagnostics.</summary>
         internal static string LivePhase => _live == null ? "none" : $"{_live.phase}/{_liveProfile?.WeaponId}";
+        /// <summary>Is <paramref name="weaponId"/>'s Solar Flash currently PRIMED (charge held, swing not yet made)? Big
+        /// Bang hangs its judgement blade over the lock-on target during exactly this.</summary>
         internal static bool PrimedFor(ushort weaponId) =>
             _live != null && _liveProfile != null && _liveProfile.WeaponId == weaponId
             && (_live.phase == Phase.Primed || _live.phase == Phase.Windup || _live.phase == Phase.Dropping
@@ -147,7 +127,7 @@ namespace Dark_Cloud_Improved_Version
             public bool chainFired;                             // … and whether this swing's bolt has gone
             public bool chainDropped;                           // the judgement blade was let go on the last swing: its landing is the bolt
 
-            public readonly List<(int slot, int ticks)> planted = new List<(int, int)>();
+            public readonly PlantedHits planted = new();        // the flash's light hits, withdrawn on their ticks
         }
 
         /// <summary>
@@ -186,7 +166,7 @@ namespace Dark_Cloud_Improved_Version
 
             SolarLighting.Tick();
             SolarBlind();
-            ExpireHits(st);
+            st.planted.Expire();                  // the engine withdraws its own swing spheres when the swing ends; ours go on their ticks
             if (Player.CheckDunIsPausedOrMenu()) return;
             if (Player.CurrentCharacterNum() != Player.ToanId)
             {
@@ -263,9 +243,9 @@ namespace Dark_Cloud_Improved_Version
                     float cursor = Memory.ReadFloat(PlayerAction.AnimFrameCursor);
                     bool dropDue = action == PlayerAction.ActionComboFirst && cursor >= DropFrame && cursor <= Combo1End;   // inside the first clip, at the drop frame
                     if (p.WeaponId == Items.swordofzeus && dropDue && PlayerAction.LockHeld(out _)
-                        && BigBang.BeginDrop(DropFrame, ZeusLandFrame))
+                        && JudgementBlade.BeginDrop(DropFrame, ZeusLandFrame))
                     { st.phase = Phase.Chain; st.chainAction = action; st.chainFired = true; st.chainDropped = true; break; }
-                    if (p.WeaponId == Items.bigbang && dropDue && BigBang.BeginDrop(DropFrame, BigBangLandFrame)) { st.phase = Phase.Dropping; break; }
+                    if (p.WeaponId == Items.bigbang && dropDue && JudgementBlade.BeginDrop(DropFrame, BigBangLandFrame)) { st.phase = Phase.Dropping; break; }
                     bool forward = action == PlayerAction.ActionWhirlwind || action == PlayerAction.ActionLunge
                                 || cursor >= ComboHitFrame(action);
                     if (!forward)
@@ -274,9 +254,9 @@ namespace Dark_Cloud_Improved_Version
                         break;
                     }
                     // Big Bang, locked on: the swing does not flash — it lets the judgement blade fall (at DropFrame above, or here
-                    // for a whirlwind or lunge), and the flash goes off when it lands (BigBang.BeginDrop → Dropping). Not locked on:
+                    // for a whirlwind or lunge), and the flash goes off when it lands (JudgementBlade.BeginDrop → Dropping). Not locked on:
                     // the flash, as ever.
-                    if (p.WeaponId == Items.bigbang && BigBang.BeginDrop()) { st.phase = Phase.Dropping; break; }
+                    if (p.WeaponId == Items.bigbang && JudgementBlade.BeginDrop()) { st.phase = Phase.Dropping; break; }
                     // The Sword of Zeus. Locked on with the judgement blade hanging: the blade is let go as the FIRST
                     // swing begins (above, before the swing comes forward), paced by the swing so it lands at the
                     // swing's hit frame — the landing is the bolt, and the combo CHAINS from there (Chain). Locked on
@@ -306,8 +286,8 @@ namespace Dark_Cloud_Improved_Version
                     // The judgement blade let go on the first swing (Windup) is in the air here until its landing —
                     // the tip in the enemy at the swing's hit frame — which is the first bolt (the owner's landing),
                     // the flash following from here. The combo cannot end while it is in the air.
-                    bool falling = BigBang.Dropping || BigBang.LandingPending;
-                    if (st.chainDropped && BigBang.TakeDropLanded()) { Flash(st, p); break; }
+                    bool falling = JudgementBlade.Dropping || JudgementBlade.LandingPending;
+                    if (st.chainDropped && JudgementBlade.TakeDropLanded()) { Flash(st, p); break; }
                     bool swinging = action >= PlayerAction.ActionComboFirst && action <= PlayerAction.ActionComboLast;
                     bool restarted = swinging && (action < st.chainAction
                                      || (action == st.chainAction && st.chainFired && Memory.ReadFloat(PlayerAction.AnimFrameCursor) < ComboHitFrame(action) - 1f));
@@ -342,8 +322,8 @@ namespace Dark_Cloud_Improved_Version
                     // The blade has landed (or the drop was abandoned — a lost lock mid-fall): the flash fires either way,
                     // so a spent charge never sits waiting on a visual. A landing has already fired the white-out on
                     // the burst's own frame; the abandon has not.
-                    if (BigBang.TakeDropLanded())                              { Flash(st, p, lit: true); st.phase = Phase.Idle; }
-                    else if (!BigBang.Dropping && !BigBang.LandingPending)     { Flash(st, p);            st.phase = Phase.Idle; }
+                    if (JudgementBlade.TakeDropLanded())                              { Flash(st, p, lit: true); st.phase = Phase.Idle; }
+                    else if (!JudgementBlade.Dropping && !JudgementBlade.LandingPending)     { Flash(st, p);            st.phase = Phase.Idle; }
                     break;
                 }
             }
@@ -409,28 +389,24 @@ namespace Dark_Cloud_Improved_Version
             // The light hit comes from the flash's own point: Toan, or the blast — the judgement blade's landing — when
             // that is what struck, so the kick throws everyone from it and the hit turns them to it, not to him.
             float px, ph, py;
-            if (lit) (px, ph, py) = BigBang.LastBlast;
+            if (lit) (px, ph, py) = BlastFalloff.LastBlast;
             else { px = Memory.ReadFloat(Addresses.dunPositionX); ph = Memory.ReadFloat(Addresses.dunPositionZ); py = Memory.ReadFloat(Addresses.dunPositionY); }
             SolarBlade.Clear();                                          // tint off, and the blade's own palette back
             ChargeTint.Clear();                                          // …and the white Toan was holding
             SolarGlow.Hide();
-            if (!lit) { p.ArmLighting(); SolarLighting.Flash(); }
-            Player.FlashActiveCharacter(p.Light[0], p.Light[1], p.Light[2], FlashPulseSpeed, 1);
-            if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
+            LightUp(p, armLighting: !lit);
             if (p.DamageFraction > 0f) PlantFlashHit(st.planted, px, ph, py, p);
             if (!lit && p.FlashWhp > 0f) WeaponWhp.Drain(p.WeaponId, p.FlashWhp, "[" + p.Tag + "] flash ");   // a blast's landing paid for itself
             Blind(p.BlindSeconds);
         }
         /// <summary>The flash from a point that is not the character — Xiao's Solar Shot, where her pellet landed: the
         /// white-out, her pulse, the light hit on every enemy in reach of the point (shoved away from it), the bill and
-        /// the blinding. <paramref name="planted"/> is the caller's list of hit entries to withdraw (<see cref="ExpireHits"/>).</summary>
+        /// the blinding. <paramref name="planted"/> is the caller's list of hit entries, which it expires on its own ticks.</summary>
         /// <param name="excludeSlot">An enemy the flash's light hit leaves alone — the one the shot itself struck (its pellet's damage
         /// is its share).</param>
-        internal static void FlashAt(SolarProfile p, float x, float h, float y, List<(int slot, int ticks)> planted, int excludeSlot = -1)
+        internal static void FlashAt(SolarProfile p, float x, float h, float y, PlantedHits planted, int excludeSlot = -1)
         {
-            p.ArmLighting(); SolarLighting.Flash();
-            Player.FlashActiveCharacter(p.Light[0], p.Light[1], p.Light[2], FlashPulseSpeed, 1);
-            if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
+            LightUp(p, armLighting: true);
             if (p.DamageFraction > 0f) PlantFlashHit(planted, x, h, y, p, excludeSlot);
             if (p.FlashWhp > 0f) WeaponWhp.Drain(p.WeaponId, p.FlashWhp, "[" + p.Tag + "] flash ");
             Blind(p.BlindSeconds);
@@ -448,10 +424,16 @@ namespace Dark_Cloud_Improved_Version
         /// profile carries no light hit, so none is planted.)</summary>
         internal static void StrikeFlash(SolarProfile p)
         {
-            p.ArmLighting(); SolarLighting.Flash();
+            LightUp(p, armLighting: true);
+            Blind(p.BlindSeconds);
+        }
+        /// <summary>The light-up every flash shares: the white-out (the profile's lighting armed first, unless the caller has
+        /// already fired it), the character's pulse in the profile's colour, and the flash's sound.</summary>
+        private static void LightUp(SolarProfile p, bool armLighting)
+        {
+            if (armLighting) { p.ArmLighting(); SolarLighting.Flash(); }
             Player.FlashActiveCharacter(p.Light[0], p.Light[1], p.Light[2], FlashPulseSpeed, 1);
             if (FlashSe != 0) SeSeq.Play(FlashSe, 90);
-            Blind(p.BlindSeconds);
         }
 
         /// <summary>A player-attack sphere ON EACH ENEMY in range (CollisionPool: the same entries CheckDmg tests his sword
@@ -464,7 +446,7 @@ namespace Dark_Cloud_Improved_Version
         /// 300-unit sphere damaged exactly one enemy and left the rest untouched — which looked like "one per species"
         /// because a species tends to be clustered. One small sphere centred on each enemy hits all of them, and the pool
         /// holds 96 entries against at most 16 enemies.</summary>
-        private static void PlantFlashHit(List<(int slot, int ticks)> planted, float x, float h, float y, SolarProfile p, int excludeSlot = -1)
+        private static void PlantFlashHit(PlantedHits planted, float x, float h, float y, SolarProfile p, int excludeSlot = -1)
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
@@ -482,35 +464,17 @@ namespace Dark_Cloud_Improved_Version
                 int slot = CollisionPool.TakeFreeSlot(pool);
                 if (slot < 0) { missed++; continue; }
                 byte[] e = CollisionPool.PlayerHitEntry(ex, eh, ey, PerEnemyRadius, baseDmg, attr);
-                void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
                 // An enemy the game cannot move (knockback 0: bosses, rooted plants) takes the hit where it stands — the reaction
                 // without the shove: a kick on one left it locked in its reaction pose rather than falling into the hold.
                 bool rooted = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.KnockbackMult)) <= 0f;
-                F(0x80, x); F(0x84, h); F(0x88, y);                    // kick origin = the flash point: everyone is shoved AWAY from it
-                F(0x90, rooted ? 0f : KickStrength); F(0x94, KickDecay);
-                BitConverter.GetBytes(KickTypeMelee).CopyTo(e, 0x98);
+                CollisionPool.SetKick(e, x, h, y, rooted ? 0f : KickStrength, KickDecay);   // kick origin = the flash point: everyone is shoved AWAY from it
                 CollisionPool.Plant(pool, slot, e);
-                planted.Add((slot, HitLifeTicks));
+                planted.Add(slot, HitLifeTicks);
                 hit++;
             }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 $"[{p.Tag}] flash at ({x:F0},{h:F0},{y:F0}) r={FlashRadius:F0}: {hit} enemies struck for base {baseDmg}, attr 0x{attr:X}"
                 + (missed > 0 ? $" ({missed} missed — pool full)" : ""));
-        }
-
-        /// <summary>The engine withdraws its own swing spheres when the swing ends; ours is withdrawn here.</summary>
-        private static void ExpireHits(SolarState st) => ExpireHits(st.planted);
-        internal static void ExpireHits(List<(int slot, int ticks)> planted)
-        {
-            if (planted.Count == 0) return;
-            long pool = CollisionPool.Resolve();
-            for (int i = planted.Count - 1; i >= 0; i--)
-            {
-                var (slot, ticks) = planted[i];
-                if (--ticks > 0) { planted[i] = (slot, ticks); continue; }
-                if (pool != 0) CollisionPool.Deactivate(pool, slot);
-                planted.RemoveAt(i);
-            }
         }
 
         private static void SolarReset(SolarState st)
@@ -520,9 +484,7 @@ namespace Dark_Cloud_Improved_Version
             ChargeTint.Clear();
             SolarLighting.Restore();
             SolarScript.End(); GuardGate.NobodyBlocks(false); _blindUntil = default; FlashArmed = false;
-            long pool = CollisionPool.Resolve();
-            foreach (var (slot, _) in st.planted) if (pool != 0) CollisionPool.Deactivate(pool, slot);
-            st.planted.Clear();
+            st.planted.WithdrawAll();
             st.phase = Phase.Idle;
         }
 

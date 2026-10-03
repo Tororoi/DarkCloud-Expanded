@@ -34,6 +34,13 @@ namespace Dark_Cloud_Improved_Version
             return 0;
         }
 
+        /// <summary>Xiao is the active character with Super Steve equipped and a SynthSphere of <paramref name="weaponId"/> attached
+        /// (the battle record's) — the sphere's source weapon's effect is hers.</summary>
+        internal static bool Wields(int weaponId)
+            => Player.CurrentCharacterNum() == Player.XiaoId
+            && Player.Weapon.GetCurrentWeaponId() == Items.supersteve
+            && AttachedSphere(WeaponHave.BattleWeaponRecord) == weaponId;
+
         // ── Quick Draw (Small Sword / Tsukikage / Heaven's Cloud sphere) ──
         private const float ShotFireFrame = 251.0f;  // inside the (251,252) pellet-release window (shoot motion idx 13)
         private static bool _xqReleaseArmed;          // edge latch so one X-release = one instant shot
@@ -126,12 +133,12 @@ namespace Dark_Cloud_Improved_Version
             if (sphere == _spriteSphere) return;
             bool slingshot = sphere >= Items.woodenslingshot && sphere <= Items.angelgear && sphere != Items.supersteve;
             uint hook = (uint)Memory.ReadInt(0x20000000L + 0x001ABC74);
-            if (slingshot && hook != Jal(CodeCaves.DebugIfCave.PelletSprite) && hook != Jal(CodeCaves.DebugInfoCave.PelletSprite))
+            if (slingshot && hook != Jal(DebugIfCave.PelletSprite) && hook != Jal(DebugInfoCave.PelletSprite))
             {
                 if (!_spriteWarned) { _spriteWarned = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SuperSteve] pellet-sprite hook not in this ISO — the pellet stays Super Steve's (re-patch the ISO)"); }
                 return;
             }
-            Memory.WriteInt(CodeCaves.Mailbox.PelletSpriteId, slingshot ? sphere : 0);
+            Memory.WriteInt(Mailbox.PelletSpriteId, slingshot ? sphere : 0);
             _spriteSphere = sphere;
             if (slingshot) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] pellet sprite: the sphere weapon's (item {sphere})");
         }
@@ -147,14 +154,14 @@ namespace Dark_Cloud_Improved_Version
             }
             _ssIconSphere = sphere;
             long rec = ItemAddresses.ComItemInfo.RecordAddr(sphere);
-            if (sphere == 0 || rec < 0) { Memory.WriteInt(CodeCaves.Mailbox.SsIconOn, 0); return; }
+            if (sphere == 0 || rec < 0) { Memory.WriteInt(Mailbox.SsIconOn, 0); return; }
             int cls  = Memory.ReadUShort(rec + ItemAddresses.ComItemInfo.ClassOffset);
             int icon = Memory.ReadUShort(rec + ItemAddresses.ComItemInfo.SubIndexOffset);
-            Memory.WriteInt(CodeCaves.Mailbox.SsIconX, SsIconX);
-            Memory.WriteInt(CodeCaves.Mailbox.SsIconY, SsIconY);
-            Memory.WriteInt(CodeCaves.Mailbox.SsIconSize, SsIconSize);
-            Memory.WriteInt(CodeCaves.Mailbox.SsIconOn, 1);                                       // on LAST
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] sphere icon: weapon {sphere} (class {cls}, icon {icon}) → wepicon cell ({(icon & 7) * 32},{(icon >> 3) * 32}), drawn at ({SsIconX},{SsIconY}) size {SsIconSize}; manager has {SheetsRegistered()}; counters draw {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagDraws)} copy calls {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagCopyCalls)} sheet seen {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagSheetSeen)} copies {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagCopies)}");
+            Memory.WriteInt(Mailbox.SsIconX, SsIconX);
+            Memory.WriteInt(Mailbox.SsIconY, SsIconY);
+            Memory.WriteInt(Mailbox.SsIconSize, SsIconSize);
+            Memory.WriteInt(Mailbox.SsIconOn, 1);                                       // on LAST
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] sphere icon: weapon {sphere} (class {cls}, icon {icon}) → wepicon cell ({(icon & 7) * 32},{(icon >> 3) * 32}), drawn at ({SsIconX},{SsIconY}) size {SsIconSize}; manager has {SheetsRegistered()}; counters draw {Memory.ReadInt(Mailbox.SsIconDiagDraws)} copy calls {Memory.ReadInt(Mailbox.SsIconDiagCopyCalls)} sheet seen {Memory.ReadInt(Mailbox.SsIconDiagSheetSeen)} copies {Memory.ReadInt(Mailbox.SsIconDiagCopies)}");
         }
 
         /// <summary>Which of the sheets the icon cave can draw from are registered right now — the one failure it cannot report.</summary>
@@ -616,8 +623,8 @@ namespace Dark_Cloud_Improved_Version
 
                 // Detonate (Big Bang): the guard charge hangs a bomb over the locked target for her shot to drop, or makes the next
                 // pellet a bomb; Big Bang's blast and flash where it lands; explosions cannot hurt her.
-                if (lastSphere == Items.bigbang && sphere != Items.bigbang) BombShot.Stop();
-                BombShot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.bigbang);
+                if (lastSphere == Items.bigbang && sphere != Items.bigbang) BigBangShot.Stop();
+                BigBangShot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.bigbang);
 
                 // Lightning (Sword of Zeus): the guard charge primes the sword's bolts — the volley on a release with no lock; locked on, a
                 // bolt on every pellet hit for five seconds; the shot charge's pellet calls the charge bolt down wherever it dies.
@@ -638,7 +645,7 @@ namespace Dark_Cloud_Improved_Version
 
                 // The Halberd line's charge (Halberd / Scorpion / Mirage / Cactus / Hercules' Wrath / Terra Sword / Babel's Spear): a
                 // 0.5 s held shot fires a pellet at the sphere's form — bigger, faster, 1.5× the attack.
-                HerculesWrath.DriveSphere(sphere, active);
+                HalberdLineCharge.DriveSphere(sphere, active);
 
                 // Swift Strikes (Shamshir / Dusack / 7 Branch Sword / Atlamillia Sword / Chronicle Sword) and the Partisan's quick combo:
                 // her draw plays ×1.6 faster and her shoot at the fastest step that still fires.
@@ -744,7 +751,7 @@ namespace Dark_Cloud_Improved_Version
             SuperSteve.DriveSmallSword(false);
             Shamshir.DriveSphere(false);
             Dusack.DriveSphere(false);
-            HerculesWrath.DriveSphere(0, false);
+            HalberdLineCharge.DriveSphere(0, false);
             Sax.DriveSphere(0, false);
             SuperSteve.DriveTsukikage(false);
             SuperSteve.DriveHeavensCloud(false);   // resets the flash latches
@@ -758,7 +765,7 @@ namespace Dark_Cloud_Improved_Version
             DragonsY.Stop();
             Matador.Stop();   // the resident slingshot copy too
             SolarShot.Stop();
-            BombShot.Stop();
+            BigBangShot.Stop();
             DoubleImpact.Stop();
             BanditSlingshot.Stop();
             SteelSlingshot.Stop();

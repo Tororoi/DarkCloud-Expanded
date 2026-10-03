@@ -259,7 +259,7 @@ namespace Dark_Cloud_Improved_Version
                 await box.ShowWindowDialogAsync(this);
                 Topmost = false;
                 Label_UserMode_PlaceholderText.Text = "A possible save state used! Mod has been terminated.";
-                Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 0);
+                Memory.WriteByte(Mailbox.PineProbe, 0);
                 Close();
             });
         }
@@ -322,20 +322,20 @@ namespace Dark_Cloud_Improved_Version
                 // ── Graphics ──
                 bool graphicsOn = (gfx & 0x01) != 0;
                 CBox_UserMode_Graphics.IsChecked = graphicsOn;
-                Memory.WriteByte(CodeCaves.Mailbox.Option4, (byte)(graphicsOn ? 1 : 0));
+                Memory.WriteByte(Mailbox.Option4, (byte)(graphicsOn ? 1 : 0));
 
                 bool fovOn = (gfx & 0x02) != 0;
                 CBox_UserMode_Widescreen.IsChecked = fovOn;
-                Memory.WriteByte(CodeCaves.Mailbox.Option3, (byte)(fovOn ? 1 : 0));
+                Memory.WriteByte(Mailbox.Option3, (byte)(fovOn ? 1 : 0));
 
                 // ── Audio ──
                 bool beepsOn = (aud & 0x01) != 0;
                 CBox_UserMode_WeaponBeeps.IsChecked = beepsOn;
-                Memory.WriteByte(CodeCaves.Mailbox.Option1, (byte)(beepsOn ? 1 : 0));
+                Memory.WriteByte(Mailbox.Option1, (byte)(beepsOn ? 1 : 0));
 
                 bool battleMusicOn = (aud & 0x02) != 0;
                 CBox_UserMode_BattleMusic.IsChecked = battleMusicOn;
-                Memory.WriteByte(CodeCaves.Mailbox.Option2, (byte)(battleMusicOn ? 1 : 0));
+                Memory.WriteByte(Mailbox.Option2, (byte)(battleMusicOn ? 1 : 0));
 
                 bool attackSoundsOn = (aud & 0x04) != 0;
                 Cbox_Usermode_AttackSounds.IsChecked = attackSoundsOn;
@@ -382,7 +382,7 @@ namespace Dark_Cloud_Improved_Version
 
         protected override void OnClosed(EventArgs e)
         {
-            Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 0);
+            Memory.WriteByte(Mailbox.PineProbe, 0);
             base.OnClosed(e);
             Environment.Exit(0);
         }
@@ -439,7 +439,7 @@ namespace Dark_Cloud_Improved_Version
         private void CBox_UserMode_WeaponBeepsChanged(object sender, RoutedEventArgs e)
         {
             bool on = CBox_UserMode_WeaponBeeps.IsChecked == true;
-            Memory.WriteByte(CodeCaves.Mailbox.Option1, (byte)(on ? 1 : 0));
+            Memory.WriteByte(Mailbox.Option1, (byte)(on ? 1 : 0));
             WriteOptionBit(OptAudioByte, 0x01, on);   // audio bit0
         }
 
@@ -447,21 +447,21 @@ namespace Dark_Cloud_Improved_Version
         {
             // Handles the Battle Music toggle (legacy method name).
             bool on = CBox_UserMode_BattleMusic.IsChecked == true;
-            Memory.WriteByte(CodeCaves.Mailbox.Option2, (byte)(on ? 1 : 0));
+            Memory.WriteByte(Mailbox.Option2, (byte)(on ? 1 : 0));
             WriteOptionBit(OptAudioByte, 0x02, on);   // audio bit1
         }
 
         private void CBox_UserMode_Widescreen_Changed(object sender, RoutedEventArgs e)
         {
             bool on = CBox_UserMode_Widescreen.IsChecked == true;
-            Memory.WriteByte(CodeCaves.Mailbox.Option3, (byte)(on ? 1 : 0));
+            Memory.WriteByte(Mailbox.Option3, (byte)(on ? 1 : 0));
             WriteOptionBit(OptGraphicsByte, 0x02, on);   // graphics bit1
         }
 
         private void CBox_UserMode_Graphics_Changed(object sender, RoutedEventArgs e)
         {
             bool on = CBox_UserMode_Graphics.IsChecked == true;
-            Memory.WriteByte(CodeCaves.Mailbox.Option4, (byte)(on ? 1 : 0));
+            Memory.WriteByte(Mailbox.Option4, (byte)(on ? 1 : 0));
             WriteOptionBit(OptGraphicsByte, 0x01, on);   // graphics bit0
         }
 

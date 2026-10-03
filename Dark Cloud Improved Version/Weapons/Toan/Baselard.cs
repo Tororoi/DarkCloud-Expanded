@@ -39,7 +39,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!active)
             {
-                if (_stampedDamage != int.MinValue) { Memory.WriteInt(CodeCaves.Mailbox.PelletKickDamage, 0); _stampedDamage = int.MinValue; }
+                if (_stampedDamage != int.MinValue) { Memory.WriteInt(Mailbox.PelletKickDamage, 0); _stampedDamage = int.MinValue; }
                 return;
             }
             long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
@@ -49,10 +49,10 @@ namespace Dark_Cloud_Improved_Version
                 if (Memory.ReadInt(PlayerShotPool.FlagAddr(pool, i)) == 0) continue;
                 int damage = Memory.ReadInt(PlayerShotPool.DamageAddr(pool, i));
                 if (damage <= 0 || damage == _stampedDamage) return;                     // a marked pellet (another ability's) or the one already stamped
-                Memory.WriteFloat(CodeCaves.Mailbox.PelletKickStrength, KickStrength);
-                Memory.WriteFloat(CodeCaves.Mailbox.PelletKickDecay, KickDecay);
-                Memory.WriteVec3 (CodeCaves.Mailbox.PelletKickOrigin, 0f, 0f, 0f);             // the kick-origin offset: none, out of the sphere itself
-                Memory.WriteInt  (CodeCaves.Mailbox.PelletKickDamage, damage);
+                Memory.WriteFloat(Mailbox.PelletKickStrength, KickStrength);
+                Memory.WriteFloat(Mailbox.PelletKickDecay, KickDecay);
+                Memory.WriteVec3 (Mailbox.PelletKickOrigin, 0f, 0f, 0f);             // the kick-origin offset: none, out of the sphere itself
+                Memory.WriteInt  (Mailbox.PelletKickDamage, damage);
                 _stampedDamage = damage;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Baselard] heavy hand on her pellets: kick {KickStrength:F2} fading {KickDecay:F2} stamped on damage {damage}");
                 return;

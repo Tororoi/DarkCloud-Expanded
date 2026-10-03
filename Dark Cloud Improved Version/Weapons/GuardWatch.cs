@@ -26,5 +26,16 @@ namespace Dark_Cloud_Improved_Version
             int mid = Memory.ReadInt(CCharacter.Base + CCharacter.MotionId);
             return mid == GuardLoopMotion || mid == GuardMoveMotion || mid == GuardMoveMotionToan;
         }
+
+        /// <summary>The guard channel as the Mirage's family reads it, one read of each: <c>r1</c> — R1 down; <c>inPose</c> — R1 down
+        /// AND the active character in the guard loop or guard walk (<see cref="GuardLoopMotion"/> / <see cref="GuardMoveMotion"/>:
+        /// Xiao's and Ungaga's; Toan's walk is not a hold pose here). Both out, because a charge treats "R1 held but out of the
+        /// pose" (a swing, a hit) differently from a release.</summary>
+        internal static (bool r1, bool inPose) HoldPose()
+        {
+            bool r1 = (Memory.ReadUShort(Addresses.buttonInputs) & (ushort)Button.R1) != 0;
+            int mid = Memory.ReadInt(CCharacter.Base + CCharacter.MotionId);
+            return (r1, r1 && (mid == GuardLoopMotion || mid == GuardMoveMotion));
+        }
     }
 }

@@ -40,7 +40,7 @@ namespace Dark_Cloud_Improved_Version
             int At(int cell, int x, int y) { int c = cell - CellBase; return px + ((c >> 2) * Cell + y) * Size + (c & (Cols - 1)) * Cell + x; }
             bool SameAsStone(int cell) { for (int y = 0; y < Cell; y++) for (int x = 0; x < Cell; x++) if (tim[At(cell, x, y)] != tim[At(StoneCell, x, y)]) return false; return true; }
             bool Blank(int cell) { for (int y = 0; y < Cell; y++) for (int x = 0; x < Cell; x++) if (tim[At(cell, x, y)] != BlankIndex) return false; return true; }
-            int clutAt = cl + Swizzle(BlankIndex) * 4;
+            int clutAt = cl + Tim8.Csm1Index(BlankIndex) * 4;                 // where the GS reads the index's colour (CSM1 order)
             bool clear = IsoBytes.U32(tim, clutAt) == 0;
 
             if (Blank(BlankCell) && clear) { log($"pellet sheet: cell {BlankCell} already blank — skipped"); return; }
@@ -53,8 +53,5 @@ namespace Dark_Cloud_Improved_Version
             arc.Redirect(SheetName, outp);
             log($"pellet sheet: cell {BlankCell} painted transparent (palette index {BlankIndex} -> 0,0,0,0); {file.Length:N0} -> {outp.Length:N0} B");
         }
-
-        /// <summary>Where an 8-bit index's colour sits in the CLUT as the GS reads it (CSM1: bits 3 and 4 swapped).</summary>
-        private static int Swizzle(int i) => (i & ~0x18) | ((i & 0x08) << 1) | ((i & 0x10) >> 1);
     }
 }

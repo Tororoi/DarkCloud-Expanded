@@ -80,7 +80,7 @@ took and the pool's state) or from its store, skips, and no-room events.
 The ELF cave band (0x1FB0000–0x1FB4000) is full and may not grow. The cave (2,864 B) is hosted in the body of
 `DebugInfomationDraw` (main 0x1B3780, 3,952 B): the developers' on-screen debug overlay, gated by `DebugStatus` and
 called only from dun.bin's `DrawProcess` behind a debug flag. Its first word becomes `jr ra` (the caller returns at
-once) and the cave starts at +8 with a four-entry branch table at fixed offsets (`CodeCaves.DebugInfoCave`), so the
+once) and the cave starts at +8 with a four-entry branch table at fixed offsets (`DebugInfoCave`), so the
 hooks never depend on the assembly's layout. The same pattern as `MemoryMapDump` in dun.bin (`DunCave`).
 
 ## Register notes for the hooks

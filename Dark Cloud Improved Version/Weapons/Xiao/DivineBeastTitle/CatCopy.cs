@@ -160,11 +160,11 @@ namespace Dark_Cloud_Improved_Version
                 while (len < 0x20 && block[o + len] != 0) len++;
                 if (System.Text.Encoding.ASCII.GetString(block, o, len) == HeadNodeName) { head = i; break; }
             }
-            Memory.WriteInt(CodeCaves.Mailbox.CatHeadNode, head >= 0 ? (int)(CodeCaves.NodePoolGuest + head * CFrameVu1.NodeStride) : 0);   // the cave's contact point = this frame's posed position
+            Memory.WriteInt(CatBlock.CatHeadNode, head >= 0 ? (int)(CodeCaves.NodePoolGuest + head * CFrameVu1.NodeStride) : 0);   // the cave's contact point = this frame's posed position
             int ga = FindNode(block, GlowNodeA), gb = FindNode(block, GlowNodeB);                                                              // the glow's anchor frames
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowNodeA, ga >= 0 ? (int)(CodeCaves.NodePoolGuest + ga * CFrameVu1.NodeStride) : 0);
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowNodeB, gb >= 0 ? (int)(CodeCaves.NodePoolGuest + gb * CFrameVu1.NodeStride) : 0);
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowReady, 0);
+            Memory.WriteInt(CatBlock.CatGlowNodeA, ga >= 0 ? (int)(CodeCaves.NodePoolGuest + ga * CFrameVu1.NodeStride) : 0);
+            Memory.WriteInt(CatBlock.CatGlowNodeB, gb >= 0 ? (int)(CodeCaves.NodePoolGuest + gb * CFrameVu1.NodeStride) : 0);
+            Memory.WriteInt(CatBlock.CatGlowReady, 0);
             if (ga < 0 || gb < 0) Log($"glow anchors: {GlowNodeA} n{ga}, {GlowNodeB} n{gb} — falling back to the root");
             if (head < 0) return;
             uint poolG = (uint)CodeCaves.NodePoolGuest;
@@ -213,7 +213,7 @@ namespace Dark_Cloud_Improved_Version
         /// calls and <see cref="CopyMeshes"/> has already given every cat mesh a PRIVATE CVisualMDT in the mod's cave, so this
         /// copies __vt__13CVisualMDTVu1, points its two DrawVu1 slots at ElfCave.CatMaskTint, and writes that copy into the
         /// mask's visual alone — no engine code touched, and the only pointer to the cave is in an object the mod allocated.
-        /// The cave adds Mailbox.CatCapeTint, the same delta the cape uses, so the two match by construction. ⚠ The vptr is at
+        /// The cave adds CatBlock.CatCapeTint, the same delta the cape uses, so the two match by construction. ⚠ The vptr is at
         /// +0x08, not offset 0; refuses unless the visual really holds the stock vtable, so a layout surprise is a no-op.</summary>
         internal static void MaskTint()
         {
@@ -223,14 +223,14 @@ namespace Dark_Cloud_Improved_Version
             { Log($"mask tint: the mask visual's vtable is 0x{vt:X}, not the expected 0x{CVisualMDT.Vu1Vtable:X} — leaving it alone"); return; }
             byte[] tbl = Memory.ReadBytesBatch(Memory.ToMmu(CVisualMDT.Vu1Vtable), CVisualMDT.Vu1VtableBytes);
             if (tbl == null) { Log("mask tint: could not read the vtable"); return; }
-            BitConverter.GetBytes(CodeCaves.ElfCave.CatMaskTint).CopyTo(tbl, CVisualMDT.Vu1VtableDrawSlot);           // the uint* overload
-            BitConverter.GetBytes(CodeCaves.ElfCave.CatMaskTint + 0x0Cu).CopyTo(tbl, CVisualMDT.Vu1VtableDrawSlot + 4);  // the packet overload
+            BitConverter.GetBytes(ElfCave.CatMaskTint).CopyTo(tbl, CVisualMDT.Vu1VtableDrawSlot);           // the uint* overload
+            BitConverter.GetBytes(ElfCave.CatMaskTint + 0x0Cu).CopyTo(tbl, CVisualMDT.Vu1VtableDrawSlot + 4);  // the packet overload
             long cave = TakeCave(CVisualMDT.Vu1VtableBytes, out uint caveG);
             if (cave == 0) { Log("mask tint: no cave room for the vtable copy"); return; }
             Memory.WriteBytesBatch(cave, tbl);
             Guard(cave, tbl, "mask vtable copy");
             Memory.WriteUInt(_maskVisual + CVisualMDT.VisVtable, caveG);
-            Log($"mask tint: the mask draws through its own vtable at 0x{caveG:X} → cave 0x{CodeCaves.ElfCave.CatMaskTint:X}, under the cape's ambient");
+            Log($"mask tint: the mask draws through its own vtable at 0x{caveG:X} → cave 0x{ElfCave.CatMaskTint:X}, under the cape's ambient");
         }
 
         /// <summary>Give the cat's software-skinned meshes their own copies in the MeshCave (CopyMeshNodes' recipe). HER copy
@@ -720,7 +720,7 @@ namespace Dark_Cloud_Improved_Version
         {
             Memory.WriteInt(DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 1);
             Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, _held ? 1 : 0);
-            Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 1);
+            Memory.WriteInt(Mailbox.MirageSceneGate, 1);
         }
 
         /// <summary>The data the copy plays but does not own — HER .mot tracks (the wing bones' keys) and HER .wgt runs (the wing and mask

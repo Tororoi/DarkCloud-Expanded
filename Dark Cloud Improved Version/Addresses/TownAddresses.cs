@@ -665,7 +665,7 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// ⚠ RETIRED (2026-08): the anchor toggle is GONE. The ISO split caves (IsoPatcher.PatchFishLineSplit)
     /// bake the above/below rest-length cutover at FIXED A=18 and hook depth is now the distpBelow data word
-    /// (CodeCaves.Mailbox.LineDistpBelow), so the cold patch is NO LONGER INSTALLED — the vanilla
+    /// (Mailbox.LineDistpBelow), so the cold patch is NO LONGER INSTALLED — the vanilla
     /// instructions already compute point[18]. The Sites/NewLui machinery survives only so a mod RELAUNCH
     /// against an already-patched game can detect the leftover patch and pin BobberPtr back to point[18]
     /// (un-patching possibly-JIT'd code is the hot-write crash). DistpAddr/VanillaDistp remain live — they

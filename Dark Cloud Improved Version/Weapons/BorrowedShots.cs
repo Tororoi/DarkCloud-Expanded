@@ -359,6 +359,18 @@ namespace Dark_Cloud_Improved_Version
             return fx;
         }
 
+        /// <summary>A <see cref="CustomConfig"/> that hurts nothing: the same cached config, every phase radius (muzzle, flying, impact,
+        /// expiry) set to zero through <see cref="SetPhaseRadius"/>, so the effect is the visual alone and its ability does any
+        /// hurting itself. Null when the template config cannot be read.</summary>
+        internal static BorrowedEffect VisualOnly(int templateIndex, string name, short muzzleMotion, short flyMotion, short impactMotion, short expireMotion, string dir = EffectDir,
+                                                  long instance = ShotEffectPack.CharaMainEffect)
+        {
+            BorrowedEffect fx = CustomConfig(templateIndex, name, muzzleMotion, flyMotion, impactMotion, expireMotion, dir, instance);
+            if (fx == null) return null;
+            for (int phase = 0; phase < 4; phase++) SetPhaseRadius(fx, phase, 0f);
+            return fx;
+        }
+
         /// <summary>DIAGNOSTIC: the container the read buffer holds after an entry — its records by name (the pack
         /// format: name at +0, data offset +0x40, size +0x44, next record +0x48 — GetPackFile walks it by name) — and
         /// the instance's model root. An entry that carved nothing is either a file that never arrived (the buffer

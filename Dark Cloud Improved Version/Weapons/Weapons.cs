@@ -4398,7 +4398,7 @@ namespace Dark_Cloud_Improved_Version
         private const long ComboHitRadiusAddr = 0x202A1C70;
 
         /// <summary>Put Toan's charge-attack hit radii back to what the game bakes in. The ISO patch
-        /// (ElfWeaponPatches.PatchChargeHitRadius) turned the two immediates into reads of
+        /// (ElfToanMeleePatches.PatchChargeHitRadius) turned the two immediates into reads of
         /// CodeCaves.ChargeHitRadius, so these words ARE the radii now: seeded at startup and restored by any
         /// ability that resized them, because a 0 here is a charge attack that hits nothing.</summary>
         /// <summary>Item-bomb blasts back to the vanilla knockdown reaction (the ISO patch made it data).</summary>

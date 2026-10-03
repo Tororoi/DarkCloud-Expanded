@@ -702,7 +702,7 @@ namespace Dark_Cloud_Improved_Version
 
                                                 if (currentCharacter == 3)
                                                 {
-                                                    Memory.WriteByte(CodeCaves.Mailbox.Element, 1);
+                                                    Memory.WriteByte(Mailbox.Element, 1);
                                                 }
 
                                                 Memory.WriteByteArray(0x21E59450, elemRGBs[elementSelected]);

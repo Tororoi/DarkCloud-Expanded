@@ -8,7 +8,7 @@ namespace Dark_Cloud_Improved_Version
     /// tint would whiten Toan too. A mesh reaches the screen through the virtual DrawVu1 slots of its CVisualMDT, so the
     /// blade's visual (the model's private object: rebuilt with every weapon swap, shared with nothing) is given a private
     /// copy of its class vtable whose DrawVu1 slots point at ElfCave.SolarBladeTint — two entries into the Divine Beast cat's
-    /// mask-tint cave body, which adds Mailbox.CatCapeTint to the ambient for that one draw. A weapon mesh is a rigid
+    /// mask-tint cave body, which adds CatBlock.CatCapeTint to the ambient for that one draw. A weapon mesh is a rigid
     /// CVisualVu1 (vtable 0x2A11C0), which is why the mask cave's own entries (the skinned class's DrawVu1) cannot serve it.
     /// Toan's sword and Xiao's cat are never live at once, so the cave body and its tint word are the blade's while the Sun
     /// Sword is in hand. Nothing of the engine's is written: the vtable copy sits in CodeCaves.SolarBladeVtable and the only
@@ -68,7 +68,7 @@ namespace Dark_Cloud_Improved_Version
             white ??= White;
             float v = k * Math.Max(white[0], Math.Max(white[1], white[2]));
             if (Math.Abs(v - _last) < 0.5f) return;
-            Memory.WriteVec3(CodeCaves.Mailbox.CatCapeTint, k * white[0], k * white[1], k * white[2]);
+            Memory.WriteVec3(CatBlock.CatCapeTint, k * white[0], k * white[1], k * white[2]);
             _last = v;
         }
 
@@ -82,7 +82,7 @@ namespace Dark_Cloud_Improved_Version
             }
             if (_armed)
             {
-                Memory.WriteVec3(CodeCaves.Mailbox.CatCapeTint, 0f, 0f, 0f);
+                Memory.WriteVec3(CatBlock.CatCapeTint, 0f, 0f, 0f);
                 if (Memory.ReadGuestPtr(_visual + CVisualMDT.VisVtable) == CodeCaves.SolarBladeVtableGuest)
                     Memory.WriteUInt(_visual + CVisualMDT.VisVtable, _stockVtable);
                 _armed = false;
@@ -115,8 +115,8 @@ namespace Dark_Cloud_Improved_Version
             {
                 // The entries that enter the tint cave for this visual's class: a weapon mesh is a rigid CVisualVu1 (ElfCave.SolarBladeTint);
                 // the skinned CVisualMDTVu1 would take the mask cave's own entries.
-                uint entry = vt == CVisualMDT.RigidVtable ? CodeCaves.ElfCave.SolarBladeTint
-                           : vt == CVisualMDT.Vu1Vtable   ? CodeCaves.ElfCave.CatMaskTint : 0;
+                uint entry = vt == CVisualMDT.RigidVtable ? ElfCave.SolarBladeTint
+                           : vt == CVisualMDT.Vu1Vtable   ? ElfCave.CatMaskTint : 0;
                 if (entry == 0) { WarnOnce($"the blade visual's vtable is 0x{vt:X}, neither CVisualVu1 nor CVisualMDTVu1 — no blade tint"); return false; }
                 byte[] tbl = Memory.ReadBytesBatch(Memory.ToMmu(vt), CVisualMDT.Vu1VtableBytes);
                 if (tbl == null) return false;
@@ -125,7 +125,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteBytesBatch(CodeCaves.SolarBladeVtable, tbl);
                 Memory.WriteUInt(visM + CVisualMDT.VisVtable, CodeCaves.SolarBladeVtableGuest);
                 _stockVtable = vt;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BladeTint] {ModelCode} blade visual 0x{vis:X} (class vtable 0x{vt:X}) draws through its own vtable (0x{CodeCaves.SolarBladeVtableGuest:X}) → cave 0x{entry:X}");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SolarBlade] {ModelCode} blade visual 0x{vis:X} (class vtable 0x{vt:X}) draws through its own vtable (0x{CodeCaves.SolarBladeVtableGuest:X}) → cave 0x{entry:X}");
             }
             _visual = visM; _weaponId = wid; _armed = true;
             return true;
@@ -146,7 +146,7 @@ namespace Dark_Cloud_Improved_Version
                 for (int i = 0; i < 3; i++) _unlitOrig[i] = Memory.ReadFloat(_unlitNode + CFrameVu1.UnlitColourR + i * 4);
                 _unlitArmed = true; _unlitWeaponId = wid;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[BladeTint] {ModelCode} unlit mesh 0x{UnlitWord:X8} at 0x{_unlitNode:X}: constant colour ({_unlitOrig[0]:F0},{_unlitOrig[1]:F0},{_unlitOrig[2]:F0})");
+                    $"[SolarBlade] {ModelCode} unlit mesh 0x{UnlitWord:X8} at 0x{_unlitNode:X}: constant colour ({_unlitOrig[0]:F0},{_unlitOrig[1]:F0},{_unlitOrig[2]:F0})");
             }
             for (int i = 0; i < 3; i++)
                 Memory.WriteFloat(_unlitNode + CFrameVu1.UnlitColourR + i * 4, _unlitOrig[i] + (UnlitMax - _unlitOrig[i]) * k);
@@ -156,7 +156,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_warned) return;
             _warned = true;
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[BladeTint] " + what);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SolarBlade] " + what);
         }
     }
 }
