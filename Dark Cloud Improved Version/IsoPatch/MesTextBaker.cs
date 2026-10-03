@@ -67,7 +67,12 @@ namespace Dark_Cloud_Improved_Version
         /// regresses. (Prepending the text instead moves every message and corrupted unrelated dialogue, so it
         /// is avoided.) Verified: every non-sentinel message decodes byte-identically to a plain append, and
         /// 2000 lands in-buffer for all three custom towns.</summary>
-        internal static byte[] AppendMes(byte[] orig, params (int id, ushort[] words)[] add)
+        internal static byte[] AppendMes(byte[] orig, params (int id, ushort[] words)[] add) => AppendMes(orig, true, add);
+
+        /// <summary><see cref="AppendMes(byte[], (int, ushort[])[])"/>, the trailing padding trimmed or kept: KEPT for a bank the engine
+        /// allocates by its file size (the system bank: what follows it in its allocator must not move), so the file grows by
+        /// exactly the new entries.</summary>
+        internal static byte[] AppendMes(byte[] orig, bool trimPadding, params (int id, ushort[] words)[] add)
         {
             int cnt = U16(orig, 0), f2 = U16(orig, 2), n = add.Length, newCount = cnt + n;
             int idxEnd = 4 + cnt * 4;                       // byte where the original text blob starts
@@ -78,7 +83,7 @@ namespace Dark_Cloud_Improved_Version
             while (blobEnd > idxEnd && orig[blobEnd - 1] == 0) blobEnd--;    // last non-zero byte of the blob
             const int Gap = 16;                                             // zero words kept as a terminator margin
             int raw = (blobEnd - idxEnd) + Gap; raw += raw & 1;             // word-align
-            int blobLen = Math.Min(orig.Length - idxEnd, raw);
+            int blobLen = trimPadding ? Math.Min(orig.Length - idxEnd, raw) : orig.Length - idxEnd;
 
             var ents = new List<(int id, int off)>(newCount);
             for (int i = 0; i < cnt; i++)                  // existing: +n absorbs the index-growth shift; text unmoved

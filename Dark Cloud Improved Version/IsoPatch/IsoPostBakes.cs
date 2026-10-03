@@ -12,6 +12,7 @@ namespace Dark_Cloud_Improved_Version
         {
             ["monster-scripts"] = MonsterScriptBakes.Run,
             ["borrowed-shots"]  = BorrowedShotBakes.Run,
+            ["confuse-ability"] = ConfuseAbilityBakes.Run,
             ["town-models"]     = TownModelBakes.Run,
             ["town-collision"]  = TownCollisionBakes.Run,
             ["cat-pack"]        = CatPackBakes.Run,

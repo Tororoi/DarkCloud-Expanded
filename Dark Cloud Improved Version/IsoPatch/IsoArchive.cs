@@ -73,6 +73,18 @@ namespace Dark_Cloud_Improved_Version
             _tail = Align(_tail + data.Length);
         }
 
+        /// <summary>The file rewritten where it stands (same size only — an in-place edit such as a texture tile; no tail space used), read back.</summary>
+        internal void Overwrite(string name, byte[] data)
+        {
+            long slot = SlotOf(name);
+            uint off = RdU32(_fs, slot), size = RdU32(_fs, slot + 4);
+            if (data.Length != size) throw new IOException($"{name}: an in-place overwrite must keep its size ({size:N0} B, given {data.Length:N0}).");
+            Wr(_fs, _datIso + off, data);
+            byte[] back = Rd(_fs, _datIso + off, data.Length);
+            if (!back.AsSpan().SequenceEqual(data)) throw new IOException($"{name}: readback after overwrite differs.");
+            _log($"overwrote {name} in place ({data.Length:N0} B)");
+        }
+
         public void Dispose() => _fs.Dispose();
     }
 }

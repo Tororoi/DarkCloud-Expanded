@@ -522,6 +522,9 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>tools/stubs/fall_drive.s (ElfWeaponPatches.PatchFallDrive): the blade fall's MODE 4 — falling and following,
             /// its stop able to follow a float, and CodeCaves.FallDrive's drive rows — between the blade-fall cave and the spin cave.</summary>
             internal const uint FallDrive        = Host + 0xCF0;  // 0x1B54B0, 364 B → 0x1B561C (the host ends at 0x1B5640)
+            /// <summary>tools/stubs/confuse_name.s (ElfWeaponPatches.PatchConfuseAbility): the status window's SPECIAL list names ability bit
+            /// 14 ("Confuse") from system message 0x45 — NowWeaponStatus's `addiu a0,a3,0x45` (main 0x20B8A8) jumps here.</summary>
+            internal const uint ConfuseName      = Host + 0xE5C;  // 0x1B561C, 28 B → 0x1B5638
             /// <summary>Where the guard-crush cave first sat (0x1B5600): an ISO patched then has its hook here, accepted on re-patching.</summary>
             internal const uint GuardCrushFirst  = Host + 0xE40;
         }

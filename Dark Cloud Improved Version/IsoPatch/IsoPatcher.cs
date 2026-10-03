@@ -208,6 +208,7 @@ namespace Dark_Cloud_Improved_Version
         {
             using var arc = new IsoArchive(outIso, progress);
             BorrowedShotBakes.Run(arc, progress);
+            ConfuseAbilityBakes.Run(arc, progress);             // the Confuse ability's name (system banks) and icon (charaface)
         }
 
         /// <summary>Queens' snake-statue part collision, the Yellow Drops west bank, and the fishing collision bins the

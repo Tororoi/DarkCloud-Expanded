@@ -691,6 +691,59 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < b.Length; i += 4) WrU32(fs, ElfOff(cave + (uint)i), U32(b, i));
         }
 
+        /// <summary>The CONFUSE weapon ability's ELF side (docs/confuse-ability.md; the name and icon are ConfuseAbilityBakes'): ability bit
+        /// 14 (0x4000, Effect2 bit 0x40) shown in the status window — the SPECIAL list's names (MenuClsMes::NowWeaponStatus) and its
+        /// icons and bars (MenuClsMes::Draw1), and the icon grid (WeaponOptionStatusDraw) walk bits 1..13 (`slti …,0xE`): raised to 14
+        /// (0xF); the bar's colour (IsWeaponOptionGoodOrBad) says good (blue) for it; the list's name lookup (bit + 0x45)
+        /// goes through tools/stubs/confuse_name.s so bit 14 reads message 0x45, not 0x53 ("Slot 1"); and Babel's Spear's
+        /// template carries the bit natively (a SynthSphere of it carries the ability to other weapons as any ability does).</summary>
+        internal static void PatchConfuseAbility(FileStream fs, Func<uint, long> ElfOff)
+        {
+            uint cave = CodeCaves.DebugIfCave.ConfuseName;
+            byte[] b = Embedded("confuseName.bin");
+            if (b.Length % 4 != 0 || U32(b, 0) != 0x24E40045u || U32(b, b.Length - 8) != MipsAsm.J(0x0020B8B0))
+                throw new IOException($"confuseName.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (cave + (uint)b.Length > CodeCaves.DebugIfCave.Host + CodeCaves.DebugIfCave.HostSpan)
+                throw new IOException("confuseName.bin overruns DebugInfomationIF's span.");
+            void Word(uint at, uint vanilla, uint ours, string what)
+            {
+                uint cur = RdU32(fs, ElfOff(at));
+                if (cur != vanilla && cur != ours) throw new IOException($"{what} at 0x{at:X} is 0x{cur:X8}, not vanilla 0x{vanilla:X8} — unmodified Dark Cloud (USA) ISO expected.");
+                WrU32(fs, ElfOff(at), ours);
+            }
+            if (RdU32(fs, ElfOff(0x0020B8AC)) != 0x8E08001Cu) throw new IOException("NowWeaponStatus's hook delay slot (0x20B8AC) is not `lw t0,0x1C(s0)`.");
+            for (int i = 0; i < b.Length; i += 4) WrU32(fs, ElfOff(cave + (uint)i), U32(b, i));
+            Word(0x0020B8A8, 0x24E40045u, MipsAsm.J(cave), "NowWeaponStatus's name lookup");
+            Word(0x0020B8E4, 0x28E1000Eu, 0x28E1000Fu, "NowWeaponStatus's ability loop bound");
+            Word(0x0020F9D4, 0x2AA1000Eu, 0x2AA1000Fu, "WeaponOptionStatusDraw's ability loop bound");
+            Word(0x0020BDC4, 0x2A21000Eu, 0x2A21000Fu, "MenuClsMes::Draw1's ability loop bound (the SPECIAL list's icons and bars)");
+            // IsWeaponOptionGoodOrBad (0x20F770): the bar's colour (1 = good, blue; 0 = bad, red) from a 14-entry table of shorts
+            // (0x293C60) it copies to the stack — bit 14 read past the copy. Rewritten in place: bit 14 is good, every other bit
+            // reads the same static table directly.
+            uint[] goodOrBad =
+            {
+                0x00041040u,   // sll   v0,a0,1
+                0x2401000Eu,   // addiu at,zero,14
+                0x10810004u,   // beq   a0,at,good
+                0x3C030029u,   // lui   v1,0x0029            (delay slot)
+                0x00621821u,   // addu  v1,v1,v0
+                0x03E00008u,   // jr    ra
+                0x84623C60u,   // lh    v0,0x3C60(v1)        (delay slot: the table at 0x293C60)
+                0x03E00008u,   // good: jr ra
+                0x24020001u,   // addiu v0,zero,1           (delay slot)
+                0, 0, 0, 0, 0, 0, 0,
+            };
+            uint g0 = RdU32(fs, ElfOff(0x0020F770));
+            if (g0 != 0x27BDFFE0u && g0 != goodOrBad[0] || RdU32(fs, ElfOff(0x0020F7B0)) != 0x27BDFFF0u)
+                throw new IOException($"IsWeaponOptionGoodOrBad at 0x20F770 is not vanilla (0x{g0:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+            for (int i = 0; i < goodOrBad.Length; i++) WrU32(fs, ElfOff(0x0020F770 + (uint)(i * 4)), goodOrBad[i]);
+            // Babel's Spear: WeaponList[357 − 257] Effect2 |= 0x40 (bit 0x4000 of the live ability word)
+            uint e2 = (uint)(WeaponList.NativeBase + (Items.babelsspear - WeaponList.FirstItemId) * WeaponList.Stride + WeaponList.Effect2);
+            uint word = e2 & ~3u; int sh = (int)(e2 & 3) * 8;
+            uint w = RdU32(fs, ElfOff(word));
+            WrU32(fs, ElfOff(word), w | (0x40u << sh));
+        }
+
         /// <summary>The FOLLOW cave (tools/stubs/follow.s, see CodeCaves.DebugInfoCave.Follow): CodeCaves.FollowTable walked every
         /// frame, entered from the fall-drive cave's exit, leaving for the blade-spin cave.</summary>
         internal static void PatchFollow(FileStream fs, Func<uint, long> ElfOff)

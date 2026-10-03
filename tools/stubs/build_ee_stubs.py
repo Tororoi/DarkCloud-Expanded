@@ -65,6 +65,7 @@ STUBS = [
     ('fall_drive.s',             'fallDrive.bin',            0x1B54B0),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchFallDrive): the blade fall's mode 4
     ('guard_crush.s',            'guardCrush.bin',           0x1B4650),    # main ELF: DebugInfomationDraw's free tail (ElfWeaponPatches.PatchGuardCrush): crush-marked hits pass guard windows
     ('guard_mask.s',             'guardMask.bin',            0x1B4390),    # main ELF: DebugInfomationDraw's body after steelLevelUp — the guard gate's per-enemy window mask (ElfWeaponPatches.PatchGuardMask)
+    ('confuse_name.s',           'confuseName.bin',          0x1B561C),    # main ELF: DebugInfomationIF's tail after fallDrive — ability bit 14's name (ElfWeaponPatches.PatchConfuseAbility)
     ('follow.s',                 'follow.bin',               0x1B4690),    # main ELF: DebugInfomationDraw's free tail (ElfWeaponPatches.PatchFollow): a point carried with a unit
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
