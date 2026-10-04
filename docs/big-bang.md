@@ -18,19 +18,20 @@ drives, which the Sword of Zeus (docs/sword-of-zeus.md), Hercules' Wrath (docs/h
 | `Weapons/BladeProp.cs` | the engine-drawn copy of a rigid model in chara slot 3 | JudgementBlade, Babel's Spear, Terra Sword, Cactus, the bomb model |
 | `Weapons/BlastFalloff.cs` | the falloff blast: one hit entry per enemy, stepped by distance, kicked away | Big Bang (both blasts), Sword of Zeus, Hercules' Wrath, Big Bang shot |
 | `Weapons/EnemyBody.cs` | where an enemy's body is: posed hurt spheres, unit height, head height, HP, shared roots | the blast, the hover, EnemyHit, PelletWatch, Confusion, Terra Sword, Cactus, Babel's Spear |
-| `Weapons/EnemyFacing.cs` | every enemy turned to a point and held; the Mirage pointer-table redirect while a blade falls | Big Bang, Big Bang shot, JudgementBlade |
+| `Weapons/EnemyFacing.cs` | every enemy turned to a point and held | Big Bang, Big Bang shot, JudgementBlade |
+| `Weapons/Toan/BigBang/BladeRedirect.cs` | the per-slot target-table redirect while a blade falls (through `AggroTable`) | JudgementBlade (begun at the drop), Big Bang and Sword of Zeus (released when due) |
 | `Weapons/ExplosionImmunity.cs` | the four explosion configs and the bomb reaction made inert for the player | Big Bang, Big Bang shot (through the sphere) |
 
 ## Detonate in play
 
 | moment | what happens |
 |---|---|
-| the regular charge | Toan's meter runs 1.0 → 3.0 (lunge at 1.5, whirlwind at 2.5). The blade whitens across it with the same tint a guard charge uses (`SolarBlade.Set`, driven by the meter instead of held time); it stands aside while Solar Flash owns the blade (`SunSword.FlashArmed`). The lunge is an ordinary swing |
+| the regular charge | Toan's meter runs 1.0 → 3.0 (lunge at 1.5, whirlwind at 2.5). The blade whitens across it with the same tint a guard charge uses (`BladeTint.Set`, driven by the meter instead of held time); it stands aside while Solar Flash owns the blade (`SunSword.FlashArmed`). The lunge is an ordinary swing |
 | the whirlwind | the level-2 charge is the blast. From the moment the meter reaches 2.5 the spin's own hit sphere is written out of reach (`WhirlNoHit` −1000 into `CodeCaves.ChargeHitRadius`'s whirl word; the lunge's stays at its vanilla 6), so nothing is struck twice; as the spin begins the falloff blast goes off at his feet (`BlastFalloff.PlantFalloff` at his position), every enemy is turned to him, and the blade pays `BlastWhp` 20 weapon HP. Guards are crushed for as long as the spin lasts (`GuardGate.NobodyBlocks`): a blocked spin would eat the detonation. Its model is explosion.chr (below) |
 | the guard charge | Solar Flash with `SunSword.BigBangFlash`: share 0.50 of attack, light (236, 226, 255) and fog (242, 236, 255) — a cool white toward pale violet — fog 0.8, prime dim 0.35, blade-glow-only (the blue disc `ToanGlowBakes.BlueName` appears with the judgement blade and goes with it; Toan never carries it). The blinding, the guard break and the lighting pipeline are Solar Flash's |
 | primed, not locked on | the swing is the ordinary flash at `SunSword.FlashWhp` 5 |
 | primed and locked on | the judgement blade hangs over the target (below). The primed swing drops it; the flash waits for the landing |
-| the landing (`BigBang.LandBigBang`) | on one frame: the lighting white-out (`SunSword.BigBangFlash.ArmLighting` + `SolarLighting.Flash`), the burst where it fell, the falloff blast crush-marked through any guard, every enemy turned to the point, the 20 WHP bill. Solar Flash's own tick then runs the rest of the flash — the light hit, the blinding, the blade and glow — once `JudgementBlade.TakeDropLanded` hands it the landing (it is told it is already lit, so it does not white the room twice) |
+| the landing (`BigBang.LandBigBang`) | on one frame: the lighting white-out (`SunSword.BigBangFlash.ArmLighting` + `SceneLighting.Flash`), the burst where it fell, the falloff blast crush-marked through any guard, every enemy turned to the point, the 20 WHP bill. Solar Flash's own tick then runs the rest of the flash — the light hit, the blinding, the blade and glow — once `JudgementBlade.TakeDropLanded` hands it the landing (it is told it is already lit, so it does not white the room twice) |
 | the sphere per victim | the blast is one hit entry per enemy in reach, not one big sphere: damage = attack × 1 / 2 / 3 / 4 at 50 / 40 / 25 / 10 units from the blast to the nearest edge of the enemy's hurt spheres, elementless (no resistance blunts it), kicked away from the blast ≈ 50 units |
 | the auto-guard answer | explosions cannot hurt him while the blade is held (immunity, below). The auto-guard cave makes the engine forget such a hit — which is what keeps his charge alive — and ticks `CodeCaves.AutoGuardSignal`; the mod answers each tick with the controller shove the engine itself uses on a hit (`GuardRumble` 0xC0 for 10 frames: its own are motor 1 at 0xE6/22 frames for a knockdown and 0xDC/12 for a lighter one, so this sits under both) and the guard clang `GuardSe` 0xA2 at volume 90. The count is compared, never zeroed |
 | the lock-on reach | the Cross Hinder's reach, inherited (`ToanLockOn.HoldReach`) |
@@ -104,13 +105,13 @@ and the landing noted for `TakeDropLanded` (after `FlashDelay`, 0).
 
 The dim: along the fall the floor's light and fog are driven down from the profile's prime dim on an exponential ramp
 that peaks at the landing — k = (e^(a·u) − 1) / (e^a − 1) over the fall's fraction u in frames, sharpness
-`SolarLighting.RampSharpness` 4 — over the whole fall for Big Bang (`RampWholeFall`) or only its last
-`SolarLighting.RampFrames` 4 for a strike's brief plunge (Zeus). The flash then lands from the darkest frame.
+`SceneLighting.RampSharpness` 4 — over the whole fall for Big Bang (`RampWholeFall`) or only its last
+`SceneLighting.RampFrames` 4 for a strike's brief plunge (Zeus). The flash then lands from the darkest frame.
 
 ### The engine fall caves
 
-The fall is stepped by the ENGINE once a frame, not by a mod thread: the blade-fall cave (`DebugInfoCave.BladeFall`,
-`ElfFrameChainPatches.PatchBladeFall`, the tail of the camera-pin chain) reads the words at `CodeCaves.BladeFall`
+The fall is stepped by the ENGINE once a frame, not by a mod thread: the vertical-drive cave (`DebugInfoCave.VerticalDrive`,
+`ElfFrameChainPatches.PatchVerticalDrive`, the tail of the camera-pin chain) reads the words at `CodeCaves.VerticalDrive`
 0x21FAF8B0 and writes the copy's chara-slot position:
 
 | word | meaning |
@@ -213,14 +214,17 @@ intercepts at the CheckHitUser match (dun 0x1DBB0E0), consumes a reaction-5 entr
   enemy with knockback 0 (bosses, rooted plants) is not turned. The yaw is written in whichever of the engine's four
   sign/axis conventions the floor's own enemies reveal (`YawConvention`, read once per floor from each live enemy's
   facing against its yaw; −1 leaves the yaw to the engine when none fits within 0.35 rad).
+- `PlayerFacing()` is Toan's model-root Euler Y (or the CCharacter yaw when the Euler is stale), for the things placed
+  square to him.
+
+`BladeRedirect` (`Weapons/Toan/BigBang/BladeRedirect.cs`, the judgement blade's own):
+
 - The REDIRECT (`BeginRedirect` … `ReleaseRedirect`) borrows Mirage's decoy table: each enemy's `_GET_POSITION(-2)` reads
   through `CodeCaves.PtrTable` 0x21F19000 (`RedirectSlots` 20 entries × 4), so while the blade falls every live slot is
   pointed at `CodeCaves.JudgementPos` 0x21FAF860 (x, h, y, 1) — the blade, then the blast — and their own AI turns them
   to it; the pointers go back to the live player `RedirectRelease` 0.4 s before the blinding ends, or `RedirectOrphan`
   2 s after a drop that never flashed. Mirage's writer only runs for Ungaga and Angel Gear's for Xiao, so nothing else
   writes the table while Toan holds it; `TargetRedirectCaves.Armed` (the caves armed at the main menu) gates it.
-- `PlayerFacing()` is Toan's model-root Euler Y (or the CCharacter yaw when the Euler is stale), for the things placed
-  square to him.
 
 ## Measured constants and addresses
 
@@ -238,7 +242,7 @@ intercepts at the CheckHitUser match (dun 0x1DBB0E0), consumes a reaction-5 entr
 | `HoverMargin` / `HoverFallback` / `HoverScale` / `BladeLengthFallback` | 6 / 20 / 2.0 / 12 |
 | `FadeSeconds` / `LockGrace` / `FlashDelay` | 0.25 / 0.35 / 0 s |
 | `Gravity` / `FallTickMs` | 500 u/s² / 2 ms |
-| `CodeCaves.BladeFall` | 0x21FAF8B0 (layout above) |
+| `CodeCaves.VerticalDrive` | 0x21FAF8B0 (layout above) |
 | `CodeCaves.NameHide` / `JudgementPos` / `AutoGuardSignal` / `BombReaction` | 0x21FAF850 / 0x21FAF860 / 0x21FAF840 / 0x21FAF838 |
 | `KickStrength` / `KickDecay` | 3.5 / 0.12 |
 | `Falloff` | (50, 1) (40, 2) (25, 3) (10, 4) |

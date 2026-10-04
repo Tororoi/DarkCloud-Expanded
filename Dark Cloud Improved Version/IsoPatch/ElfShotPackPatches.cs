@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using static Dark_Cloud_Improved_Version.IsoBytes;
 using static Dark_Cloud_Improved_Version.MipsAsm;
-using static Dark_Cloud_Improved_Version.IsoPatcher;
 using static Dark_Cloud_Improved_Version.ElfCaveWriter;
 
 namespace Dark_Cloud_Improved_Version

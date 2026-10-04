@@ -293,7 +293,7 @@ immediate in one of four routines.
   0x1B47C0 — `ElfWeaponPatches.PatchCircleEffects`, hook in `DunPatches`), which applies the same ten effects with
   every figure read from `CodeCaves.CircleTable` (0x01FAF900; pnach-seeded vanilla while its owner word is 0). The
   two "to max" circles can also drop RewardCount items into the bag while there is room. `MagicCircles` writes a set;
-  `CircleAmplifier` (ownership passive: Crysknife or Magical Hammer owned ×2, both ×3, `MagicCircles.Boosted(m)`) writes
+  `CrysKnife.CircleAmplifierEffect` (the Crysknife / Magical Hammer ownership passive: Crysknife or Magical Hammer owned ×2, both ×3, `MagicCircles.Boosted(m)`) writes
   the boosted one. The table's FAVOUR word (the Secret Armlet owned, `SecretArmlet`) has the cave deal the bad circles
   as good ones: 6 → 1, 8 → 3, 9 → 4, 7's losses become gains of the
   same roll (capped 99), and 5 slows every enemy (gooey timer, +0x14 of the slot block, = SlowFrames) instead of

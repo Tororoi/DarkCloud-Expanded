@@ -5,7 +5,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>Hercules' Wrath — the ultimate, the guard charge's SECOND level (docs/hercules-wrath.md). Level 1 is the Mirage's
     /// decoy (Mirage.cs: the guard pose held Mirage.GuardChargeMs); the guard held <see cref="ChargeSeconds"/> more charges level 2:
-    /// the room dims as Big Bang's does (SolarLighting, <see cref="PrimeDim"/>) and the spear goes gold (<see cref="Gold"/>,
+    /// the room dims as Big Bang's does (SceneLighting, <see cref="PrimeDim"/>) and the spear goes gold (<see cref="Gold"/>,
     /// <see cref="Curve"/>) through the Sun Sword's blade lever (<see cref="SetGold"/>), the Mirage clone's spear with it. Released
     /// early, it all falls away; full, it is PRIMED for as long as a Mirage decoy stands. The strike — Ungaga's next swing reaching
     /// <see cref="StrikeFrame"/>, or the FIRST pellet Super Steve fires with its sphere (<see cref="Fire"/>, <see cref="Track"/>) —
@@ -79,11 +79,11 @@ namespace Dark_Cloud_Improved_Version
             {
                 while (Wielded() && Player.InDungeonFloor())
                 {
-                    if (!Player.CheckDunIsPausedOrMenu()) { Step(); SolarLighting.Tick(); BlastFalloff.ExpireShells(); }   // the flash's ease is stepped here (nothing of the wielder's else does); the strike's unspent entries withdrawn
+                    if (!Player.CheckDunIsPausedOrMenu()) { Step(); SceneLighting.Tick(); BlastFalloff.ExpireShells(); }   // the flash's ease is stepped here (nothing of the wielder's else does); the strike's unspent entries withdrawn
                     Thread.Sleep(TickMs);
                 }
             }
-            finally { Cancel("sword away"); SolarLighting.Restore(); }
+            finally { Cancel("sword away"); SceneLighting.Restore(); }
         }
 
         private static void Step()
@@ -100,14 +100,14 @@ namespace Dark_Cloud_Improved_Version
                 case Phase.Idle:
                 {
                     double held = _guard.Held();
-                    if (held * 1000.0 >= Mirage.GuardChargeMs) { _phase = Phase.Charging; _chargeStart = _guard.Since.AddMilliseconds(Mirage.GuardChargeMs); SolarLighting.BeginDim(); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "level 2 charging (the Mirage is level 1)"); }
+                    if (held * 1000.0 >= Mirage.GuardChargeMs) { _phase = Phase.Charging; _chargeStart = _guard.Since.AddMilliseconds(Mirage.GuardChargeMs); SceneLighting.BeginDim(); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "level 2 charging (the Mirage is level 1)"); }
                     break;
                 }
                 case Phase.Charging:
                 {
                     if (_guard.Held() <= 0) { Cancel("guard released before level 2"); break; }
                     float f = (float)Math.Min(1.0, (GameClock.Now - _chargeStart).TotalSeconds / ChargeSeconds);
-                    SolarLighting.DimTo(PrimeDim * f);
+                    SceneLighting.DimTo(PrimeDim * f);
                     SetGold(Curve(f));
                     if (f >= 1f) { _phase = Phase.Primed; _pellets.NewPellet(); Player.FlashChargeComplete(); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "primed"); }   // pellets already out are not the strike
                     break;
@@ -116,14 +116,14 @@ namespace Dark_Cloud_Improved_Version
                 {
                     if (!Mirage.DecoyUp) { Cancel("the mirage faded before the strike"); break; }
                     float k = Mirage.DecoyOutroAlpha;                                // 1 while it stands; its dissolve at the end
-                    SolarLighting.DimTo(PrimeDim * k);
+                    SceneLighting.DimTo(PrimeDim * k);
                     SetGold(k);
                     if (_xiao) { int slot = _pellets.NewPellet(); if (slot >= 0 && k > 0f) Fire(slot); }
                     else if (swingStart && k > 0f) Unleash();
                     break;
                 }
                 case Phase.Flying:
-                    SolarLighting.DimTo(PrimeDim);
+                    SceneLighting.DimTo(PrimeDim);
                     SetGold(1f);
                     Track();
                     break;
@@ -138,7 +138,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The spear's gold at <paramref name="k"/> (0..1) through the blade lever — which tints the clone's spear as well:
         /// the clone's rigid weapon visuals are the real spear's own (shared), private vtable and all.</summary>
         private static void SetGold(float k) => WielderTint.Set(k, ModelCode, BladeFrame, Gold, _xiao);   // the spear's frame, or the whole slingshot
-        private static void ClearGold() => SolarBlade.Clear();
+        private static void ClearGold() => BladeTint.Clear();
 
         /// <summary>Where motion 0 plays: Xiao's — where her primed pellet died; Ungaga's — the clone's spear tip, or the mirage's
         /// spot when the clone's weapon cannot be read.</summary>
@@ -254,7 +254,7 @@ namespace Dark_Cloud_Improved_Version
                 if (!_blasted)
                 {
                     float u = Math.Max(0f, Math.Min(1f, (frame - DarkFrom) / (BlastFrame - DarkFrom)));
-                    SolarLighting.DimRamp(PrimeDim, u);                                // the plunge to black, frame 21 → 36
+                    SceneLighting.DimRamp(PrimeDim, u);                                // the plunge to black, frame 21 → 36
                     if (frame >= BlastFrame) Blast();
                 }
                 float v = 1f - Math.Max(0f, Math.Min(1f, (frame - FadeFrom) / (FadeTo - FadeFrom)));
@@ -279,7 +279,7 @@ namespace Dark_Cloud_Improved_Version
             WeaponWhp.Drain((ushort)(_xiao ? Items.supersteve : Items.herculeswrath), BlastWhp, Tag + "ultimate ");
             Mirage.Dispel();                                                         // the strike takes the mirage with it
             SunSword.ZeusFlash.ArmLighting();
-            SolarLighting.Flash();
+            SceneLighting.Flash();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"blast at ({x:F0},{h:F0},{y:F0})");
         }
 
@@ -301,7 +301,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_phase == Phase.Idle) return;
             if (_phase == Phase.Playing && _sub >= 0 && _fx != null) Memory.WriteUShort(_fx.Instance + ShotEffectPack.OffActive + _sub * 2, 0);
-            if (!_blasted || _phase != Phase.Playing) { ClearGold(); SolarLighting.EndDim(); }
+            if (!_blasted || _phase != Phase.Playing) { ClearGold(); SceneLighting.EndDim(); }
             Memory.WriteInt(CodeCaves.SecondEffectLive, 0);
             _sub = -1; _key = -1; _slot = -1; _phase = Phase.Idle;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "ultimate off: " + why);

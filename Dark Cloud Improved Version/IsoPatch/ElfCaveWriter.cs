@@ -1,12 +1,14 @@
 using System;
 using System.IO;
+using System.Linq;
 using static Dark_Cloud_Improved_Version.IsoBytes;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>The ISO-patch primitives the Elf*Patches and DunPatches caves share: an embedded stub's bytes, a cave written
-    /// word by word behind a bounds check, the signed lui/lw split of a guest address, a hook word replaced behind its
-    /// vanilla-or-ours guard, and a stub-signature scan. Each guard throws an IOException carrying the site's own text.</summary>
+    /// <summary>The ISO-patch primitives the Elf*Patches, DunPatches and the resource-reading bakes share: an embedded resource's
+    /// bytes, a cave written word by word behind a bounds check, the signed lui/lw split of a guest address, hook words replaced
+    /// behind their vanilla-or-ours guard (with the context words that frame a site), and a stub-signature scan. Each guard throws
+    /// an IOException carrying the site's own text.</summary>
     internal static class ElfCaveWriter
     {
         private const string ResourcePrefix = "Dark_Cloud_Improved_Version.Resources.isoPatch.";
@@ -17,10 +19,13 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The bytes of the embedded resource <c>Resources/isoPatch/&lt;name&gt;</c>; <paramref name="missing"/> is the
         /// whole message thrown when the assembly does not carry it.</summary>
-        internal static byte[] Embedded(string name, string missing)
+        internal static byte[] Embedded(string name, string missing) => TryEmbedded(name) ?? throw new IOException(missing);
+
+        /// <summary>The bytes of the embedded resource <c>Resources/isoPatch/&lt;name&gt;</c>, or null when the assembly does not carry it.</summary>
+        internal static byte[] TryEmbedded(string name)
         {
-            using var st = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream(ResourcePrefix + name)
-                ?? throw new IOException(missing);
+            using var st = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream(ResourcePrefix + name);
+            if (st == null) return null;
             using var ms = new MemoryStream(); st.CopyTo(ms); return ms.ToArray();
         }
 
@@ -73,6 +78,27 @@ namespace Dark_Cloud_Improved_Version
             uint cur = RdU32(fs, ElfOff(site));
             if (cur != vanilla && cur != ours) throw new IOException(notVanilla(cur));
             WrU32(fs, ElfOff(site), ours);
+        }
+
+        /// <summary>The words from <paramref name="site"/> become <paramref name="ours"/> when they are all <paramref name="vanilla"/> or
+        /// all already ours AND every <paramref name="context"/> (address, word) pair reads as given — the untouched neighbours that
+        /// prove the site is the one meant; anything else throws "<paramref name="what"/> at 0x… is not vanilla (0x…, …) — unmodified
+        /// Dark Cloud (USA) ISO expected."</summary>
+        internal static void ReplaceWords(FileStream fs, Func<uint, long> ElfOff, uint site, uint[] vanilla, uint[] ours, string what, params (uint addr, uint word)[] context) =>
+            ReplaceWords(fs, ElfOff, site, vanilla, ours,
+                         cur => $"{what} at 0x{site:X} is not vanilla ({string.Join(", ", cur.Select(w => $"0x{w:X8}"))}) — unmodified Dark Cloud (USA) ISO expected.", context);
+
+        /// <summary>As above, the message built by <paramref name="notVanilla"/> from the words found at the site.</summary>
+        internal static void ReplaceWords(FileStream fs, Func<uint, long> ElfOff, uint site, uint[] vanilla, uint[] ours, Func<uint[], string> notVanilla, params (uint addr, uint word)[] context)
+        {
+            var cur = new uint[vanilla.Length];
+            for (int i = 0; i < cur.Length; i++) cur[i] = RdU32(fs, ElfOff(site + (uint)(i * 4)));
+            bool isVanilla = true, isOurs = true;
+            for (int i = 0; i < cur.Length; i++) { isVanilla &= cur[i] == vanilla[i]; isOurs &= cur[i] == ours[i]; }
+            bool framed = true;
+            foreach (var (addr, word) in context) framed &= RdU32(fs, ElfOff(addr)) == word;
+            if (!(isVanilla || isOurs) || !framed) throw new IOException(notVanilla(cur));
+            WriteWords(fs, ElfOff, site, ours);
         }
 
         /// <summary>Whether any aligned word of a stub's bytes is <paramref name="word"/> (a call, jump or immediate the stub must carry).</summary>

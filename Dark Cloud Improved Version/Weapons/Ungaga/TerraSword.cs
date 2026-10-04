@@ -143,7 +143,7 @@ namespace Dark_Cloud_Improved_Version
                 case Phase.Charging:
                 {
                     double held = _guard.Held();
-                    if (held <= 0) { _phase = Phase.Idle; SolarBlade.Clear(); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "guard released before the charge was full"); break; }
+                    if (held <= 0) { _phase = Phase.Idle; BladeTint.Clear(); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "guard released before the charge was full"); break; }
                     float f = (float)Math.Min(1.0, held / ChargeSeconds);
                     SetTint(f);
                     if (f >= 1f) { _phase = Phase.Primed; Player.FlashChargeComplete(); ModelRoot(); GroundShadow.Root(); Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "primed"); }   // the model and its shadow loaded into the cash now
@@ -166,7 +166,7 @@ namespace Dark_Cloud_Improved_Version
             if (_falling) { SetTint(1f); return; }
             if (_tintFadeFrom == default) return;
             double t = (GameClock.Now - _tintFadeFrom).TotalSeconds / TintFadeSeconds;
-            if (t >= 1.0) { SolarBlade.Clear(); _tintFadeFrom = default; return; }
+            if (t >= 1.0) { BladeTint.Clear(); _tintFadeFrom = default; return; }
             SetTint((float)(1.0 - t));
         }
 
@@ -224,7 +224,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!BladeProp.Maintain()) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the copy did not maintain — down"); TakeDown(); return; }
             KeepTextures();                                                                    // its texture re-sent through the copy's pass
-            bool landed = Memory.ReadInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag) == CodeCaves.BladeLanded;
+            bool landed = Memory.ReadInt(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveFlag) == CodeCaves.DriveLanded;
             if (_falling)
             {
                 if (_headArmed && Memory.ReadInt(CodeCaves.FallDrive + CodeCaves.FallDriveHopped) != 0) { Bonk(); return; }
@@ -232,16 +232,16 @@ namespace Dark_Cloud_Improved_Version
                 if (_target >= 0 && Enemies.IsLive(_target))
                 {   // the cave keeps it over the target; the floor under the target is the rock's stop (the nut's is the head)
                     TargetGround();
-                    if (!_headArmed) Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallStop, RestHeight());
+                    if (!_headArmed) Memory.WriteFloat(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveStop, RestHeight());
                     else if ((GameClock.Now - _hopAimed).TotalSeconds >= HopAimSeconds) AimHop();
                 }
-                else if (Memory.ReadUInt(CodeCaves.BladeFall + CodeCaves.BladeFallUnit) != 0)
+                else if (Memory.ReadUInt(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveUnit) != 0)
                 {   // gone or dead: it falls where it is, onto the floor
                     _headArmed = false;
                     Memory.WriteInt  (CodeCaves.FallDrive + CodeCaves.FallDriveHopArmed, 0);
                     Memory.WriteUInt (CodeCaves.FallDrive + CodeCaves.FallDriveStopSrc, 0);
-                    Memory.WriteUInt (CodeCaves.BladeFall + CodeCaves.BladeFallUnit, 0);
-                    Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallStop, RestHeight());
+                    Memory.WriteUInt (CodeCaves.VerticalDrive + CodeCaves.VerticalDriveUnit, 0);
+                    Memory.WriteFloat(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveStop, RestHeight());
                 }
                 Shadow(true, null);                                                            // its scale is the cave's while it falls
                 return;
@@ -253,7 +253,7 @@ namespace Dark_Cloud_Improved_Version
                 if (landed)
                 {
                     _bouncing = false;
-                    Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
+                    Memory.WriteInt(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveFlag, CodeCaves.VerticalDriveOff);
                     Rest();
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the nut comes to rest at ({_x:F0},{_ground:F0},{_y:F0})");
                 }
@@ -271,7 +271,7 @@ namespace Dark_Cloud_Improved_Version
         private static void Impact()
         {
             _falling = false;
-            Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
+            Memory.WriteInt(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveFlag, CodeCaves.VerticalDriveOff);
             FallRowsOff();
             BladeProp.SetHeight(RestHeight());
             BladeProp.SetScale(FullScale);
@@ -302,7 +302,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!_rockUp) return;
             _rockUp = _falling = _bouncing = false; _headArmed = false;
-            Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
+            Memory.WriteInt(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveFlag, CodeCaves.VerticalDriveOff);
             Memory.WriteUInt(CodeCaves.FallDrive + CodeCaves.FallDriveStopSrc, 0);
             Memory.WriteInt (CodeCaves.FallDrive + CodeCaves.FallDriveHopArmed, 0);
             FallRowsOff();
@@ -332,7 +332,7 @@ namespace Dark_Cloud_Improved_Version
             long pool = CollisionPool.Resolve();
             foreach (var sh in _shells) CollisionPool.Withdraw(pool, sh.Idx, clearMark: true);
             _shells.Clear();
-            SolarBlade.Clear();
+            BladeTint.Clear();
             _phase = Phase.Idle; _guard.Since = default; _tintFadeFrom = default;
             if (_xiao) KinomiModel.Forget(); else IwaModel.Forget();
             GroundShadow.Forget();                                                        // a floor change empties the cash: loaded again when next wanted

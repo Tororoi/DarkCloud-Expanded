@@ -67,7 +67,7 @@ its own; each bolt does (`StrikeWhp`). The blinding, the guard break and the lig
   and the 5 s blinding as every strike. The camera is pinned at its height through the lunge (`CameraHold`) and
   released with the bolt.
 - **The plunge.** From the drop to the bolt the room goes to black: the falling blade drives it (BigBang's fall thread,
-  the same ramp) or, with no blade in the air, the clock does over `ChargeFallSeconds` (`SolarLighting.DimRamp`).
+  the same ramp) or, with no blade in the air, the clock does over `ChargeFallSeconds` (`SceneLighting.DimRamp`).
 - **Short of level 2.** A level-1 lunge is nothing more than the lunge: the dim lifts, the blade (not yet let go) fades
   out. Charging stands aside entirely while Solar Flash owns the blade (`SunSword.FlashArmed`).
 
@@ -92,8 +92,8 @@ reach are inherited alongside. Bolts bill the weapon as the sword's do (`SwordOf
 
 | piece | how |
 |---|---|
-| guard charge | `GuardWatch.IsGuarding()` for `GuardSeconds` 3: the slingshot whitens (`SolarBlade`) as the room darkens to the prime dim, the stock cyan `ChargeTint` ramp runs on her, and at full the stock charge-complete flash fires (Zeus puts no white on its wielder, so this is the readiness cue). Primed, the charge holds `PrimedSeconds` 10 unused, then dissipates. No charging while a blinding runs |
-| release, not locked on | the VOLLEY: a plunge of `SolarLighting.RampFrames` (4) frames from the dim it had, then `SwordOfZeus.StrikeNearest` from where she stands and the strike's flash. The pellet is retired as it appears (its pool flag word zeroed) — no shot flies |
+| guard charge | `GuardWatch.IsGuarding()` for `GuardSeconds` 3: the slingshot whitens (`BladeTint`) as the room darkens to the prime dim, the stock cyan `ChargeTint` ramp runs on her, and at full the stock charge-complete flash fires (Zeus puts no white on its wielder, so this is the readiness cue). Primed, the charge holds `PrimedSeconds` 10 unused, then dissipates. No charging while a blinding runs |
+| release, not locked on | the VOLLEY: a plunge of `SceneLighting.RampFrames` (4) frames from the dim it had, then `SwordOfZeus.StrikeNearest` from where she stands and the strike's flash. The pellet is retired as it appears (its pool flag word zeroed) — no shot flies |
 | release, locked on | the CHAIN window: for `ChainSeconds` 5 from that first release, every pellet that reaches an enemy brings a bolt down on it with the flash. The window does not reset (the sword's chain lasts its combo; hers is the clock, so shots can follow fast). A pellet released inside the window keeps its bolt however late it lands; only shots released after it stop calling one. The prime dim holds until the first bolt, then each flash eases back at its own cadence and the next overrides it |
 | the shot charge | the shot held `ShotChargeSeconds` 1 (`ShotCharge`, as her other charged shots are made; the room darkens as it builds, as under the sword's charge attack) marks the NEXT pellet: wherever it ends — on an enemy or not — the charge bolt comes down there with the strike's flash, locked on or not. A release short of the charge lifts the dim; the charge's dim is held while its pellet flies, to the bolt |
 | the pellet hurts nothing | a pellet that calls a bolt has its damage word (`PlayerShotPool.DamageAddr`, pool + 0x2E0) written `NoDamage` −1 as it leaves. The `PelletPlant` cave (an ISO patch on step__5CSHOT's plant call at 0x1ABE04, DebugIfCave + 0x6D0 = 0x1B4E90, `ElfShotPackPatches.PatchPelletPlant`) then has its contact plant nothing and simply end it, on the engine's own frame; the mod sees it end and brings the bolt down on the enemy it ended on — the bolt is the hit. `ZeusShot.Native` checks the `jal` at 0x1ABE04 points at the cave; without it the mod warns once and bolt pellets land a hit of their own |

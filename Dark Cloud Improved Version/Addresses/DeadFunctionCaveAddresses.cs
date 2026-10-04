@@ -132,11 +132,11 @@ namespace Dark_Cloud_Improved_Version
         /// not — the Sword of Zeus's level-2 lunge jumps higher in the same frames. 0 = vanilla.</summary>
         internal const uint LungeGravitySeed = Host + 0xD80;   // 0x1B4500 → main hook (the parabola's seed)
         internal const uint LungeGravityStep = Host + 0xDA0;   // 0x1B4520 → dun hook (the per-frame gravity)
-        /// <summary>92 B: the BLADE FALL cave (ElfFrameChainPatches.PatchBladeFall), chained after the camera-pin cave so it
-        /// runs once a frame at the end of the dungeon camera pass. While CodeCaves.BladeFall's flag is 1 it steps the
+        /// <summary>92 B: the BLADE FALL cave (ElfFrameChainPatches.PatchVerticalDrive), chained after the camera-pin cave so it
+        /// runs once a frame at the end of the dungeon camera pass. While CodeCaves.VerticalDrive's flag is 1 it steps the
         /// judgement blade's fall — vy += g, y −= vy, stopped at the floor, where the flag becomes 2 — and writes the
         /// copy's slot height: the fall is the engine's own frame, not a mod thread racing it.</summary>
-        internal const uint BladeFall      = Host + 0xDC0;   // 0x1B4540, 168 B → 0x1B45E8
+        internal const uint VerticalDrive      = Host + 0xDC0;   // 0x1B4540, 168 B → 0x1B45E8
         internal const uint WhpBill        = Host + 0xE70;   // 0x1B45F0, 88 B → 0x1B4648 (the host ends at 0x1B46F0)
         /// <summary>tools/stubs/guard_crush.s (ElfDamagePatches.PatchGuardCrush): the GUARD GATE — CheckDmg's guard-window hook lands
         /// here first; an entry carrying CodeCaves.CrushMark passes every guard window, anything else goes on to

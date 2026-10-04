@@ -82,7 +82,7 @@ namespace Dark_Cloud_Improved_Version
                 p += stride;
             }
             if (bankBytes == null) throw new IOException($"{TexBank} not in img.pak");
-            var bank = new CatPackBakes.Bank(bankBytes);
+            var bank = new ImgBank(bankBytes);
             _full = CashModel.FullPictures(bank, Textures);
             return CashModel.StandInBank(bank, TexSize, Textures);
         }

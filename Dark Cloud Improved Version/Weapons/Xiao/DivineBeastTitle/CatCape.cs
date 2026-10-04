@@ -10,12 +10,45 @@ using static Dark_Cloud_Improved_Version.CatTextures;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>The Super Steve cape on the cat: her cape cloth (CCloth 0x8550) taken as the template, spawned and scaled onto the copy, watched, breezed, stiffened and reseeded. One of the <see cref="DivineBeastTitle"/> classes, which share their members through using static.</summary>
+    /// <summary>The Super Steve cape on the cat: her cape cloth (CCloth 0x8550) taken as the template, spawned and scaled onto the copy, watched, breezed, stiffened and reseeded. One of the <see cref="DivineBeastTitle"/> classes, which share their members through using static.
+    /// The cape's own sweep (<see cref="Start"/>) runs whenever Xiao is the character and whatever weapon she holds, so it is no weapon's thread: the cat pack builds the cloth for HER on every model load, and it is taken off her list the moment it appears.</summary>
     internal static class CatCape
     {
         // ── the Super Steve cape (CCloth 0x8550) ───────────────────────────────────────────────────────────
         internal static long _capeObj;
         private static uint _capeTemplate;                                    // her CCloth for cat_cape, taken out of her draw list by TakeHerCape
+
+        // ── the sweep: her cloth list looked at every 200 ms on a floor (four 50 ms ticks) while she is the character ──
+        private const int SweepWatchMs = 50, SweepIdleMs = 100, SweepEvery = 4;
+        private static Thread _sweep;
+        private static int _capeSweepTick;
+
+        /// <summary>Started once with the game: <see cref="TakeHerCape"/> every fourth 50 ms tick on a dungeon floor while Xiao is the
+        /// character (100 ms between looks off a floor).</summary>
+        internal static void Start()
+        {
+            if (_sweep != null && _sweep.IsAlive) return;
+            _sweep = new Thread(SweepLoop) { IsBackground = true, Name = "CatCapeSweep" };
+            _sweep.Start();
+        }
+
+        private static void SweepLoop()
+        {
+            while (true)
+            {
+                int sleep = SweepIdleMs;
+                try
+                {
+                    if (Player.InDungeonFloor())
+                    {
+                        sleep = SweepWatchMs;
+                        if (Player.CurrentCharacterNum() == Player.XiaoId && ++_capeSweepTick >= SweepEvery) { _capeSweepTick = 0; TakeHerCape(); }
+                    }
+                }
+                catch (Exception e) { Log("cape sweep failed: " + e.Message); sleep = 1000; }
+                Thread.Sleep(sleep);
+            }
+        }
 
         /// <summary>The cape's cloth record lives in HER pack, so the engine builds it for XIAO and hangs it off her own cloth
         /// list — anchored to the hidden cat_cape node at her origin, where it draws as a sheet at her feet whether or not the cat

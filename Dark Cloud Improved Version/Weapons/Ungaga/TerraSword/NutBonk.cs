@@ -22,7 +22,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void Bonk()
         {
             int slot = _target;
-            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallG, BonkGravity / 3600f);
+            Memory.WriteFloat(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveG, BonkGravity / 3600f);
             Memory.WriteInt  (CodeCaves.FallDrive + CodeCaves.FallDriveHopped, 0);
             _falling = false; _bouncing = true; _headArmed = false;
             _ground = _hopGround;

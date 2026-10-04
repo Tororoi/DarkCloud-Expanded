@@ -15,7 +15,7 @@ namespace Dark_Cloud_Improved_Version
         // ── WADING (current design): at LOW TIDE, the PLAYER is drawn EARLY, mizu stays 100% vanilla ─────
         // GS transparency only reveals what is ALREADY in the framebuffer, so for the submerged body to sit
         // "under" the water it must be in the framebuffer before the water part's own native pass draws.
-        // At low tide this class arms the mailbox word the ISO-baked EARLY_STUB reads (IsoPatcher.
+        // At low tide this class arms the mailbox word the ISO-baked EARLY_STUB reads (ElfWaterPatches.
         // PatchWaterRedraw: the retargeted `jal DrawWater(ground, 0x15)` at 0x17BB6C): MGDraw(player model
         // root) runs just before the water pass, mizu then draws over the submerged half with its native
         // pass/state, and the normal EdDrawCharacter redraw later is Z-clipped at the waterline — leaving a

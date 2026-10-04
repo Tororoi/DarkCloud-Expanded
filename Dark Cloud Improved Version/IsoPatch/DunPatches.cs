@@ -86,7 +86,7 @@ namespace Dark_Cloud_Improved_Version
             // The WINGS: the cat's wing bones/meshes/keys/textures cost another ~220 KB in this pool (chara
             // 3,400,336 → 3,620,496 measured), and the pool is shared with the weapons (~216 KB) and the floor's shot effects
             // (70-190 KB): 240000 units overflowed by 67-190 KB → a silent spin on the switch to Xiao. The allocator's own
-            // counter (DivineBeastTitle.HeapWatch, GlobalPoolUsed 0x21C74980) shows the global buffer at 26,616,000 of
+            // counter (HeapWatch, GlobalPoolUsed 0x21C74980) shows the global buffer at 26,616,000 of
             // 27,039,984 B in every log — 26,499 units unused (which is exactly why +30,000 alone black-screened and the
             // read-buffer cut was needed) — so the heap takes 20,000 more of them: 260000 units = 4.16 MB, leaving 6,499
             // units (104 KB) of global slack. The literal 210000 is `lui r,3; ori r,r,0x3450` at four sites (carve, the two
@@ -114,7 +114,7 @@ namespace Dark_Cloud_Improved_Version
             new(0x01DAEBF8, 0x0C071030, MipsAsm.Jal(ElfCave.CatGlowDrawEntryA), "cat glow hook A (jal DrawFire__11CDungeonMap → cave)"),
             new(0x01DAEC10, 0x0C070F30, MipsAsm.Jal(ElfCave.CatGlowDrawEntryB), "cat glow hook B (jal DrawFireFreeStyle → cave)"),
             // Mirage haze: the draw loop's raster pass → the haze cave, which performs the pass and then draws one raster at
-            // the clone's root (ElfPatches.PatchMirageHazeDraw writes the cave).
+            // the clone's root (ElfWeaponPatches.PatchMirageHazeDraw writes the cave).
             new(MirageHazeHookAddr, MirageHazeHookOrig, MirageHazeHookNew, "mirage haze hook (jal DrawRaster__11CDungeonMap → cave)"),
             // Babel's spear, solid to the player: the player's move's two player-versus-enemy blocks → the spear cave, which makes the
             // engine's call and then slides the velocity along the spear (ElfWeaponPatches.PatchSpearBlock writes the cave).

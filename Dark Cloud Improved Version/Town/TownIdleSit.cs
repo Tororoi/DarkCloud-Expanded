@@ -22,7 +22,7 @@ namespace Dark_Cloud_Improved_Version
 
         private const string Tag = "[IdleSit] ";
 
-        // ElfPatches.PatchIdleMotionOverride mailbox (EE 0x21F10070): write the sit motion index here to make
+        // ElfTownAllyPatches.PatchIdleMotionOverride mailbox (EE 0x21F10070): write the sit motion index here to make
         // EdMoveChara's grounded locomotion store play it in place of idle; 0 = no override (vanilla idle).
         private const long IdleMotionMailbox = Mailbox.IdleMotionOverride;
 

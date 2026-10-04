@@ -4,14 +4,14 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// Queens waterfall mist: keeps the emitter table the ISO-baked queensSprayCave reads every frame
-    /// (ElfPatches.PatchQueensSprayHook) populated with one entry per waterfall mouth at the live tide level.
+    /// (ElfCanalPatches.PatchQueensSprayHook) populated with one entry per waterfall mouth at the live tide level.
     /// Pure data writes; CanalTide writes it at low tide and clears it otherwise.
     /// </summary>
     internal static class QueensCanalMist
     {
         // ── Waterfall mist ───────────────────────────────────────────────────────────────────────────
         // The engine's own EffectWaterSpray (the Matataki waterfall mist, "shibuki"/飛沫 spray texture) is spawned
-        // from MainDraw but hardcoded to Matataki (NowEditMap==1). The queensSprayCave (IsoPatcher.PatchQueensSprayHook,
+        // from MainDraw but hardcoded to Matataki (NowEditMap==1). The queensSprayCave (ElfCanalPatches.PatchQueensSprayHook,
         // hooked at MainDraw 0x17c5a0) reads THIS table every frame and fires an emitter per entry, so we just keep
         // it populated while in Queens. Layout mirrors the cave: word[0]=count, then count × 0x30 entries
         // { pos x,y,z,w @+0x00 ; spread x,y,z,w @+0x10 ; bias bx,by,bz @+0x20 } starting at +0x10.

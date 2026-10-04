@@ -120,7 +120,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>A charge dropped: the timer cleared and the weapon's tint off (left alone while the spear is up — it is the spear's).</summary>
         private static void ChargeOff()
         {
-            if (_guardSince != default && !_up) SolarBlade.Clear();
+            if (_guardSince != default && !_up) BladeTint.Clear();
             _guardSince = default;
         }
 
@@ -134,7 +134,7 @@ namespace Dark_Cloud_Improved_Version
             int target = Target(out float x, out float y, out float ground);
             _sx = x; _sy = y; _ground = ground; _riseStarted = _risen = _struck = false; _target = target; _fadeK = 1f; _spinTick = -1;
             if (!CopySpawn()) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"no {F.Name} copy (slot or cave busy)"); return; }
-            Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
+            Memory.WriteInt(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveFlag, CodeCaves.VerticalDriveOff);
             Memory.WriteFloat(CodeCaves.BladeSpin, 0f);
             CopyPlace(_sx, RootHeight(0f), _sy);                                               // buried, still: the caves move it from here
             CopyAlpha(1f);
@@ -193,14 +193,14 @@ namespace Dark_Cloud_Improved_Version
             ShockDrive(age);
             if (!_riseStarted && age >= EmergeStartSeconds)
             {   // the rise, on the engine's frames: the blade-fall cave's ease from buried to risen over the emergence
-                BladeFall.StartEase(RootHeight(0f), RootHeight(1f), EmergeSeconds * 60f);
+                VerticalDrive.StartEase(RootHeight(0f), RootHeight(1f), EmergeSeconds * 60f);
                 _riseStarted = true;
             }
             if (_riseStarted && !_struck && !_risen) Follow();
             if (_riseStarted && !_struck) TipStrike();
             if (!_risen && age >= EmergeStartSeconds + EmergeSeconds)
             {   // risen: the integrator off (its velocity is at zero), the exact top written once, the spin begins, and it is solid
-                Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
+                Memory.WriteInt(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveFlag, CodeCaves.VerticalDriveOff);
                 CopySetHeight(RootHeight(1f));
                 Memory.WriteFloat(CodeCaves.BladeSpin, (float)(SpinDegPerSec * Math.PI / 180.0 / 60.0));
                 SpearBlock.Arm(_sx, _ground, _sy, BlockRadius, _ground + Exposed);                   // enemy shots stop below the tip
@@ -218,11 +218,11 @@ namespace Dark_Cloud_Improved_Version
             if (!_up) return;
             ShockStop();
             Memory.WriteFloat(CodeCaves.BladeSpin, 0f);
-            Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
+            Memory.WriteInt(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveFlag, CodeCaves.VerticalDriveOff);
             SpearBlock.Disarm();                                                                    // passable again
             CopyDespawn();
             ConfusionStars.Fade = 1f;
-            SolarBlade.Clear();                                                                       // the weapon's tint goes with the copy
+            BladeTint.Clear();                                                                       // the weapon's tint goes with the copy
             _up = false;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the spear sinks away");
         }
@@ -261,7 +261,7 @@ namespace Dark_Cloud_Improved_Version
             _shells.WithdrawAll();
             Confusion.End();
             ConfusionStars.Fade = 1f;
-            SolarBlade.Clear();
+            BladeTint.Clear();
             _guardLatched = false; _guardSince = default;
         }
     }

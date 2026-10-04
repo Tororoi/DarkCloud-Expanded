@@ -141,7 +141,7 @@ namespace Dark_Cloud_Improved_Version
                 if (!_chargeDimming)
                 {
                     _chargeDimming = true; _chargeFull = false; _chargeBoltDue = false; _chargeLevel1At = default; ZeroUnlock();   // no level 2 for the game this wind-up
-                    _chargeDimFloor = SolarLighting.Active ? SolarLighting.LastDim : 0f;   // a blinding's dim stays on under the charge rather than lifting and snapping back
+                    _chargeDimFloor = SceneLighting.Active ? SceneLighting.LastDim : 0f;   // a blinding's dim stays on under the charge rather than lifting and snapping back
                 }
                 if (meter >= ChargeLevel1 && _chargeLevel1At == default) _chargeLevel1At = GameClock.Now;   // level 1: the sword's own clock starts
                 // The charge's progress: half of it is the meter climbing to level 1, the other half the ChargeLevel2Seconds held past it.
@@ -149,9 +149,9 @@ namespace Dark_Cloud_Improved_Version
                 float k = _chargeLevel1At == default
                     ? 0.5f * Math.Max(0f, Math.Min(1f, (meter - ChargeDimFrom) / (ChargeLevel1 - ChargeDimFrom)))
                     : 0.5f + 0.5f * held;
-                SolarBlade.Set(k, SunSword.ZeusFlash.Model, 0, 0, SunSword.ZeusFlash.BladeWhite);   // the blade whitens with the meter, as under a guard charge
-                SolarLighting.BeginDim();                                        // takes an easing flash over (its capture kept)
-                SolarLighting.DimTo(Math.Max(_chargeDimFloor, SunSword.ZeusFlash.PrimeDim * k));
+                BladeTint.Set(k, SunSword.ZeusFlash.Model, 0, 0, SunSword.ZeusFlash.BladeWhite);   // the blade whitens with the meter, as under a guard charge
+                SceneLighting.BeginDim();                                        // takes an easing flash over (its capture kept)
+                SceneLighting.DimTo(Math.Max(_chargeDimFloor, SunSword.ZeusFlash.PrimeDim * k));
                 if (held >= 1f && !_chargeFull)
                 {   // the sword's own level 2, ChargeLevel2Seconds past level 1: the stock charge-complete flash on him, and the release flagged as a bolt
                     _chargeFull = true; _chargeDropped = false;
@@ -191,7 +191,7 @@ namespace Dark_Cloud_Improved_Version
                 // The room plunges to black from the dash to the bolt: the falling blade drives it (BigBang's fall
                 // thread, the same ramp), or — no blade — the clock does over the same ChargeFallSeconds.
                 if (_chargeDropped && !JudgementBlade.Dropping && action != PlayerAction.ActionLungeEnd)
-                    SolarLighting.DimRamp(SunSword.ZeusFlash.PrimeDim, (float)((GameClock.Now - _chargeDropAt).TotalSeconds / ChargeFallSeconds));
+                    SceneLighting.DimRamp(SunSword.ZeusFlash.PrimeDim, (float)((GameClock.Now - _chargeDropAt).TotalSeconds / ChargeFallSeconds));
                 if (action != PlayerAction.ActionLungeEnd) return;
                 _chargeBoltFired = true;
                 float cursor = Memory.ReadFloat(PlayerAction.AnimFrameCursor);
@@ -204,7 +204,7 @@ namespace Dark_Cloud_Improved_Version
                 SunSword.StrikeFlash(SunSword.ZeusFlash);                        // the white easing back to normal light, his pulse, and the 5 s blinding — a strike's flash
                 CameraHold.Unpin();                                              // the camera follows again
                 _chargeDimming = false; _chargeFull = false; _chargeBoltDue = false;   // the flash took the dim over
-                SolarBlade.Clear(); _chargeTarget = -1;                          // …and the charge's white is off the blade
+                BladeTint.Clear(); _chargeTarget = -1;                          // …and the charge's white is off the blade
                 Memory.WriteFloat(CodeCaves.LungeGravityExtra, 0f);              // the next lunge is vanilla
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Zeus] charge bolt at ({x:F0},{h:F0},{y:F0}) (cursor {cursor:F1})");
                 return;
@@ -236,9 +236,9 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.LungeGravityExtra, 0f);
             CameraHold.Unpin();                                                  // broken or spent: the camera follows again
             JudgementBlade.PointFade(); _chargeDropped = false; _chargeTarget = -1;     // a blade not yet let go fades out; one in the air is gone
-            if (!SunSword.FlashArmed) SolarBlade.Clear();                        // the charge's white off the blade (a primed flash keeps its own)
+            if (!SunSword.FlashArmed) BladeTint.Clear();                        // the charge's white off the blade (a primed flash keeps its own)
             if (_unlockZeroed) RestoreUnlock();
-            if (_chargeDimming) { SolarLighting.EndDim(); _chargeDimming = false; }
+            if (_chargeDimming) { SceneLighting.EndDim(); _chargeDimming = false; }
             _chargeFull = false; _chargeBoltDue = false;
         }
         private static void ZeroUnlock()
@@ -298,11 +298,11 @@ namespace Dark_Cloud_Improved_Version
                     if (LightningSeeded) MaintainScale();
                     if (!Player.CheckDunIsPausedOrMenu()) { ChargeTick(); if (Player.CurrentCharacterNum() == Player.ToanId) JudgementBlade.JudgementTick(Judgement); }
                     BlastFalloff.ExpireShells();                                            // the bolt's blast entries, once spent
-                    EnemyFacing.ReleaseRedirectWhenDue();
+                    BladeRedirect.ReleaseRedirectWhenDue();
                 }
                 catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[Zeus] tick error: " + ex.Message); }
             }
-            ChargeStandDown(); CameraHold.Unpin(); JudgementBlade.ReleaseJudgement(); EnemyFacing.ReleaseRedirect();
+            ChargeStandDown(); CameraHold.Unpin(); JudgementBlade.ReleaseJudgement(); BladeRedirect.ReleaseRedirect();
             ToanLockOn.ReleaseReach();
         }
 

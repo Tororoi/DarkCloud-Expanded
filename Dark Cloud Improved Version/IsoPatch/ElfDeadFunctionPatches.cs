@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using static Dark_Cloud_Improved_Version.IsoBytes;
+using static Dark_Cloud_Improved_Version.ElfCaveWriter;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -18,27 +19,21 @@ namespace Dark_Cloud_Improved_Version
         {
             // DebugInfomationDraw: the shot-slot sharing cave's host (ElfShotPackPatches.PatchSharedShots).
             const uint Host = DebugInfoCave.Host;
-            uint w0 = RdU32(fs, ElfOff(Host));
-            if (w0 != DebugInfoCave.VanillaWord0 && w0 != 0x03E00008u)
-                throw new IOException($"DebugInfomationDraw at 0x{Host:X} is not vanilla (`addiu sp,sp,-0x170`) — unmodified Dark Cloud (USA) ISO expected.");
-            WrU32(fs, ElfOff(Host), 0x03E00008u);                                   // jr ra: the overlay draws nothing
+            ReplaceWord(fs, ElfOff, Host, DebugInfoCave.VanillaWord0, 0x03E00008u,   // jr ra: the overlay draws nothing
+                        _ => $"DebugInfomationDraw at 0x{Host:X} is not vanilla (`addiu sp,sp,-0x170`) — unmodified Dark Cloud (USA) ISO expected.");
             WrU32(fs, ElfOff(Host + 4), 0);                                          // (its delay slot)
 
             // DebugItemGetKey / DebugItemGetDraw: the Confuse roll's and the stars caves' hosts (ElfConfusePatches).
-            uint key0 = RdU32(fs, ElfOff(DebugItemCave.Host)), draw0 = RdU32(fs, ElfOff(DebugItemCave.DrawHost));
-            if (key0 != DebugItemCave.KeyWord0 && key0 != 0x03E00008u || draw0 != DebugItemCave.DrawWord0 && draw0 != 0x03E00008u)
-                throw new IOException($"DebugItemGetKey/Draw (0x{DebugItemCave.Host:X}/0x{DebugItemCave.DrawHost:X}) are not vanilla — unmodified Dark Cloud (USA) ISO expected.");
-            WrU32(fs, ElfOff(DebugItemCave.Host), 0x03E00008u);         // jr ra
+            string itemHosts = $"DebugItemGetKey/Draw (0x{DebugItemCave.Host:X}/0x{DebugItemCave.DrawHost:X}) are not vanilla — unmodified Dark Cloud (USA) ISO expected.";
+            ReplaceWord(fs, ElfOff, DebugItemCave.Host, DebugItemCave.KeyWord0, 0x03E00008u, _ => itemHosts);        // jr ra
             WrU32(fs, ElfOff(DebugItemCave.Host + 4), 0x2402FFFFu);     //   addiu v0,zero,-1 (the screen's "leave")
-            WrU32(fs, ElfOff(DebugItemCave.DrawHost), 0x03E00008u);     // jr ra
+            ReplaceWord(fs, ElfOff, DebugItemCave.DrawHost, DebugItemCave.DrawWord0, 0x03E00008u, _ => itemHosts);   // jr ra
             WrU32(fs, ElfOff(DebugItemCave.DrawHost + 4), 0u);          //   nop
 
             // DebugInfomationIF: the magic-circle cave's host (ElfWeaponPatches.PatchCircleEffects) and a dozen smaller caves'.
             const uint IfHost = DebugIfCave.Host;
-            uint if0 = RdU32(fs, ElfOff(IfHost));
-            if (if0 != DebugIfCave.VanillaWord0 && if0 != 0x03E00008u)
-                throw new IOException($"DebugInfomationIF at 0x{IfHost:X} is not vanilla (`addiu sp,sp,-0x20`) — unmodified Dark Cloud (USA) ISO expected.");
-            WrU32(fs, ElfOff(IfHost),     0x03E00008u);                            // jr   ra
+            ReplaceWord(fs, ElfOff, IfHost, DebugIfCave.VanillaWord0, 0x03E00008u,   // jr ra
+                        _ => $"DebugInfomationIF at 0x{IfHost:X} is not vanilla (`addiu sp,sp,-0x20`) — unmodified Dark Cloud (USA) ISO expected.");
             WrU32(fs, ElfOff(IfHost + 4), 0x24020000u);                            //   addiu v0,zero,0 — "nothing pressed" to the debug key's caller
         }
     }

@@ -3,14 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using static Dark_Cloud_Improved_Version.IsoBytes;
 using static Dark_Cloud_Improved_Version.MipsAsm;
-using static Dark_Cloud_Improved_Version.IsoPatcher;
 using static Dark_Cloud_Improved_Version.ElfCaveWriter;
 
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>Per-weapon ELF patches: Babel's spear column, the Terra Sword's boulder shadow, the Sun Sword's blade tint, the
-    /// lock-on name-plate gate, the magic circles, Xiao's build-up tree, the Steel Slingshot's level-ups, the flamethrower spacing
-    /// and the Super Steve HUD icon. Called in order from ElfPatches.ElfPatchAndCrc (the dead hosts are claimed first by
+    /// lock-on name-plate gate, the magic circles, Xiao's build-up tree, the Steel Slingshot's level-ups, the flamethrower spacing,
+    /// the Super Steve HUD icon and Mirage's heat shimmer. Called in order from ElfPatches.ElfPatchAndCrc (the dead hosts are claimed first by
     /// ElfDeadFunctionPatches).</summary>
     internal static class ElfWeaponPatches
     {
@@ -71,10 +70,10 @@ namespace Dark_Cloud_Improved_Version
             WriteBytes(fs, ElfOff, cave, b, DebugIfCave.Host + DebugIfCave.HostSpan, "rockShadow.bin overruns DebugInfomationIF's span.");
         }
 
-        /// <summary>The Sun Sword's blade under its own ambient (SolarBlade): the mask-tint cave's BODY is generic — it adds
+        /// <summary>The Sun Sword's blade under its own ambient (BladeTint): the mask-tint cave's BODY is generic — it adds
         /// CatBlock.CatCapeTint to the ambient, calls the DrawVu1 in t9, restores — only its two 3-word entries name the skinned
         /// class's overloads. A weapon model's mesh is a CVisualVu1, so these two entries load THAT class's overloads and jump
-        /// into the same body. Six words in the cave band's last gap; the private vtable SolarBlade builds points its DrawVu1
+        /// into the same body. Six words in the cave band's last gap; the private vtable BladeTint builds points its DrawVu1
         /// slots here.</summary>
         internal static void PatchSolarBladeTint(FileStream fs, Func<uint, long> ElfOff)
         {
@@ -132,14 +131,9 @@ namespace Dark_Cloud_Improved_Version
                     throw new IOException($"Cave gap 0x{cave + i * 4:X} holds 0x{cur:X8} — not free.");
                 WrU32(fs, ElfOff(cave + (uint)(i * 4)), words[i]);
             }
-            uint jump = MipsAsm.J(cave);
-            uint got0 = RdU32(fs, ElfOff(Getter)), got1 = RdU32(fs, ElfOff(Getter + 4));
-            if (got0 == jump && got1 == 0) return;                                  // idempotent re-run
-            if (got0 != VanillaLh || got1 != VanillaJr)
-                throw new IOException($"GetMonsterNameDrawFlag 0x{Getter:X} is not vanilla (got 0x{got0:X8}/0x{got1:X8}) " +
-                                      "— is this an unmodified Dark Cloud (USA) ISO?");
-            WrU32(fs, ElfOff(Getter),     jump);
-            WrU32(fs, ElfOff(Getter + 4), 0);                                       // the jump's delay slot
+            ReplaceWords(fs, ElfOff, Getter, new[] { VanillaLh, VanillaJr }, new[] { MipsAsm.J(cave), 0u },   // j cave; its delay slot
+                         got => $"GetMonsterNameDrawFlag 0x{Getter:X} is not vanilla (got 0x{got[0]:X8}/0x{got[1]:X8}) " +
+                                "— is this an unmodified Dark Cloud (USA) ISO?");
         }
 
         /// <summary>THE MAGIC CIRCLES as data (tools/stubs/circle_effects.s, CodeCaves.CircleTable): the cave in the body of
@@ -202,12 +196,9 @@ namespace Dark_Cloud_Improved_Version
                 (0x00235D94u, 0x87A200AAu, 0x24430001u, DebugInfoCave.SteelLevelUpD),   // WeaponLevelUpValueCalc: lh v0,0xAA(sp); addiu v1,v0,1
                 (0x00235EE4u, 0x00641821u, 0xA6A3000Cu, DebugInfoCave.SteelLevelUpE),   // WeaponLevelUpValueCalc: addu v1,v1,a0; sh v1,0xC(s5)
             })
-            {
-                uint cur = RdU32(fs, ElfOff(site)), ours = Jal(entry);
-                if ((cur != vanilla && cur != ours) || RdU32(fs, ElfOff(site + 4)) != delay)
-                    throw new IOException($"Weapon level-up site 0x{site:X} is not vanilla (0x{vanilla:X8} then 0x{delay:X8}) — unmodified Dark Cloud (USA) ISO expected.");
-                WrU32(fs, ElfOff(site), ours);
-            }
+                ReplaceWords(fs, ElfOff, site, new[] { vanilla }, new[] { Jal(entry) },
+                             _ => $"Weapon level-up site 0x{site:X} is not vanilla (0x{vanilla:X8} then 0x{delay:X8}) — unmodified Dark Cloud (USA) ISO expected.",
+                             (site + 4, delay));
         }
 
         /// <summary>Osmond's flamethrower reach from a data word: Set__13CSHOT_FIREBAR (0x1AED88) and Init__13CSHOT_FIREBAR (0x1AEB6C)
@@ -218,14 +209,9 @@ namespace Dark_Cloud_Improved_Version
             uint hi = 0x3C020000u | (uint)((Mailbox.FlameSpacing - 0x20000000) >> 16);
             uint lo = 0xC44C0000u | (uint)((Mailbox.FlameSpacing - 0x20000000) & 0xFFFF);
             foreach (var (site, next) in new[] { (0x001AED88u, 0x27A40060u), (0x001AEB6Cu, 0x27A40070u) })
-            {
-                uint w0 = RdU32(fs, ElfOff(site)), w1 = RdU32(fs, ElfOff(site + 4));
-                bool vanilla = w0 == 0x3C024000u && w1 == 0x44826000u, ours = w0 == hi && w1 == lo;
-                if (!(vanilla || ours) || RdU32(fs, ElfOff(site + 8)) != next)
-                    throw new IOException($"Flamethrower spacing site 0x{site:X} is not vanilla `lui v0,0x4000; mtc1 v0,f12` — unmodified Dark Cloud (USA) ISO expected.");
-                WrU32(fs, ElfOff(site), hi);
-                WrU32(fs, ElfOff(site + 4), lo);
-            }
+                ReplaceWords(fs, ElfOff, site, new[] { 0x3C024000u, 0x44826000u }, new[] { hi, lo },
+                             _ => $"Flamethrower spacing site 0x{site:X} is not vanilla `lui v0,0x4000; mtc1 v0,f12` — unmodified Dark Cloud (USA) ISO expected.",
+                             (site + 8, next));
         }
 
         /// <summary>Every main-ELF call of DngActiveWeaponTextureCopy — the game's copy opportunities, each while a menu has
@@ -257,6 +243,22 @@ namespace Dark_Cloud_Improved_Version
             foreach (uint site in SsIconCopyMainHooks)
                 ReplaceWord(fs, ElfOff, site, DunPatches.SsIconCopyHookOrig, DunPatches.SsIconCopyHookNew,
                             cur => $"copy hook site 0x{site:X} is not `jal DngActiveWeaponTextureCopy` (0x{cur:X8}) — unmodified Dark Cloud (USA) is required.");
+        }
+
+        /// <summary>Mirage's heat shimmer at the clone itself: the dungeon draw loop's raster pass (dun 0x1DAEBCC, hooked by DunPatches)
+        /// comes to this cave, which performs it and then draws one raster at the Mirage clone's root when the mailbox says so.</summary>
+        internal static void PatchMirageHazeDraw(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = ElfCave.MirageHazeDraw;
+            byte[] b = Embedded("mirageHazeDraw.bin");
+            if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u)   // opens its frame: addiu sp,sp,-0x20
+                throw new IOException($"mirageHazeDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            // The two words that make it THIS cave: the "alpha01" string's address (ori a1,a1,0xA0E8) and the draw call
+            // (jal DrawRaster__9CFireOmni 0x162310). A wrong immediate in either fails invisibly — nothing drawn, no error.
+            bool name = ContainsWord(b, 0x34A5A0E8u), draw = ContainsWord(b, 0x0C0588C4u);
+            if (!name || !draw)
+                throw new IOException("mirageHazeDraw.bin lacks the \"alpha01\" address or the DrawRaster call — it would draw nothing.");
+            WriteBytes(fs, ElfOff, CaveAddr, b, ElfCave.NextFree, "mirageHazeDraw.bin overruns its cave — move ElfCave.NextFree.");
         }
     }
 }

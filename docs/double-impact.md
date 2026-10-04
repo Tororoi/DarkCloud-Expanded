@@ -4,7 +4,7 @@
 when a Double Impact SynthSphere is attached).
 
 Every shot is two pellets. The one the game fires is joined by a twin the tick it appears in the player's shot pool
-(`PlayerShotPool`, 12 slots): a second real pellet, written the way `ShrapnelBurst` writes its fragments — the same
+(`PlayerShotPool`, 12 slots): a second real pellet, written field by field into a free slot (position, velocity, lifetime, damage, scale, the live flag last) — the same
 velocity and life, collision on, live flag last — beside the first: the pair straddles the flight line 2 units apart,
 side by side in the ground plane (the first pellet is moved 1 unit to one side, the twin placed 1 unit to the other).
 `step__5CSHOT` flies and collides each like any pellet and plants its own damage entry with the weapon's ability flags,

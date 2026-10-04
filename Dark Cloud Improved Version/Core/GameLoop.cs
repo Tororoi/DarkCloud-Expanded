@@ -5,7 +5,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// The mod's all-mode game loop: one background thread, started once a save is in play
-    /// (MainMenuThread and ModWindow start it as <see cref="Run"/>).
+    /// (SessionController and ModWindow start it as <see cref="Run"/>).
     /// Start-up applies the save-load pokes (item table, mayor-quest HP, daily shop, Sword of Zeus max
     /// attack, the ally .chr/.cfg path slots). Then, every 50 ms, in this order: the weapon ownership
     /// passives (<see cref="WeaponPassives"/>), the town branch while the game is in town mode 2
@@ -70,7 +70,7 @@ namespace Dark_Cloud_Improved_Version
                     TownLoop.Tick();
                 } //end of check if player is in town mode
 
-                if (MainMenuThread.userMode == true)
+                if (SessionController.userMode == true)
                 {
                     if (Memory.ReadByte(Addresses.mode) == 0 || Memory.ReadByte(Addresses.mode) == 1)
                     {

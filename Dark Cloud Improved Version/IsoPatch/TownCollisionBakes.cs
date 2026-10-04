@@ -13,16 +13,16 @@ namespace Dark_Cloud_Improved_Version
         {
             // e03 — Queens
             byte[] scene0 = arc.Read("gedit/e03/scene.scn"), mapinfo0 = arc.Read("gedit/e03/mapinfo.cfg");
-            byte[] baked = QueensCollisionBakes.BakeStructures(scene0, mapinfo0, log);
-            (baked, _) = CanalVisualCap.AddCanalCap(baked, log);       // AFTER the collision bake: the cap must never enter the collision
-            arc.Redirect("gedit/e03/img.pak", CanalRipple.RetextureRippleBank(arc.Read("gedit/e03/img.pak"), log));
+            byte[] baked = QueensCollision.BakeStructures(scene0, mapinfo0, log);
+            (baked, _) = CanalWestEndCap.AddCanalCap(baked, log);       // AFTER the collision bake: the cap must never enter the collision
+            arc.Redirect("gedit/e03/img.pak", CanalRippleTexture.RetextureRippleBank(arc.Read("gedit/e03/img.pak"), log));
             arc.Redirect("gedit/e03/scene.scn", baked);
             // s04 — Brownboo
             byte[] s04 = arc.Read("gedit/s04/scene.scn");
-            var named = BrownbooCollisionBakes.BakedNamed(s04);
+            var named = BrownbooCollision.BakedNamed(s04);
             var (s04New, _) = CollisionMdsWriter.ReplaceABlock(s04, "s04g01", CollisionMdsWriter.BuildFlatMds(named.Select(x => (x.name, x.tris, (System.Collections.Generic.List<byte[]>)null)).ToList()), "_v");
             log($"s04: s04g01_v rebuilt: {named.Count} nodes, {named.Sum(x => x.tris.Count)} tris, scene {s04.Length:N0} -> {s04New.Length:N0} B");
-            (s04New, _) = BrownbooCollisionBakes.BakeRocks(s04New);
+            (s04New, _) = BrownbooCollision.BakeRocks(s04New);
             arc.Redirect("gedit/s04/scene.scn", s04New);
         }
     }

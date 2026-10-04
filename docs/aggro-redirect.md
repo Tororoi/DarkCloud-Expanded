@@ -13,7 +13,7 @@ never read and nothing below writes it.
 Both functions read the player global (`StbExternCmd.PlayerPosGuest`, 0x1EA1D30) with a hardcoded `lui/addiu`. Each is
 copied whole (0xF0 bytes) into a cold-PINE cave (`CodeCaves.PosCave`, `CodeCaves.DistCave`), the player load in the copy
 is replaced by `j helper / nop`, and the STB external-command dispatch slot (`StbExternCmd.GetPositionSlot` /
-`GetDistanceSlot`) is repointed at the copy — the generic `CodeCaveFunctions.ArmDispatchCave` (docs/cave-code-execution.md),
+`GetDistanceSlot`) is repointed at the copy — the generic `RuntimeCaveWriter.ArmDispatchCave` (docs/cave-code-execution.md),
 which also asserts the vanilla prologue and load words before copying. The helper, after the copied body at +0x100,
 resolves the current enemy's slot (`NowMonstorUnit` +0x90), loads `PtrTable[slot]` into a1 and jumps back into the copy at
 its `sceVu0CopyVector` jal. Explicit-coordinate queries never reach the detour. An un-fooled slot holds the player global
@@ -25,7 +25,7 @@ itself, so that enemy's read is bit-identical vanilla.
 |---|---|---|
 | Mirage's decoy | `Mirage` (`AggroTable.Holder.MirageDecoy`) | fooled slots → `CodeCaves.DecoyPos`; the rest → the player |
 | Angel Gear's shield ring | `AngelGear` (`ShieldRing`) | every enemy outside the ring → its own ring point (`SlingshotProp.RingTable`); nearer ones → the player |
-| The judgement blade's fall (Big Bang, Sword of Zeus) | `EnemyFacing` (`JudgementBlade`) | every live slot → `CodeCaves.JudgementPos` |
+| The judgement blade's fall (Big Bang, Sword of Zeus) | `BladeRedirect` (begun by `JudgementBlade`) | every live slot → `CodeCaves.JudgementPos` |
 | Confusion (the Confuse ability, Babel's Spear, the Terra nut) | `Confusion` (no holder) | each confused slot → its victim, the player or a wander point; each provoked slot → its attacker |
 
 ## The one writer: `AggroTable`

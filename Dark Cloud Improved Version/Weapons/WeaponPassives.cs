@@ -28,7 +28,7 @@ namespace Dark_Cloud_Improved_Version
             AtlamilliaSword.AtlamilliaInsuranceEffect();
             // Crysknife / Magical Hammer "Circle Amplifier" — ownership passive: the magic circle table ×2 while one is
             // owned, ×3 while both are (self-gated 1 Hz; ownership changes in menus, so it runs in every mode).
-            CircleAmplifier.CircleAmplifierEffect();
+            CrysKnife.CircleAmplifierEffect();
             // Secret Armlet "Favoured Circles" — ownership passive: the circle table's favour word while the armlet is owned (self-gated 1 Hz).
             SecretArmlet.FavouredCirclesEffect();
         }

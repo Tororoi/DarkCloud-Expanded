@@ -25,7 +25,7 @@ namespace Dark_Cloud_Improved_Version
         //    glow disc resident while Xiao is the active character, and how it is painted and sized ──
         internal const string GlowDisc    = "catglowp";   // the cat's disc: the one glow disc resident while Xiao is the active character
         internal const int    GlowGoldRow = 9;            // the glow cave's ONE-based palette row: 1–5 the elements, 6 none, 7 the Divine Beast blue, 8 the Angel Shooter white, 9 the Angel Gear gold — the Sun Sword's colour
-        internal const string WeaponModel = "c04w13";     // Super Steve's dungeon rig (item 312 = c04w13.chr): what SolarBlade whitens
+        internal const string WeaponModel = "c04w13";     // Super Steve's dungeon rig (item 312 = c04w13.chr): what BladeTint whitens
         internal const float  GlowSize = 0.75f;           // the disc wider than the ×10 stone (45 units at 1.0 — 0.4 sat behind the 20-unit sprite): on the pouch while primed at the same size, so it looks the same when it rides the pellet
 
         /// <summary>The source weapon id of the single SynthSphere attached to Super Steve's record at
@@ -146,13 +146,13 @@ namespace Dark_Cloud_Improved_Version
             var xiaoCurse = new CurseAddrs(Player.Xiao.status, Player.Xiao.statusTimer, Player.Xiao.hp);
             var ssEvilcise = new CurseState();
             var ssManeater = new CurseState();
-            var xiaoTuna = new CustomGoroEffects.FrozenTunaWielder(Player.XiaoId, Player.Xiao.hp, Player.Xiao.maxHP,
+            var xiaoTuna = new FrozenTuna.FrozenTunaWielder(Player.XiaoId, Player.Xiao.hp, Player.Xiao.maxHP,
                                                                    Player.Xiao.status, Player.Xiao.statusTimer);
-            var ssTuna = new CustomGoroEffects.FrozenTunaState();
-            var ssTallHammer = new CustomGoroEffects.TallHammerState();
-            var ssCactus = new CustomUngagaEffects.CactusState();
-            var ssSnail = new CustomOsmondEffects.SnailState();
-            var ssStarBreaker = new CustomOsmondEffects.StarBreakerState();
+            var ssTuna = new FrozenTuna.FrozenTunaState();
+            var ssTallHammer = new TallHammer.TallHammerState();
+            var ssCactus = new Cactus.CactusState();
+            var ssSnail = new Snail.SnailState();
+            var ssStarBreaker = new StarBreaker.StarBreakerState();
             int lastSphere = 0;   // the sphere last seen: Charging Bull keeps a resident copy that must go when its sphere does
             int errors = 0;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SuperSteve] sphere dispatch up");
@@ -222,7 +222,7 @@ namespace Dark_Cloud_Improved_Version
 
                 // The Halberd line's charge (Halberd / Scorpion / Mirage / Cactus / Hercules' Wrath / Terra Sword / Babel's Spear): a
                 // 0.5 s held shot fires a pellet at the sphere's form — bigger, faster, 1.5× the attack.
-                HalberdLineCharge.DriveSphere(sphere, active);
+                Halberd.DriveSphere(sphere, active);
 
                 // Swift Strikes (Shamshir / Dusack / 7 Branch Sword / Atlamillia Sword / Chronicle Sword) and the Partisan's quick combo:
                 // her draw plays ×1.6 faster and her shoot at the fastest step that still fires.
@@ -285,10 +285,10 @@ namespace Dark_Cloud_Improved_Version
 
                 // Cold Storage (Frozen Tuna): WHP losses bank a healing pool that drains after Xiao is hit;
                 // on-hit 5% chance to stop all non-ice enemies at the price of freezing Xiao too.
-                CustomGoroEffects.FrozenTunaDrive(active && sphere == Items.frozentuna, xiaoTuna, equipSlot, ssTuna);
+                FrozenTuna.FrozenTunaDrive(active && sphere == Items.frozentuna, xiaoTuna, equipSlot, ssTuna);
 
                 // Tall Hammer: shrinks enemies Xiao's pellets hit.
-                CustomGoroEffects.TallHammerDrive(active && sphere == Items.tallhammer, Player.XiaoId, ssTallHammer);
+                TallHammer.TallHammerDrive(active && sphere == Items.tallhammer, Player.XiaoId, ssTallHammer);
 
                 // Ruby Effects
 
@@ -299,16 +299,16 @@ namespace Dark_Cloud_Improved_Version
                 // Ungaga Effects
 
                 // Absorb (Cactus): pellet hits restore Xiao's thirst scaled by damage (rock/metal/undead immune).
-                CustomUngagaEffects.CactusDrive(active && sphere == Items.cactus, Player.XiaoId,
+                Cactus.CactusDrive(active && sphere == Items.cactus, Player.XiaoId,
                                                 Player.Xiao.thirst, Player.Xiao.thirstMax, ssCactus);
 
                 // Osmond Effects
 
                 // Snail: 5% chance on hit to inflict gooey on the struck enemy.
-                CustomOsmondEffects.SnailDrive(active && sphere == Items.snail, Player.XiaoId, ssSnail);
+                Snail.SnailDrive(active && sphere == Items.snail, Player.XiaoId, ssSnail);
 
                 // Star Breaker: 2% chance on an enemy kill to receive an empty SynthSphere.
-                CustomOsmondEffects.StarBreakerDrive(active && sphere == Items.starbreaker, ssStarBreaker);
+                StarBreaker.StarBreakerDrive(active && sphere == Items.starbreaker, ssStarBreaker);
                 }
                 catch (Exception ex)
                 {   // one ability's fault must not take the whole dispatch down with it
@@ -328,7 +328,7 @@ namespace Dark_Cloud_Improved_Version
             SmallSwordSphere.Drive(false);
             Shamshir.DriveSphere(false);
             Dusack.DriveSphere(false);
-            HalberdLineCharge.DriveSphere(0, false);
+            Halberd.DriveSphere(0, false);
             Sax.DriveSphere(0, false);
             TsukikageSphere.Drive(false);
             HeavensCloudSphere.Drive(false);   // resets the flash latches, hands the wind gem's collision radius back
@@ -336,7 +336,7 @@ namespace Dark_Cloud_Improved_Version
             SuperSteve.DriveSphereIcon(0);
             SuperSteve.DriveSphereSprite(0);
             MobiusRingSphere.Drive(false);   // resets the damage ramp
-            CustomGoroEffects.FrozenTunaDrive(false, xiaoTuna, 0, ssTuna);   // resets the healing pool
+            FrozenTuna.FrozenTunaDrive(false, xiaoTuna, 0, ssTuna);   // resets the healing pool
             DragonsY.LockOnSpeedStop();
             Flamingo.Stop();
             DragonsY.Stop();

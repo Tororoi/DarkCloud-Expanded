@@ -709,7 +709,7 @@ namespace Dark_Cloud_Improved_Version
                         }
                 }
 
-                if (MainMenuThread.userMode == true)
+                if (SessionController.userMode == true)
                 {
                     if (Memory.ReadByte(Addresses.mode) == 0 || Memory.ReadByte(Addresses.mode) == 1)
                     {

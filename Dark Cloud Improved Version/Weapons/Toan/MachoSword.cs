@@ -440,7 +440,7 @@ namespace Dark_Cloud_Improved_Version
         // blocks live). The floor-load window did NOT save these two functions (crashed on
         // floor load, 2026-07-06 — by then the menu/HUD draw code had already run, unlike the
         // ToanKey case that window was verified on), so this is applied from
-        // MainMenuThread.ApplyNewChanges at in-game entry instead, while the menu/HUD draw
+        // SessionController.ApplyNewChanges at in-game entry instead, while the menu/HUD draw
         // code is still cold for the session. Original words are read-verified first: a
         // mismatch (different game build / emulator state) logs once and never writes.
         private struct AbsCodePatch { public long Addr; public uint[] Orig; public uint[] New; }

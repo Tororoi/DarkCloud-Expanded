@@ -44,26 +44,26 @@ namespace Dark_Cloud_Improved_Version
         private static Thread angelShooterThread = new Thread(new ThreadStart(AngelShooter.GuardianGraceEffect));
         private static Thread divineBeastTitleThread = new Thread(new ThreadStart(DivineBeastTitle.SpiritBeastEffect));
         private static Thread heavensCloudThread = new Thread(new ThreadStart(HeavensCloud.TyphoonEffect));
-        private static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SlimeTrailEffect));
+        private static Thread snailThread = new Thread(new ThreadStart(Snail.SlimeTrailEffect));
         private static Thread agasSwordThread = new Thread(new ThreadStart(AgasSword.DefensiveLegacyEffect));
         private static Thread braveArkThread = new Thread(new ThreadStart(BraveArk.HerosCourageEffect));
-        private static Thread tallHammerThread = new Thread(new ThreadStart(CustomGoroEffects.TallHammerEffect));
-        private static Thread frozenTunaThread = new Thread(new ThreadStart(CustomGoroEffects.ColdStorageEffect));
-        private static Thread infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
-        private static Thread mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
-        private static Thread halberdLineChargeThread = new Thread(new ThreadStart(HalberdLineCharge.TornadoChargeBuffEffect));
+        private static Thread tallHammerThread = new Thread(new ThreadStart(TallHammer.TallHammerEffect));
+        private static Thread frozenTunaThread = new Thread(new ThreadStart(FrozenTuna.ColdStorageEffect));
+        private static Thread infernoHammerThread = new Thread(new ThreadStart(Inferno.InfernoEffect));
+        private static Thread mobiusRingThread = new Thread(new ThreadStart(MobiusRing.MobiusRingEffect));
+        private static Thread halberdLineChargeThread = new Thread(new ThreadStart(Halberd.TornadoChargeBuffEffect));
         private static Thread partisanThread = new Thread(new ThreadStart(Partisan.QuickSwingEffect));
         private static Thread deSangaThread = new Thread(new ThreadStart(DeSanga.KillHealEffect));
         private static Thread javelinThread = new Thread(new ThreadStart(Javelin.MarineEffect));
         private static Thread scorpionVenomThread = new Thread(new ThreadStart(ScorpionVenom.VenomEffect));
         private static Thread cactusThread = new Thread(new ThreadStart(Cactus.DesertBloomEffect));
+        private static Thread absorbThread = new Thread(new ThreadStart(Cactus.AbsorbEffect));   // the Cactus's second loop: 50 ms, Ungaga's own hand only, no pause gate — not Desert Bloom's 16 ms sphere-aware loop
         private static Thread herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.UltimateEffect));
         private static Thread babelSpearThread = new Thread(new ThreadStart(BabelsSpear.CurseOfBabelEffect));
         private static Thread terraSwordThread = new Thread(new ThreadStart(TerraSword.RockfallEffect));
-        private static Thread absorbThread = new Thread(new ThreadStart(CustomUngagaEffects.AbsorbEffect));
-        private static Thread supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
-        private static Thread starBreakerThread = new Thread(new ThreadStart(CustomOsmondEffects.ShootingStarsEffect));
-        private static Thread skunkThread = new Thread(new ThreadStart(CustomOsmondEffects.LongerFlameEffect));
+        private static Thread supernovaThread = new Thread(new ThreadStart(Supernova.SupernovaEffect));
+        private static Thread starBreakerThread = new Thread(new ThreadStart(StarBreaker.ShootingStarsEffect));
+        private static Thread skunkThread = new Thread(new ThreadStart(Skunk.LongerFlameEffect));
         private static Thread wiseOwlSwordThread = new Thread(new ThreadStart(WiseOwlSword.WiseOwlAlwaysKnowsEffect));
 
         /// <summary>Starts <paramref name="entry"/> on a fresh thread in <paramref name="thread"/> unless the one there is still running.</summary>
@@ -377,13 +377,13 @@ namespace Dark_Cloud_Improved_Version
             switch (Player.Weapon.GetCurrentWeaponId())
             {
                 case Items.tallhammer:
-                    Ensure(ref tallHammerThread, CustomGoroEffects.TallHammerEffect);
+                    Ensure(ref tallHammerThread, TallHammer.TallHammerEffect);
                     break;
                 case Items.frozentuna:
-                    Ensure(ref frozenTunaThread, CustomGoroEffects.ColdStorageEffect);
+                    Ensure(ref frozenTunaThread, FrozenTuna.ColdStorageEffect);
                     break;
                 case Items.inferno:
-                    Ensure(ref infernoHammerThread, CustomGoroEffects.InfernoEffect);
+                    Ensure(ref infernoHammerThread, Inferno.InfernoEffect);
                     break;
 
                 default:
@@ -399,7 +399,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 case Items.mobiusring:
 
-                    Ensure(ref mobiusRingThread, CustomRubyEffects.MobiusRingEffect);
+                    Ensure(ref mobiusRingThread, MobiusRing.MobiusRingEffect);
                     break;
                 case Items.banditsring:
 
@@ -418,23 +418,23 @@ namespace Dark_Cloud_Improved_Version
             switch (Player.Weapon.GetCurrentWeaponId())
             {
                 case Items.herculeswrath:
-                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);
+                    Ensure(ref halberdLineChargeThread, Halberd.TornadoChargeBuffEffect);
                     Ensure(ref herculesWrathThread, HerculesWrath.UltimateEffect);   // its own: the ultimate
                     break;
 
                 case Items.babelsspear:
                     Ensure(ref babelSpearThread, BabelsSpear.CurseOfBabelEffect);
-                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);   // the Halberd line's charge
+                    Ensure(ref halberdLineChargeThread, Halberd.TornadoChargeBuffEffect);   // the Halberd line's charge
                     break;
 
                 case Items.cactus:
-                    Ensure(ref absorbThread, CustomUngagaEffects.AbsorbEffect);
-                    Ensure(ref cactusThread, Cactus.DesertBloomEffect);   // its guard: the cactus rising ahead
-                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);   // the Halberd line's charge
+                    Ensure(ref absorbThread, Cactus.AbsorbEffect);   // its hits water Ungaga (50 ms)
+                    Ensure(ref cactusThread, Cactus.DesertBloomEffect);   // its guard: the cactus rising ahead (16 ms)
+                    Ensure(ref halberdLineChargeThread, Halberd.TornadoChargeBuffEffect);   // the Halberd line's charge
                     break;
 
                 case Items.halberd:
-                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);   // the Halberd line's charge
+                    Ensure(ref halberdLineChargeThread, Halberd.TornadoChargeBuffEffect);   // the Halberd line's charge
                     break;
 
                 case Items.partisan:
@@ -450,16 +450,16 @@ namespace Dark_Cloud_Improved_Version
                     break;
 
                 case Items.scorpion:
-                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);   // the Halberd line's charge
+                    Ensure(ref halberdLineChargeThread, Halberd.TornadoChargeBuffEffect);   // the Halberd line's charge
                     Ensure(ref scorpionVenomThread, ScorpionVenom.VenomEffect);   // its poison landing cures the wielder and feeds the weapon
                     break;
 
                 case Items.mirage:
-                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);   // the Halberd line's charge
+                    Ensure(ref halberdLineChargeThread, Halberd.TornadoChargeBuffEffect);   // the Halberd line's charge
                     break;
 
                 case Items.terrasword:
-                    Ensure(ref halberdLineChargeThread, HalberdLineCharge.TornadoChargeBuffEffect);   // the Halberd line's charge
+                    Ensure(ref halberdLineChargeThread, Halberd.TornadoChargeBuffEffect);   // the Halberd line's charge
                     Ensure(ref terraSwordThread, TerraSword.RockfallEffect);   // its guard: the boulder
                     break;
 
@@ -475,19 +475,19 @@ namespace Dark_Cloud_Improved_Version
             switch (Player.Weapon.GetCurrentWeaponId())
             {
                 case Items.supernova:
-                    Ensure(ref supernovaThread, CustomOsmondEffects.SupernovaEffect);
+                    Ensure(ref supernovaThread, Supernova.SupernovaEffect);
                     break;
 
                 case Items.starbreaker:
-                    Ensure(ref starBreakerThread, CustomOsmondEffects.ShootingStarsEffect);
+                    Ensure(ref starBreakerThread, StarBreaker.ShootingStarsEffect);
                     break;
 
                 case Items.snail:
-                    Ensure(ref snailThread, CustomOsmondEffects.SlimeTrailEffect);
+                    Ensure(ref snailThread, Snail.SlimeTrailEffect);
                     break;
 
                 case Items.skunk:
-                    Ensure(ref skunkThread, CustomOsmondEffects.LongerFlameEffect);
+                    Ensure(ref skunkThread, Skunk.LongerFlameEffect);
                     break;
                 default:
                     break;

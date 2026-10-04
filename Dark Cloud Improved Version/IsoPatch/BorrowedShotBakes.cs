@@ -43,7 +43,7 @@ namespace Dark_Cloud_Improved_Version
             foreach (var rec in pack.Records)
             {
                 if (!rec.Name.EndsWith(".img", StringComparison.OrdinalIgnoreCase)) continue;
-                var bank = new CatPackBakes.Bank(rec.Payload);
+                var bank = new ImgBank(rec.Payload);
                 var items = new List<(string name, byte[] blob)>();
                 foreach (var (tname, _) in bank.Entries)
                 {
@@ -64,7 +64,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     items.Add((tname, blk));
                 }
-                rec.ReplacePayload(CatPackBakes.Bank.Build(bank.Magic, items));
+                rec.ReplacePayload(ImgBank.Build(bank.Magic, items));
             }
             return pack.Rebuild();
         }

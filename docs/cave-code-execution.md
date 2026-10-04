@@ -31,7 +31,7 @@ techniques were previously the only safe ones, and both have hard limits:
 A cave **does** execute cleanly if you satisfy **two** conditions together:
 
 1. **Write it cold.** Populate the cave via PINE at the cold window
-   (`MainMenuThread.ApplyNewChanges`, in-game entry) — *before* anything executes. The
+   (`SessionController.ApplyNewChanges`, in-game entry) — *before* anything executes. The
    recompiler has never touched the page, so when the EE first runs it, it compiles it
    fresh with no stale cache to trip over.
 2. **Reach it via a data-driven indirect call, not an in-place jump.** Instead of

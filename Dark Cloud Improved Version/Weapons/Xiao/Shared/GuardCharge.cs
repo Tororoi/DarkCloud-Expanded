@@ -9,8 +9,8 @@ namespace Dark_Cloud_Improved_Version
     {
         internal static void Frame(SunSword.SolarProfile p, double held, double seconds)
         {
-            SolarBlade.Set((float)(held / seconds), p.Model, p.Frame, p.Unlit, p.BladeWhite);
-            if (p.PrimeDim > 0f) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim * (float)Math.Min(1.0, held / seconds)); }
+            BladeTint.Set((float)(held / seconds), p.Model, p.Frame, p.Unlit, p.BladeWhite);
+            if (p.PrimeDim > 0f) { SceneLighting.BeginDim(); SceneLighting.DimTo(p.PrimeDim * (float)Math.Min(1.0, held / seconds)); }
             ChargeTint.Ramp(seconds - held);
         }
     }

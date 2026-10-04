@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -47,6 +48,18 @@ namespace Dark_Cloud_Improved_Version
             _held = false;
             if (Memory.ReadFloat(Mailbox.FlameSpacing) == Spacing) Memory.WriteFloat(Mailbox.FlameSpacing, VanillaSpacing);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "flamethrower reach released");
+        }
+
+        /// <summary>Osmond's Skunk thread: hands every tick to <see cref="Drive"/> while the weapon is equipped, and
+        /// stands it down once when it goes.</summary>
+        public static void LongerFlameEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.skunk)
+            {
+                Drive(!Player.CheckDunIsPaused());
+                Thread.Sleep(16);
+            }
+            Stop();
         }
     }
 }

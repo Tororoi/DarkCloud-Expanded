@@ -111,7 +111,7 @@ namespace Dark_Cloud_Improved_Version
         /// takes the normal flinch decision; plain pellets (kick 0) are unchanged. Returns to 0x1DB420. ElfCatPatches also
         /// accepts (and re-aims) an ISO whose hook still points at 0x1FB1FA0.</summary>
         internal const uint XiaoMeleeFlinch    = 0x01FB2250;   // 40 B → 0x1FB2278
-        /// <summary>The Sun Sword's blade under its own ambient (SolarBlade): two 3-word entries that load the DrawVu1
+        /// <summary>The Sun Sword's blade under its own ambient (BladeTint): two 3-word entries that load the DrawVu1
         /// overloads of CVisualVu1 (the rigid-mesh class a weapon model is; 0x135000 / 0x134BC0) into t9 and jump into the
         /// BODY of <see cref="CatMaskTint"/> (+0x18, past its own two entries), which does the ambient add generically and
         /// calls whatever t9 holds. Written as words by ElfWeaponPatches.PatchSolarBladeTint.</summary>

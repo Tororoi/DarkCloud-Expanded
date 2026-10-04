@@ -13,8 +13,8 @@ namespace Dark_Cloud_Improved_Version
     /// a black-cored RED RING, for the Sword of Zeus's judgement blade.
     ///
     /// Each is the Gallery of Time's torch glow re-tinted through the same builder the cat's disc uses
-    /// (<see cref="CatPackBakes.GlowT8Tim2"/>) with that ramp (<see cref="CatPackBakes.GlowGold"/>,
-    /// <see cref="CatPackBakes.GlowBlue"/>) resting in its CLUT. ⚠ The names must NOT be the cat's: the palette cave
+    /// (<see cref="GlowDisc.BuildT8"/>) with that ramp (<see cref="GlowDisc.Gold"/>,
+    /// <see cref="GlowDisc.Blue"/>) resting in its CLUT. ⚠ The names must NOT be the cat's: the palette cave
     /// (tools/stubs/cat_glow_palette.s) finds its target by matching "catglowp", so a disc under any other name is never
     /// repainted and keeps its baked colour for good — which is why a second colour is a second DISC here rather than a
     /// palette row, and why neither needs a cave change. One 8-bit 64×64 disc is ~5 KB, so his pack grows by that per disc.
@@ -27,26 +27,26 @@ namespace Dark_Cloud_Improved_Version
         internal const string Template = "c01d01";           // an 8-bit TIM2 with a 0x30 picture header in that bank — the headers the disc is built on
         internal const string GlowName = "toanglow";    // Sun Sword — the Angel Gear cat's gold
         internal const string BlueName = "toanglowb";   // Big Bang — the Divine Beast Title cat's blue
-        internal const string ZeusName = "toanglowz";   // Sword of Zeus — a black core out to a deep red edge (CatPackBakes.GlowZeus)
+        internal const string ZeusName = "toanglowz";   // Sword of Zeus — a black core out to a deep red edge (GlowDisc.Zeus)
 
         internal static void Run(IsoArchive arc, Action<string> log)
         {
             byte[] host = arc.Read(HostChr);
             var pack = ChrPack.Parse(host);
             var imgRec = pack.Find(HostImg) ?? throw new IOException($"{HostChr} lacks {HostImg}");
-            var bank = new CatPackBakes.Bank(imgRec.Payload);
+            var bank = new ImgBank(imgRec.Payload);
             if (!bank.Entries.Any(e => e.name == Template)) throw new IOException($"{HostImg} lacks {Template}, the picture the disc borrows its headers from");
 
-            var fire = ChrPack.Parse(arc.Read(CatPackBakes.GlowSrc)).Find("fire.img")
+            var fire = ChrPack.Parse(arc.Read(GlowDisc.SourcePack)).Find("fire.img")
                        ?? throw new IOException("glow source pack lacks fire.img");
-            byte[] light = new CatPackBakes.Bank(fire.Payload).Block("lightling");
+            byte[] light = new ImgBank(fire.Payload).Block(GlowDisc.SourcePicture);
             var ramps = new[]
             {
-                (name: GlowName, ramp: CatPackBakes.GlowGold),
-                (name: BlueName, ramp: CatPackBakes.GlowBlue),
-                (name: ZeusName, ramp: CatPackBakes.GlowZeus),
+                (name: GlowName, ramp: GlowDisc.Gold),
+                (name: BlueName, ramp: GlowDisc.Blue),
+                (name: ZeusName, ramp: GlowDisc.Zeus),
             };
-            var discs = ramps.Select(d => (d.name, bytes: CatPackBakes.GlowT8Tim2(bank.Block(Template), light, d.ramp.core, d.ramp.outer))).ToArray();
+            var discs = ramps.Select(d => (d.name, bytes: GlowDisc.BuildT8(bank.Block(Template), light, d.ramp.core, d.ramp.outer))).ToArray();
             bool Present(string name) => bank.Entries.Any(e => e.name == name);
             byte[] Fresh(string name) => discs.FirstOrDefault(d => d.name == name).bytes;
 
@@ -57,7 +57,7 @@ namespace Dark_Cloud_Improved_Version
 
             var items = bank.Entries.Select(e => (e.name, Fresh(e.name) ?? bank.Block(e.name))).ToList();
             foreach (var d in discs) if (!Present(d.name)) items.Add((d.name, d.bytes));
-            imgRec.ReplacePayload(CatPackBakes.Bank.Build(bank.Magic, items));
+            imgRec.ReplacePayload(ImgBank.Build(bank.Magic, items));
             byte[] outp = pack.Rebuild();
             arc.Redirect(HostChr, outp);
             string what = string.Join(", ", discs.Select(d => $"`{d.name}` {(Present(d.name) ? "recoloured" : "added")}"));

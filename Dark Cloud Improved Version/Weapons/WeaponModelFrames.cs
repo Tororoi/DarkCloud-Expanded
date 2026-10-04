@@ -8,7 +8,7 @@ namespace Dark_Cloud_Improved_Version
     /// <see cref="ScaleBlade"/>: a snapshot MULTIPLIED, so the frame's own rotation and base scale survive and a ramp eases smoothly;
     /// 1.0 restores). <see cref="DumpTree"/> logs the whole tree — how a new weapon's frame names are found. Also the two reads of the
     /// equipped weapon RECORD the Xiao-sphere abilities key their element on (<see cref="EquippedRecord"/>,
-    /// <see cref="SelectedElementBits"/>). Used by HeavensCloud, KitchenKnife, Claymore, SolarBlade, WhirlwindScale, MobiusRing,
+    /// <see cref="SelectedElementBits"/>). Used by HeavensCloud, KitchenKnife, Claymore, BladeTint, WhirlwindScale, MobiusRing,
     /// DivineBeastTitle and the spheres.</summary>
     internal static class WeaponModelFrames
     {

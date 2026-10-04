@@ -362,7 +362,7 @@ namespace Dark_Cloud_Improved_Version
         {
             Array.Clear(_fooled, 0, _fooled.Length);
             Array.Clear(_brokenThisDecoy, 0, _brokenThisDecoy.Length);
-            _prevHp = ReusableFunctions.GetEnemiesHp();
+            _prevHp = EnemyQueries.GetEnemiesHp();
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count && s < MaxSlots; s++)
                 if (Enemies.IsLive(s)) _fooled[s] = true;
         }
@@ -409,7 +409,7 @@ namespace Dark_Cloud_Improved_Version
             }
             PoseClone();
             ShowDecoyHaze();
-            int[] hp = ReusableFunctions.GetEnemiesHp();
+            int[] hp = EnemyQueries.GetEnemiesHp();
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count && s < MaxSlots; s++)
             {
                 if (!Enemies.IsLive(s)) { _fooled[s] = false; continue; }

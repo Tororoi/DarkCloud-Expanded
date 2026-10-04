@@ -6,7 +6,7 @@ namespace Dark_Cloud_Improved_Version
     /// Xiao ramps while HOLDING the drawn shot (states 0xB/0xC). Every <see cref="CycleSeconds"/> held the damage multiplier
     /// compounds ×<see cref="StepMultiplier"/> (Ruby's damage += damage/2 per flash cycle) and Xiao flashes, as Ruby does. The
     /// fired pellet takes damage ×1.5^cycles (capped at Ruby's 65535) and its sprite grows with the multiplier by Ruby's own
-    /// ball-growth formula (<see cref="CustomRubyEffects.RubyBallGrowthPerMultiple"/>), capped at <see cref="PelletMaxScale"/>.
+    /// ball-growth formula (<see cref="MobiusRing.RubyBallGrowthPerMultiple"/>), capped at <see cref="PelletMaxScale"/>.
     /// The ramp freezes on release so the pellet that fires reads it, and resets on a fresh hold or when the sphere goes.
     /// Driven from Super Steve's sphere dispatch.</summary>
     internal static class MobiusRingSphere
@@ -64,7 +64,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         long dmgA = PlayerShotPool.DamageAddr(poolBase, i);
                         Memory.WriteInt(dmgA, (int)Math.Min(DamageCap, Memory.ReadInt(dmgA) * (double)mult));
-                        float scale = 1f + (mult - 1f) * CustomRubyEffects.RubyBallGrowthPerMultiple;
+                        float scale = 1f + (mult - 1f) * MobiusRing.RubyBallGrowthPerMultiple;
                         if (scale > PelletMaxScale) scale = PelletMaxScale;
                         Memory.WriteFloat(PlayerShotPool.ScaleAddr(poolBase, i), scale);
                     }

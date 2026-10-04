@@ -45,7 +45,7 @@ namespace Dark_Cloud_Improved_Version
         // needed to interpret them, so CWater's own frame (+0xB0) plays no part in this math.
         private const long CwCorner = 0x20, CwCornerStride = 0x10;
         // Water DISTORTION is fully NATIVE (e03 mapinfo: the canal body is world-anchored and its
-        // WATER_SHAKE sources agitate it — SceneBaker.TuneCanalWater). The old C# height-buffer
+        // WATER_SHAKE sources agitate it — TownSceneBakes.TuneCanalWater). The old C# height-buffer
         // poking experiments (PlayerRipple/RippleProbe) were deleted 2026-08 — recoverable via git.
         private const long  WaveSpeedOff = 0x94, WaveDampOff = 0x98;   // Hamon params in CWater (cw = body+0x90)
 

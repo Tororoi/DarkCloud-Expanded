@@ -70,16 +70,16 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>An IMG bank (row-major pixels) of the pictures <paramref name="names"/> of <paramref name="bank"/>, each resampled to
         /// <paramref name="n"/>² (nearest texel) with its CLUT kept: what the cash is handed in place of textures too big for its entry;
         /// once the model is loaded their entries are pointed at the full pictures (<see cref="FullPictures"/>, <see cref="FullTexture"/>).</summary>
-        internal static byte[] StandInBank(CatPackBakes.Bank bank, int n, params string[] names)
+        internal static byte[] StandInBank(ImgBank bank, int n, params string[] names)
         {
             var items = new List<(string, byte[])>();
             foreach (string t in names) items.Add((t, Tim8.ResampleTim8(bank.Block(t), bank.Swizzled, n)));
-            return CatPackBakes.Bank.Build(new[] { (byte)'I', (byte)'M', (byte)'G', (byte)0 }, items);
+            return ImgBank.Build(new[] { (byte)'I', (byte)'M', (byte)'G', (byte)0 }, items);
         }
 
         /// <summary>The pictures <paramref name="names"/> of <paramref name="bank"/> whole — row-major, CLUTs as the bank has them — in
         /// <see cref="FullTexture"/>'s shape.</summary>
-        internal static List<(string name, int w, int h, byte[] pixels, byte[] clut)> FullPictures(CatPackBakes.Bank bank, params string[] names)
+        internal static List<(string name, int w, int h, byte[] pixels, byte[] clut)> FullPictures(ImgBank bank, params string[] names)
         {
             var full = new List<(string name, int w, int h, byte[] pixels, byte[] clut)>();
             foreach (string t in names) { var (w, h, px, clut) = Tim8.ReadTim8(bank.Block(t), bank.Swizzled); full.Add((t, w, h, px, clut)); }
@@ -176,7 +176,7 @@ namespace Dark_Cloud_Improved_Version
                 int meshOff = (int)IsoBytes.U32(mds, table + i * 0x70 + 0x28);
                 if (meshOff <= 0 || meshOff + 0x40 > mds.Length) continue;
                 meshes++;
-                var m = MdtCarve.MdtParse(mds, meshOff);
+                var m = MdtFloatCodec.Parse(mds, meshOff);
                 int stride = m.hasCol ? 4 : 3;
                 foreach (var sub in m.subs) vu += sub.recs.Count * stride * 16 + 64;
             }

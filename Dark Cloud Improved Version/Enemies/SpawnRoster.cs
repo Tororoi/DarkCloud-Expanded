@@ -500,6 +500,52 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>
+        /// Parses the Sandbox injector's roster spec: "20" or a comma list "20,3,6". A trailing "!" marks a species
+        /// spawn-once (at most 1 per floor; the rest fill normally, total stays 15), e.g. "20!,60" = one Gyon + Cursed
+        /// Roses. Entries that are not integers are skipped. False when nothing parsed.
+        /// </summary>
+        internal static bool TryParseSpec(string spec, out int[] tableIndices, out bool[] spawnOnce)
+        {
+            var idx = new System.Collections.Generic.List<int>();
+            var once = new System.Collections.Generic.List<bool>();
+            foreach (string p in (spec ?? "").Split(','))
+            {
+                string t = p.Trim();
+                bool o = t.EndsWith("!");
+                if (o) t = t.Substring(0, t.Length - 1).Trim();
+                if (!int.TryParse(t, out int v)) continue;
+                idx.Add(v); once.Add(o);
+            }
+            tableIndices = idx.ToArray();
+            spawnOnce = once.ToArray();
+            return idx.Count > 0;
+        }
+
+        /// <summary>
+        /// Sets the current dungeon's spawn roster from the injector's spec (<see cref="TryParseSpec"/>): one index →
+        /// every spawn is that species (<see cref="SetSpawnRosterToSpecies"/>), a list → <see cref="SetSpawnRosterMix"/>.
+        /// The special token "iq" writes the exact real Ice Queen (SW floor-18) boss block, incl. the Count field
+        /// (<see cref="SetIceQueenFloorExact"/>). Pure data writes (crash-free); takes effect when you re-enter / descend
+        /// to a floor.
+        /// </summary>
+        internal static void ApplySpec(string spec)
+        {
+            if ((spec ?? "").Trim().ToLowerInvariant() == "iq")
+            {
+                SetIceQueenFloorExact();
+                return;
+            }
+            if (!TryParseSpec(spec, out int[] idx, out bool[] once))
+            {
+                Console.WriteLine("Injector: enter a TableIndex or list, e.g. 20  |  20,3,6  |  20!,60 (Gyon once)");
+                return;
+            }
+            int population = 0; // 0 (or unparseable) = keep original
+            if (idx.Length == 1) SetSpawnRosterToSpecies(idx[0], population);
+            else SetSpawnRosterMix(idx, once, population);
+        }
+
         // TEST: write the EXACT real Shipwreck floor-18 boss block (count/id/weight per entry) to the current
         // dungeon's floors — including the +0x0 Count field the normal roster path never writes — to see whether
         // matching the game's block reproduces the deterministic boss spawn (Ice Queen -> slot 0 + companions).

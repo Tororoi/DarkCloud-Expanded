@@ -42,7 +42,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Queens fishing collision: the canal's bridge (obj40/44) and pipe (obj9) tris from the scene plus the authored
-        /// containment walls. (Fish leaking the +Z wall was the engine's gather box, fixed in IsoPatcher.PatchFishBox.)</summary>
+        /// containment walls. (Fish leaking the +Z wall was the engine's gather box, fixed in ElfFishingPatches.PatchFishBox.)</summary>
         internal static List<double[][]> QueensFishingTris(List<SceneScn.PlacedMesh> placed, Action<string> log)
         {
             var bridges = MeshTris(placed, new HashSet<int> { 40, 44 });
@@ -63,14 +63,14 @@ namespace Dark_Cloud_Improved_Version
                 var q = QueensFishingTris(SceneScn.PlacedMeshes(e03, e03map), log);
                 File.WriteAllBytes(Path.Combine(fishingOut, "queens_2.bin"), Dcfc(2, q));
                 log($"  queens_2.bin: {q.Count} tris");
-                var y = YellowDropsBankBakes.WestbankFishWalls();
+                var y = YellowDropsWestBank.WestbankFishWalls();
                 File.WriteAllBytes(Path.Combine(fishingOut, "yellowdrops_23.bin"), Dcfc(23, y));
                 log($"  yellowdrops_23.bin: {y.Count} tris");
             }
-            var (h06, orig, nodes) = SnakeStatueBakes.RebuildH06(e03, log);
+            var (h06, orig, nodes) = SnakeStatueCollision.RebuildH06(e03, log);
             log($"e03h06: sub {orig:N0} -> {h06.Length:N0} B ({nodes} player-collision nodes)");
             arc.Redirect(QueensScene, SceneScn.ReplaceSub(e03, "e03h06", h06));
-            byte[] s1301 = YellowDropsBankBakes.RebuildS1301(s13, s13map, log);
+            byte[] s1301 = YellowDropsWestBank.RebuildS1301(s13, s13map, log);
             arc.Redirect(YellowDropsScene, SceneScn.ReplaceSub(s13, "s1301", s1301));
         }
     }

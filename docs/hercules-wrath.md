@@ -7,9 +7,9 @@ keep guarding 5 s more:
 
 | part | how |
 |---|---|
-| dim | `SolarLighting.BeginDim` / `DimTo(0.35 × charge)` — Big Bang's prime darkness; held while primed |
-| body tint | the dim's own white (`SolarLighting.TintEnemies`: enemies and the active character, up to 30 at a dim of 0.5), and the Mirage clone (`CharacterClone.BodyTint`) |
-| spear | gold (150, 130, 50) on an exponential ramp (e^(4f)−1)/(e^4−1) to full at 5 s: through `SolarBlade` (the Sun Sword's vtable-copy lever, frame `w09_` of c10w09) — the clone's spear too, since its rigid weapon visuals are SHARED with the real spear's (Lessons) |
+| dim | `SceneLighting.BeginDim` / `DimTo(0.35 × charge)` — Big Bang's prime darkness; held while primed |
+| body tint | the dim's own white (`SceneLighting.TintEnemies`: enemies and the active character, up to 30 at a dim of 0.5), and the Mirage clone (`CharacterClone.BodyTint`) |
+| spear | gold (150, 130, 50) on an exponential ramp (e^(4f)−1)/(e^4−1) to full at 5 s: through `BladeTint` (the Sun Sword's vtable-copy lever, frame `w09_` of c10w09) — the clone's spear too, since its rigid weapon visuals are SHARED with the real spear's (Lessons) |
 | release early | guard let go before level 2: gold cleared, dim ended (the Mirage decoy stays) |
 | primed | charge-complete flash; the dim holds until the next swing reaches frame 677 of Ungaga's attack motion (the end of his first swing's 674–677 hit window) for as long as a Mirage decoy stands — a new decoy cast keeps it primed; if the last one dissolves unused, the gold and the dim fall away with its dissolve (`Mirage.DecoyOutroAlpha`) and the strike is gone. The decoy lasts 18 s for Hercules' Wrath (12 for the Mirage), latched at each cast |
 | clone | drawn by the chara-slot draw (Draw__12CNPCharacter), which adds a slot's tint to the ambient and then calls Draw__10CCharacter, which adds it again: the chara-slot pass also misses the room's darkening, so the clone takes the scene's light fraction d as its own dim (`CharacterClone.SceneLight`), and every tint written to its slots is t / (1 + d) — (A + x)·d + x = A·d + t, Ungaga's |
@@ -27,11 +27,11 @@ sub-shot stays on the mirage.
 
 | frame | what |
 |---|---|
-| 21 → 36 | `SolarLighting.DimRamp(0.35, u)`: the exponential plunge to black |
-| 36 | `BlastFalloff.PlantFalloff(…, reachScale: 2, guardBreak: true)` (each entry crush-marked — `CodeCaves.CrushMark` at +0x9C: the ISO's guard-crush cave passes it through every guard window, and Ungaga's crushing hits bill no weapon HP per hit, the strike billing its 20 once; the thread withdraws the unspent entries, `BlastFalloff.ExpireShells`, which clears the mark with them) (Big Bang's multipliers on rings of 20 / 50 / 80 / 100: 4× / 3× / 2× / 1× attack), `WeaponWhp.Drain(herculeswrath, 20)` (Big Bang's blast cost), `Mirage.Dispel()` (the decoy gone at once, under the flash), `SunSword.ZeusFlash.ArmLighting()` + `SolarLighting.Flash()` — the bolt's white, easing back over 2 s |
+| 21 → 36 | `SceneLighting.DimRamp(0.35, u)`: the exponential plunge to black |
+| 36 | `BlastFalloff.PlantFalloff(…, reachScale: 2, guardBreak: true)` (each entry crush-marked — `CodeCaves.CrushMark` at +0x9C: the ISO's guard-crush cave passes it through every guard window, and Ungaga's crushing hits bill no weapon HP per hit, the strike billing its 20 once; the thread withdraws the unspent entries, `BlastFalloff.ExpireShells`, which clears the mark with them) (Big Bang's multipliers on rings of 20 / 50 / 80 / 100: 4× / 3× / 2× / 1× attack), `WeaponWhp.Drain(herculeswrath, 20)` (Big Bang's blast cost), `Mirage.Dispel()` (the decoy gone at once, under the flash), `SunSword.ZeusFlash.ArmLighting()` + `SceneLighting.Flash()` — the bolt's white, easing back over 2 s |
 | 60 → 68 | the sparkle (`SetFade`) and the spear's gold (held full until here) fade out together; the sub-shot ends at 68 |
 
-Nothing of Ungaga's steps `SolarLighting.Tick`, so the ultimate's loop does, every 16 ms, and restores the light on exit.
+Nothing of Ungaga's steps `SceneLighting.Tick`, so the ultimate's loop does, every 16 ms, and restores the light on exit.
 If the sparkle is not entered on a floor, the swing blasts at once.
 
 ## Super Steve's sphere
@@ -50,12 +50,12 @@ decoy), level 2 the 5 s dim and gold, primed while a decoy stands — except:
 
 Once the pellet has left, the strike goes ahead even if the decoy fades during its flight.
 
-## "Tornado Charge Buff" — the Halberd line's charge (`Weapons/Ungaga/Shared/HalberdLineCharge.cs`)
+## "Tornado Charge Buff" — the Halberd line's charge (`Weapons/Ungaga/Halberd.cs`)
 
 Ungaga's charge effect c10a_ex (the shot `UngagaKey_Play` fires every 30 frames of a held charge from the main-character effect
 instance) travels faster and is drawn larger, hit spheres to match, at a form that grows down the build path
-(`HalberdLineCharge.TierOf`; each branch at its parent's form). Ungaga's own charge animation is untouched (`AnimFactor` 1). The
-thread is `HalberdLineCharge.TornadoChargeBuffEffect`.
+(`Halberd.TierOf`; each branch at its parent's form). Ungaga's own charge animation is untouched (`AnimFactor` 1). The
+thread is `Halberd.TornadoChargeBuffEffect`.
 
 | form | weapons | travel | size / hit radius |
 |---|---|---|---|
@@ -82,7 +82,7 @@ frame, so nothing races the engine:
 A floor load or a menu rebuilds the instance with the engine's own config pointer: the next 250 ms tick applies the form again.
 Switching to another weapon of the line restores first and applies the new form from scratch.
 
-**Super Steve with a sphere of the line** carries the form on a CHARGED shot (`HalberdLineCharge.DriveSphere`, every dispatch tick
+**Super Steve with a sphere of the line** carries the form on a CHARGED shot (`Halberd.DriveSphere`, every dispatch tick
 while Super Steve is out): holding the draw 0.5 s charges it (`ChargeTint` ramps, the game's charge-complete flash; the shot's
 weapon HP billed as a charged one, `ChargedShotWhp`), and the pellet a charged release fires — the first new slot in the player
 shot pool — is drawn the form's size larger (its sprite only: the pellet's hit sphere is the engine's fixed one), has its velocity
@@ -101,5 +101,5 @@ non-flat part — the strike logs the floor it found beside the pellet's and the
 ## Lessons
 
 - **Tint the spear once.** The Mirage clone's rigid weapon visuals are SHARED with the real spear's (private vtable and all), so the
-  blade lever (`SolarBlade`) gilds both. A slot tint written to the clone on top of that doubled the gold on its spear; the clone
+  blade lever (`BladeTint`) gilds both. A slot tint written to the clone on top of that doubled the gold on its spear; the clone
   takes only the dim's body white (`CharacterClone.BodyTint`).

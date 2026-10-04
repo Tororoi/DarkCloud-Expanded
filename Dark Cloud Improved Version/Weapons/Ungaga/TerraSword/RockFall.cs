@@ -35,17 +35,17 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>A mode-4 fall: its fields first, the flag last.</summary>
         internal static void StartFall(float y, float vy, float g, float stop, uint follow, float offX, float offZ, uint stopSrc, float stopOff)
         {
-            Memory.WriteInt  (CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
-            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallY, y);
-            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallVy, vy);
-            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallG, g);
-            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallStop, stop);
-            Memory.WriteUInt (CodeCaves.BladeFall + CodeCaves.BladeFallUnit, follow);
-            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallOffX, offX);
-            Memory.WriteFloat(CodeCaves.BladeFall + CodeCaves.BladeFallOffZ, offZ);
+            Memory.WriteInt  (CodeCaves.VerticalDrive + CodeCaves.VerticalDriveFlag, CodeCaves.VerticalDriveOff);
+            Memory.WriteFloat(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveY, y);
+            Memory.WriteFloat(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveVy, vy);
+            Memory.WriteFloat(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveG, g);
+            Memory.WriteFloat(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveStop, stop);
+            Memory.WriteUInt (CodeCaves.VerticalDrive + CodeCaves.VerticalDriveUnit, follow);
+            Memory.WriteFloat(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveOffX, offX);
+            Memory.WriteFloat(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveOffZ, offZ);
             Memory.WriteUInt (CodeCaves.FallDrive + CodeCaves.FallDriveStopSrc, stopSrc);
             Memory.WriteFloat(CodeCaves.FallDrive + CodeCaves.FallDriveStopOff, stopOff);
-            Memory.WriteInt  (CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallFollowing);
+            Memory.WriteInt  (CodeCaves.VerticalDrive + CodeCaves.VerticalDriveFlag, CodeCaves.DriveFallFollowing);
         }
 
         /// <summary>The nut's ARMED HOP (the cave's, taken the frame it lands on the head): up BonkUp, drifting BonkSide square to the

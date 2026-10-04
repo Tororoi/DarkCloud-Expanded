@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using static Dark_Cloud_Improved_Version.IsoBytes;
 using static Dark_Cloud_Improved_Version.MipsAsm;
-using static Dark_Cloud_Improved_Version.IsoPatcher;
 using static Dark_Cloud_Improved_Version.ElfCaveWriter;
 
 namespace Dark_Cloud_Improved_Version
@@ -11,19 +10,6 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>Divine Beast cat: the ELF patches behind the cat shot — its pellet follower, glow, sphere percentage, guard bypass, cape and mask tints, copy queue and palettes (docs/divine-beast-title.md). Called in order from ElfPatches.ElfPatchAndCrc.</summary>
     internal static class ElfCatPatches
     {
-        // ── Town idle-motion override (idle → sit for the swapped-in cat) ────────────────────────────
-        // EdMoveChara @0x16a160 drives the town character's idle/run/walk animation with ONE grounded write:
-        //   0x16a6a8  sw s0,0xc68(s2)   ; *(char+0xc68) = motion   (s0 = 0 idle / 1 run / 2 walk, s2 = char)
-        // guarded by `if ((chara_mode & 6)==0 && chara_fishing < 2)` — the plain locomotion store, NOT the
-        // airborne fall/land writes (which store the constants 8 and 9) nor the fishing-state writes. Redirect
-        // it to a tiny cave in the mod's ELF cave segment (loader-loaded at boot — a jal there is legal; runtime-
-        // written heap caves crash the recompiler): the cave keeps run/walk as-is, and when the motion is idle (0) it stores
-        // the IdleMotionOverride mailbox (guest 0x01F10070) instead — so a non-zero mailbox (the mod's sit index)
-        // makes an idle town character sit, while a zero mailbox leaves vanilla idle untouched. The jal's delay
-        // slot is the following `sw zero,0xc64(s2)` (kept — order-independent), and the cave returns via `jr $ra`
-        // to 0x16a6b0 (the c60 stores). Scratch = $v0 (reloaded by `lui v0` at the return) and $at (dead after
-        // the guard branch), both dead across the hook; $ra is stack-saved at function entry (`sq ra,0xc0(sp)`),
-        // so the jal's $ra clobber is safe. $s0/$s2 are read-only. (Cave hand-built via the MipsAsm encoders.)
         // ── Divine Beast cat: native pellet follower ─────────────────────────────────────────────────────
         // The charged shot's cat rides the live pellet (head on the pellet's point) and grows in over a few
         // frames — a mod-thread follower trails and jitters, so a cave does it: DunPatches redirects the dungeon
@@ -94,7 +80,7 @@ namespace Dark_Cloud_Improved_Version
         // face is 0 % for Xiao. The cave (tools/stubs/cat_sphere_percent.s) re-forms that load's address: a Xiao-owned
         // hit whose kick type (+0x98) equals the sphere's spare[1] (`_SET_BODY_COL_PARA(1, kick)`, +0x55490 table — no
         // vanilla reader or writer, reset to 100 by every _SET_BODY_COL) reads spare[0] instead. The disc side
-        // (tools/iso_patch/patch_monster_scripts.py, run by IsoPatcher.BakeMonsterSpheres) arms Joe's face with (100, 2).
+        // (MonsterScriptBakes, the monster-scripts post-step) arms Joe's face with (100, 2).
         internal static void PatchCatSpherePercent(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint CaveAddr = ElfCave.CatSpherePercent;
@@ -108,14 +94,10 @@ namespace Dark_Cloud_Improved_Version
             // Hook site (main ELF, CheckDmg__12CMonstorUnit 0x1D9F10): `lui at,5; addu at,v1,at; lw a2,0x55d0(at); lui v1,0x42c8`
             // — the per-attacker % load; the first two words become the jump, the lw stays and the cave returns onto it.
             const uint HookAddr = 0x001DC084;
-            uint jump = J(CaveAddr);
-            uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4));
-            bool vanilla = cur0 == 0x3C010005u && cur1 == 0x00610821u, ours = cur0 == jump && cur1 == 0;
-            if (!(vanilla || ours) || RdU32(fs, ElfOff(HookAddr + 8)) != 0x8C2655D0u || RdU32(fs, ElfOff(HookAddr + 12)) != 0x3C0342C8u)
-                throw new IOException($"Sphere-percent hook site 0x{HookAddr:X} is not vanilla `lui at,5; addu at,v1,at; lw a2,0x55d0(at); lui v1,0x42c8` — unmodified Dark Cloud (USA) ISO expected.");
             WriteBytes(fs, ElfOff, CaveAddr, b);
-            WrU32(fs, ElfOff(HookAddr), jump);          // j cave
-            WrU32(fs, ElfOff(HookAddr + 4), 0);         // delay slot nop (was the addu)
+            ReplaceWords(fs, ElfOff, HookAddr, new[] { 0x3C010005u, 0x00610821u }, new[] { J(CaveAddr), 0u },   // j cave; delay slot nop (was the addu)
+                         _ => $"Sphere-percent hook site 0x{HookAddr:X} is not vanilla `lui at,5; addu at,v1,at; lw a2,0x55d0(at); lui v1,0x42c8` — unmodified Dark Cloud (USA) ISO expected.",
+                         (HookAddr + 8, 0x8C2655D0u), (HookAddr + 12, 0x3C0342C8u));
         }
 
         // Divine Beast cat: its hits pass an enemy's GUARD WINDOW (tools/stubs/cat_guard_bypass.s). CheckDmg decides a guard
@@ -169,12 +151,10 @@ namespace Dark_Cloud_Improved_Version
             if (CaveAddr + (uint)b.Length > ElfCave.NextFree)
                 throw new IOException("catCapeTint.bin overruns its cave — move ElfCave.NextFree.");
             const uint HookAddr = 0x00139694;              // `jal Draw__6CCloth` in Draw__10CCharacter's cloth-list loop
-            uint jal = Jal(CaveAddr), vanilla = Jal(0x0013B640u);
-            uint cur = RdU32(fs, ElfOff(HookAddr));
-            if (!(cur == vanilla || cur == jal) || RdU32(fs, ElfOff(HookAddr - 8)) != 0x10800003u)
-                throw new IOException($"Cloth-draw hook site 0x{HookAddr:X} is not vanilla `beq a0,zero,+3; nop; jal Draw__6CCloth` — unmodified Dark Cloud (USA) ISO expected.");
             WriteBytes(fs, ElfOff, CaveAddr, b);
-            WrU32(fs, ElfOff(HookAddr), jal);              // the cave calls Draw__6CCloth itself, on both paths
+            ReplaceWords(fs, ElfOff, HookAddr, new[] { Jal(0x0013B640u) }, new[] { Jal(CaveAddr) },   // the cave calls Draw__6CCloth itself, on both paths
+                         _ => $"Cloth-draw hook site 0x{HookAddr:X} is not vanilla `beq a0,zero,+3; nop; jal Draw__6CCloth` — unmodified Dark Cloud (USA) ISO expected.",
+                         (HookAddr - 8, 0x10800003u));
         }
 
         /// <summary>The Super Steve cat's MASK under the cape's ambient. Unlike every other cave here this one patches NO hook

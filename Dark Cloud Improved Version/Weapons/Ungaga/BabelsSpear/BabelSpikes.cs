@@ -21,7 +21,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_target < 0) { _struck = true; return; }
             if (!Enemies.IsLive(_target)) { _struck = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"enemy slot {_target} gone before the tip reached it — no strike"); return; }
-            float tip = (_risen ? RootHeight(1f) : Memory.ReadFloat(CodeCaves.BladeFall + CodeCaves.BladeFallY)) + TipZ * Scale;
+            float tip = (_risen ? RootHeight(1f) : Memory.ReadFloat(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveY)) + TipZ * Scale;
             long a = EnemyAddresses.FloorSlots.SlotAddr(_target, 0), b = BodyCollision.SlotBase(_target), up = EnemyAddresses.CharObjects.PosAddr(_target);
             float ux = Memory.ReadFloat(up), uh = Memory.ReadFloat(up + 4), uy = Memory.ReadFloat(up + 8);
             float lowest = float.MaxValue;

@@ -1,10 +1,10 @@
 # fall_drive.s — the blade fall's MODE 4: falling AND following, with per-frame drive rows. Assembled at 0x001B54B0
-# (DebugIfCave.FallDrive, in dead DebugInfomationIF). The blade-fall cave (ElfWeaponPatches.PatchBladeFall) handles modes 1
+# (DebugIfCave.FallDrive, in dead DebugInfomationIF). The vertical-drive cave (ElfFrameChainPatches.PatchVerticalDrive) handles modes 1
 # (falling) and 3 (following) and leaves through here; this cave acts only on flag 4 and then goes on to the blade-spin cave
 # (the chain's next link), so modes 1/2/3 are untouched. Once a dungeon frame, at the end of the camera pass. Caller-saved
 # registers only (t0–t8, f0–f9); no calls, no frame.
 #
-# Mode 4, each frame (CodeCaves.BladeFall: +0 flag, +4 y, +8 vy, +0xC g, +0x10 stop, +0x14 unit, +0x18/+0x1C x/z offsets;
+# Mode 4, each frame (CodeCaves.VerticalDrive: +0 flag, +4 y, +8 vy, +0xC g, +0x10 stop, +0x14 unit, +0x18/+0x1C x/z offsets;
 # CodeCaves.FallDrive: +0 stop source, +4 stop offset, rows from +0x10, the armed hop at +0xB0):
 #  · the stop follows a float when a source is set (stop = *src + offset: a hurt sphere's centre height + its radius + the
 #    dropped thing's — the nut lands ON the head, the frame it reaches it);
@@ -20,7 +20,7 @@
 # FPU compares are .word: the EE's c.lt.s / c.le.s condition codes are 0x34 / 0x36 (keystone emits the MIPS 0x3C / 0x3E).
 
     lui   $t0, 0x01FB
-    lw    $t1, -0x0750($t0)        # BladeFall flag (0x01FAF8B0)
+    lw    $t1, -0x0750($t0)        # VerticalDrive flag (0x01FAF8B0)
     addiu $t2, $zero, 4
     bne   $t1, $t2, out
     nop

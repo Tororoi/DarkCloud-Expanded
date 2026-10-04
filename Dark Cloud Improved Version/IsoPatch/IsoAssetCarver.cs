@@ -36,27 +36,14 @@ namespace Dark_Cloud_Improved_Version
         // spillover) out of an img.pak's IM2 bank. Returns just the TIM2 block; Im2BuildMulti wraps banks.
         internal static byte[] CarveTim2(byte[] pak, string texName)
         {
-            int p = 0;
-            while (p < pak.Length && pak[p] != 0)
+            foreach (var (_, b, size) in PakEntries(pak))
             {
-                uint dataOff = U32(pak, p + 0x40), size = U32(pak, p + 0x44), stride = U32(pak, p + 0x48);
-                int b = p + (int)dataOff;
-                if (size >= 8 && pak[b] == 'I' && pak[b + 1] == 'M' && (pak[b + 2] == '2' || pak[b + 2] == 'G') && pak[b + 3] == 0)
-                {
-                    int count = (int)U32(pak, b + 4);
-                    for (int i = 0; i < count; i++)
-                    {
-                        int e = b + 0x10 + i * 0x30;                              // ENT = 0x30, name@0, offset@+0x20
-                        if (NameAt(pak, e, 0x20) != texName) continue;
-                        int t = b + (int)U32(pak, e + 0x20);                       // TIM2 block (bank-relative offset)
-                        uint clutSz = U32(pak, t + 0x14), imgSz = U32(pak, t + 0x18);
-                        ushort hdrSz = BitConverter.ToUInt16(pak, t + 0x1C);
-                        int clean = 0x10 + hdrSz + (int)imgSz + (int)clutSz;
-                        var tim2 = new byte[clean]; Array.Copy(pak, t, tim2, 0, clean);
-                        return tim2;
-                    }
-                }
-                p += (int)stride;
+                if (size < 8 || !ImgBank.IsBankAt(pak, b)) continue;
+                int t = ImgBank.EntryOffset(pak, b, texName);                   // the TIM2 block, by the bank's own table
+                if (t < 0) continue;
+                int clean = Tim8.CleanLength(pak, t);
+                var tim2 = new byte[clean]; Array.Copy(pak, t, tim2, 0, clean);
+                return tim2;
             }
             throw new IOException($"Could not find texture {texName} in img.pak.");
         }

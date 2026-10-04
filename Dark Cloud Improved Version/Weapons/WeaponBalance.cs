@@ -5,7 +5,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>The mod's weapon-stat rebalance: the per-weapon base stats, elements, slayer values, abilities, build-up branches
     /// and attachment slots it changes in the engine's static weapon table (<see cref="WeaponTable"/>), written once at startup
-    /// (MainMenuThread.ApplyNewChanges) and skipped when the Baselard's Endurance already reads the rebalanced 30.</summary>
+    /// (SessionController.ApplyNewChanges) and skipped when the Baselard's Endurance already reads the rebalanced 30.</summary>
     internal static class WeaponBalance
     {
         /// <summary>Applies all the weapon changes to their base values (runs once when starting the mod).</summary>

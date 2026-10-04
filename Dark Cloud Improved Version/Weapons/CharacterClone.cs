@@ -761,14 +761,14 @@ namespace Dark_Cloud_Improved_Version
             return head;
         }
 
-        /// <summary>An ambient add another ability lays on the clone (the dark's white while the room dims — SolarLighting), on top of
+        /// <summary>An ambient add another ability lays on the clone (the dark's white while the room dims — SceneLighting), on top of
         /// the ghost tint, body and weapon slot alike: the real weapon draws inside the player's own draw, under his tint. A tint on
-        /// the weapon MESH itself (SolarBlade's gold) needs nothing here: the clone's rigid weapon visuals are SHARED with the real
+        /// the weapon MESH itself (BladeTint's gold) needs nothing here: the clone's rigid weapon visuals are SHARED with the real
         /// weapon's (see GraftWeapon), so the blade lever's private vtable already tints the clone's spear the same. RGB, 0–255.</summary>
         internal static readonly float[] BodyTint = new float[3];
         /// <summary>The scene's light as a fraction of its own (1 = untouched), taken as the clone's dim (+0xCF0 on the weapon slot;
         /// the body's through the step's own DimOn/DimFloor, since the step rewrites +0xCF0 on a stepped slot): the chara-slot pass
-        /// does not see the darkening SolarLighting writes, so without it the clone stood lit beside a dimmed Ungaga (with nothing
+        /// does not see the darkening SceneLighting writes, so without it the clone stood lit beside a dimmed Ungaga (with nothing
         /// active the two match exactly).</summary>
         internal static float SceneLight = 1f;
 

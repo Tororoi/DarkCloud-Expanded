@@ -4,8 +4,8 @@ Reference for `Weapons/Xiao/DivineBeastTitle.cs`, its ELF caves (`tools/stubs/ca
 + `WingBake.cs` + `CatWings.cs`, the byte-exact port of the authoring model `tools/iso_patch/build_cat_pack.py` / `wing_bake.py` /
 `tools/lib/cat_wings.py`, which the cat viewer still runs).
 The mod side is five classes that share their members through `using static`: `DivineBeastTitle` (the constants, the looks, the
-thread, charge and launch, the hit, the heap watch), `CatCopy` (the copy and her MOTION 1 channel), `CatFlight` (the cave
-handshake, aim, the hit's element, the flight step), `CatCape` (the cape cloth) and `CatTextures` (the texture block).
+thread, charge and launch, the hit), `CatCopy` (the copy and her MOTION 1 channel), `CatFlight` (the cave
+handshake, aim, the hit's element, the flight step), `CatCape` (the cape cloth, and the sweep that takes her own copy off her cloth list whenever she is the character) and `CatTextures` (the texture block). The character-heap log that used to ride with the cape sweep is `Weapons/HeapWatch.cs`, a diagnostic behind `DebugDiagnostics.Enabled`.
 
 The code comments describe current behaviour only. This file holds the findings behind decisions that are no longer
 obvious from the code — why a thing is done the way it is, and what does not work — so the reasoning survives without

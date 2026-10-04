@@ -85,13 +85,13 @@ namespace Dark_Cloud_Improved_Version
             Thread.Sleep(50);
 
             //Save weapon Whp
-            chronicleCurrentWHP = ReusableFunctions.GetCurrentEquippedWhp(Player.CurrentCharacterNum(), Player.Toan.GetWeaponSlot());
+            chronicleCurrentWHP = WeaponRecord.ReadWhp(Player.CurrentCharacterNum(), Player.Toan.GetWeaponSlot());
 
             //Save every enemy's HP on the current floor
-            chronicleCurrentEnemyHP = ReusableFunctions.GetEnemiesHp();
+            chronicleCurrentEnemyHP = EnemyQueries.GetEnemiesHp();
 
             int damagedEnemyNum = 0;
-            if (chronicleCurrentWHP < chronicleFormerWHP && ReusableFunctions.GetRecentDamageDealtByPlayer() > 0)
+            if (chronicleCurrentWHP < chronicleFormerWHP && EnemyQueries.GetRecentDamageDealtByPlayer() > 0)
             {
                 float flashRGB_R = 0;
                 float flashRGB_G = 0;
@@ -111,7 +111,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
 
-                float[] enemiesDistance = ReusableFunctions.GetEnemiesDistance();
+                float[] enemiesDistance = EnemyQueries.GetEnemiesDistance();
                 List<int> enemiesinRange = new List<int>();
                 float[] enemiescoordinateX = new float[15];
                 float[] enemiescoordinateY = new float[15];
@@ -252,7 +252,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
             }
-            ReusableFunctions.ClearRecentDamageAndDamageSource();
+            EnemyQueries.ClearRecentDamageAndDamageSource();
             chronicleFormerWHP = chronicleCurrentWHP;
             chronicleFormerEnemyHP = chronicleCurrentEnemyHP;
         }

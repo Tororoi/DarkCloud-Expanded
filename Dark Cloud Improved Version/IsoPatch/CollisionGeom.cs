@@ -30,7 +30,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         private static int Cmp3(double[] a, double[] b) { for (int i = 0; i < 3; i++) { int c = a[i].CompareTo(b[i]); if (c != 0) return c; } return 0; }
-        private static double[] R3(double[] p, int nd) => new[] { PyMath.Round(p[0], nd) + 0.0, PyMath.Round(p[1], nd) + 0.0, PyMath.Round(p[2], nd) + 0.0 };   // +0.0: −0 keys as 0, as Python's numeric equality does
+        private static double[] R3(double[] p, int nd) => new[] { ExactMath.Round(p[0], nd) + 0.0, ExactMath.Round(p[1], nd) + 0.0, ExactMath.Round(p[2], nd) + 0.0 };   // +0.0: −0 keys as 0, as Python's numeric equality does
 
         /// <summary>Winding-agnostic key: the three integer-rounded vertices, sorted.</summary>
         internal static string TriKeyInt(double[][] t) => TriKeyRounded(t, 0);
@@ -107,7 +107,7 @@ namespace Dark_Cloud_Improved_Version
         /// the merged plane is authored <paramref name="outward"/> behind the outermost source point.</summary>
         internal static List<double[][]> SimplifyCoplanar(List<double[][]> tris, double snap = 5.0, double outward = 0.0, double? top = null, bool keepWindows = false)
         {
-            double Sn(double x) => PyMath.Round(x / snap, 0) * snap;
+            double Sn(double x) => ExactMath.Round(x / snap, 0) * snap;
             var keys = new List<string>(); var groups = new Dictionary<string, (double[] nn, double d, List<double[][]> g)>();
             var outp = new List<double[][]>();
             foreach (var t in tris)
@@ -115,7 +115,7 @@ namespace Dark_Cloud_Improved_Version
                 var n = TriangleNormal(t);
                 if (Math.Sqrt(Dot3(n, n)) < 1e-9) { outp.Add(t); continue; }
                 var nn = Unit3(n); double d = Dot3(nn, t[0]);
-                double k0 = PyMath.Round(nn[0], 1) + 0.0, k1 = PyMath.Round(nn[1], 1) + 0.0, k2 = PyMath.Round(nn[2], 1) + 0.0, kd = PyMath.Round(d / snap, 0) * snap;
+                double k0 = ExactMath.Round(nn[0], 1) + 0.0, k1 = ExactMath.Round(nn[1], 1) + 0.0, k2 = ExactMath.Round(nn[2], 1) + 0.0, kd = ExactMath.Round(d / snap, 0) * snap;
                 string key = $"{k0:R},{k1:R},{k2:R}|{kd:R}";
                 if (!groups.ContainsKey(key)) { groups[key] = (nn, d, new List<double[][]>()); keys.Add(key); }
                 groups[key].g.Add(t);

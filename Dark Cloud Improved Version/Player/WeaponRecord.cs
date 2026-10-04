@@ -80,5 +80,10 @@ namespace Dark_Cloud_Improved_Version
         /// <paramref name="slot"/> (0-9), via <see cref="DngStatusData.WeaponRecord"/>.</summary>
         internal static long Address(int character, int slot, int field)
             => DngStatusData.WeaponRecord(character, slot) + field;
+
+        /// <summary>The current WHP of <paramref name="character"/>'s bag slot <paramref name="slot"/>; 0 for a
+        /// character or slot outside the inventory (6 characters × 10 slots).</summary>
+        internal static float ReadWhp(int character, int slot)
+            => (uint)character > Player.OsmondId || (uint)slot > 9 ? 0f : Memory.ReadFloat(Address(character, slot, Whp));
     }
 }

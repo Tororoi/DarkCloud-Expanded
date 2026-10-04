@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using static Dark_Cloud_Improved_Version.IsoBytes;
 using static Dark_Cloud_Improved_Version.MipsAsm;
-using static Dark_Cloud_Improved_Version.IsoPatcher;
 using static Dark_Cloud_Improved_Version.ElfCaveWriter;
 
 namespace Dark_Cloud_Improved_Version
@@ -36,36 +35,36 @@ namespace Dark_Cloud_Improved_Version
                 0xC5060000u | Lo(4),                                //  6 lwc1  f6,P.y(t0)
                 0x46033181u,                                        //  7 sub.s f6,f6,f3              height = P.y − R.y
                 0xE48602D4u,                                        //  8 swc1  f6,0x2D4(a0)
-                MipsAsm.J(DebugInfoCave.BladeFall),       //  9 ret: j BladeFall (which returns through ra)
+                MipsAsm.J(DebugInfoCave.VerticalDrive),       //  9 ret: j VerticalDrive (which returns through ra)
                 0x00000000u,                                        // 10   nop
             };
             WriteWords(fs, ElfOff, cave, words, DebugInfoCave.Host + DebugInfoCave.HostSpan, "The camera-pin cave does not fit its host (DebugInfomationDraw).");
         }
 
-        /// <summary>The BLADE cave (see DebugInfoCave.BladeFall): the tail of the camera-pin chain, once a frame.
+        /// <summary>The BLADE cave (see DebugInfoCave.VerticalDrive): the tail of the camera-pin chain, once a frame.
         /// Flag 1, FALLING: vy += g; y −= vy; if y ≤ stop then y = stop and the flag becomes 2; y and vy stored back, and y
         /// written to the blade copy's slot height. Flag 3, FOLLOWING: the unit position at the guest pointer in the words
         /// gives the copy's x and z, and its height plus the y word (a height OVER the unit) the copy's height — the hover
         /// riding an enemy the engine moves, up and down as well, at the engine's own frame. Caller-saved registers only
         /// (t0..t3, f0..f3); no calls.</summary>
-        internal static void PatchBladeFall(FileStream fs, Func<uint, long> ElfOff)
+        internal static void PatchVerticalDrive(FileStream fs, Func<uint, long> ElfOff)
         {
-            uint cave = DebugInfoCave.BladeFall;
-            HiLo(CodeCaves.BladeFallGuest, out uint hi, out uint lo);                // signed offsets
+            uint cave = DebugInfoCave.VerticalDrive;
+            HiLo(CodeCaves.VerticalDriveGuest, out uint hi, out uint lo);                // signed offsets
             uint Lo(int o) => (lo + (uint)o) & 0xFFFFu;
             uint slotPos = (uint)(DungeonCharaDraw.CharaArray - 0x20000000L) + (uint)(BladeProp.Slot * DungeonCharaDraw.CharaStride) + (uint)CCharacter.CharPos;
             HiLo(slotPos, out uint shi, out uint slo); uint SLo(int o) => (slo + (uint)o) & 0xFFFFu;   // x +0, y +4, z +8 (all past the sign bit alike)
             uint[] words =
             {
                 0x3C080000u | hi,                                   //  0 lui   t0,HI(fall)
-                0x8D090000u | Lo(CodeCaves.BladeFallFlag),          //  1 lw    t1,flag(t0)
+                0x8D090000u | Lo(CodeCaves.VerticalDriveFlag),          //  1 lw    t1,flag(t0)
                 0x240A0001u,                                        //  2 li    t2,1
                 0x152A0000u | 19,                                   //  3 bne   t1,t2,follow (+19 → index 23)
                 0x00000000u,                                        //  4   nop
-                0xC5000000u | Lo(CodeCaves.BladeFallY),             //  5 lwc1  f0,y(t0)
-                0xC5010000u | Lo(CodeCaves.BladeFallVy),            //  6 lwc1  f1,vy(t0)
-                0xC5020000u | Lo(CodeCaves.BladeFallG),             //  7 lwc1  f2,g(t0)
-                0xC5030000u | Lo(CodeCaves.BladeFallStop),          //  8 lwc1  f3,stop(t0)
+                0xC5000000u | Lo(CodeCaves.VerticalDriveY),             //  5 lwc1  f0,y(t0)
+                0xC5010000u | Lo(CodeCaves.VerticalDriveVy),            //  6 lwc1  f1,vy(t0)
+                0xC5020000u | Lo(CodeCaves.VerticalDriveG),             //  7 lwc1  f2,g(t0)
+                0xC5030000u | Lo(CodeCaves.VerticalDriveStop),          //  8 lwc1  f3,stop(t0)
                 0x46020840u,                                        //  9 add.s f1,f1,f2               vy += g
                 0x46010001u,                                        // 10 sub.s f0,f0,f1               y −= vy
                 0x46030036u,                                        // 11 c.le.s f0,f3                 y ≤ stop ?  (⚠ EE cond code 0x36 — the MIPS 0x3E "LE" is not one the R5900 FPU has, and read as a coin toss)
@@ -73,9 +72,9 @@ namespace Dark_Cloud_Improved_Version
                 0x45000000u | 3,                                    // 13 bc1f  store (+3 → index 17)
                 0x240A0002u,                                        // 14   li  t2,2                   (both paths; only stored below)
                 0x46001806u,                                        // 15 mov.s f0,f3                  y = stop
-                0xAD0A0000u | Lo(CodeCaves.BladeFallFlag),          // 16 sw    t2,flag(t0)            landed
-                0xE5000000u | Lo(CodeCaves.BladeFallY),             // 17 store: swc1 f0,y(t0)
-                0xE5010000u | Lo(CodeCaves.BladeFallVy),            // 18 swc1  f1,vy(t0)
+                0xAD0A0000u | Lo(CodeCaves.VerticalDriveFlag),          // 16 sw    t2,flag(t0)            landed
+                0xE5000000u | Lo(CodeCaves.VerticalDriveY),             // 17 store: swc1 f0,y(t0)
+                0xE5010000u | Lo(CodeCaves.VerticalDriveVy),            // 18 swc1  f1,vy(t0)
                 0x3C0B0000u | shi,                                  // 19 lui   t3,HI(slot pos)
                 0xE5600000u | SLo(4),                               // 20 swc1  f0,y(t3)               the copy's height, this frame
                 MipsAsm.J(DebugIfCave.FallDrive),         // 21 j     FallDrive (mode 4), then BladeSpin and the WHP bill
@@ -83,15 +82,15 @@ namespace Dark_Cloud_Improved_Version
                 0x240A0003u,                                        // 23 follow: li t2,3
                 0x152A0000u | 15,                                   // 24 bne   t1,t2,ret (+15 → index 40)
                 0x00000000u,                                        // 25   nop
-                0x8D0A0000u | Lo(CodeCaves.BladeFallUnit),          // 26 lw    t2,unit(t0)            the followed unit's position (guest)
+                0x8D0A0000u | Lo(CodeCaves.VerticalDriveUnit),          // 26 lw    t2,unit(t0)            the followed unit's position (guest)
                 0xC5400000u,                                        // 27 lwc1  f0,0x0(t2)             its x
                 0xC5410008u,                                        // 28 lwc1  f1,0x8(t2)             its z
-                0xC5020000u | Lo(CodeCaves.BladeFallY),             // 29 lwc1  f2,y(t0)               the height OVER the unit
+                0xC5020000u | Lo(CodeCaves.VerticalDriveY),             // 29 lwc1  f2,y(t0)               the height OVER the unit
                 0xC5430004u,                                        // 30 lwc1  f3,0x4(t2)             the unit's own height (a flyer's rises)
                 0x46031080u,                                        // 31 add.s f2,f2,f3
-                0xC5030000u | Lo(CodeCaves.BladeFallOffX),          // 32 lwc1  f3,offx(t0)            an x/z offset from the unit (0 over an enemy;
+                0xC5030000u | Lo(CodeCaves.VerticalDriveOffX),          // 32 lwc1  f3,offx(t0)            an x/z offset from the unit (0 over an enemy;
                 0x46030000u,                                        // 33 add.s f0,f0,f3                ahead of Toan for the charge blade)
-                0xC5030000u | Lo(CodeCaves.BladeFallOffZ),          // 34 lwc1  f3,offz(t0)
+                0xC5030000u | Lo(CodeCaves.VerticalDriveOffZ),          // 34 lwc1  f3,offz(t0)
                 0x46030840u,                                        // 35 add.s f1,f1,f3
                 0x3C0B0000u | shi,                                  // 36 lui   t3,HI(slot pos)
                 0xE5600000u | SLo(0),                               // 37 swc1  f0,x(t3)

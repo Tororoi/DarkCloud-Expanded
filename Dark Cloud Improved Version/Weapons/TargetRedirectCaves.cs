@@ -31,7 +31,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── The cave payload ─────────────────────────────────────────────────────────────────────────
-        // The generic hosting mechanism (copy → detour → repoint dispatch) lives in CodeCaveFunctions; what is specific to
+        // The generic hosting mechanism (copy → detour → repoint dispatch) lives in RuntimeCaveWriter; what is specific to
         // the redirect is only the HELPER below — the code spliced into each copy.
         //
         // _GET_POSITION / _GET_DISTANCE both read the PLAYER global (0x1EA1D30) directly. Each copy has that hardcoded load
@@ -52,18 +52,18 @@ namespace Dark_Cloud_Improved_Version
             0x34A50000u | (CodeCaves.PtrTableGuest & 0xFFFFu),  // ori  a1, a1, LO(PtrTable)
             0x00A82821u,                                     // addu a1, a1, t0        ; &PtrTable[slot]
             0x8CA50000u,                                     // lw   a1, 0(a1)         ; a1 = per-slot target pointer
-            CodeCaveFunctions.J(caveGuest + (uint)jalOff),   // j    cave+jalOff       ; back into the copy
-            CodeCaveFunctions.Nop,                           // (j delay)
+            MipsAsm.J(caveGuest + (uint)jalOff),   // j    cave+jalOff       ; back into the copy
+            RuntimeCaveWriter.Nop,                           // (j delay)
         };
 
         /// <summary>Arm one of the two redirect caves. Returns true once armed (idempotent — safe to retry).</summary>
         private static bool ArmRedirectCave(string name, long vanillaFn, long cave, uint caveGuest, long dispatch, int detourOff, int jalOff)
-            => CodeCaveFunctions.ArmDispatchCave(
+            => RuntimeCaveWriter.ArmDispatchCave(
                 name, vanillaFn, FnCopySize, cave, caveGuest, dispatch,
                 pristine: new[] { (0, StbExternCmd.VanillaPrologue),            // addiu sp,-0x50
                                   (detourOff, StbExternCmd.VanillaPlayerLd) },  // lui v0,0x1ea (the player-addr load)
-                detours:  new[] { (detourOff, new[] { CodeCaveFunctions.J(caveGuest + HelperOff),   // was lui v0,0x1ea
-                                                      CodeCaveFunctions.Nop }) },                   // was addiu a1,v0,0x1d30
+                detours:  new[] { (detourOff, new[] { MipsAsm.J(caveGuest + HelperOff),   // was lui v0,0x1ea
+                                                      RuntimeCaveWriter.Nop }) },                   // was addiu a1,v0,0x1d30
                 helperOff: HelperOff, helper: PerSlotTargetHelper(caveGuest, jalOff));
     }
 }

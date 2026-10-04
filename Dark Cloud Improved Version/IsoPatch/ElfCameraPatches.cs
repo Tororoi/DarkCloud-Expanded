@@ -4,7 +4,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using static Dark_Cloud_Improved_Version.IsoBytes;
-using static Dark_Cloud_Improved_Version.IsoPatcher;
+using static Dark_Cloud_Improved_Version.ElfCaveWriter;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -161,9 +161,9 @@ namespace Dark_Cloud_Improved_Version
             const float SlideMargin = 8f;   // swept-slide standoff + proximity-extension reach. KEEP <= MARGIN (else the two setpoints oscillate)
             const float SlideBias = 0.125f; // angle-axis weight² in the slide: 1 = neutral (resists rotation), small = FREE glide (dist/height resolve, rotation flows)
             const float SlideFriction = 0.6f; // contact drag at FULL tangency (keep-floor); head-on contact is undamped — keep = 1 − (1−F)·|n_t|
-            float SLIDE_FRICTION_INV = 1f - SlideFriction;   // injected form (asm folds 1−F to save the 1.0 load)
+            float SlideFrictionInv = 1f - SlideFriction;   // injected form (asm folds 1−F to save the 1.0 load)
             const float ClimbPeak = 60f;    // height the climb curve reaches at full pinch (d' = 0); the BELL's peak
-            float CLIMB_K = (ClimbPeak - RestHeight) / (BaseDistance * BaseDistance);   // quadratic climb gain - zero slope at touch
+            float ClimbK = (ClimbPeak - RestHeight) / (BaseDistance * BaseDistance);   // quadratic climb gain - zero slope at touch
             const float ClimbRise = 2f;     // climb RE-ENABLED for pull-in only (its intrusion term max(BASE−d', 0)
                                              // is zero at/beyond rest, so it natively fires only when pinched in), at
                                              // the original rate cap. Composes with the height freeze: the clamp chain
@@ -186,18 +186,14 @@ namespace Dark_Cloud_Improved_Version
             // written into the flagged word slots after this literal (PutVal/PutEase, indices guarded). Regenerate this
             // array via mips_asm.py only if the CODE changes. R5900 quirks: c.OLT.s / sqrt.s are .word-encoded; a nop
             // follows every mtc1 and every FP compare.
-            uint[] pullIn = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.townCameraCollision.bin", 0x27BDFF60);   // Resources/isoPatch/townCameraCollision.bin (embedded) —
+            uint[] pullIn = LoadWordsResource("townCameraCollision.bin", 0x27BDFF60);   // Resources/isoPatch/townCameraCollision.bin (embedded) —
                                                       // assembled from tools/stubs/town_camera_collision.s @0x14B838
             // Inject the tunables above into the template's constant-load slots (indices auto-located from
             // tools/stubs/town_camera_collision.s; guards trip loudly if the array drifts). PutVal = single `lui $t0` (float low16 must
             // be 0 — integers / .25 steps); PutEase = `lui $t0` + `ori $t0`.
             static uint[] LoadWordsResource(string res, uint expectedFirstWord)
             {
-                using var s = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream(res)
-                    ?? throw new IOException($"Embedded EE function missing: {res} (reassemble its .s in tools/ and rebuild)");
-                using var ms = new MemoryStream();
-                s.CopyTo(ms);
-                byte[] b = ms.ToArray();
+                byte[] b = Embedded(res, $"Embedded EE function missing: {res} (reassemble its .s in tools/ and rebuild)");
                 if (b.Length == 0 || (b.Length & 3) != 0)
                     throw new IOException($"EE function resource {res} is malformed ({b.Length} bytes).");
                 uint[] w = new uint[b.Length / 4];
@@ -232,7 +228,7 @@ namespace Dark_Cloud_Improved_Version
                 pullIn[luiIdx] = 0x3C080000u | (b >> 16);
                 pullIn[oriIdx] = 0x35080000u | (b & 0xFFFF);
             }
-            float STICK_DZ2 = StickDeadzone * StickDeadzone;   // deadzone² (compared vs stickY²)
+            float StickDeadzone2 = StickDeadzone * StickDeadzone;   // deadzone² (compared vs stickY²)
             // ⚠ slot indices are +2 from the 2026-08 winding-agnostic insert (jal cameraNormSide + nop at
             //   words 14/15 of town_camera_collision.s) — every slot at/after word 14 shifted by 2.
             PutVal(144, BaseDistance, nameof(BaseDistance));   // resting dist target
@@ -252,13 +248,13 @@ namespace Dark_Cloud_Improved_Version
             PutVal(562, SlideMargin, nameof(SlideMargin));   // corner second-resolution standoff
             PutVal(442, SlideGain, nameof(SlideGain));   // θ reacquisition
             PutVal(118, StickScale, nameof(StickScale));
-            PutEase(110, 111, STICK_DZ2, nameof(STICK_DZ2));
+            PutEase(110, 111, StickDeadzone2, nameof(StickDeadzone2));
             PutEase(129, 130, StickEase, nameof(StickEase));
             PutEase(181, 182, HeightEase, nameof(HeightEase));
             PutEase(197, 198, DistanceEase, nameof(DistanceEase));
             PutEase(374, 375, SlideBias, nameof(SlideBias));
-            PutEase(423, 424, SLIDE_FRICTION_INV, nameof(SLIDE_FRICTION_INV));
-            PutEase(466, 467, CLIMB_K, nameof(CLIMB_K));
+            PutEase(423, 424, SlideFrictionInv, nameof(SlideFrictionInv));
+            PutEase(466, 467, ClimbK, nameof(ClimbK));
             if (pullIn.Length > 634)   // 0x14B838 + 634*4 == 0x14C220 == set2DSprite_Start: flush, no headroom left
                 throw new IOException($"townCameraCollision.bin is {pullIn.Length} words — overruns set2DSprite_Start @0x14C220 (max 634).");
             for (int i = 0; i < pullIn.Length; i++)
@@ -269,7 +265,7 @@ namespace Dark_Cloud_Improved_Version
             // prep for the swept-slide / corner-verify (normalize + flip N̂ to E_prev's side of the hit
             // plane, so vanilla `_c`/`_v` meshes work regardless of authored winding — a buffer-wide
             // ref-side flip was tried first and pulled the camera inside closed shells' far walls).
-            uint[] normSide = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.cameraNormSide.bin", 0x3C0A01F1);
+            uint[] normSide = LoadWordsResource("cameraNormSide.bin", 0x3C0A01F1);
             for (int i = 0; i < normSide.Length; i++)
                 WrU32(fs, ElfOff(ElfCave.CameraNormSideBank + (uint)(i * 4)), normSide[i]);
             // ── FISHING LINE CANAL CLAMP (CamBankFishLineClamp in the bank above, camera_norm_side.s) ──
@@ -282,7 +278,7 @@ namespace Dark_Cloud_Improved_Version
             Guard(0x0016D314, 0x0C06A8D0, "fishing line-clamp hook (jal FishLineStep)");
             WrU32(fs, ElfOff(0x0016D314), MipsAsm.Jal(ElfCave.CamBankFishLineClamp));   // jal the FishLineClamp wrapper in the cameraNormSide bank
             Guard(0x0027D090, 0x00000000, "world-height cave (ex-autorotate area, zero words in vanilla)");
-            uint[] heightFn = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.cameraHeight.bin", 0x27BDFFE0);
+            uint[] heightFn = LoadWordsResource("cameraHeight.bin", 0x27BDFFE0);
             // REACQUISITION GATE (word 3 of the sub, 2026-08, HEIGHT-ONLY since the recovery fix): when
             // wall-pinched strictly inside rest the sub freezes only the HEIGHT target at current — the
             // DIST target always seeks BaseDistance so a wall-pinned camera recovers back out to resting
@@ -359,9 +355,7 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException($"Fishing camera-height site 0x{LuiAddr:X} is not vanilla " +
                                       $"(got 0x{gotLui:X8}/0x{gotMtc1:X8}) — is this an unmodified Dark Cloud (USA) ISO?");
 
-            const uint SLOT = (uint)(Mailbox.FishCamHeight & 0x1FFFFFFF);   // guest (PINE addr minus the 0x20000000 view)
-            uint hi = SLOT >> 16, lo = SLOT & 0xFFFF;
-            if (lo >= 0x8000) hi += 1;                       // lwc1's offset is SIGNED — compensate like the assembler
+            HiLo((uint)(Mailbox.FishCamHeight & 0x1FFFFFFF), out uint hi, out uint lo);   // the guest address (PINE addr minus the 0x20000000 view); lwc1's offset is SIGNED, so hi carries
             WrU32(fs, ElfOff(LuiAddr),  0x3C020000u | hi);                      // lui  $2,hi
             WrU32(fs, ElfOff(Mtc1Addr), 0xC4000000u | (2u << 21) | (12u << 16) | lo);  // lwc1 $f12,lo($2)
         }
@@ -376,11 +370,8 @@ namespace Dark_Cloud_Improved_Version
         internal static void PatchFishingCameraGather(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint FishingMaskAddr = 0x0016AF4C;   // fishing-path `li a3,0x1` feeding jal PickUpCameraPoly @0x16AF50
-            uint got = RdU32(fs, ElfOff(FishingMaskAddr));
-            if (got == 0x3407FFFF) return;     // already patched (idempotent re-run)
-            if (got != 0x24070001)
-                throw new IOException($"Fishing camera-gather mask site 0x{FishingMaskAddr:X} is not vanilla `li a3,1` (got 0x{got:X8}) — unmodified Dark Cloud (USA) ISO expected.");
-            WrU32(fs, ElfOff(FishingMaskAddr), 0x3407FFFF);   // ori a3,zero,0xffff — full camera-poly mask while fishing
+            ReplaceWord(fs, ElfOff, FishingMaskAddr, 0x24070001, 0x3407FFFF,   // ori a3,zero,0xffff — full camera-poly mask while fishing
+                        got => $"Fishing camera-gather mask site 0x{FishingMaskAddr:X} is not vanilla `li a3,1` (got 0x{got:X8}) — unmodified Dark Cloud (USA) ISO expected.");
         }
     }
 }

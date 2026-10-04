@@ -1,3 +1,7 @@
+// Fishing address bank: the fishing state machines and their values, the bait notice-radius table, fish model / species
+// tables, the per-slot CFish layout, the save's rank list, the fishing SPOT globals, the Verlet rope arrays, the fishing
+// line's bobber-anchor sites + distp lever (FishLineShallow) and the villager/fishing bump pool (FishingPool).
+// Town villagers and the running-event id live in TownAddresses.cs.
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
@@ -378,26 +382,6 @@ namespace Dark_Cloud_Improved_Version
         internal const long DrawUnderWater = 0x202A1FA0;
     }
 
-    /// <summary>Town villager (NPC) globals the fishing feature suspends for a session, to stop the
-    /// freed-villager crash/flicker (see CustomFishingSpot villager-hide).</summary>
-    internal static class Villagers
-    {
-        // The event-mode NPC stepper (EdEventNPCStep 0x1987D0) loops `for i < Count`; the town's villager clear
-        // must pair with suspending this count. Zeroing it for the fishing window covers every event-mode
-        // villager iterator (EdEventNPCStep, EdEventMode, GetNPC/GetChara).
-        internal const long Count = 0x21D3D3C8;    // ELF DAT_01d3d3c8 — live NPC count
-
-        // Villager DRAW (EdDrawCharacter 0x1725F0) is called from MainDraw with a HARDCODED count of 10, so the
-        // Count knob does NOT cover it. CheckDraw__12CNPCharacter (0x156670) draws a slot only when its draw
-        // flag @ +0x146C != 0. The objects live at a FIXED base (stride 0x14A0) the model load does NOT
-        // overwrite — only the VISUAL sub-object they point to (+0xA0) is freed; dispatching its vtable (+0xAC)
-        // through the garbage pointer is the recLUT crash. Zero the fixed draw flags and CheckDraw returns 0.
-        internal const long ObjBase   = 0x21D25B90;
-        internal const int  ObjStride = 0x14A0;
-        internal const int  DrawFlag  = 0x146C;
-        internal const int  DrawSlots = 10;        // MainDraw's hardcoded EdDrawCharacter count
-    }
-
     /// <summary>The fishing-line Verlet rope arrays (mod-access form = ELF addr + 0x20000000): main line
     /// point[], bobber ukip/ukiv, hook hookv. Resolved from the SCUS_971.11 symtab; layout confirmed in the
     /// FishLineStep decomp. Read/written by FishingCastPayout.</summary>
@@ -409,9 +393,91 @@ namespace Dark_Cloud_Improved_Version
         internal const long Hookv = 0x21D56310;   // hookv[0]; 3 x 0x10
     }
 
-    /// <summary>The running-event id, set by EdEventInit before the enter script's fade + loads.</summary>
-    internal static class EditEvent
+    // NOTE: the fish depth is NOT patched in code (FishingInitFish's inline `lui r2,0x4140` = 12.0). Patching
+    // that just-JIT'd fishing instruction crashes PCSX2; shallow fishing moves the fish by a data write to the
+    // fish-slot Y instead (FishingCollision.ApplyFishDepth). See FishLineShallow below.
+
+    /// <summary>
+    /// Shallow-hook via the fishing line's BOBBER ANCHOR, done recompiler-safely.
+    ///
+    /// The bobber (uki) binds to main-line point[18] in six FishLineStep instructions (`lui $2,0x1d5;
+    /// addiu $reg,$2,0x5f50`). Moving it toward the hook (point 23) shortens the below-water run so the hook
+    /// rests shallower with the line length (cast reach) unchanged. But patching those instructions directly
+    /// crashes PCSX2 once a prior fishing session has JIT-compiled FishLineStep (writing hot code). So instead:
+    ///
+    ///  (1) ONCE, in the COLD window (ApplyNewChanges, before any fishing), rewrite the six sites in place to
+    ///      `lui $reg,0x01FB; lw $reg,0x4000($reg)` — i.e. LOAD the bobber's point address from a mod global
+    ///      at game-addr 0x01FB4000 instead of computing point[18]. Rewriting cold code is safe.
+    ///  (2) Per town, a pure DATA write to that global selects the anchor: point[18] (vanilla) or point[20]
+    ///      (shallow). No further code writes, so no recompiler hazard.
+    ///
+    /// $2 is throwaway at every site (recomputed per address), so clobbering it is safe. See
+    /// the fishing engine RE notes §fishing-line.
+    ///
+    /// ⚠ RETIRED (2026-08): the anchor toggle is GONE. The ISO split caves (ElfFishingPatches.PatchFishLineSplit)
+    /// bake the above/below rest-length cutover at FIXED A=18 and hook depth is now the distpBelow data word
+    /// (Mailbox.LineDistpBelow), so the cold patch is NO LONGER INSTALLED — the vanilla
+    /// instructions already compute point[18]. The Sites/NewLui machinery survives only so a mod RELAUNCH
+    /// against an already-patched game can detect the leftover patch and pin BobberPtr back to point[18]
+    /// (un-patching possibly-JIT'd code is the hot-write crash). DistpAddr/VanillaDistp remain live — they
+    /// are the split's distpAbove side. See the fishing-line split feasibility notes.
+    /// </summary>
+    internal static class FishLineShallow
     {
-        internal const long Info = 0x21D3D1D0;     // ELF 0x1d3d1d0 — running-event id
+        internal const long BobberPtr    = 0x21FB4000;   // mod view of the global; game reads game-addr 0x01FB4000
+        // Anchor address for point index i = PointVanilla + (i-18)*0x10 (the line's points are 16B vec4s).
+        // ⚠ Prose around the codebase used to call the shallow anchor "point 21" — 0x5F70 is point **20**
+        // (0x5F80 would be 21). These addresses are authoritative.
+        internal const uint PointVanilla = 0x001D55F50;  // point[18] — the vanilla bobber anchor
+        internal const uint PointShallow = 0x001D55F70;  // point[20] — shallow anchor (Brownboo)
+        internal const uint PointStride  = 0x10;         // per-point stride, for picking another index
+
+        /// <summary>Address of main-line point[<paramref name="index"/>], for anchoring the bobber anywhere
+        /// along the line. Valid range is 18..22 — the HOOK lives at point 23, so the anchor must stay above
+        /// it (fewer points between anchor and hook = shallower resting hook).</summary>
+        internal static uint PointAt(int index) => PointVanilla + (uint)((index - 18) * (int)PointStride);
+
+        // Line LENGTH lever (separate from the bobber anchor): distp = the per-segment rest length of the
+        // 24-point Verlet line, a plain .data float read every frame by FishLineInit/FishLineStep — a pure
+        // data write is recompiler-safe. Scaling it stretches the WHOLE line (cast reach AND hang depth), so
+        // a spot over low water (Queens canal) can reach the surface. Restore to vanilla off-session.
+        internal const long  DistpAddr    = 0x202A1FA4;
+        internal const float VanillaDistp = 1.6666666f;   // 5/3 (read from SCUS_971.11 .data)
+
+        // Each site: (lui addr, addiu/lw addr, dest reg). reg = the original addiu's target ($4 or $5).
+        internal static readonly (long lui, long ld, int reg)[] Sites =
+        {
+            (0x201AA464, 0x201AA468, 5),
+            (0x201AA478, 0x201AA47C, 5),
+            (0x201AA954, 0x201AA958, 5),
+            (0x201AA9B4, 0x201AA9B8, 4),
+            (0x201AA9BC, 0x201AA9C0, 5),
+            (0x201AAB30, 0x201AAB34, 4),
+        };
+
+        internal const uint OrigLui = 0x3C0201D5;                                  // lui $2, 0x1d5
+        internal static uint OrigAddiu(int reg) => 0x24025F50u | ((uint)reg << 16); // addiu $reg,$2,0x5f50
+        internal static uint NewLui(int reg)    => 0x3C0001FBu | ((uint)reg << 16); // lui $reg, 0x01FB
+        internal static uint NewLw(int reg)     => 0x8C004000u | ((uint)reg << 21) | ((uint)reg << 16); // lw $reg,0x4000($reg)
+    }
+
+    /// <summary>
+    /// The villager/fishing memory pool — a <c>CDataAlloc2</c> bump allocator (base, used, capacity), all
+    /// counts in 0x10-byte blocks. <c>Alloc</c> hangs (<c>while(true)</c>) if <c>used + size &gt; capacity</c>.
+    ///
+    /// This is the pool <c>_LOAD_MAIN_CHARA(turi, flag=1)</c> AND <c>_LOAD_FISHING_DATA</c> allocate from, so
+    /// the 1.73 MB fishing model has to fit here. <c>_CLEAR_VILLAGER_BUFF</c> recomputes
+    /// <c>capacity = BaseBuffer.capacity - BaseBuffer.used</c> — i.e. whatever the parent buffer has free —
+    /// so a town with more resident data gets a SMALLER fishing pool. Reading this tells us whether the model
+    /// fits, instead of finding out by crashing.
+    /// </summary>
+    internal static class FishingPool
+    {
+        internal const long Base     = 0x21D1B360;   // guest pointer to the pool memory
+        internal const long Used     = 0x21D1B368;   // blocks in use (x0x10 = bytes)
+        internal const long Capacity = 0x21D1B36C;   // block capacity (x0x10 = bytes)
+        internal const int  BlockSize = 0x10;
+
+        internal const int TuriModelBytes = 1814240; // chara/c01d_turi.chr — must fit
     }
 }

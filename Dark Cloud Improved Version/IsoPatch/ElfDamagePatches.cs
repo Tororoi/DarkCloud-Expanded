@@ -2,14 +2,14 @@ using System;
 using System.IO;
 using static Dark_Cloud_Improved_Version.IsoBytes;
 using static Dark_Cloud_Improved_Version.MipsAsm;
-using static Dark_Cloud_Improved_Version.IsoPatcher;
 using static Dark_Cloud_Improved_Version.ElfCaveWriter;
 
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>The damage-pipeline ELF patches: CheckDmg's guard gate (the crush and mask caves in front of the cat's bypass),
     /// every engine-made collision entry starting unmarked, Ungaga's no-drain hits, the auto-guard reaction, the item-bomb
-    /// reaction word and a thrown gem's damage factor. Called in order from ElfPatches.ElfPatchAndCrc.</summary>
+    /// reaction word, a thrown gem's damage factor and Blizzard's ice immunity in the species table. Called in order from
+    /// ElfPatches.ElfPatchAndCrc.</summary>
     internal static class ElfDamagePatches
     {
         /// <summary>The GUARD CRUSH cave (tools/stubs/guard_crush.s, see DebugInfoCave.GuardCrush): CheckDmg's guard-window hook
@@ -34,10 +34,9 @@ namespace Dark_Cloud_Improved_Version
         internal static void PatchSetClearsMark(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint Site = 0x001B5858, Vanilla = 0xACA00020u, Patched = 0xACA00000u | (uint)CodeCaves.NoDrainMarkOff;   // sw zero,0x20(a1) → sw zero,0x9C(a1)
-            uint cur = RdU32(fs, ElfOff(Site));
-            if (cur != Vanilla && cur != Patched || RdU32(fs, ElfOff(Site + 4)) != 0xACA40020u)
-                throw new IOException($"CCollisionData::Set at 0x{Site:X} is not vanilla (`sw zero,0x20(a1); sw a0,0x20(a1)`) — unmodified Dark Cloud (USA) ISO expected.");
-            WrU32(fs, ElfOff(Site), Patched);
+            ReplaceWords(fs, ElfOff, Site, new[] { Vanilla }, new[] { Patched },
+                         _ => $"CCollisionData::Set at 0x{Site:X} is not vanilla (`sw zero,0x20(a1); sw a0,0x20(a1)`) — unmodified Dark Cloud (USA) ISO expected.",
+                         (Site + 4, 0xACA40020u));
         }
 
         /// <summary>The GUARD MASK cave (tools/stubs/guard_mask.s, see DebugInfoCave.GuardMask): the guard gate's second link,
@@ -203,6 +202,23 @@ namespace Dark_Cloud_Improved_Version
             if (RdU32(fs, ElfOff(HookAddr + 4)) != 0 || RdU32(fs, ElfOff(HookAddr - 4)) != 0x70402E28u)   // its delay slot; `moveq a1,v0`: the damage into a1
                 throw new IOException("CMainItemModel::Step is not laid out as expected around the gem's SetDmg.");
             WrU32(fs, ElfOff(HookAddr), ours);
+        }
+
+        // ── Blizzard: immune to ice ──────────────────────────────────────────────────────────────────────
+        // The enemy species table is static ELF data (EnemySpeciesTable @0x27FB00, 0x9C per record; element resistances
+        // are signed shorts, 0 = immune, 100 = neutral). Blizzard (row 57, "e65a") ships ice-neutral; the user wants it ice-immune
+        // like Ice Gemron. EnemyData.cs carries the patched value so the mod's tables agree with the disc.
+        internal static void PatchBlizzardIceImmunity(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const int Row = 57;                                                                     // EnemyData.Blizzard.TableIndex
+            long rec = ElfOff((uint)EnemySpeciesTable.RecordAddress(Row));
+            long ice = rec + EnemySpeciesTable.IceRes;
+            ushort cur = U16(Rd(fs, ice, 2), 0);
+            bool vanilla = cur == 100, ours = cur == 0;
+            if (RdU32(fs, rec) != 0x61353665u /* "e65a" */ || !(vanilla || ours)
+                || U16(Rd(fs, rec + EnemySpeciesTable.FireRes, 2), 0) != 100 || U16(Rd(fs, rec + EnemySpeciesTable.ThunderRes, 2), 0) != 140)
+                throw new IOException($"Species row {Row} is not Blizzard as shipped (\"e65a\", fire 100 / ice 100 / thunder 140) — unmodified Dark Cloud (USA) ISO expected.");
+            Wr(fs, ice, new byte[] { 0, 0 });                                                       // IceRes = 0: immune
         }
     }
 }

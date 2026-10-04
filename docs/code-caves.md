@@ -11,7 +11,7 @@ symbol table and reports address ranges no symbol claims, classified by segment.
 shows the nearest symbols to any address.
 
 **Runtime:** `CodeCaveScanner.cs` (thread started with the others in
-`MainMenuThread.TitleMenu`) passively sweeps all 32MB of EE RAM every ~45s in 8KB
+`SessionController.TitleMenu`, only while `DebugDiagnostics.Enabled`) passively sweeps all 32MB of EE RAM every ~45s in 8KB
 PINE batches, tracking 256-byte chunks. A chunk that is all-zero in every sweep is
 clean; one that changes or holds data is not. Small entries (≤8KB) are re-verified
 byte-precisely so seeds smaller than a chunk aren't polluted by neighbours.

@@ -158,7 +158,7 @@ namespace Dark_Cloud_Improved_Version
             EnemyFacing.FaceTick();
 
             BlastFalloff.ExpireShells();
-            EnemyFacing.ReleaseRedirectWhenDue();
+            BladeRedirect.ReleaseRedirectWhenDue();
 
             if (Player.CheckDunIsPausedOrMenu()) return;
             if (Player.CurrentCharacterNum() != Player.ToanId) { ClearTint(st); RestoreSwing(st); return; }
@@ -192,8 +192,8 @@ namespace Dark_Cloud_Improved_Version
             if (action == PlayerAction.ActionWindup && !SunSword.FlashArmed)
             {
                 float k = (meter - ChargeMeterFloor) / (PlayerAction.ChargeMeterCap - ChargeMeterFloor);
-                SolarBlade.Set(Math.Min(1f, Math.Max(0f, k)), SolarBlade.BigBangModel,
-                               SolarBlade.BigBangBladeFrame, SolarBlade.BigBangGlowFrame);
+                BladeTint.Set(Math.Min(1f, Math.Max(0f, k)), BladeTint.BigBangModel,
+                               BladeTint.BigBangBladeFrame, BladeTint.BigBangGlowFrame);
                 st.tinted = true;
             }
             else if (st.tinted && !whirl) ClearTint(st);
@@ -349,7 +349,7 @@ namespace Dark_Cloud_Improved_Version
         private static void LandBigBang(int slot, float x, float h, float y)
         {
             SunSword.BigBangFlash.ArmLighting();
-            SolarLighting.Flash();
+            SceneLighting.Flash();
             Burst(x, h, y);
             BlastFalloff.PlantFalloff(x, h, y, guardBreak: true);      // the judgement blade's landing crushes any guard (the ISO's guard gate)
             EnemyFacing.TurnEnemiesToward(x, y);
@@ -380,7 +380,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!st.tinted) return;
             st.tinted = false;
-            if (!SunSword.FlashArmed) SolarBlade.Clear();
+            if (!SunSword.FlashArmed) BladeTint.Clear();
         }
 
         /// <summary>Weapon HP for a blast: <see cref="BlastWhp"/>, taken by the engine's own drain (<see cref="WeaponWhp"/>),
@@ -393,7 +393,7 @@ namespace Dark_Cloud_Improved_Version
             RestoreSwing(st);          // stats, kick constants and the charge radii
             ExplosionImmunity.RestoreImmunity();   // ⚠ shared ELF data: never leave the explosions inert
             JudgementBlade.ReleaseJudgement();
-            ToanLockOn.ReleaseReach(); EnemyFacing._faceHold = 0; EnemyFacing.ReleaseRedirect();
+            ToanLockOn.ReleaseReach(); EnemyFacing._faceHold = 0; BladeRedirect.ReleaseRedirect();
             BlastFalloff._shells.WithdrawAll();                                  // the blast's entries withdrawn, their marks cleared, as ExpireShells does
             if (st.crushing) { GuardGate.NobodyBlocks(false); st.crushing = false; }
             st.chargeAction = 0;

@@ -1,3 +1,6 @@
+// STB script address bank: the .stb file format and VM opcodes (StbVm), the external-command dispatch table and the
+// _GET_POSITION / _GET_DISTANCE splice points (StbExternCmd), the per-enemy-slot VM state (CRunScript), the town's
+// event-script VM object (RunScript) and the script-visible global integers (GlobalInt).
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
@@ -86,7 +89,7 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// Because the dispatch entries are function POINTERS the game dereferences, hosting a modified copy of
     /// either function and repointing its slot redirects targeting for ALL enemies with a pure data write —
-    /// no in-place code surgery (see CodeCaveFunctions). Splice at the player-load offsets below; the copy's
+    /// no in-place code surgery (see RuntimeCaveWriter). Splice at the player-load offsets below; the copy's
     /// own `jal sceVu0CopyVector` is left intact and is where a helper jumps back to.
     ///
     /// Mirage's decoy is the first consumer (it makes the load per-enemy indirect), but nothing here is
@@ -155,5 +158,39 @@ namespace Dark_Cloud_Improved_Version
         internal static long SlotAddr(int slot, int fieldOffset) => Base + (long)slot * Stride + fieldOffset;
         /// <summary>EE address of the STB-base pointer field for <paramref name="slot"/>.</summary>
         internal static long StbPtrAddr(int slot) => SlotAddr(slot, StbPtr);
+    }
+
+    /// <summary>
+    /// The event script's VM object (ELF <c>CRunScript</c>) — <c>EdEventInit</c> calls
+    /// <c>reload__10CRunScript(0x1d4a430, ...)</c>. <c>exe()</c> reads the running frame's LOCAL VARIABLE
+    /// array from <c>this + 0x28</c>, so that is how the mod reaches a script's locals: each is an
+    /// 8-byte RS_STACKDATA of {type, value}, and type 1 = int.
+    /// </summary>
+    internal static class RunScript
+    {
+        internal const long Object   = 0x21D4A430;
+        internal const int  VarsBase = 0x28;
+
+        internal const int VarStride = 8;
+        internal const int VarType   = 0;
+        internal const int VarValue  = 4;
+        internal const int TypeInt   = 1;
+    }
+
+    /// <summary>
+    /// The engine's _SET/_GET_GLOBAL_INT scratch array (handler @ ELF 0x1E5190): global[i] = Base + i*4.
+    /// ELF global-int array @0x1D8FC80, read at PCSX2 0x21D8FC80. Used by the Ice Queen fight handshake.
+    ///
+    /// The script-visible global integers (<c>GL_INT</c>, 64 of them): what <c>_SET_GLOBAL_INT</c> / <c>_GET_GLOBAL_INT</c>
+    /// (commands 220/221) read and write, and the only channel by which the mod can say something to a running enemy script.
+    /// The Ice Queen cluster owns 0-8; anything new must sit well clear of those.</summary>
+    internal static class GlobalInt
+    {
+        internal const long Base = 0x21D8FC80;
+        internal const int  Count = 64;
+        internal static long Addr(int i) => Base + (long)i * 4;
+        /// <summary>Solar Flash: non-zero while the flash is blinding the floor, read by the guard preamble the mod
+        /// writes into each species' AI label (see <see cref="SolarScript"/>).</summary>
+        internal const int  SolarBlindIndex = 40;
     }
 }

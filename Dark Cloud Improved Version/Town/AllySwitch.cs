@@ -34,7 +34,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>
         /// Points the game's .cfg loader at the relocated slot, clears both slots and writes "info.cfg" and
-        /// Toan's "chara/c01d.chr" into them. Run at game entry (MainMenuThread) and again at game-loop start.
+        /// Toan's "chara/c01d.chr" into them. Run at game entry (SessionController) and again at game-loop start.
         /// </summary>
         public static void InitializeCharacterOffsetValues()
         {

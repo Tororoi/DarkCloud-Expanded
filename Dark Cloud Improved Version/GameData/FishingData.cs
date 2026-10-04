@@ -609,7 +609,7 @@ namespace Dark_Cloud_Improved_Version
         };
 
         // ---- Custom fishing spots (ISO-patched dedicated areas 5/6/7) ----
-        // These towns' fish pools are baked straight into FishingLoadFish by IsoPatcher.PatchFishingLoadFish
+        // These towns' fish pools are baked straight into FishingLoadFish by ElfFishingPatches.PatchFishingLoadFish
         // (dedicated area branches 5/6/7), so the loader spawns the right species with no runtime re-species.
         // SlotBase is resolved live at session start (Fishing.OnSessionStart) from the CFish* pointer, since
         // these areas don't have a fixed captured base like the native AreaBase_* constants. QuestBase = 0 →

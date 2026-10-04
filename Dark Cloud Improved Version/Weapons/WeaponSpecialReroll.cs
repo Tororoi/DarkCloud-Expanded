@@ -5,7 +5,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>The weapon special attributes (<see cref="WeaponTable.Effect1"/> / <see cref="WeaponTable.Effect2"/>) the mod lets
     /// certain weapons carry, rerolled in the static weapon table once a second for as long as a save is in play (so each weapon
-    /// the game builds from the table rolls its own): the thread body MainMenuThread.weaponspecialeffectThread runs.</summary>
+    /// the game builds from the table rolls its own): the thread body SessionController.weaponspecialeffectThread runs.</summary>
     internal static class WeaponSpecialReroll
     {
         static Random rnd = new Random();
@@ -16,7 +16,7 @@ namespace Dark_Cloud_Improved_Version
         {
             while (true)
             {
-                if (MainMenuThread.userMode == true)
+                if (SessionController.userMode == true)
                 {
                     if (Memory.ReadByte(Addresses.mode) == 0 || Memory.ReadByte(Addresses.mode) == 1)
                     {

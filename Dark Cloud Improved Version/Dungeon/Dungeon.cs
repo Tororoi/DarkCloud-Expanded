@@ -138,7 +138,7 @@ namespace Dark_Cloud_Improved_Version
                     }
 
                     //Check if the player has killed all the floor enemies
-                    if (ReusableFunctions.CheckIfAllEnemiesKilled() && !hasClearMessageShown)
+                    if (EnemyQueries.CheckIfAllEnemiesKilled() && !hasClearMessageShown)
                     {
                         DungeonMessages.DisplayMessage("DUMMY", 0, 0, 4000, true);
 
@@ -232,7 +232,7 @@ namespace Dark_Cloud_Improved_Version
                     UpdateMiniBossFloorState();
                     if (CheckWeaponChange(currentWeapon))
                     {
-                        ReusableFunctions.ClearRecentDamageAndDamageSource();
+                        EnemyQueries.ClearRecentDamageAndDamageSource();
                         currentWeapon = Player.Weapon.GetCurrentWeaponId();
                     }
 
@@ -262,7 +262,7 @@ namespace Dark_Cloud_Improved_Version
                     EnemyRandomizer.StageFloorRoster(currentDungeon, Memory.ReadByte(Addresses.checkFloor) + 1);
                 }
 
-                if (MainMenuThread.userMode == true)
+                if (SessionController.userMode == true)
                 {
                     if (Memory.ReadByte(Addresses.mode) == 0 || Memory.ReadByte(Addresses.mode) == 1)
                     {
@@ -483,7 +483,7 @@ namespace Dark_Cloud_Improved_Version
             DungeonSidequests.CheckSidequests(currentDungeon, currentFloor);
 
             ChronicleSword.chronicleNewFloor = true;
-            ReusableFunctions.ClearRecentDamageAndDamageSource();
+            EnemyQueries.ClearRecentDamageAndDamageSource();
 
             DungeonSidequests.monsterQuestActive = SideQuestManager.CheckCurrentDungeonQuests(currentDungeon);
 

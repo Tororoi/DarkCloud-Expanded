@@ -94,7 +94,7 @@ namespace Dark_Cloud_Improved_Version
         private static int _lastMode = int.MinValue;
         private static int _lastGameMode = int.MinValue;
 
-        // ── Shallow-hook (Brownboo) — DATA-ONLY, recompiler-safe. See TownAddresses.FishLineShallow. ─────────
+        // ── Shallow-hook (Brownboo) — DATA-ONLY, recompiler-safe. See FishLineShallow (Addresses/FishingAddresses.cs). ─────────
         private static bool _shallowLineInstalled;
         /// <summary>Install the cold-window FishLineStep rewrite ONCE (from ApplyNewChanges, before any fishing
         /// has JIT-compiled the function). It re-points the bobber's six anchor loads at a mod data global, so
@@ -324,7 +324,7 @@ namespace Dark_Cloud_Improved_Version
         private static Spot _active;
         private static float _lastCamH = float.NaN;
 
-        /// <summary>Feed the patched fishing-camera SetHeight site (IsoPatcher.PatchFishingCameraHeight turned
+        /// <summary>Feed the patched fishing-camera SetHeight site (ElfCameraPatches.PatchFishingCameraHeight turned
         /// its hard-coded 40 into a read of <see cref="Mailbox.FishCamHeight"/>).
         ///
         /// The patched instruction runs every frame of every fishing session in EVERY town — including the
@@ -538,7 +538,7 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // The trigger is now BAKED into the ISO — a native type-3 event point in the town's own scene.scn
-            // (IsoPatcher.BuildFishingFunc), created by the engine at town load. So we no longer create a
+            // (SceneBaker.BuildFishingFunc), created by the engine at town load. So we no longer create a
             // runtime event point; we only install the fishing SCRIPT here, and the baked point names label
             // 400. The baked point survives day/night AND town rebuilds; only the runtime script can be lost
             // (a same-map rebuild re-reads the stb), which FishingInstallPresent now detects by script content.
@@ -656,7 +656,7 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // Move the fish to the shallow depth once they spawn. The custom-town SPECIES now come straight
-            // from the loader (IsoPatcher.PatchFishingLoadFish bakes dedicated areas 5/6/7 into FishingLoadFish),
+            // from the loader (ElfFishingPatches.PatchFishingLoadFish bakes dedicated areas 5/6/7 into FishingLoadFish),
             // so there's no mod-side re-species and no race — nothing to do here for species. Depth still waits
             // for the fish: the window goes live (cpoly/water) a few frames before _INIT_FISH places them.
             if (!live) { _shallowFishApplied = false; _fishCPolySynced = false; }

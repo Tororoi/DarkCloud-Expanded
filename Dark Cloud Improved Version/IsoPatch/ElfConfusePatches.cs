@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using static Dark_Cloud_Improved_Version.IsoBytes;
 using static Dark_Cloud_Improved_Version.MipsAsm;
-using static Dark_Cloud_Improved_Version.IsoPatcher;
 using static Dark_Cloud_Improved_Version.ElfCaveWriter;
 
 namespace Dark_Cloud_Improved_Version
@@ -24,10 +23,9 @@ namespace Dark_Cloud_Improved_Version
             if (b.Length % 4 != 0 || U32(b, 0) != 0x8EA30090u || U32(b, b.Length - 8) != MipsAsm.J(0x001DBAA8))
                 throw new IOException($"confuseProc.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             WriteBytes(fs, ElfOff, cave, b, DebugItemCave.StarsStep, "confuseProc.bin runs into the stars step cave.");
-            uint cur = RdU32(fs, ElfOff(Hook));
-            if (cur != HookVanilla && cur != MipsAsm.J(cave) || RdU32(fs, ElfOff(Hook + 4)) != HookSlot)
-                throw new IOException($"CheckDmg's post-Stop meeting point 0x{Hook:X} is not vanilla (0x{cur:X8}) — unmodified Dark Cloud (USA) ISO expected.");
-            WrU32(fs, ElfOff(Hook), MipsAsm.J(cave));
+            ReplaceWords(fs, ElfOff, Hook, new[] { HookVanilla }, new[] { MipsAsm.J(cave) },
+                         cur => $"CheckDmg's post-Stop meeting point 0x{Hook:X} is not vanilla (0x{cur[0]:X8}) — unmodified Dark Cloud (USA) ISO expected.",
+                         (Hook + 4, HookSlot));
         }
 
         /// <summary>The CONFUSE weapon ability's ELF side (docs/confuse-ability.md; the name and icon are ConfuseAbilityBakes'): ability bit

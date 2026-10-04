@@ -15,7 +15,7 @@ from `WeaponThreads`) drives it with three helpers in `Weapons/Toan/SunSword/`.
   `GameClock`. The last half second also runs the stock cyan `ChargeTint` ramp on Toan, so the build-up reads like the
   game's other charges. Priming keeps through guard release; a sidekick taking over, a floor change or putting the sword
   away drops it.
-- **Blade tint** (`SolarBlade`) — the sword is a frame in Toan's own tree (EquipWeaponFrame), drawn inside
+- **Blade tint** (`BladeTint`) — the sword is a frame in Toan's own tree (EquipWeaponFrame), drawn inside
   Draw__10CCharacter under HIS ambient, so a character tint would whiten Toan too. The blade mesh's visual (the weapon
   model's private object, rebuilt on every swap) is a rigid `CVisualVu1` (vtable 0x2A11C0 — not the skinned
   CVisualMDTVu1 the cat's meshes are). It gets a private copy of its class vtable (`CodeCaves.SolarBladeVtable`, 32 B in
@@ -27,7 +27,7 @@ from `WeaponThreads`) drives it with three helpers in `Weapons/Toan/SunSword/`.
   `Clear` zeroes it and puts the class vtable back. The blade frame is found by `Weapons.ResolveBladeFrame("c01w10")` →
   `LocateModelFrame` (the template name sits at node + 0x118; the visual is the node's `GeomPtr`). A skinned visual would
   take the mask cave's own entries; any other class is left alone (logged once, no tint).
-- **The peak palette step** (`SolarBlade.PaintPeak`) — the instant the charge completes, the blade's OWN 256-entry palette
+- **The peak palette step** (`BladeTint.PaintPeak`) — the instant the charge completes, the blade's OWN 256-entry palette
   is EXPOSED in the texture manager's copy: every entry multiplied by `PeakGain`, and an entry bright enough after that
   gain washed toward white by up to `PeakWash`. Multiplying keeps the ratios between entries, so the blade's shading
   survives and only its brightest gold blows out. Selecting "the gold entries" and pushing each the same distance instead
@@ -43,7 +43,7 @@ from `WeaponThreads`) drives it with three helpers in `Weapons/Toan/SunSword/`.
   / 852 / 870 — the first is the measured hit-window start, the rest are start + 5 and the finisher's midpoint, to tune);
   the charge lunge (0xF) and whirlwind (0x18) flash at state entry. A swing that ends before its point leaves the charge
   primed.
-- **Lighting** (`SolarLighting`) — `DungeonAddresses.DungeonLighting`: the dungeon overlay's MainDraw (dun 0x1DAE2A0)
+- **Lighting** (`SceneLighting`) — `DungeonAddresses.DungeonLighting`: the dungeon overlay's MainDraw (dun 0x1DAE2A0)
   hands the renderer these globals EVERY frame — `MGSetLight(dirs, colours)`, `MGSetAmbient(ambient)`, the bg colour and
   the fog (`fogRate` start/end, `fogColor` bytes) — the main set when `lightingMode` (0x2A34CC) is 0, the sub (ura) set
   otherwise. The flash captures the drawn set, writes ambient and the four light-colour rows to 255 and pulls the fog to
@@ -80,8 +80,8 @@ from `WeaponThreads`) drives it with three helpers in `Weapons/Toan/SunSword/`.
 ## Tuning knobs (constants)
 
 `SunSword`: ChargeSeconds 1.5, FlashRadius 300, FlashDamageFraction 0.25, Kick 2.0/0.3, HitLifeTicks 3, FlashPulseSpeed
-90, FlashSe 0 (no sound yet — a resident SE id goes here), the five combo forward frames. `SolarBlade`: WhiteMax 200 (the ambient add). The peak palette exposure was removed once the glow landed - the glow reads the charge on its own.
-`SunSword.PrimedTint` 45. `SolarLighting`: EaseSeconds = SolarStun.StunSeconds (5 s), FogStart/End 0/1, FogEasePow 2 (the
+90, FlashSe 0 (no sound yet — a resident SE id goes here), the five combo forward frames. `BladeTint`: WhiteMax 200 (the ambient add). The peak palette exposure was removed once the glow landed - the glow reads the charge on its own.
+`SunSword.PrimedTint` 45. `SceneLighting`: EaseSeconds = SolarStun.StunSeconds (5 s), FogStart/End 0/1, FogEasePow 2 (the
 fog clears ahead of the light). `SolarGlow`: Scale 1.0, Flags 2, Pull 5, Lift 8. ⚠ Flags 2 is the flickering flame sprite ALONE — 1 adds the steady
 glow pair (18 × 9 at 1.0), which draws as a second much smaller glow beside the first, so 3 shows a tiny duplicate; the
 cat and the Matador both use 2. ⚠ The disc is NOT carried by a chara slot - that was tried and disproved. Nothing services the chara texture groups
@@ -115,7 +115,7 @@ A species without a guard holds its IDLE instead: grounded enemies brace, flyers
 LOWERING clip in the wind-down only applies to the ones that actually raised a guard.
 
 `SolarGlow`: GrowSeconds 0.25, FadeSeconds 0.5 — and the CHARGE starts the glow a grow-time early, so it reaches full
-size the instant the charge primes (a guard released before then hides it again). `SolarLighting.FlashColour` 255,240,200 drives the ambient, the four directional light rows and Toan's own pulse;
+size the instant the charge primes (a guard released before then hides it again). `SceneLighting.FlashColour` 255,240,200 drives the ambient, the four directional light rows and Toan's own pulse;
 the fog is driven to pure white separately (`FogColour`), and lifts in 1 s while the light takes the full 5.
 
 ⚠ The flash plants ONE SPHERE PER ENEMY, not one big one. A CollisionData entry is CONSUMED by the first victim the

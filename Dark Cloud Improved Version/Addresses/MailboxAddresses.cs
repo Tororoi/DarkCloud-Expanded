@@ -35,8 +35,8 @@ namespace Dark_Cloud_Improved_Version
         internal const long InsideMayor  = Base + 0x14; // TownCharacter
         internal const long Element      = Base + 0x18; // Dayuppy
         internal const long Clock        = Base + 0x1C; // TownCharacter
-        internal const long PnachActive  = Base + 0x20; // MainMenuThread
-        internal const long PineProbe    = Base + 0x24; // MemoryFunctions / MainMenuThread / ModWindow
+        internal const long PnachActive  = Base + 0x20; // SessionController
+        internal const long PineProbe    = Base + 0x24; // MemoryFunctions / SessionController / ModWindow
         internal const long Option1      = Base + 0x28; // ModWindow
         internal const long Option2      = Base + 0x2C; // ModWindow
         internal const long Option3      = Base + 0x30; // ModWindow
@@ -54,7 +54,7 @@ namespace Dark_Cloud_Improved_Version
         /// vanilla fishing angle (looking down into the water); the Queens CANAL spot uses the standard town
         /// height 5 because there you stand IN the water and the downward view is counterproductive.
         /// ⚠ The patched code reads this EVERY FRAME while fishing, in EVERY town — it must never be 0 or
-        /// the camera drops to height 0. Seeded at mod start (MainMenuThread) and re-asserted per tick.</summary>
+        /// the camera drops to height 0. Seeded at mod start (SessionController) and re-asserted per tick.</summary>
         internal const long FishCamHeight = Base + 0x3C;
 
         /// <summary>⚠ RESERVED — NOT mailbox slots. The ISO-baked town-camera collision function
@@ -66,13 +66,13 @@ namespace Dark_Cloud_Improved_Version
         internal const long CameraEprev = Base + 0x50;   // external, 16 bytes (0x50-0x5F) — do not reuse
 
         /// <summary>Player CCharacter ptr for the low-tide cape early-draw. CanalTide arms this alongside the
-        /// body's model root (MizuRedrawFramePtr); the capeEarlyDraw cave (IsoPatcher.PatchCapeEarlyDraw,
+        /// body's model root (MizuRedrawFramePtr); the capeEarlyDraw cave (ElfWaterPatches.PatchCapeEarlyDraw,
         /// reached by redirecting the refraction EARLY_STUB's `jal MGDraw`) reads it to walk char+0xC74 and
         /// Draw__6CCloth each cloth piece EARLY — so the cape survives the falls' Z-write like the body.
         /// The cave bakes the guest form 0x01F10044.</summary>
         internal const long CapeCharPtr = Base + 0x44;
 
-        /// <summary>Fishing rope BELOW-bobber rest length (float). The split caves (IsoPatcher.PatchFishLineSplit)
+        /// <summary>Fishing rope BELOW-bobber rest length (float). The split caves (ElfFishingPatches.PatchFishLineSplit)
         /// select this vs the existing distp @0x202A1FA4 (=above) per segment at anchor 18, so hook depth
         /// (bobber→hook) is tuned independently of cast reach (rod→bobber). The cave bakes the guest form
         /// 0x01F10048. Mod seeds/tunes it while fishing; MUST be > 0 (0 collapses the hang).</summary>
@@ -80,7 +80,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Canal tide-evict flag — the mod maintains the flag, native code owns the timing.
         /// CanalTide writes 1 the instant the tide turns while the player is caught in the drained Queens
-        /// canal; the EdFadeInOut fade-hook (IsoPatcher.PatchCanalEvictFadeHook, stub @<see cref="ElfCave.CanalEvictFadeHook"/>)
+        /// canal; the EdFadeInOut fade-hook (ElfCanalPatches.PatchCanalEvictFadeHook, stub @<see cref="ElfCave.CanalEvictFadeHook"/>)
         /// reads it on the exact fully-black frame, requests the _MAP_JUMP to the East Harbor dock, then clears it.
         /// The fade-hook bakes the guest form 0x01F10060 (tools/stubs/canal_evict_fade_hook.s) — keep in sync.</summary>
         internal const long CanalEvict = Base + 0x60;
@@ -106,7 +106,7 @@ namespace Dark_Cloud_Improved_Version
         internal const long FishWallLatch = Base + 0x6C;
 
         /// <summary>Town-character idle-motion override (the swapped-in cat's idle→sit). The ELF cave
-        /// <c>ElfPatches.PatchIdleMotionOverride</c> intercepts EdMoveChara's grounded LOCOMOTION store
+        /// <c>ElfTownAllyPatches.PatchIdleMotionOverride</c> intercepts EdMoveChara's grounded LOCOMOTION store
         /// <c>*(char+0xc68) = motion</c> (0 = idle / 1 = run / 2 = walk, @0x16a6a8): when the motion the
         /// engine computed is 0 (idle) AND this word is non-zero, the cave stores THIS value instead (e.g.
         /// the sit motion index), so an idle town character plays the override animation. Run/walk (1/2) and
@@ -116,7 +116,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Town ladder-mount block (the swapped-in non-Toan ally must never climb — the mount
         /// loads a Toan-rigged climb overlay onto a foreign model → crash). The ELF cave
-        /// <c>ElfPatches.PatchLadderRefusal</c> redirects EdMoveChara's single ladder-mount call
+        /// <c>ElfTownAllyPatches.PatchLadderRefusal</c> redirects EdMoveChara's single ladder-mount call
         /// (<c>jal EdInitHashigo</c> @0x16c0fc) plus the climbing-flag set (<c>li s8,1</c> @0x16c104) to a
         /// cave: when this word is 0 it mounts exactly as vanilla (calls EdInitHashigo + sets the climbing
         /// flag s8=1 → DAT_01d1970c); when non-zero it SKIPS both (no mount, s8 stays -1 = not climbing) and
@@ -133,7 +133,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Player "!" event-trigger mark HEIGHT boost (float). A swapped-in ally with different
         /// proportions (the cat) sits lower, so the exclamation mark pokes through its mesh. The ELF cave
-        /// <c>ElfPatches.PatchExclamationHeight</c> redirects the PLAYER mark's final Y store in
+        /// <c>ElfTownAllyPatches.PatchExclamationHeight</c> redirects the PLAYER mark's final Y store in
         /// <c>EdDrawSysCursor</c> (<c>swc1 f0,0x94(sp)</c> @0x17cf5c, the store of
         /// <c>fStack_c + *(Chara+0xb4) + 3.0 + sinf(a)*0.5</c>) to a cave that adds THIS word to the Y before
         /// storing it — so the mark rides `vanilla Y + boost`. The cave reads the GUEST form 0x01F1007C; the

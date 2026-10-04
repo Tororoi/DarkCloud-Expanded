@@ -117,7 +117,7 @@ namespace Dark_Cloud_Improved_Version
             else { BombModel.ReleaseTextures(); BombModel.Tick(); }
             PulseTint(copyUp);
             var p = BigBangShot.FlashProfile;
-            SolarLighting.ToanTintOwned = _guard == Guard.Charging || _guard == Guard.Primed;
+            SceneLighting.ToanTintOwned = _guard == Guard.Charging || _guard == Guard.Primed;
 
             // The shot charge, as her other charged shots: held ShotChargeSeconds, the charge-complete flash, and the next
             // pellet is the bomb. It arms whether or not the guard charge is primed; the guard charge owns the tint while it runs.
@@ -134,8 +134,8 @@ namespace Dark_Cloud_Improved_Version
             if (_flashPending)                                                                  // her release's flash: the plunge, then the flash from where she stood
             {
                 double frames = (GameClock.Now - _flashAt).TotalSeconds * 60.0;
-                SolarLighting.DimRamp(p.PrimeDim, (float)(frames / SolarLighting.RampFrames));
-                if (frames >= SolarLighting.RampFrames)
+                SceneLighting.DimRamp(p.PrimeDim, (float)(frames / SceneLighting.RampFrames));
+                if (frames >= SceneLighting.RampFrames)
                 {
                     _flashPending = false;
                     EnemyFacing.TurnEnemiesToward(_flashX, _flashY);                                // every enemy turned to the flash, as to a blast
@@ -156,8 +156,8 @@ namespace Dark_Cloud_Improved_Version
                     if (_whiteFading)                                                          // her white off her after a release
                     {
                         float k = (float)Math.Max(0.0, 1.0 - (GameClock.Now - _firedAt).TotalSeconds / TintFadeSeconds);
-                        SunSword.HoldPrimedTint(p, k); SolarBlade.Set(k, p.Model, p.Frame, p.Unlit, p.BladeWhite);
-                        if (k <= 0f) { _whiteFading = false; SolarBlade.Clear(); }
+                        SunSword.HoldPrimedTint(p, k); BladeTint.Set(k, p.Model, p.Frame, p.Unlit, p.BladeWhite);
+                        if (k <= 0f) { _whiteFading = false; BladeTint.Clear(); }
                     }
                     if (!SunSword.BlindRunning && GuardWatch.IsGuarding()) { _guard = Guard.Charging; _holdStart = GameClock.Now; _whiteFading = false; }
                     break;
@@ -180,8 +180,8 @@ namespace Dark_Cloud_Improved_Version
                     break;
                 }
                 case Guard.Primed:
-                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);
-                    if (p.PrimeDim > 0f) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim); }
+                    BladeTint.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);
+                    if (p.PrimeDim > 0f) { SceneLighting.BeginDim(); SceneLighting.DimTo(p.PrimeDim); }
                     SunSword.HoldPrimedTint(p, 1f);
                     JudgementBlade.JudgementTick(Owner);                                     // the bomb over a locked target, following it
                     // Her release — the shoot state's first tick, before the engine has a pellet out — lets the hanging bomb go,
@@ -204,7 +204,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     double since = (GameClock.Now - _firedAt).TotalSeconds;
                     float k = (float)Math.Max(0.0, 1.0 - since / TintFadeSeconds);
-                    SunSword.HoldPrimedTint(p, k); SolarBlade.Set(k, p.Model, p.Frame, p.Unlit, p.BladeWhite);
+                    SunSword.HoldPrimedTint(p, k); BladeTint.Set(k, p.Model, p.Frame, p.Unlit, p.BladeWhite);
                     JudgementBlade.JudgementTick(Owner);                                     // the fall, and the landing (LandDrop)
                     if (JudgementBlade.TakeDropLanded()) { _guard = Guard.Idle; break; }
                     if (!JudgementBlade.Dropping && !JudgementBlade.LandingPending) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the drop was abandoned — the charge is spent"); Dissipate(); }
@@ -414,7 +414,7 @@ namespace Dark_Cloud_Improved_Version
         private static void Dissipate()
         {
             SunSword.HoldPrimedTint(BigBangShot.FlashProfile, 0f);
-            SolarBlade.Clear(); ChargeTint.Clear(); SolarLighting.EndDim();
+            BladeTint.Clear(); ChargeTint.Clear(); SceneLighting.EndDim();
             if (BladeProp.Active) SolarGlow.Fade();
             JudgementBlade.ReleaseJudgement();
             _guard = Guard.Idle; _whiteFading = false; _flashPending = false;
@@ -451,11 +451,11 @@ namespace Dark_Cloud_Improved_Version
             if (_guard != Guard.Idle || _whiteFading) SunSword.HoldPrimedTint(BigBangShot.FlashProfile, 0f);
             EndFlights();
             Memory.WriteInt(Mailbox.PelletKickDamage, 0);                         // no kick mark
-            SolarBlade.Clear(); ChargeTint.Clear(); SolarGlow.Hide(); SolarLighting.Restore(); Unhide();
+            BladeTint.Clear(); ChargeTint.Clear(); SolarGlow.Hide(); SceneLighting.Restore(); Unhide();
             JudgementBlade.ReleaseJudgement(); ExplosionImmunity.DriveImmunity(false); Ungraft(); BombModel.ReleaseTextures();
             SunSword.EndBlinding();
             _planted.WithdrawAll();
-            SolarLighting.ToanTintOwned = false;
+            SceneLighting.ToanTintOwned = false;
             _pellets.Reset(); _shot.Reset();
             _guard = Guard.Idle; _whiteFading = false; _flashPending = false;
         }

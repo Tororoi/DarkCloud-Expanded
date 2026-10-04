@@ -120,10 +120,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The icon's 20×20 RGBA pixels, from the embedded PNG.</summary>
         private static byte[] IconRgba()
         {
-            using var st = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.confuse_icon.png")
-                ?? throw new System.IO.IOException("Embedded asset missing: confuse_icon.png");
-            using var ms = new System.IO.MemoryStream(); st.CopyTo(ms);
-            var (w, h, rgba) = Png.DecodeRgba(ms.ToArray());
+            var (w, h, rgba) = Png.DecodeRgba(ElfCaveWriter.Embedded("confuse_icon.png", "Embedded asset missing: confuse_icon.png"));
             if (w != Tile || h != Tile) throw new System.IO.IOException($"confuse_icon.png is {w}×{h}; the ability tiles are {Tile}×{Tile}.");
             return rgba;
         }

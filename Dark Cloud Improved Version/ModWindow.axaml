@@ -97,7 +97,7 @@
                   Margin="349,288,0,0"
                   VerticalAlignment="Top" HorizontalAlignment="Left"
                   FontWeight="Normal"
-                  Click="button2_Click"/>
+                  Click="Btn_Discord_Click"/>
         </Panel>
       </TabItem>
 
@@ -176,7 +176,7 @@
                   Margin="46,339,0,0"
                   VerticalAlignment="Top" HorizontalAlignment="Left"
                   FontWeight="Normal"
-                  Click="button1_Click"/>
+                  Click="Btn_BugReport_Click"/>
 
         </Panel>
         </ScrollViewer>
@@ -416,40 +416,40 @@
             </Grid.RowDefinitions>
             <!-- Row 0: 1–4 -->
             <TextBlock Grid.Column="0" Grid.Row="0" Text="1" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy1" Grid.Column="1" Grid.Row="0" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy1_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy1" Grid.Column="1" Grid.Row="0" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="0" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <TextBlock Grid.Column="2" Grid.Row="0" Text="2" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy2" Grid.Column="3" Grid.Row="0" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy2_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy2" Grid.Column="3" Grid.Row="0" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="1" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <TextBlock Grid.Column="4" Grid.Row="0" Text="3" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy3" Grid.Column="5" Grid.Row="0" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy3_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy3" Grid.Column="5" Grid.Row="0" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="2" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <TextBlock Grid.Column="6" Grid.Row="0" Text="4" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy4" Grid.Column="7" Grid.Row="0" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy4_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy4" Grid.Column="7" Grid.Row="0" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="3" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <!-- Row 1: 5–8 -->
             <TextBlock Grid.Column="0" Grid.Row="1" Text="5" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy5" Grid.Column="1" Grid.Row="1" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy5_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy5" Grid.Column="1" Grid.Row="1" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="4" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <TextBlock Grid.Column="2" Grid.Row="1" Text="6" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy6" Grid.Column="3" Grid.Row="1" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy6_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy6" Grid.Column="3" Grid.Row="1" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="5" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <TextBlock Grid.Column="4" Grid.Row="1" Text="7" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy7" Grid.Column="5" Grid.Row="1" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy7_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy7" Grid.Column="5" Grid.Row="1" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="6" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <TextBlock Grid.Column="6" Grid.Row="1" Text="8" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy8" Grid.Column="7" Grid.Row="1" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy8_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy8" Grid.Column="7" Grid.Row="1" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="7" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <!-- Row 2: 9–12 -->
             <TextBlock Grid.Column="0" Grid.Row="2" Text="9" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy9" Grid.Column="1" Grid.Row="2" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy9_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy9" Grid.Column="1" Grid.Row="2" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="8" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <TextBlock Grid.Column="2" Grid.Row="2" Text="10" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy10" Grid.Column="3" Grid.Row="2" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy10_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy10" Grid.Column="3" Grid.Row="2" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="9" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <TextBlock Grid.Column="4" Grid.Row="2" Text="11" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy11" Grid.Column="5" Grid.Row="2" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy11_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy11" Grid.Column="5" Grid.Row="2" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="10" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <TextBlock Grid.Column="6" Grid.Row="2" Text="12" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy12" Grid.Column="7" Grid.Row="2" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy12_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy12" Grid.Column="7" Grid.Row="2" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="11" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <!-- Row 3: 13–16 -->
             <TextBlock Grid.Column="0" Grid.Row="3" Text="13" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy13" Grid.Column="1" Grid.Row="3" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy13_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy13" Grid.Column="1" Grid.Row="3" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="12" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <TextBlock Grid.Column="2" Grid.Row="3" Text="14" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy14" Grid.Column="3" Grid.Row="3" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy14_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy14" Grid.Column="3" Grid.Row="3" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="13" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <TextBlock Grid.Column="4" Grid.Row="3" Text="15" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy15" Grid.Column="5" Grid.Row="3" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy15_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy15" Grid.Column="5" Grid.Row="3" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="14" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
             <TextBlock Grid.Column="6" Grid.Row="3" Text="16" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
-            <TextBox x:Name="DEV_Page2_TextBox_Enemy16" Grid.Column="7" Grid.Row="3" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy16_TextChanged"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy16" Grid.Column="7" Grid.Row="3" MaxLength="10" TextAlignment="Right" FontWeight="Normal" Tag="15" TextChanged="DEV_Page2_TextBox_Enemy_TextChanged"/>
           </Grid>
 
         </DockPanel>

@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Text.RegularExpressions;
 using static Dark_Cloud_Improved_Version.IsoBytes;
 using static Dark_Cloud_Improved_Version.MipsAsm;
-using static Dark_Cloud_Improved_Version.IsoPatcher;
+using static Dark_Cloud_Improved_Version.BootCave;
 using static Dark_Cloud_Improved_Version.ElfCameraPatches;
 using static Dark_Cloud_Improved_Version.ElfWaterPatches;
+using static Dark_Cloud_Improved_Version.ElfCanalPatches;
 using static Dark_Cloud_Improved_Version.ElfFishingPatches;
 using static Dark_Cloud_Improved_Version.ElfCatPatches;
 using static Dark_Cloud_Improved_Version.ElfDeadFunctionPatches;
@@ -17,52 +17,39 @@ using static Dark_Cloud_Improved_Version.ElfFrameChainPatches;
 using static Dark_Cloud_Improved_Version.ElfToanMeleePatches;
 using static Dark_Cloud_Improved_Version.ElfConfusePatches;
 using static Dark_Cloud_Improved_Version.ElfWeaponPatches;
+using static Dark_Cloud_Improved_Version.ElfTownAllyPatches;
 using static Dark_Cloud_Improved_Version.ElfCaveWriter;
 
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// ELF (SCUS_971.11) patching: the boot cave that registers fishsign.img, ElfPatchAndCrc (program-header
-    /// resolve + the ordered Patch* dispatch + new PCSX2 CRC), and the small cave-stub hooks (tide-evict
-    /// fade, Queens spray, spray bias). The fishing ELF patches live in ElfFishingPatches; camera and
-    /// water-visual patches in ElfCameraPatches / ElfWaterPatches; the cat's in ElfCatPatches; the dead-function
-    /// hosts' takeover in ElfDeadFunctionPatches; the shot pack's in ElfShotPackPatches, the damage pipeline's in
-    /// ElfDamagePatches, the camera-pass frame chain's in ElfFrameChainPatches, Toan's melee in ElfToanMeleePatches,
-    /// the Confuse ability's in ElfConfusePatches and the per-weapon odds and ends in ElfWeaponPatches.
+    /// ELF (SCUS_971.11) patching: the boot cave that registers fishsign.img (its addresses in BootCave), the cave SEGMENT
+    /// hijacked out of phdr3, ElfPatchAndCrc (program-header resolve + the ordered Patch* dispatch + new PCSX2 CRC) and the
+    /// map-carve remainder. The feature patches live by area: ElfFishingPatches, ElfCameraPatches, ElfWaterPatches (the
+    /// order-coupled water redraw), ElfCanalPatches (the Queens canal's hooks), ElfCatPatches, ElfDeadFunctionPatches (the
+    /// dead-function hosts' takeover), ElfShotPackPatches, ElfDamagePatches, ElfFrameChainPatches (the camera-pass frame chain),
+    /// ElfToanMeleePatches, ElfConfusePatches, ElfWeaponPatches (the per-weapon odds and ends) and ElfTownAllyPatches (the
+    /// swapped-in town ally's motion, ladder and mark).
     /// </summary>
     internal static class ElfPatches
     {
-        // EE encoders / register numbers this file's caves need that MipsAsm doesn't expose (kept local to
-        // honour the patch's file scope; MipsAsm supplies Lui/Ori/Lw/Sw/Addiu/Move/Jal/J and zero/v0/a0..a3/t0/sp).
-        private const int at = 1, s0 = 16, s2 = 18, s8 = 30, ra = 31;
-        private static uint Bne(int rs, int rt, int off) => 0x14000000u | ((uint)rs << 21) | ((uint)rt << 16) | (uint)(off & 0xFFFF);
-        private static uint Jr(int rs) => ((uint)rs << 21) | 0x08u;
-
-        // FPU (cop1) encoders + FPR numbers for the exclamation-height cave (MipsAsm stays integer-only, so these
-        // are kept local like Bne/Jr above). Verified against EdDrawSysCursor's own listing: lwc1 f1,0(v0)=0xC4410000,
-        // swc1 f0,0x94(sp)=0xE7A00094, add.S f0,f0,f1=0x46010000.
-        private const int f0 = 0, f2 = 2;
-        private static uint Lwc1(int ft, int off, int b) => 0xC4000000u | ((uint)b << 21) | ((uint)ft << 16) | (uint)(off & 0xFFFF);
-        private static uint Swc1(int ft, int off, int b) => 0xE4000000u | ((uint)b << 21) | ((uint)ft << 16) | (uint)(off & 0xFFFF);
-        private static uint AddS(int fd, int fs, int ft) => 0x46000000u | ((uint)ft << 16) | ((uint)fs << 11) | ((uint)fd << 6);
-
         internal static byte[] BuildCave()
         {
             uint[] w = {
                 Addiu(sp, sp, -0x20), Sw(a0, 0x14, sp), Sw(a1, 0x18, sp),
-                Move(a0, a1), Lui(a1, BootCaveStringAddr >> 16), Ori(a1, a1, BootCaveStringAddr & 0xFFFF), Addiu(a2, zero, 0),
+                Move(a0, a1), Lui(a1, StringAddr >> 16), Ori(a1, a1, StringAddr & 0xFFFF), Addiu(a2, zero, 0),
                 Jal(GetPackFile), 0,
-                Lui(t0, BootCaveDiagAddr >> 16), Sw(v0, (int)(BootCaveDiagAddr & 0xFFFF), t0),
+                Lui(t0, DiagAddr >> 16), Sw(v0, (int)(DiagAddr & 0xFFFF), t0),
                 Move(a1, v0), Lui(a0, SysTexMgr >> 16), Ori(a0, a0, SysTexMgr & 0xFFFF),
                 Addiu(a2, zero, -1), Addiu(a3, zero, 0), Addiu(t0, zero, 0),
                 Jal(EnterIMGFile), 0,
                 Lw(a0, 0x14, sp), Lw(a1, 0x18, sp), Addiu(a2, zero, 0),
                 Jal(LoadFile), 0,
-                Addiu(sp, sp, 0x20), J(REJOIN_VA), 0,
+                Addiu(sp, sp, 0x20), J(RejoinVa), 0,
             };
             var b = new byte[w.Length * 4];
             for (int i = 0; i < w.Length; i++) Array.Copy(BitConverter.GetBytes(w[i]), 0, b, i * 4, 4);
-            if (b.Length > BootCaveMaxBytes) throw new InvalidOperationException($"cave {b.Length}B > {BootCaveMaxBytes}B");
+            if (b.Length > MaxBytes) throw new InvalidOperationException($"cave {b.Length}B > {MaxBytes}B");
             return b;
         }
 
@@ -76,7 +63,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 byte[] ph = Rd(fs, elfIso + phoff + i * phent, 24);
                 uint typ = U32(ph, 0), off = U32(ph, 4), va = U32(ph, 8), fsz = U32(ph, 16);
-                if (typ == 1 && fsz > 0 && va <= DETOUR_VA && DETOUR_VA < va + fsz) { pOff = off; pVa = va; break; }
+                if (typ == 1 && fsz > 0 && va <= DetourVa && DetourVa < va + fsz) { pOff = off; pVa = va; break; }
             }
             if (pOff < 0) throw new IOException("No PT_LOAD covers the patch site — wrong ISO/version.");
             // va → ISO file offset. Two segments: the mod's own cave segment (the hijacked phdr3, guest
@@ -91,14 +78,14 @@ namespace Dark_Cloud_Improved_Version
             HijackPhdr3CaveSegment(fs, elfIso, phoff, phent, phnum, elf.Size);
 
             byte[] cave = BuildCave();
-            if (RdU32(fs, ElfOff(DETOUR_VA)) != Jal(LoadFile) || RdU32(fs, ElfOff(DETOUR_VA + 4)) != 0)
+            if (RdU32(fs, ElfOff(DetourVa)) != Jal(LoadFile) || RdU32(fs, ElfOff(DetourVa + 4)) != 0)
                 throw new IOException("Boot-loader patch site is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
-            byte[] caveWas = Rd(fs, ElfOff(BootCaveAddr), cave.Length);
+            byte[] caveWas = Rd(fs, ElfOff(CaveAddr), cave.Length);
             foreach (byte x in caveWas) if (x != 0) throw new IOException("Boot-cave region not empty — unexpected ISO.");
 
-            Wr(fs, ElfOff(BootCaveStringAddr), Encoding.ASCII.GetBytes("fishsign.img\0"));
-            Wr(fs, ElfOff(BootCaveAddr), cave);
-            WrU32(fs, ElfOff(DETOUR_VA), J(BootCaveAddr));
+            Wr(fs, ElfOff(StringAddr), Encoding.ASCII.GetBytes("fishsign.img\0"));
+            Wr(fs, ElfOff(CaveAddr), cave);
+            WrU32(fs, ElfOff(DetourVa), J(CaveAddr));
 
             PatchClaimDeadFunctionHosts(fs, ElfOff);     // the dead debug functions that host caves (DebugInfomationDraw, DebugItemGetKey/Draw, DebugInfomationIF) return at once — before every cave patch; nothing else writes their first words
             PatchFishingLoadFish(fs, ElfOff);
@@ -135,13 +122,13 @@ namespace Dark_Cloud_Improved_Version
             PatchNameDrawGate(fs, ElfOff);               // lock-on name plate: its getter ANDs in NOT CodeCaves.NameHide
             PatchStrideScale(fs, ElfOff);                // Toan's stride on motion 33 × CodeCaves.StrideScale (the dun hook is in DunPatches)
             PatchCameraPin(fs, ElfOff);                  // the camera held at a world height while CodeCaves.CameraPin is set (the dun hook is in DunPatches)
-            PatchBladeFall(fs, ElfOff);                  // the judgement blade's fall stepped by the engine once a frame (chained after the camera pin)
+            PatchVerticalDrive(fs, ElfOff);                  // the judgement blade's fall stepped by the engine once a frame (chained after the camera pin)
             PatchBladeSpin(fs, ElfOff);                  // …then chara slot 3's yaw turned by CodeCaves.BladeSpin a frame (Babel's spear), before the WHP bill
             PatchFallDrive(fs, ElfOff);                  // …and the blade fall's mode 4 (falling and following, drive rows) between the two
             PatchFollow(fs, ElfOff);                     // …and the follow cave after it (a point carried with a unit: the Terra stars)
             PatchWhpBill(fs, ElfOff);                    // a weapon-HP bill the mod posts (CodeCaves.WhpBill) taken by the engine's own drain — SwordDmgCheck1 — once a frame (the chain's tail)
             PatchLungeGravity(fs, ElfOff);               // the charge lunge's gravity × (1 + CodeCaves.LungeGravityExtra): the seed cave + its main hook (the dun hook is in DunPatches)
-            PatchSolarBladeTint(fs, ElfOff);              // the Sun Sword's blade too (SolarBlade): the rigid-mesh class's DrawVu1, into the mask cave's body
+            PatchSolarBladeTint(fs, ElfOff);              // the Sun Sword's blade too (BladeTint): the rigid-mesh class's DrawVu1, into the mask cave's body
             PatchCatCopyQueue(fs, ElfOff);                // the cat's mesh copy runs inside the machine instead of over PINE
             PatchPropPelletFollow(fs, ElfOff);            // a chara-slot prop on one of Xiao's pellets — the Matador's charged shot (the hook in DunPatches now lands here)
             PatchBorrowedShotsEnter(fs, ElfOff);            // a species' shot config, borrowed by an ability, entered into every floor's shot pack (dun.bin hook in DunPatches)
@@ -171,7 +158,7 @@ namespace Dark_Cloud_Improved_Version
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
             PatchExclamationHeight(fs, ElfOff);           // player "!" mark Y store: add ExclamationYBoost mailbox (0 = vanilla) → lift the mark off a shorter swapped-in ally's mesh (the cat)
-            // (ally-swap buffer grow removed — every ally now fits the vanilla arenas; see the note below)
+            // (ally-swap buffer grow removed — every ally now fits the vanilla arenas; see the note in ElfTownAllyPatches)
 
             byte[] pelf = Rd(fs, elfIso, (int)elf.Size);
             uint crc = 0;
@@ -234,250 +221,14 @@ namespace Dark_Cloud_Improved_Version
             Wr(fs, elfIso + SegOff, new byte[SegSize]);   // zero-fill the whole span
         }
 
-        // ── Canal tide-evict: hook the fully-black fade frame natively ───────────────────────────────
-        // EdFadeInOut sets fade_end=1 (`sw $v1,-0x6df4($gp)` @0x189970) the instant a fade-OUT reaches full
-        // black. Retarget that store to our stub in the mod's ELF cave segment (loader-loaded at boot, so a jal
-        // there is legal; runtime-written heap caves crash the recompiler): the stub does the store, then if CanalTide raised
-        // the evict flag (mailbox 0x01F10040) it requests the _MAP_JUMP to the East Harbor dock (NextMapNo=19,
-        // arrival StartEventNo=404, return code 8) and clears the flag. Frame-perfect — the mod no longer polls
-        // the fade; it only sets the flag when the player is caught in the draining canal.
-        // (Stub = tools/stubs/canal_evict_fade_hook.s → Resources/isoPatch/canalEvictFadeHook.bin.)
-        internal static void PatchCanalEvictFadeHook(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint StubAddr = ElfCave.CanalEvictFadeHook;   // registry: CodeCaveAddresses.ElfCave
-            const uint HookAddr = 0x00189970;   // EdFadeInOut fade-out `fade_end = 1` store
-            if (RdU32(fs, ElfOff(HookAddr)) != 0xAF83920C)
-                throw new IOException($"Canal-evict hook site 0x{HookAddr:X} is not vanilla `sw $v1,-0x6df4($gp)` — unmodified Dark Cloud (USA) ISO expected.");
-            byte[] b = Embedded("canalEvictFadeHook.bin", "Embedded EE function missing: canalEvictFadeHook.bin (reassemble tools/stubs/canal_evict_fade_hook.s and rebuild)");
-            if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0xAF83920C)
-                throw new IOException($"canalEvictFadeHook.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            WriteBytes(fs, ElfOff, StubAddr, b);
-            WrU32(fs, ElfOff(HookAddr), Jal(StubAddr));   // store → jal stub; delay slot `clear $s4` runs first (harmless loop init)
-        }
-
-        // ── Ally in-place-swap buffer grow: REMOVED 2026-09-04 ───────────────────────────────────────
-        // PatchAllyTextureBudget grew the town TEXTURE arena (0x1d3a080) + GEOMETRY arena (0x1d3a060) and
-        // shrank the scene arena (0x1d3a050) so Ungaga's oversized cloth-less NPC model (c10a, 1.05MB) would
-        // fit an in-place _LOAD_MAIN_CHARA. It had a nasty side effect: growing the TEXTURE arena pushed the
-        // GEOMETRY arena's base later, and the town player's CLOTH lives in geometry — so on the first cold
-        // Queens load it INTERMITTENTLY landed on uninitialised boot memory and its Verlet solver blew up
-        // (Toan's "missing front cape"). Switching Ungaga to his 479KB PLAYER model c10p (which also gives him
-        // real cloth) dropped every ally under Toan's 850KB, so all fit the VANILLA arenas — the grow became
-        // unnecessary and removing it returned the cloth buffer to its benign vanilla home, fixing Toan's cape
-        // (confirmed clean across cold boots 2026-09-04). Recover from git if a future ally ever exceeds vanilla.
-        // See [[ccloth-particle-layout]], [[town-ally-switch-reload]].
-
-        // ── Blizzard: immune to ice ──────────────────────────────────────────────────────────────────────
-        // The enemy species table is static ELF data (EnemySpeciesTable @0x27FB00, 0x9C per record; element resistances
-        // are signed shorts, 0 = immune, 100 = neutral). Blizzard (row 57, "e65a") ships ice-neutral; the user wants it ice-immune
-        // like Ice Gemron. EnemyData.cs carries the patched value so the mod's tables agree with the disc.
         /// <summary>BtMapJumpLoad sizes the monster pool as `0xA7F80 − map.used` (`lui v0,0xA; ori a1,v0,0x7F80` @0x1B2724):
         /// the same 688,000 → 718,000 as DunPatches' map carve, or the pool would end 30,000 units short of its memory.</summary>
         internal static void PatchMapCarveRemainder(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint Site = 0x001B2728;                                                   // the ori; the lui 0xA before it is unchanged
-            uint cur = RdU32(fs, ElfOff(Site));
-            if (RdU32(fs, ElfOff(Site - 4)) != 0x3C02000Au || (cur != 0x34457F80u && cur != DunPatches.MapCarveGrownWord))
-                throw new IOException($"BtMapJumpLoad's map-carve remainder @0x{Site:X} is not vanilla ({cur:X8}) — unmodified Dark Cloud (USA) ISO expected.");
-            if (cur == DunPatches.MapCarveGrownWord) return;
-            WrU32(fs, ElfOff(Site), DunPatches.MapCarveGrownWord);
+            ReplaceWords(fs, ElfOff, Site, new[] { 0x34457F80u }, new[] { DunPatches.MapCarveGrownWord },
+                         cur => $"BtMapJumpLoad's map-carve remainder @0x{Site:X} is not vanilla ({cur[0]:X8}) — unmodified Dark Cloud (USA) ISO expected.",
+                         (Site - 4, 0x3C02000Au));
         }
-
-        internal static void PatchBlizzardIceImmunity(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const int Row = 57;                                                                     // EnemyData.Blizzard.TableIndex
-            long rec = ElfOff((uint)EnemySpeciesTable.RecordAddress(Row));
-            long ice = rec + EnemySpeciesTable.IceRes;
-            ushort cur = U16(Rd(fs, ice, 2), 0);
-            bool vanilla = cur == 100, ours = cur == 0;
-            if (RdU32(fs, rec) != 0x61353665u /* "e65a" */ || !(vanilla || ours)
-                || U16(Rd(fs, rec + EnemySpeciesTable.FireRes, 2), 0) != 100 || U16(Rd(fs, rec + EnemySpeciesTable.ThunderRes, 2), 0) != 140)
-                throw new IOException($"Species row {Row} is not Blizzard as shipped (\"e65a\", fire 100 / ice 100 / thunder 140) — unmodified Dark Cloud (USA) ISO expected.");
-            Wr(fs, ice, new byte[] { 0, 0 });                                                       // IceRes = 0: immune
-        }
-
-        /// <summary>The fishing prize exchange's slingshot: the Flamingo for 1000 FP in place of the Matador. The exchange's
-        /// stock is a static (item id, FP price) halfword table at 0x2929D0 (baits, powders, then the weapons); the Matador's
-        /// pair sits between the Tsukikage (266, 1100) and the Magical Hammer (317, 1800).</summary>
-        internal static void PatchFishingPrizeSlingshot(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint Entry = 0x00292A3Cu;                                                         // (item, price) of the slingshot on offer
-            const ushort VanillaItem = Items.matador, VanillaPrice = 1400, OurItem = Items.flamingo, OurPrice = 1000;
-            byte[] row = Rd(fs, ElfOff(Entry - 4), 12);                                             // the neighbour pairs frame the check
-            ushort item = U16(row, 4), price = U16(row, 6);
-            bool vanilla = item == VanillaItem && price == VanillaPrice, ours = item == OurItem && price == OurPrice;
-            if (!(vanilla || ours) || U16(row, 0) != Items.tsukikage || U16(row, 2) != 1100 || U16(row, 8) != Items.magicalhammer || U16(row, 10) != 1800)
-                throw new IOException($"Fishing prize entry 0x{Entry:X} is ({item}, {price}), not the Matador at 1400 FP between the Tsukikage and the Magical Hammer — unmodified Dark Cloud (USA) ISO expected.");
-            byte[] ours4 = new byte[4]; U16(ours4, 0, OurItem); U16(ours4, 2, OurPrice);
-            Wr(fs, ElfOff(Entry), ours4);
-        }
-
-        // The dungeon draw loop's raster pass (dun 0x1DAEBCC, hooked by DunPatches) comes here; the cave performs it and then
-        // draws one raster at the Mirage clone's root when the mailbox says so.
-        internal static void PatchMirageHazeDraw(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint CaveAddr = ElfCave.MirageHazeDraw;
-            byte[] b = Embedded("mirageHazeDraw.bin");
-            if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u)   // opens its frame: addiu sp,sp,-0x20
-                throw new IOException($"mirageHazeDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            // The two words that make it THIS cave: the "alpha01" string's address (ori a1,a1,0xA0E8) and the draw call
-            // (jal DrawRaster__9CFireOmni 0x162310). A wrong immediate in either fails invisibly — nothing drawn, no error.
-            bool name = ContainsWord(b, 0x34A5A0E8u), draw = ContainsWord(b, 0x0C0588C4u);
-            if (!name || !draw)
-                throw new IOException("mirageHazeDraw.bin lacks the \"alpha01\" address or the DrawRaster call — it would draw nothing.");
-            WriteBytes(fs, ElfOff, CaveAddr, b, ElfCave.NextFree, "mirageHazeDraw.bin overruns its cave — move ElfCave.NextFree.");
-        }
-
-        internal static void PatchIdleMotionOverride(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint HookAddr = 0x0016A6A8;   // EdMoveChara grounded locomotion store `sw s0,0xc68(s2)`
-            // NOT a hand-picked literal — a first placement sat inside the fishline-split bin and clobbered the
-            // rope step-cave's tail → every Queens fishing session hung on entry. The ELF cave-segment map
-            // lives in CodeCaveAddresses.ElfCave — place new caves from THERE, never from a patch-local literal.
-            const uint CaveAddr = ElfCave.IdleMotionOverride;
-            uint mbGuest = (uint)(Mailbox.IdleMotionOverride - 0x20000000);   // 0x01F10070 (guest form the cave reads)
-
-            if (RdU32(fs, ElfOff(HookAddr)) != Sw(s0, 0xc68, s2))   // 0xAE500C68
-                throw new IOException($"Idle-motion hook site 0x{HookAddr:X} is not vanilla `sw s0,0xc68(s2)` — unmodified Dark Cloud (USA) ISO expected.");
-
-            uint mbFlagsGuest = (uint)(Mailbox.IdleMotionFlags - 0x20000000);   // 0x01F10080 — same upper half as the index mailbox
-            uint[] cave = {
-                Move(v0, s0),                                          // v0 = motion (default: as the engine computed)
-                Bne(s0, zero, 5), 0,                                   // motion != 0 (run/walk) → keep it; branch to the store. delay = nop
-                Lui(at, mbGuest >> 16),
-                Lw(v0, (int)(mbGuest & 0xFFFF), at),                   // idle: v0 = *IdleMotionOverride (0 → still idle)
-                Lw(at, (int)(mbFlagsGuest & 0xFFFF), at),              // at = *IdleMotionFlags (bit1 = play once + hold last frame)
-                Sw(at, 0xc64, s2),                                     // re-write char+0xc64 (the hook's delay slot zeroed it) — 0 = vanilla loop
-                Jr(ra), Sw(v0, 0xc68, s2),                             // return to 0x16a6b0; delay slot stores the motion id to char+0xc68
-            };
-            WriteWords(fs, ElfOff, CaveAddr, cave);
-
-            WrU32(fs, ElfOff(HookAddr), Jal(CaveAddr));   // store → jal cave; delay slot `sw zero,0xc64(s2)` runs first (harmless — c64 is zeroed either way)
-        }
-
-        // ── Town ladder-mount refusal (a swapped-in non-Toan ally must never climb) ──────────────────
-        // The town ladder MOUNT loads a Toan-rigged climb overlay onto the active model; with a non-Toan ally
-        // swapped in that rig mismatch crashes. EdMoveChara @0x16a160 mounts a ladder (event-point type 4/5) with
-        // exactly two instructions, both under the SAME `PadDown(Cross) && (iVar9!=0 || viewMode==0)` press gate:
-        //   0x16c0fc  jal EdInitHashigo(0x16d720)   ; a0=0x1d3d1d0, a1=s5 — THE MOUNT (loads the climb overlay)
-        //   0x16c104  li  s8,0x1                     ; climbing flag → stored to DAT_01d1970c @0x16c268
-        // (s8's not-climbing default is -1, set by `moveq s8,s6` @0x16bf18 with s6=-1; the vanilla no-press path
-        // simply skips 0x16c104, leaving s8=-1.) Both must be skipped TOGETHER or the game thinks it is climbing
-        // with no setup and hangs. Redirect the `jal EdInitHashigo` to a cave in the mod's ELF cave segment
-        // (loader-loaded at boot — a jal there is legal; runtime-written heap caves crash the recompiler): it reads BlockLadder,
-        // and when it is 0 it replicates vanilla exactly (calls EdInitHashigo with a0/a1 still set, then sets the
-        // climbing flag s8=1), returning past the `li s8,1` to 0x16c108. When BlockLadder != 0 it raises the
-        // RefusalRequested mailbox and returns to 0x16c108 WITHOUT the mount and WITHOUT touching s8 (so the
-        // not-climbing -1 flows straight through) — the refusal is armed only here, inside the mount press gate,
-        // so it fires once per Cross press like the vanilla one-shot mount, not every frame near the ladder. Both
-        // paths return via `j 0x16c108`, so the inner EdInitHashigo call clobbering $ra is irrelevant (vanilla
-        // clobbers it at the same site anyway, and the function reloads $ra from the stack at its epilogue).
-        // Scratch = $at + $v0 (both dead across the site); $s5/$a0/$a1 are read-only until the preserved call.
-        // (Cave hand-built via the MipsAsm encoders, like PatchIdleMotionOverride.)
-        internal static void PatchLadderRefusal(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint HookAddr      = 0x0016C0FC;   // EdMoveChara ladder mount `jal EdInitHashigo`
-            const uint EdInitHashigo = 0x0016D720;   // the mount (loads the climb overlay)
-            const uint AfterFlag     = 0x0016C108;   // return target: `li s4,1`, one past the `li s8,1` climbing-flag set
-            const uint CaveAddr      = ElfCave.LadderRefusal;   // registry: CodeCaveAddresses.ElfCave
-            uint blockGuest   = (uint)(Mailbox.BlockLadder      - 0x20000000);   // 0x01F10074 (guest form the cave reads)
-            uint refusalGuest = (uint)(Mailbox.RefusalRequested - 0x20000000);   // 0x01F10078 (guest form the cave sets)
-
-            if (RdU32(fs, ElfOff(HookAddr)) != Jal(EdInitHashigo))   // 0x0C05B5C8
-                throw new IOException($"Ladder-mount hook site 0x{HookAddr:X} is not vanilla `jal EdInitHashigo` — unmodified Dark Cloud (USA) ISO expected.");
-
-            uint[] cave = {
-                Lui(at, blockGuest >> 16),                                   // at = mailbox page (0x01F10000)
-                Lw(v0, (int)(blockGuest & 0xFFFF), at),                      // v0 = *BlockLadder
-                Bne(v0, zero, 6), 0,                                         // BlockLadder != 0 → BLOCK path (word 9); delay nop
-                Jal(EdInitHashigo), 0,                                       // vanilla: EdInitHashigo(a0=0x1d3d1d0, a1=s5); delay nop
-                Addiu(s8, zero, 1),                                          // climbing flag s8 = 1
-                J(AfterFlag), 0,                                             // return past the `li s8,1`; delay nop
-                Addiu(v0, zero, 1),                                          // BLOCK: v0 = 1
-                Sw(v0, (int)(refusalGuest & 0xFFFF), at),                    // *RefusalRequested = 1 (at still = mailbox page)
-                J(AfterFlag), 0,                                             // return WITHOUT mount, s8 untouched (stays -1); delay nop
-            };
-            WriteWords(fs, ElfOff, CaveAddr, cave);
-
-            WrU32(fs, ElfOff(HookAddr), Jal(CaveAddr));   // jal EdInitHashigo → jal cave; delay slot @0x16c100 (nop) runs first
-        }
-
-        // ── Player exclamation-mark height boost (lift the "!" off a shorter ally's mesh) ─────────────
-        // EdDrawSysCursor @0x17cbf0 draws the PLAYER's floating "!" event-trigger mark inside its
-        // `if (DAT_01d3d4a8 != 0)` block. The mark's world Y is accumulated in fStack_c (= auStack_10+4, sp+0x94):
-        //   0x17cf58  add.S f0,f0,f1     ; f0 = fStack_c + (3.0 + *(Chara+0xb4) + sinf(a)*0.5)   = vanilla Y
-        //   0x17cf5c  swc1  f0,0x94(sp)  ; STORE Y → auStack_10+4   ← THE HOOK
-        //   0x17cf60  lwc1  f1,-0x6e54(gp); f1 = a_1906   (bob-angle reload — the jal's delay slot)
-        //   0x17cf68  add.S f1,f1,f0     ; a_1906 += delta  ← still needs f1 = a_1906
-        // A swapped-in ally with different proportions (the cat) sits lower, so the mark pokes through its mesh.
-        // Redirect the store to a cave in the mod's ELF cave segment (loader-loaded at boot — a jal there is legal;
-        // runtime-written heap caves crash the recompiler): it adds *ExclamationYBoost (guest 0x01F1007C, EE-writable) to the Y and
-        // then performs the displaced store, so the mark rides `vanilla Y + boost`. A 0.0 boost reproduces vanilla
-        // bit-exactly for any real position (x + 0.0 == x). This is the PLAYER mark ONLY — the NPC-cursor loop
-        // earlier in the function (the `DAT_01d25c44 + 2.0 / offset_1876` store `swc1 f0,0x0(s3)` @0x17cd28) is
-        // untouched. Register contract at the hook: the `jal cave` return address is 0x17cf64 (jal+8) and its delay
-        // slot @0x17cf60 runs FIRST, so on cave entry f1 already = a_1906 (must be PRESERVED for 0x17cf68) and f0
-        // still = the vanilla Y (0x17cf60 doesn't touch f0). The cave therefore scratches f2 (dead — last held
-        // 0.5*sin, consumed at 0x17cf50) and $at (dead here; also clobbered by the later SetPosition call), never
-        // f0/f1. $ra is stack-saved at entry (`sq ra,0x60(sp)`), so the jal's $ra clobber is safe.
-        // (Cave hand-built via the MipsAsm encoders + the local Lwc1/Swc1/AddS, like PatchIdleMotionOverride.)
-        internal static void PatchExclamationHeight(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint HookAddr = 0x0017CF5C;   // EdDrawSysCursor PLAYER-mark final Y store `swc1 f0,0x94(sp)`
-            const uint CaveAddr = ElfCave.ExclamationHeight;   // registry: CodeCaveAddresses.ElfCave
-            uint mbGuest = (uint)(Mailbox.ExclamationYBoost - 0x20000000);   // 0x01F1007C (guest form the cave reads)
-
-            if (RdU32(fs, ElfOff(HookAddr)) != Swc1(f0, 0x94, sp))   // 0xE7A00094
-                throw new IOException($"Exclamation-height hook site 0x{HookAddr:X} is not vanilla `swc1 f0,0x94(sp)` — unmodified Dark Cloud (USA) ISO expected.");
-
-            uint[] cave = {
-                Lui(at, mbGuest >> 16),                     // at = mailbox page (0x01F10000)
-                Lwc1(f2, (int)(mbGuest & 0xFFFF), at),      // f2 = *ExclamationYBoost   (0.0 → identity)
-                AddS(f0, f0, f2),                           // f0 = vanilla Y + boost
-                Swc1(f0, 0x94, sp),                         // displaced original store → auStack_10+4
-                Jr(ra), 0,                                  // return to 0x17cf64 (jal+8); delay slot nop
-            };
-            WriteWords(fs, ElfOff, CaveAddr, cave);
-
-            WrU32(fs, ElfOff(HookAddr), Jal(CaveAddr));   // store → jal cave; delay slot @0x17cf60 (lwc1 f1,a_1906) runs first, unchanged
-        }
-
-        // ── Queens waterfall spray hook ──────────────────────────────────────────────────────────────
-        // MainDraw @0x17c5a0 is `jal EditEffectStep2` (0x166de0) — the point where the Matataki-spray branch and
-        // the non-Matataki path converge, right before DrawEffect. Redirect it to the queensSprayCave (in the mod's
-        // ELF cave segment, after the fade hook), which spawns EffectWaterSpray emitters from CanalTide's table
-        // then tail-calls EditEffectStep2. Its delay slot is a nop (nothing displaced), so the redirect is a clean
-        // one-word swap. (Stub = tools/stubs/queens_spray_cave.s → Resources/isoPatch/queensSprayCave.bin.)
-        internal static void PatchQueensSprayHook(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint StubAddr = ElfCave.QueensSpray;   // registry: CodeCaveAddresses.ElfCave
-            const uint HookAddr = 0x0017C5A0;   // MainDraw `jal EditEffectStep2` (convergence point before DrawEffect)
-            if (RdU32(fs, ElfOff(HookAddr)) != 0x0C059B78)   // = jal 0x00166de0
-                throw new IOException($"Queens-spray hook site 0x{HookAddr:X} is not vanilla `jal EditEffectStep2` — unmodified Dark Cloud (USA) ISO expected.");
-            byte[] b = Embedded("queensSprayCave.bin", "Embedded EE function missing: queensSprayCave.bin (reassemble tools/stubs/queens_spray_cave.s and rebuild)");
-            if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x27BDFFE0)   // first insn = addiu $sp,$sp,-0x20
-                throw new IOException($"queensSprayCave.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            WriteBytes(fs, ElfOff, StubAddr, b);
-            WrU32(fs, ElfOff(HookAddr), Jal(StubAddr));   // jal EditEffectStep2 → jal queensSprayCave (which re-does that call)
-        }
-
-        // ── Spray velocity-bias shim ─────────────────────────────────────────────────────────────────
-        // EffectWaterSpray @0x165184 ends with `jal EnterEffect` (spawn the just-built particle). Redirect it to
-        // the sprayBiasShim, which adds the global bias vec (0x01F18300, set per-emitter by the spray cave) to the
-        // particle's initial velocity, then tail-jumps to EnterEffect. The bias is 0 for Matataki's own spray, so
-        // this is transparent there. (Stub = tools/stubs/spray_bias_shim.s → Resources/isoPatch/sprayBiasShim.bin.)
-        internal static void PatchSprayBiasShim(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint StubAddr = ElfCave.SprayBiasShim;   // registry: CodeCaveAddresses.ElfCave
-            const uint HookAddr = 0x00165184;   // EffectWaterSpray `jal EnterEffect`
-            if (RdU32(fs, ElfOff(HookAddr)) != 0x0C059260)   // = jal 0x00164980 (EnterEffect)
-                throw new IOException($"Spray-bias hook site 0x{HookAddr:X} is not vanilla `jal EnterEffect` — unmodified Dark Cloud (USA) ISO expected.");
-            byte[] b = Embedded("sprayBiasShim.bin", "Embedded EE function missing: sprayBiasShim.bin (reassemble tools/stubs/spray_bias_shim.s and rebuild)");
-            if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x3C0801F2)   // first insn = lui $t0,0x1f2
-                throw new IOException($"sprayBiasShim.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            WriteBytes(fs, ElfOff, StubAddr, b);
-            WrU32(fs, ElfOff(HookAddr), Jal(StubAddr));   // jal EnterEffect → jal sprayBiasShim (which re-does that call)
-        }
-
     }
 }

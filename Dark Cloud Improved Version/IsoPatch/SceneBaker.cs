@@ -5,7 +5,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using static Dark_Cloud_Improved_Version.IsoBytes;
-using static Dark_Cloud_Improved_Version.IsoPatcher;
+using static Dark_Cloud_Improved_Version.SignPlacements;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -98,12 +98,12 @@ namespace Dark_Cloud_Improved_Version
             int n = (int)U32(scene, 4);
 
             var kb = (byte[])kanbanMds.Clone();
-            const int NODE = 0x10, MAT = NODE + 0x30, TRANS = MAT + 12 * 4;      // node 0 matrix / translation row
+            const int NodeOff = 0x10, MatOff = NodeOff + 0x30, TransOff = MatOff + 12 * 4;      // node 0 matrix / translation row
             if (bakeIdentity)   // kanban verts are local; force identity+origin so the mapinfo positions it.
             {                   // the ladder MDS already carries world-baked verts (identity), so skip.
                 for (int r = 0; r < 3; r++) for (int c = 0; c < 3; c++)
-                    Array.Copy(BitConverter.GetBytes(r == c ? 1.0f : 0.0f), 0, kb, MAT + (r * 4 + c) * 4, 4);   // identity 3x3
-                for (int k = 0; k < 3; k++) Array.Copy(BitConverter.GetBytes(0.0f), 0, kb, TRANS + k * 4, 4);   // origin
+                    Array.Copy(BitConverter.GetBytes(r == c ? 1.0f : 0.0f), 0, kb, MatOff + (r * 4 + c) * 4, 4);   // identity 3x3
+                for (int k = 0; k < 3; k++) Array.Copy(BitConverter.GetBytes(0.0f), 0, kb, TransOff + k * 4, 4);   // origin
             }
 
             var part = new List<byte>();

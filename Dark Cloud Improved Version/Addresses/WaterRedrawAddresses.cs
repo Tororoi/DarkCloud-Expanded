@@ -1,10 +1,10 @@
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>The town water redraw's runtime words (IsoPatcher.PatchWaterRedraw / PatchDrawWaterCompaction; CanalTide), in the
+    /// <summary>The town water redraw's runtime words (ElfWaterPatches.PatchWaterRedraw / PatchDrawWaterCompaction; CanalTide), in the
     /// last free span under the ELF cave segment.</summary>
     internal static class WaterRedraw
     {
-        /// <summary>Town water "submerged tint" redraw — see <c>IsoPatcher.PatchWaterRedraw</c> /
+        /// <summary>Town water "submerged tint" redraw — see <c>ElfWaterPatches.PatchWaterRedraw</c> /
         /// <c>PatchDrawWaterCompaction</c>. The redraw CODE lives baked inside MainDraw/DrawWater's own
         /// ELF footprint (the draw is MOVED to after the character, not duplicated); these two words are
         /// plain runtime DATA the baked code reads/writes, on a runtime-data page (docs/code-caves.md).
@@ -19,7 +19,7 @@ namespace Dark_Cloud_Improved_Version
         internal const uint WaterRedrawPendingFlag     = 0x01FAE600;
         internal const uint DrawWaterHelperRaScratch   = 0x01FAE604;
 
-        /// <summary>Low-tide mizu-reorder mailbox — see <c>IsoPatcher.PatchWaterRedraw</c>'s MIZU_STUB and
+        /// <summary>Low-tide mizu-reorder mailbox — see <c>ElfWaterPatches.PatchWaterRedraw</c>'s MIZU_STUB and
         /// <c>CanalTide</c>. The baked stub (hosted in the compacted GameMode gate) reads these at the
         /// post-character hook: if FramePtr is nonzero it ReloadTexture(TexGroup)s and MGDraw()s that frame
         /// — drawing the (scene-pass-hidden) water mesh AFTER the player so its own semi-transparent

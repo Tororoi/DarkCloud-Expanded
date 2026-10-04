@@ -160,7 +160,7 @@ namespace Dark_Cloud_Improved_Version
         /// still look valid — the scene re-allocates at the SAME addresses, so the name checks pass. Drop the
         /// caches: the next tick re-finds the frame (freshFrame → snap under the load's black) and the settled
         /// level re-bakes the fishing water. The tide LEVEL itself (<c>_shownWaterLevel</c>) carries across.
-        /// Called by AllySwitchPositionRestore the moment it detects the reload.</summary>
+        /// Has no caller today (the ally-switch position restore that detected the reload was removed).</summary>
         internal static void OnTownReloaded()
         {
             if (Memory.ReadInt(EditLoop.MapNo) != TownMapNo.Queens) return;

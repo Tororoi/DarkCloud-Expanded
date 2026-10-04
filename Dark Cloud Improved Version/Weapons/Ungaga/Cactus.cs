@@ -15,10 +15,92 @@ namespace Dark_Cloud_Improved_Version
     /// The copy is untinted (it draws in the room's own light), in one of two <see cref="Form"/>s: Ungaga's equipped Cactus baked
     /// point-up (<see cref="CactusForm"/>), or — Super Steve with a Cactus sphere — Queens' trees from the item-model cash
     /// (<see cref="TreesForm"/>, <see cref="QueensTrees"/>), which hurt nothing and cast no shadow: a wall for a ranged fighter to
-    /// shoot from behind. Both forms rise in the same proportions (SpawnRatio, PeakRatio).</summary>
+    /// shoot from behind. Both forms rise in the same proportions (SpawnRatio, PeakRatio).
+    ///
+    /// And "Absorb" (<see cref="AbsorbEffect"/>, its own thread): a hit restores the wielder's thirst by a tenth of the damage dealt
+    /// (100 damage = 10.0 thirst units = one visible water drop), up to the gauge's max; the rock, metal and undead species
+    /// (<see cref="CactusImmuneNameTags"/>) give nothing. The driver (<see cref="CactusDrive"/>) is wielder-agnostic — the character
+    /// id picks whose hits count and the thirst addresses whose gauge fills — so Super Steve's inherited copy runs it too.</summary>
     internal static class Cactus
     {
         private const string Tag = "[Cactus] ";
+
+        // ── Absorb ──────────────────────────────────────────────────────────────────────────────
+        private static readonly HashSet<int> CactusImmuneNameTags = new()
+        {
+            EnemySpecies.MasterJacket.Id,    // 1
+            EnemySpecies.SkeletonSoldier.Id, // 3
+            EnemySpecies.Statue.Id,          // 5
+            EnemySpecies.PiratesChariot.Id,  // 25
+            EnemySpecies.Golem.Id,           // 30
+            EnemySpecies.MrBlare.Id,         // 31
+            EnemySpecies.Dune.Id,            // 32
+            EnemySpecies.Titan.Id,           // 33
+            EnemySpecies.Arthur.Id,          // 40
+            EnemySpecies.LivingArmor.Id,     // 55
+            EnemySpecies.SteelGiant.Id,      // 64
+            EnemySpecies.Billy.Id,           // 69
+            EnemySpecies.Vulcan.Id,          // 70
+            EnemySpecies.Rockanoff.Id,       // 77
+            EnemySpecies.Gol.Id,             // 90
+            EnemySpecies.Sil.Id,             // 91
+            EnemySpecies.StatueDog.Id,       // 303
+            EnemySpecies.Gacious.Id,         // 317
+            EnemySpecies.SilverGear.Id,      // 318
+            EnemySpecies.HornHead.Id,        // 319
+        };
+
+        /// <summary>Per-caller Absorb state: last tick's enemy-HP snapshot for fresh-hit detection.</summary>
+        internal sealed class CactusState { public int[] PrevHp; }
+
+        /// <summary>Absorb's per-tick driver: the first freshly hit, non-immune enemy this tick restores the wielder's thirst by a
+        /// tenth of the damage (capped at the gauge's max; nothing once it is full), and the recent-damage source is cleared.
+        /// <paramref name="wielderId"/> picks whose hits count, the two addresses whose gauge fills, so Ungaga's own Cactus and
+        /// Super Steve's inherited copy both reuse it.</summary>
+        internal static void CactusDrive(bool active, int wielderId, int thirstAddr, int thirstMaxAddr, CactusState st)
+        {
+            int[] cur = EnemyQueries.GetEnemiesHp();
+            if (st.PrevHp != null && active && EnemyQueries.GetDamageSourceCharacterID() == wielderId)
+            {
+                for (int i = 0; i < EnemyAddresses.FloorSlots.Count && i < st.PrevHp.Length && i < cur.Length; i++)
+                {
+                    if (st.PrevHp[i] <= 0 || cur[i] >= st.PrevHp[i])
+                        continue;
+
+                    int enemySpeciesId = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
+                    if (CactusImmuneNameTags.Contains(enemySpeciesId))
+                        continue;
+
+                    float curThirst = Memory.ReadFloat(thirstAddr);
+                    float maxThirst = Memory.ReadFloat(thirstMaxAddr);
+                    if (maxThirst > 0 && curThirst >= maxThirst)
+                        break;
+
+                    float gain = (st.PrevHp[i] - cur[i]) / 10.0f;
+                    float newThirst = (maxThirst > 0)
+                        ? Math.Min(curThirst + gain, maxThirst)
+                        : curThirst + gain;
+                    Memory.WriteFloat(thirstAddr, newThirst);
+                    break;
+                }
+                EnemyQueries.ClearRecentDamageAndDamageSource();
+            }
+            st.PrevHp = cur;
+        }
+
+        /// <summary>Ungaga's own Cactus: the Absorb driver every 50 ms while it is equipped on a floor (its own thread — Desert Bloom's
+        /// runs at 16 ms behind the pause gate and for the sphere too, so the two are not one loop).</summary>
+        public static void AbsorbEffect()
+        {
+            var st = new CactusState();
+            while (Player.Weapon.GetCurrentWeaponId() == Items.cactus && Player.InDungeonFloor())
+            {
+                CactusDrive(true, Player.UngagaId, Player.Ungaga.thirst, Player.Ungaga.thirstMax, st);
+                Thread.Sleep(50);
+            }
+        }
+
+        // ── Desert Bloom ────────────────────────────────────────────────────────────────────────
         private const int    TickMs         = 16;
         private const float  AheadDistance  = 10f;
         private const float  SpawnRatio     = 0.1f / 3f;   // it emerges at this share of its full size…
@@ -141,7 +223,7 @@ namespace Dark_Cloud_Improved_Version
             BladeProp.Place(rx, RootHeight(0f, SpawnScale), ry, CopyYaw);
             BladeProp.Alpha(1f);
             // The rise, on the engine's frames (Babel's): the blade-fall cave's ease from buried to out, at the spawn size.
-            BladeFall.StartEase(RootHeight(0f, SpawnScale), RootHeight(1f, SpawnScale), EmergeSeconds * 60f);
+            VerticalDrive.StartEase(RootHeight(0f, SpawnScale), RootHeight(1f, SpawnScale), EmergeSeconds * 60f);
             _up = true; _summoned = GameClock.Now; _lastHit = default;
             FxStartPlay();
             Player.FlashChargeComplete();
@@ -183,7 +265,7 @@ namespace Dark_Cloud_Improved_Version
             FxDrive();
             if (!_emerged && age >= EmergeSeconds)
             {   // out at its small size: the integrator off, the height the mod's from here
-                Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
+                Memory.WriteInt(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveFlag, CodeCaves.VerticalDriveOff);
                 _emerged = true;
             }
             if (_emerged && !_risen)
@@ -311,7 +393,7 @@ namespace Dark_Cloud_Improved_Version
         {
             FxEnd_();
             if (!_up) return;
-            Memory.WriteInt(CodeCaves.BladeFall + CodeCaves.BladeFallFlag, CodeCaves.BladeFallOff);
+            Memory.WriteInt(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveFlag, CodeCaves.VerticalDriveOff);
             SpearBlock.Disarm();                                                            // passable again
             GroundShadow.Hide();
             BladeProp.Despawn();

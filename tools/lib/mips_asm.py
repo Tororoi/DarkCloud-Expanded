@@ -85,7 +85,7 @@ def assemble_words(code: str, base: int = 0) -> list:
 
 
 def csharp_words(code: str, base: int = 0, indent: str = "    ") -> str:
-    """Emit as a C# uint[] literal for pasting into IsoPatcher / CodeCaveFunctions."""
+    """Emit as a C# uint[] literal for pasting into IsoPatcher / RuntimeCaveWriter."""
     ws = assemble_words(code, base)
     body = "".join(f"{indent}0x{w:08X}u,\n" for w in ws)
     return "new uint[]\n{\n" + body + "}"

@@ -9,7 +9,7 @@ namespace Dark_Cloud_Improved_Version
     /// Toan. The next pellet she fires is the charge: five times its size, the disc riding it (the glow cave takes the pellet's
     /// own position every frame — CodeCaves.GlowPellet — so nothing carries it), her white and the dim held to the flash, as
     /// Toan's are through his swing. The pellet landing on an enemy plunges the room to black over
-    /// SolarLighting.RampFrames and then the flash goes off from the impact — the light hit on every enemy in reach of
+    /// SceneLighting.RampFrames and then the flash goes off from the impact — the light hit on every enemy in reach of
     /// it, the 5 s blinding with their guards broken, the ease back to normal light — exactly the Sun Sword's
     /// (SunSword.FlashAt, SolarShot.FlashProfile). The flash goes off wherever the pellet ENDS — an enemy (spared the light
     /// hit, its share is the pellet's), a wall, or the end of its range; only a pellet still out after <see cref="MissSeconds"/>
@@ -50,7 +50,7 @@ namespace Dark_Cloud_Improved_Version
             _planted.Expire();
             if (!active) return;
             var p = SolarShot.FlashProfile;
-            SolarLighting.ToanTintOwned = _phase == Phase.Charging || _phase == Phase.Primed;   // her tint is the charge's while it is held
+            SceneLighting.ToanTintOwned = _phase == Phase.Charging || _phase == Phase.Primed;   // her tint is the charge's while it is held
             switch (_phase)
             {
                 case Phase.Idle:
@@ -77,8 +77,8 @@ namespace Dark_Cloud_Improved_Version
 
                 case Phase.Primed:
                 {
-                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);
-                    SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim);
+                    BladeTint.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);
+                    SceneLighting.BeginDim(); SceneLighting.DimTo(p.PrimeDim);
                     ShowPouchGlow(); SolarGlow.Tick();
                     SunSword.HoldPrimedTint(p, 1f);
                     ChargedShotWhp.Arm(ShotWhp / SwingBase);                          // the next pellet's bill, taken by the engine as it leaves
@@ -91,7 +91,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     double since = (GameClock.Now - _firedAt).TotalSeconds;
                     SunSword.HoldPrimedTint(p, 1f);                                   // her white and the slingshot's held to the flash, as Toan's are through his swing
-                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);
+                    BladeTint.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);
                     SolarGlow.Tick();
                     // The engine's own contact record (the pellet-contact cave): the pellet met an enemy — the flash from its
                     // hit sphere's centre, that enemy spared the light hit — or a wall — the charge is spent.
@@ -134,9 +134,9 @@ namespace Dark_Cloud_Improved_Version
                 case Phase.HitPending:
                 {
                     double frames = (GameClock.Now - _hitAt).TotalSeconds * 60.0;
-                    SolarLighting.DimRamp(p.PrimeDim, (float)(frames / SolarLighting.RampFrames));
-                    if (frames < SolarLighting.RampFrames) break;
-                    SunSword.HoldPrimedTint(p, 0f); SolarBlade.Clear(); SolarGlow.Hide(); EndPellet();
+                    SceneLighting.DimRamp(p.PrimeDim, (float)(frames / SceneLighting.RampFrames));
+                    if (frames < SceneLighting.RampFrames) break;
+                    SunSword.HoldPrimedTint(p, 0f); BladeTint.Clear(); SolarGlow.Hide(); EndPellet();
                     SunSword.FlashAt(p, _lastX, _lastH, _lastY, _planted, excludeSlot: _hitSlot);   // the flash's light hit spares the one the pellet struck
                     _phase = Phase.Idle;
                     break;
@@ -175,9 +175,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The charge lapses (guard let go early, a pellet that hit nothing): everything back, the dim easing off.</summary>
         private static void Dissipate(string why = "spent")
         {
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"charge dissipates ({why}) — phase {_phase}, dim {SolarLighting.LastDim:0.00}, guarding {GuardWatch.IsGuarding()}, blinding {SunSword.BlindRunning}");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"charge dissipates ({why}) — phase {_phase}, dim {SceneLighting.LastDim:0.00}, guarding {GuardWatch.IsGuarding()}, blinding {SunSword.BlindRunning}");
             SunSword.HoldPrimedTint(SolarShot.FlashProfile, 0f);
-            SolarBlade.Clear(); ChargeTint.Clear(); SolarGlow.Fade(); SolarLighting.EndDim(); EndPellet();
+            BladeTint.Clear(); ChargeTint.Clear(); SolarGlow.Fade(); SceneLighting.EndDim(); EndPellet();
             _phase = Phase.Idle;
         }
 
@@ -185,10 +185,10 @@ namespace Dark_Cloud_Improved_Version
         internal static void Stop()
         {
             if (_phase != Phase.Idle) SunSword.HoldPrimedTint(SolarShot.FlashProfile, 0f);
-            SolarBlade.Clear(); ChargeTint.Clear(); SolarGlow.Hide(); SolarLighting.Restore(); EndPellet();
+            BladeTint.Clear(); ChargeTint.Clear(); SolarGlow.Hide(); SceneLighting.Restore(); EndPellet();
             SunSword.EndBlinding();
             _planted.WithdrawAll();
-            SolarLighting.ToanTintOwned = false;
+            SceneLighting.ToanTintOwned = false;
             _pellets.Reset();
             _phase = Phase.Idle; _slot = -1;
         }

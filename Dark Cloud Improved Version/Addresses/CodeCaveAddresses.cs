@@ -177,6 +177,7 @@ namespace Dark_Cloud_Improved_Version
         // The feature is dormant (EnemyModelInjector.Enabled == false) and must be given a
         // scanner-verified cave from this file before it is ever switched on.
 
+        // ── MeshCave / PropCat: the clone's software-skinned meshes, shared between the cat and the prop (0x21F56400 .. 0x21FAE400) ──
         /// <summary>Software-skinned meshes. Sized for the WORST CASE character — GORO at 0x57B30 — so ALL SIX
         /// are clonable.</summary>
         internal const long MeshCave       = 0x21F56400;
@@ -212,7 +213,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CatOverflowCaveSize  = (int)(MotionCave - ClothObjCave);                        // 0x23F00
 
         // ── 0x21FB4000 .. 0x21FB4300 (guest 0x01FB4000, 0x300 B, top of the MeshCave margin) ─────────────
-        // +0x00 (4 B) holds the shallow-fishing bobber-anchor global (TownAddresses.FishLineShallow.BobberPtr):
+        // +0x00 (4 B) holds the shallow-fishing bobber-anchor global (FishLineShallow.BobberPtr, FishingAddresses.cs):
         //   the cold-patched FishLineStep reads game-addr 0x01FB4000 for the bobber's point address, and a data
         //   write here toggles vanilla point[18] vs shallow point[20]. The rest of the block is the cat's
         //   (<see cref="CatBlock"/>). Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300).
@@ -227,6 +228,7 @@ namespace Dark_Cloud_Improved_Version
         // already carry runtime-written words (WaterRedraw, the blocks below), so a PINE write here cannot
         // fault the way one into a code page does. Inside the ModReserved heap-tail claim, so it stays clean.
         //
+        // ── CatCopyQueue / CatCopyPairs: the cat's mesh-copy job queue (0x21FAE620, 0x910 B; its pair table sits at 0x21FAFCC0) ──
         /// <summary>The cat's mesh-copy QUEUE (ElfCave.CatCopyQueue reads it). Data, not code, in the runtime-data span.
         /// +0x00 job count (0 = idle), jobs from +0x10, 0x30 B each: src, dst, size, then two (src, size, dst) rebase specs.</summary>
         internal const long CatCopyQueue      = 0x21FAE620;
@@ -242,6 +244,7 @@ namespace Dark_Cloud_Improved_Version
         /// rather than truncated.</summary>
         internal const int  CatCopyMaxPairs   = 16;                                           // × 16 B at CatCopyPairs
 
+        // ── BorrowedShotBlock: the borrowed shot config and its carve state (0x21FAEF40, 0x2C0 B) ──
         /// <summary>The borrowed shot config in use (ElfCave.BorrowedShotsEnter keeps it entered in the main-character effect
         /// instance, BorrowedShots writes it): +0x00 "SHOT" (0 = nothing to enter — the mod's clear, or the cave's after a
         /// failure), the BT_SHOT_EFFECT copy (0x70, victim mask = enemies) at +0x10, +0x250 the state (mod: 0 = enter; cave:
@@ -257,6 +260,7 @@ namespace Dark_Cloud_Improved_Version
                             BorrowedShotAlloc = 0x298, BorrowedShotReserve = 0x2AC, BorrowedShotCarveMark = 0x2B0,
                             BorrowedShotInstance = 0x2B4, BorrowedShotMainFlag = 0x2B8, BorrowedShotSubShots = 0x2BC, BorrowedShotBlockSize = 0x2C0;   // +0x2BC the sub-shots to enter (mod; ≤ 8)   // +0x2B4 the instance (guest), +0x2B8 1 = the main one (texture block cleared, live pointer set)
 
+        // ── SharedShotBlock: the shot-slot sharing block (0x21FAF200, 0x270 B) ──
         /// <summary>The shot-slot sharing block (DebugInfoCave.SharedShots shares the monster pack's five slots among every config
         /// a floor needs; SharedShots seeds and reads it): +0x00 "SHRE" (mod; without it a refused config is only skipped when it
         /// fires), +0x04 the cave's frame counter, +0x08 disc entries, +0x0C restores, +0x10 skipped fires, +0x14 no room, +0x18 /
@@ -271,6 +275,7 @@ namespace Dark_Cloud_Improved_Version
                             SharedShotNeed2 = 0x18, SharedShotNeed6 = 0x1C, SharedShotStamps = 0x20, SharedShotCfgTable = 0x40, SharedShotRing = 0x150,
                             SharedShotRingCount = 16, SharedShotRingIndex = 0x250, SharedShotAlloc = 0x260, SharedShotBlockSize = 0x270;
 
+        // ── LockOnFactorTable: the per-character lock-on reach factors (0x21FAF480, 0x24 B) ──
         /// <summary>The lock-on reach factor per character (DunPatches: SetNearLockOnTarget and setTargetCursor read their
         /// six-float table from HERE instead of dun 0x1DC1B20 — the enemy's lock-on distance × this = the reach): Toan 1.2,
         /// Xiao 1.4, Goro 1.1, Ruby 1.5, Ungaga 1.0, Osmond 1.8, indexed by character id. The PNACH re-seeds the six every frame
@@ -281,8 +286,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int  LockOnFactorCount = 6, LockOnFactorOwner = 0x20;
         internal static readonly float[] LockOnFactorVanilla = { 1.2f, 1.4f, 1.1f, 1.5f, 1.0f, 1.8f };
 
+        // ── Single runtime words (0x21FAF4B0 .. 0x21FAFFF0): one feature's flag, vector or small table each, in address order ──
         /// <summary>A private copy of __vt__13CVisualMDTVu1 (32 B) for the Sun Sword's blade mesh: its two DrawVu1 slots point
-        /// at ElfCave.CatMaskTint, so the blade draws under the ambient CatBlock.CatCapeTint adds (SolarBlade). Toan's sword and
+        /// at ElfCave.CatMaskTint, so the blade draws under the ambient CatBlock.CatCapeTint adds (BladeTint). Toan's sword and
         /// Xiao's cat are never live together, so the cave and its tint word are free for the blade.</summary>
         internal const long SolarBladeVtable      = 0x21FAF4B0;
         internal const uint SolarBladeVtableGuest = 0x01FAF4B0;
@@ -357,7 +363,7 @@ namespace Dark_Cloud_Improved_Version
         /// as high over the same frames. 0 (fresh memory) = vanilla; the Sword of Zeus writes 0.5 for its level-2 lunge.</summary>
         internal const long LungeGravityExtra      = 0x21FAF8A0;
         internal const uint LungeGravityExtraGuest = 0x01FAF8A0;
-        /// <summary>THE BLADE, MOVED BY THE ENGINE (DebugInfoCave.BladeFall, once a frame): +0 flag — 1 = FALLING (vy += g,
+        /// <summary>THE BLADE, MOVED BY THE ENGINE (DebugInfoCave.VerticalDrive, once a frame): +0 flag — 1 = FALLING (vy += g,
         /// y −= vy, stopped at +0x10 where the flag becomes 2), 3 = FOLLOWING (x and z copied from the unit position at
         /// the guest address in +0x14 plus the x/z offsets at +0x18/+0x1C, height = the unit's + the y word), 0 = off;
         /// +4 the grip's world height y (falling) or its height OVER the unit (following), +8 its speed vy, +0xC the
@@ -365,15 +371,15 @@ namespace Dark_Cloud_Improved_Version
         /// or Toan's own position words, guest), +0x18/+0x1C the x/z offset from it (0 over an enemy; the spot ahead of
         /// Toan for the Zeus charge blade). The cave writes the blade copy's chara slot position (BladeProp.Slot) each
         /// frame. For a fall, g = 2·span/N² lands it in exactly N frames.</summary>
-        internal const long BladeFall      = 0x21FAF8B0;
-        internal const uint BladeFallGuest = 0x01FAF8B0;
-        internal const int  BladeFallFlag = 0x0, BladeFallY = 0x4, BladeFallVy = 0x8, BladeFallG = 0xC, BladeFallStop = 0x10, BladeFallUnit = 0x14;
-        internal const int  BladeFallOffX = 0x18, BladeFallOffZ = 0x1C;   // following: an x/z offset from the unit (the charge blade ahead of Toan: the unit is HIM)
-        internal const int  BladeFallOff = 0, BladeFalling = 1, BladeLanded = 2, BladeFollowing = 3;
+        internal const long VerticalDrive      = 0x21FAF8B0;
+        internal const uint VerticalDriveGuest = 0x01FAF8B0;
+        internal const int  VerticalDriveFlag = 0x0, VerticalDriveY = 0x4, VerticalDriveVy = 0x8, VerticalDriveG = 0xC, VerticalDriveStop = 0x10, VerticalDriveUnit = 0x14;
+        internal const int  VerticalDriveOffX = 0x18, VerticalDriveOffZ = 0x1C;   // following: an x/z offset from the unit (the charge blade ahead of Toan: the unit is HIM)
+        internal const int  VerticalDriveOff = 0, DriveFalling = 1, DriveLanded = 2, DriveFollowing = 3;
         /// <summary>Mode 4 (DebugIfCave.FallDrive): falling as mode 1 AND, across the ground, the unit at +0x14's x/z plus the offsets —
         /// or, with no unit, the slot's own x/z plus the offsets each frame (a drift); with <see cref="FallDrive"/>'s stop source and
         /// drive rows. Lands as mode 1 does (flag 2).</summary>
-        internal const int  BladeFallFollowing = 4;
+        internal const int  DriveFallFollowing = 4;
         /// <summary>A WEAPON-HP BILL FOR THE ENGINE TO TAKE (DebugInfoCave.WhpBill, the tail of the camera-pin chain, once a
         /// dungeon frame): +0 the factor of a bill the mod has posted (swing-equivalents: base WHP / 1.5), +4 a magic the mod
         /// writes ahead of it (<see cref="WhpBillMagicValue"/>) so stale memory never posts one. While the magic matches
@@ -477,7 +483,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  RockShadowFlag = 0x0, RockShadowFrame = 0x4, RockShadowPlane = 0x10, RockShadowDir = 0x20;
 
         /// <summary>The blade fall's mode 4 extras (DebugIfCave.FallDrive): +0 the stop source (guest address of a float; 0 = none: the
-        /// stop is BladeFall's own), +4 the offset added to it; from +0x10, <see cref="FallDriveRowCount"/> DRIVE ROWS of 0x20 —
+        /// stop is VerticalDrive's own), +4 the offset added to it; from +0x10, <see cref="FallDriveRowCount"/> DRIVE ROWS of 0x20 —
         /// +0 dst (guest; 0 = off), +4 count (≥ 1), +8 a, +0xC b, +0x10 lo, +0x14 hi: clamp(a + b·y, lo, hi) written as a float to
         /// dst and the count−1 words after it, every falling frame (y = the fall height).</summary>
         internal const long FallDrive      = 0x21FAFBC0;

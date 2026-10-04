@@ -1,4 +1,7 @@
-using System;
+// Character address bank: the ACTIVE player CCharacter and its motion control (CharacterMotion), the CDngStatusData
+// status block (weapon inventory records live here — it is the engine's layout), the player's collision globals, the
+// ambient flash, Toan's status word, the CCharacter / CFrameVu1 / MDS node / CVisualMDT / MOTION_TYPE / CCloth / CBound
+// struct layouts and the player's ACTION / CHARGE / lock-on state machine (PlayerAction). GamePad is Core/GamePad.cs.
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
@@ -72,30 +75,6 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Address of the byte holding which bag slot <paramref name="character"/> has equipped.</summary>
         internal static long EquippedSlotAddr(int character) => Base + EquipSlotArrayOffset + character;
-    }
-
-    /// <summary>
-    /// The controller's vibration, as CGamePad keeps it (instance 0x21CBC540, SetVibration 0x12B940, stepped by
-    /// CGamePad::Step 0x12B140). Pure data: the step sends whatever these hold to scePadSetActDirect every frame and
-    /// counts the timers down, turning a motor off at zero — so writing them IS a rumble, no call needed.
-    /// The engine's own hits use motor 1 at 0xE6 for 22 frames (a knockdown) and 0xDC for 12 (a lighter hit).
-    /// </summary>
-    internal static class GamePad
-    {
-        internal const long Base       = 0x21CBC540;
-        internal const int  MotorSmall = 0x2C;   // byte, on/off
-        internal const int  MotorLarge = 0x2D;   // byte, strength 0-255
-        internal const int  TimerSmall = 0x38;   // int, frames left
-        internal const int  TimerLarge = 0x3C;
-        internal const int  Enabled    = 0x464;  // the player's own vibration option — 0 = off, and SetVibration obeys it
-
-        /// <summary>A shove of rumble on the big motor, if the player has vibration on.</summary>
-        internal static void Rumble(int strength, int frames)
-        {
-            if (Memory.ReadInt(Base + Enabled) == 0) return;
-            Memory.WriteInt(Base + TimerLarge, frames);
-            Memory.WriteByte(Base + MotorLarge, (byte)Math.Min(255, Math.Max(0, strength)));
-        }
     }
 
     /// <summary>
@@ -408,15 +387,179 @@ namespace Dark_Cloud_Improved_Version
         internal const int  BoundCentre = 0xC0;   // world centre, refreshed each step by UpDate__6CBound
     }
 
-    /// <summary>The EQUIPPED WEAPON is a separate object from the character: its model root (+0xBC) is PARENTED
-    /// to the hand bone but DRAWN separately (it is not inside the character's +0xBC tree), in its own texture
-    /// pass. So putting a weapon on a copied character means copying its small CFrame tree too.
-    ///
-    /// To find the HAND BONE, read the weapon root's parent pointer (CFrameVu1.Parent) — do NOT hardcode a bone
-    /// index. Every character has a different skeleton (Ungaga 67 bones, Xiao 79, Osmond 84...), so an index is
-    /// only ever correct for one of them; the live weapon already tells you which bone it hangs off.</summary>
-    internal static class EquippedWeapon
+    /// <summary>
+    /// The player's ACTION / CHARGE state machine — one set of globals shared by every character's attack, which
+    /// is why Toan's melee charge and Xiao's shot both live here: they are literally the same
+    /// <see cref="ChargeActionState"/> word with different action ids.
+    /// </summary>
+    internal static class PlayerAction
     {
-        internal const long WeaponObjGlobal = 0x202A34F0;  // iGpffff9d00 (gp-0x6300)
+
+        // ── Charge attack state (ToanKey_Play, RE'd from SCUS_971.11) ──
+        // Drives HeavensCloud.TyphoonEffect's charge ramp + HeavensCloud.MaintainEnemyHitbox's whirl gate. See
+        // HeavensCloud.IsChargingWhirlwind / IsWhirlwindActive.
+        internal const long ChargeActionState = 0x21DC4494; // DAT_01dc4494 action id (values below)
+        internal const int  ActionWindup      = 0xE;        // charge wind-up (meter accumulates; lunge OR whirlwind)
+        internal const int  ActionLunge       = 0xF;        // charge lunge executing: the wind-up clip (15)…
+        // …then, in ToanKey_Play's order: the DASH (0x10, until the flight distance is spent), the loop clip (3, id 3 =
+        // 溜め攻撃loop2), the FALL (0x19, id 25 = loop3, one held frame, until the height is under 2.0) and the END clip
+        // (0x11, id 17 = 溜め攻撃end from frame 196), after which the attack is over. The CCharacter motion-id word reads
+        // 0 throughout; the action word is what tells the phases apart.
+        internal const int  ActionLungeDash   = 0x10;
+        internal const int  ActionLungeLoop   = 0x3;
+        internal const int  ActionLungeFall   = 0x19;
+        internal const int  ActionLungeEnd    = 0x11;
+        internal static bool InLunge(int action) =>
+            action == ActionLunge || action == ActionLungeDash || action == ActionLungeLoop || action == ActionLungeFall || action == ActionLungeEnd;
+        internal const int  ActionWhirlwind   = 0x18;       // whirlwind executing
+        internal const int  ActionComboFirst  = 0x24;       // combo swing states 0x24-0x28 = melee hits 1-5
+        internal const int  ActionComboLast   = 0x28;       //   (each combo hit is its own action state)
+        /// <summary>The hit radius Toan's combo swings 3, 4 and 5 SHARE (ELF float, vanilla 6.2; swings 1 and 2 have their
+        /// own at 0x202A1C68 / 0x202A1C6C). Plain ELF data, unlike the charge radii, which the game baked into instructions
+        /// (CodeCaves.ChargeHitRadius). ⚠ Shared: anything that widens it must snapshot the old value and put it back, and
+        /// must expect to be holding it for swings 3 and 4 as well as 5. Recorded; nothing in the mod writes it.</summary>
+        internal const long ComboHitRadius3to5 = 0x202A1C70;
+
+        // ── Xiao shot states (BattleActionPlay_Jinn, dun 0x1DBC930) — SAME ChargeActionState global ──
+        // Xiao's slingshot shot is three c04b motions: idx 11 構え引き "draw" (frames 240-251, spd 0.7)
+        // = state 0xB; idx 12 構え引きループ "draw hold" (frame 250-250, spd 0) = state 0xC; idx 13 撃ち
+        // "shoot" (frames 251-255, spd 0.7) = state 0xD, pellet released at frame 251.
+        internal const int  XiaoShotDraw     = 0xB;
+        internal const int  XiaoShotHold     = 0xC;  // zero-speed loop parked on frame 250 until release flag flips
+        internal const int  XiaoShotShoot    = 0xD;
+        // iRam01dc4498: reset to 0 by BattleActionOn_Jinn at shot start, set to 1 when the fire input
+        // releases → what makes the 0xC hold advance to the 0xD shoot. Forcing it = fire now (no hold).
+        internal const long XiaoShotReleaseFlag = 0x21DC4498;
+        // ── Lock-on (SetNearLockOnTarget dun 0x1DC0160 / LockOffTargte 0x1DBFCE0, gp-relative globals) ──
+        // Three words: iGpffff9d94 = the locked-on MONSTOR SLOT (0..15; -1 = none), gp−0x6268 = the lock button's
+        // held TOGGLE, uGpffff9d90 = Xiao's shot-path flag. "Locked on, and to whom" is <see cref="LockHeld"/>: the
+        // slot a real one AND <see cref="LockOnHeld"/> up — the slot alone also holds the nearest CANDIDATE while no
+        // lock is held.
+        internal const long LockOnTargetSlot = 0x202A3584;
+        /// <summary>⚠ Not a general "locked on" flag: it reads 0 for TOAN the whole time he holds a lock (measured
+        /// with a live target slot held for seconds). It rises on Xiao's shot path, which is the only reason Dragon's
+        /// Y can gate on it. For "is the player locked on, and to whom", use <see cref="LockHeld"/>
+        /// (<see cref="LockOnHeld"/> + <see cref="LockOnTargetSlot"/>); LockOffTargte (dun 0x1DBFCE0) returns the slot
+        /// to −1 on release.</summary>
+        internal const long LockOnActive     = 0x202A3580;
+        /// <summary>THE HELD LOCK: the lock button TOGGLES this word (0 ↔ 1) in the player key handler (dun 0x1DB29B4)
+        /// whenever <see cref="LockOnTargetSlot"/> holds a candidate, and every frame setTargetCursor(this) runs — 0 has
+        /// it re-pick the nearest enemy (SetNearLockOnTarget(0,1)), 1 has it validate and draw the reticle on the held
+        /// one, and 32 frames of an invalid target (dead, out of range, off-screen) clear it and the slot together.
+        /// LockOffTargte clears it too. The cycle button only re-picks while this is 1.</summary>
+        internal const long LockOnHeld       = 0x202A3588;   // gp−0x6268
+        /// <summary>The lock-on target's NAME plate. SetNearLockOnTarget names a newly acquired target with
+        /// MonsterNameMake(id) (0x20ED90), which builds the message window in the ClsMes at
+        /// <see cref="CharaNameMes"/> and sets its +0x98 visible; the engine then shows or hides the plate through
+        /// this halfword alone — SetMonsterNameDrawFlag (0x20EB60) writes 1 on acquisition and 0 when the target
+        /// projects off-screen. Holding it at 0 hides the name and touches nothing on the enemy.</summary>
+        internal const long CharaNameDrawFlag = 0x202A2E10;   // ushort, gp−0x69E0
+        internal const long CharaNameMes      = 0x202A2E08;   // → ClsMes; +0x98 = the window's own visible flag
+        /// <summary>⚠ Neither is a lock gate. DrawTargetLife draws the HP bar while both are nonzero, but the cursor
+        /// word is only written DOWN when the candidate projects off-screen or the lock is cleared — after a release
+        /// it stays raised over whatever enemy is nearest — and the bar word flaps per frame.</summary>
+        internal const long TargetCursorUp   = 0x21E58F30;
+        internal const long TargetBarUp      = 0x21E58F34;
+        /// <summary>Is the player locked on, and to whom: <see cref="LockOnHeld"/> up and the slot a real one.</summary>
+        internal static bool LockHeld(out int slot)
+        {
+            slot = Memory.ReadInt(LockOnTargetSlot);
+            return slot >= 0 && Memory.ReadInt(LockOnHeld) != 0;
+        }
+        // iRam01dc4490: nonzero while a shot is in progress (set at BattleActionOn start, cleared at the
+        // shoot-motion end). iRam01dc44c8 (float): the ranged "speed bar" — BattleActionOn starts a shot
+        // only when it reaches 100.0, then resets it to 0; its fill rate is the weapon's speed stat.
+        internal const long XiaoShotActive = 0x21DC4490;
+        internal const long XiaoShotGauge  = 0x21DC44C8;
+
+        // ── Quick Draw (Small Sword) — first-swing wind-up skip ──
+        // ToanKey_Play keys EVERYTHING off the active character's animation frame cursor
+        // (DAT_01ea2010 = CCharacter 0x1ea1d20 + 0x2F0, float). First combo swing (action 0x24)
+        // timeline, from the ToanKey_Play decompile + ELF gp-data:
+        //   820.0–820.5  one-shot forward step-in write (speed 0.17 → DAT_01dc4590)
+        //   824.0–825.0  weapon-trail effect spawn (CWeaponEffect)
+        //   825.0        swing whoosh sound
+        //   825.0–828.0  hit window (CCollisionData::Set + basic_damage)
+        //   ~830         motion end → chain to 0x25 / windup / exit
+        // Snapping the cursor forward once it has passed the step-in window preserves the
+        // step-in, trail, sound and hit — only the wind-up frames disappear. See
+        // SmallSword.QuickDrawEffect (Quick Draw).
+        internal const long  AnimFrameCursor        = 0x21EA2010; // float: active-char motion frame cursor
+        internal const float Combo1WindupSettled    = 820.5f;     // past the engine's one-shot step-in write
+        internal const float Combo1TrailSpawn  = 824.0f;     // just before trail spawn + hit window
+
+        /// <summary>ELF global <c>hitCnt</c> (native 0x2A2C64): the hit-spark ring counter,
+        /// incremented by <c>CMonstorUnit::CheckDmg</c> (0x1D9F10) each time a player attack
+        /// deals damage to a monster (wraps 0-15). Watching it across a swing is the "did that
+        /// swing connect?" signal. Guarded hits do NOT advance it.</summary>
+        internal const long HitSparkCounter   = 0x202A2C64;
+        /// <summary>ELF global <c>HitPointMark</c> (native 0x01EC4740): 16 entries of 0x20 holding the WORLD POSITION
+        /// of each hit mark — x at +0, height at +4, the ground plane at +8. CheckDmg copies the struck body part's
+        /// position in at index <see cref="HitSparkCounter"/> and only THEN advances the counter, so the hit that just
+        /// landed is at index (hitCnt − 1) &amp; 15.
+        ///
+        /// ⚠ The mark is stamped BEFORE the damage is computed (the element multiplier and the damage floor come
+        /// later in the same function), so it lands on a hit that is fully resisted to zero just as it does on one
+        /// that hurts — a nullified hit merely takes the branch that shows a white 0 instead of a red number. That
+        /// makes this the only "did my swing connect" signal that survives elemental immunity. GUARDED hits are the
+        /// exception: they take an earlier branch that stamps a mark without advancing the counter.</summary>
+        internal const long HitPointMark      = 0x21EC4740;
+        internal const int  HitPointMarkStride = 0x20, HitPointMarkCount = 16;
+        /// <summary>The mark's LIFE countdown within its entry: stamped at 16 and decremented one per frame by
+        /// <c>CHitPointMark::Step</c> (0x1B3710), which clears the entry's active word at zero. Since a GUARDED
+        /// hit re-stamps the CURRENT entry instead of advancing the counter, a life that has gone UP since the
+        /// last look is the only signal a blocked hit leaves behind.</summary>
+        internal const int  HitPointMarkLife  = 0x10;
+        /// <summary>Pointer (DAT_01ea2064) to the ACTIVE character's MOTION FRAME-RANGE table: one 0x10 record per
+        /// motion index, holding that motion's START frame at +0 and its END frame at +4, both ints. Starting a
+        /// motion seeks <see cref="AnimFrameCursor"/> to the start; the overlay's step code then holds the motion
+        /// until the cursor reaches the end (`cursor < end − 2 || end < cursor` keeps it playing, otherwise the
+        /// action is over). BtCheckDamageProc uses records 6 and 4 for the knockdown a player survives and the one
+        /// that kills him.
+        ///
+        /// ⚠ These are FRAMES, not distances. Scaling a start frame parks the cursor past the end of the clip, which
+        /// freezes the character mid-air on the last pose while the action runs on forever — measured. How far a
+        /// reaction carries the player is the clip's own root motion and is not in this table.</summary>
+        internal const long MotionRangeTablePtr = 0x21EA2064;
+        internal const int  MotionRangeStride   = 0x10;   // per motion index
+        internal const int  MotionRangeStart    = 0x00, MotionRangeEnd = 0x04;
+        /// <summary>The player's current blow-reaction action (DAT_01dc4490): 0 = none, 4 = the flinch/fatal
+        /// reaction, 5 = the knockdown. Set by BtCheckDamageProc and cleared by the step code when the motion
+        /// reaches its end frame.</summary>
+        internal const long BlowAction          = 0x21DC4490;
+        internal const int  BlowKnockdownAction = 5;
+        // Charge METER (float, DAT_01dc449c): resets to 1.0 at attack start, accumulates each windup frame,
+        // caps at 3.0. Thresholds: ≥1.5 → lunge available, ≥2.5 → whirlwind available (if unlocked).
+        internal const long ChargeMeter       = 0x21DC449C;
+        // Native meter gain: +1/60 per windup frame (float @ native 0x2A1CAC) = 1.0/second at 60 fps.
+        // The charge LEVEL is re-derived from the meter every windup frame, so boosting the meter
+        // (e.g. Tsukikage's double-speed charge) advances the levels automatically.
+        internal const float ChargeMeterPerSecond = 1.0f;
+        internal const float ChargeMeterCap       = 3.0f;
+        // Charge LEVEL (DAT_01dc44dc): the tier the meter has crossed during the 0xE windup — the clean signal
+        // for WHICH charge attack is being built. Reset to 0 by ToanKey_On at attack start.
+        internal const long ChargeLevel       = 0x21DC44DC;
+        internal const int  ChargeLevelNone     = 0;        // meter < 1.5
+        internal const int  ChargeLevelLunge    = 1;        // meter ≥ 1.5
+        internal const int  ChargeLevelWhirl    = 2;        // meter ≥ 2.5 AND whirlwind unlocked (UserStatus+0x4324≠0)
+        // Whirlwind-unlock gate: the level-2 transition also requires *(int*)(UserStatus + WhirlwindUnlockOffset)
+        // ≠ 0 (the ability learned). Documented for completeness; the level-2 check already folds it in, so code
+        // reads ChargeLevel==2 rather than this directly (UserStatus base not needed).
+        internal const int  WhirlwindUnlockOffset = 0x4324;
+        /// <summary>The whirlwind-unlock word itself: the "UserStatus" ToanKey_Play reads (through gp-0x6388) is the
+        /// CDngStatusData block (DngStatusData.Base), and the word is the first of six special-skill flags at +0x4324
+        /// (one per character, set to 1 by the event command _SSKILL_GET, cleared only by Initialize__14CDngStatusData).
+        /// ToanKey_Play reads it at the level-2 transition AND at the release — zero there, a full meter releases the
+        /// LUNGE (level 1); it is read nowhere else. Save data: never leave it changed.</summary>
+        internal const long WhirlwindUnlock = DngStatusData.Base + WhirlwindUnlockOffset;   // 0x21CDD870
+        // Charge-active flag (DAT_01dc44f0): 1 while a lunge/whirlwind hit is live; cleared to 0 INSIDE the 0x18
+        // block on the whirlwind's final frame — so (action 0x18 && flag 1) is the true "whirlwind executing"
+        // window, and the flag dropping is the earliest, cleanest "attack finished" signal (the action state
+        // itself lingers at 0x18 for a frame until ToanKey_On resets it).
+        internal const long ChargeActiveFlag  = 0x21DC44F0;
+        /// <summary>The LOCK-ON AIM POINT (vec4, world): setTargetCursor writes it every frame a lock is held — the target's
+        /// lock-on frame position when its script declared one, else its origin raised 8 — before raising it 10 more and
+        /// projecting that for the name plate and HP gauge. Xiao's pellets fly at it; the judgement blade hangs off it.</summary>
+        internal const long LockOnAimPoint    = 0x21DC4500;
     }
 }

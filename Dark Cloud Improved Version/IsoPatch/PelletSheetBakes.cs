@@ -28,7 +28,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void Run(IsoArchive arc, Action<string> log)
         {
             byte[] file = arc.Read(SheetName);
-            var bank = new CatPackBakes.Bank(file);
+            var bank = new ImgBank(file);
             int at0 = bank.Entries.First(e => e.name == Picture).off;   // the picture's place in the bank: edited where it lies, the bank's own bytes kept
             byte[] tim = bank.Block(Picture);
             if (System.Text.Encoding.ASCII.GetString(tim, 0, 4) != "TIM2") throw new IOException($"{SheetName}: {Picture} is not a TIM2");

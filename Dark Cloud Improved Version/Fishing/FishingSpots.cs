@@ -59,7 +59,7 @@ namespace Dark_Cloud_Improved_Version
             /// memory) is what crashes Brownboo — with the swap skipped it reaches fishing mode.</summary>
             internal readonly bool DiagSkipModel;
 
-            /// <summary>The stb script label this spot's BAKED trigger names (IsoPatcher.BuildFishingFunc). A
+            /// <summary>The stb script label this spot's BAKED trigger names (SceneBaker.BuildFishingFunc). A
             /// town can have several spots, each on its own label + baked sign part — e.g. Queens has the
             /// north-bank sign (400) and the canal-floor sign (401), which fish the same area from different
             /// stances. Defaults to the primary fishing label 400.</summary>
@@ -69,7 +69,7 @@ namespace Dark_Cloud_Improved_Version
             /// water angle that suits casting from a bank. A spot where the player stands IN the water (the
             /// Queens canal floor at low tide) wants the ordinary town height (5) instead, because the downward
             /// view is counterproductive there. Fed to the patched SetHeight site via
-            /// <see cref="Mailbox.FishCamHeight"/> (IsoPatcher.PatchFishingCameraHeight).</summary>
+            /// <see cref="Mailbox.FishCamHeight"/> (ElfCameraPatches.PatchFishingCameraHeight).</summary>
             internal readonly float CameraHeight;
 
             internal Spot(int mapNo, string name, int areaId,
@@ -199,7 +199,7 @@ namespace Dark_Cloud_Improved_Version
                      // Shallow fishing: the RESTING hook follows the fishing-line physics, NOT the rod animation
                      // (in the waiting state it is not pinned to the rod bone). Its depth = the below-bobber rest
                      // length distpBelow (mailbox @0x01F10048, read by the ISO split caves at fixed anchor A=18;
-                     // IsoPatcher.PatchFishLineSplit). See the fishing-line split feasibility notes.
+                     // ElfFishingPatches.PatchFishLineSplit). See the fishing-line split feasibility notes.
                      ),
 
             // Yellow Drops: the yellow liquid.

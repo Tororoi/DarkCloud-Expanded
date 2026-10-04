@@ -1,8 +1,15 @@
 using System;
+using System.Collections.Generic;
+using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Mobius Ring — the charge ball's growth. The ball + fired orbs are CSHOT_EFFECT slots of the MainCharaEffectBase
+    /// <summary>Mobius Ring — the longer the charge, the greater the damage (<see cref="MobiusRingEffect"/>, the weapon's thread): while
+    /// Ruby charges, every flash of the charge glow (the glow timer reaching 17008, reset by the mod) compounds the shot's damage
+    /// ×1.5 (capped at 65535) and shows the running total; from the first flash the held ball grows with the damage multiplier
+    /// (<see cref="RubyBallGrowthPerMultiple"/>, capped at <see cref="RubyBallMaxScale"/>), the fired orbs fly at that size with the
+    /// ramped damage written into them every 10 ms until they expire, and the enemy bodies are inflated so the orbs' collision grows
+    /// to match. The growth itself is below. The ball + fired orbs are CSHOT_EFFECT slots of the MainCharaEffectBase
     /// pool (decomp-confirmed: RubyOrbs' addresses ARE the pool's per-slot fields; the objects are full CCharacters). Three
     /// coordinated levers, all engine-fed, each behind its own switch:
     ///  1. Mot_List SCALE keyframes (ratio-multiply) — the billboard sprite layers, whose size the motion animates per frame
@@ -13,10 +20,18 @@ namespace Dark_Cloud_Improved_Version
     ///     PCSX2; OFF. The shipping collision path is <see cref="MaintainOrbHitbox"/>: enemy-body inflation, mathematically
     ///     equivalent (hit ⇔ dist &lt; orbR + bodyR), with none of the BT side effects (wall checks stay native).
     /// All slots share one Mot_List/BT, so the fired orbs inherit everything. Layout consts + RE notes in ShotEffectPool
-    /// (WeaponAddresses.cs). Driven from CustomRubyEffects.MobiusRingEffect, which holds the growth formula; restored via
+    /// (WeaponAddresses.cs). Driven from <see cref="MobiusRingEffect"/>, which holds the growth formula; restored via
     /// factor 1.0.</summary>
     internal static class MobiusRing
     {
+        // ── the charge-ball growth — MOD POLICY, not a vanilla fact ──────────────────────────────
+        // The ball's size tracks the Mobius damage multiplier M = currentDamage/baseDamage:
+        //   scale = 1 + (M-1)*RubyBallGrowthPerMultiple, clamped to RubyBallMaxScale.
+        // Both are eyeball-calibration (tune live) — which is exactly why they do NOT belong in an addresses
+        // file. The vanilla facts they drive live in ShotEffectPool. MobiusRingSphere reads the growth for Xiao's pellet.
+        internal const float RubyBallMaxScale          = 5.0f;   // hard cap on ball/orb size (M can reach 1000s)
+        internal const float RubyBallGrowthPerMultiple = 1.0f;   // ball-scale gained per +1.0 of damage multiplier
+
         // ── WHICH lever to use (mod implementation choices / crash triage, not game facts) ──
         private const bool ScaleSprites   = false;   // 1. Mot_List chain-1 SCALE keyframe patch — redundant with the core scale
         private const bool ScaleCore      = true;    // 2. CObject scale on the template + slots — THE visual lever
@@ -137,7 +152,7 @@ namespace Dark_Cloud_Improved_Version
             // one float write BT+0x2C 5.0→6.25, still Read Abort; mechanism unresolved — the live BT is a
             // runtime-built registry entry whose static content differs). Kept for reference, toggle OFF.
             // The shipping collision path is MaintainOrbHitbox (enemy-body inflation — mathematically
-            // equivalent: hit ⇔ dist < orbR + bodyR) driven from CustomRubyEffects.MobiusRingEffect.
+            // equivalent: hit ⇔ dist < orbR + bodyR) driven from MobiusRingEffect.
             int btN = Memory.ReadInt(ShotEffectPool.MainCharaEffectBase + ShotEffectPool.BtShotPtrOff);
             if (ScaleCollision && WeaponModelFrames.IsRamPtr(btN))
             {
@@ -178,5 +193,160 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Restore every body radius inflated by <see cref="MaintainOrbHitbox"/> to its stock value.</summary>
         public static void RestoreOrbHitbox() => _orbHitbox.Restore();
+
+        // ── the weapon's thread ─────────────────────────────────────────────────────────────────
+        /// <summary>Mobius Ring's thread, one charge per launch (the class summary): the damage ramp per glow flash, the ball's growth,
+        /// the fired orbs' damage and size until they expire, then everything back to 1×.</summary>
+        public static void MobiusRingEffect()
+        {
+            //Declare inputs
+            string message;
+            int height;
+            int width;
+            ushort sleep = 1500;
+            int chargeGlowTimer = 0x21DC449E;
+            ushort chargeTimer = 0;
+
+            //Check these addresses which tells us if Ruby is charging an attack
+            if (Player.IsChargingAttack())
+            {
+                //Initialize the damage
+                int damage = Player.Weapon.GetCurrentWeaponAttack() + Player.Weapon.GetCurrentWeaponMagic();
+
+                //The energy ball only starts growing once the charge is fully built (first flash); from
+                //there its size tracks the Mobius damage multiplier (M = damage / baseDamage). baseDamage
+                //is the un-boosted attack+magic, floored at 1 to avoid divide-by-zero.
+                int baseDamage = System.Math.Max(1, damage);
+                bool fullyCharged = false;
+                float ballScale = 1.0f;
+
+                while (Player.IsChargingAttack())
+                {
+                    //Check if the game is paused during the charge
+                    if (Player.CheckDunIsPaused())
+                    {
+                        ReusableFunctions.AwaitUnpause(1);
+                    }
+                    //If the damage increase reaches the set max value, stop increasing it further
+                    if (damage >= ushort.MaxValue)
+                    {
+                        damage = ushort.MaxValue;
+                    }
+                    else damage += damage / 2;
+
+                    //Set messages to display onscreen
+                    if (damage > 9000)
+                    {
+                        message = "Total damage is over 9000";
+                        height = 1;
+                        width = message.Length;
+                    }
+                    else
+                    {
+                        message = "Total damage " + damage;
+                        height = 1;
+                        width = message.Length;
+                    }
+
+                    //Keep looping until chargeGlowTimer reaches the value 17008 or the player stops charging
+                    while (Memory.ReadUShort(chargeGlowTimer) < 17008 && Player.IsChargingAttack())
+                    {
+                        if (Player.CheckDunIsPaused())
+                        {
+                            ReusableFunctions.AwaitUnpause(1);
+                        }
+                        Thread.Sleep(100);
+                        continue;
+                    }
+
+                    //Save the value of the timer
+                    chargeTimer = Memory.ReadUShort(chargeGlowTimer);
+
+                    //Check if the timer hit the value we are looking for. This value makes Ruby flash
+                    if (chargeTimer == 17008)
+                    {
+                        //The flash marks the charge as fully built — from here the ball may grow.
+                        fullyCharged = true;
+
+                        //Display current damage
+                        DungeonMessages.DisplayMessage(message, height, width, sleep + 500);
+
+                        Thread.Sleep(sleep);
+
+                        //Reset Flash
+                        Memory.WriteUShort(chargeGlowTimer, 0);
+                    }
+
+                    //Once fully charged, grow the energy ball in step with the damage multiplier the Mobius
+                    //ramp has reached (scale = 1 + (M-1)*perMultiple, clamped). Re-applied every tick so the
+                    //effect stays sized as the charge is held. See SetBallScale.
+                    if (fullyCharged)
+                    {
+                        float m = (float)damage / baseDamage;
+                        ballScale = 1.0f + (m - 1.0f) * RubyBallGrowthPerMultiple;
+                        if (ballScale > RubyBallMaxScale) ballScale = RubyBallMaxScale;
+                        if (ballScale < 1.0f) ballScale = 1.0f;
+                        SetBallScale(ballScale);
+                    }
+
+                    Thread.Sleep(100);
+                }
+
+                //Charge released. Freeze the final size and re-apply it so the fired orbs (same effect pool
+                //as the ball) fly at the grown size, and inflate enemy body radii so the orbs' COLLISION
+                //grows to match (equivalent to a bigger damage sphere; see MaintainOrbHitbox).
+                float finalBallScale = ballScale;
+                if (fullyCharged)
+                {
+                    SetBallScale(finalBallScale);
+                    MaintainOrbHitbox(finalBallScale);
+                }
+
+                //Wait for the fired orbs to actually spawn before tracking them. The release animation takes
+                //a moment (the held ball is killed, then the shots grab pool slots), so the old approach of
+                //using the slot list captured at CHARGE START raced it — when the list was empty the reset
+                //below ran instantly and snapped the just-fired orbs back to 1× (and skipped their damage).
+                //Poll the live flags instead; time out in case the charge was interrupted without firing.
+                List<int> liveOrbs = RubyOrbs.GetRubyActiveOrbs();
+                for (int wait = 0; liveOrbs.Count == 0 && wait < 60; wait++)   // up to ~3s (fire lands ~1.5s in)
+                {
+                    Thread.Sleep(50);
+                    if (Player.IsChargingAttack()) break;                 // interrupted → recharging already
+                    liveOrbs = RubyOrbs.GetRubyActiveOrbs();
+                }
+
+                //Drive the boosted damage into every live orb until they all expire (slots re-read each tick
+                //so late-spawning second orbs are covered too). Keep the enemy hitbox inflation fresh while
+                //the orbs fly (covers enemies that spawn mid-flight).
+                //Tick period: the engine inits an orb's damage at spawn and never rewrites it, so the only
+                //race is spawn→our-next-tick; a point-blank orb can hit within a frame, so the period must
+                //stay UNDER one frame (16.7ms @60fps). 10ms ≈ 0.6 frames of worst-case stale damage. PINE
+                //writes aren't frame-synced, so exactly matching 16.7ms wouldn't align to anything anyway.
+                int hitboxTick = 0;
+                while (liveOrbs.Count > 0)
+                {
+                    //A NEW charge starting is the hand-off signal: its held ball is an active pool slot, so
+                    //without this check the loop would never exit (blocking Dungeon from spawning a fresh
+                    //MobiusRing), the new ball would inherit this charge's scale, and this loop would write
+                    //THIS charge's damage into the new shot — a full size+power carry-over exploit. Break,
+                    //reset below, and let the dispatcher start a clean ramp for the new charge. Any old orbs
+                    //still flying keep their (already latched) boosted damage but snap to 1× visuals — brief
+                    //and acceptable.
+                    if (Player.IsChargingAttack()) break;
+
+                    foreach (int id in liveOrbs)
+                        Memory.WriteInt(RubyOrbs.Orb0.damage + 4 * id, damage);
+                    if (fullyCharged && ++hitboxTick % 20 == 0)
+                        MaintainOrbHitbox(finalBallScale);
+                    Thread.Sleep(10);
+                    liveOrbs = RubyOrbs.GetRubyActiveOrbs();
+                }
+
+                //All orbs expired (or a new charge took over) — snap the effect pool back to its original
+                //size so the next charge starts from a clean 1× template, and restore enemy hitboxes.
+                SetBallScale(1.0f);
+                RestoreOrbHitbox();
+            }
+        }
     }
 }

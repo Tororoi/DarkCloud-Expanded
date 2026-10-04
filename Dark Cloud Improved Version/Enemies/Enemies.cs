@@ -691,7 +691,7 @@ namespace Dark_Cloud_Improved_Version
         /// CheckDmg owns the death path (death motion, drops, de-targeting, removing it from the AI), so an enemy
         /// zeroed by a direct HP write keeps walking and attacking while everything that tests HP treats it as
         /// dead: an untargetable, unkillable corpse. Damage must always be dealt by something the engine itself
-        /// resolves (a real pellet — <see cref="ShrapnelBurst"/> — or an effect's own collision sphere).
+        /// resolves (a real pellet in the player's shot pool — <see cref="PlayerShotPool"/> — or an effect's own collision sphere).
         ///
         /// The knockback is the engine's own, not a teleport. Step__CMonstorUnit feeds
         /// <see cref="EnemySlotOffsets.KnockbackForce"/> into the enemy's velocity every frame and drains it by

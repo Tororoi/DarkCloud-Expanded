@@ -49,7 +49,7 @@ namespace Dark_Cloud_Improved_Version
 
         private const int  XiaoId = 1;
 
-        // The monster shot-effect pack's layout: WeaponAddresses.ShotEffectPack.
+        // The monster shot-effect pack's layout: ShotEffectPack (Addresses/ShotAddresses.cs).
 
         // ── tuning ──
         internal const float PouchHeight  = 7.5f;   // copy root height above her feet (8.5 read slightly high at 2x)
@@ -97,7 +97,7 @@ namespace Dark_Cloud_Improved_Version
         private static int   _ownerWritten = -1;
         private static bool  _live;                             // the loop's state is up (weapon live in a dungeon); one HardReset when it stops being
 
-        /// <summary>Started once from the main menu (<see cref="MainMenuThread.ApplyNewChanges"/>): seeds the gauge multiplier
+        /// <summary>Started once from the main menu (<see cref="SessionController.ApplyNewChanges"/>): seeds the gauge multiplier
         /// to vanilla, then runs the reflector loop and the melee hit watch for the life of the app. Both idle until the Angel
         /// Gear (or Super Steve with its sphere) is live on a dungeon floor; the loop also retries the cold patches while not on one.</summary>
         internal static void Start()

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| charge | the guard pose (motions 9 / 33, R1) held 5 s primes it; the sword's mesh `c10w08__m` (frame word `c10w`) goes linearly to the green ambient add (80, 150, 20) through the Sun Sword's blade lever (`SolarBlade`), held while primed. Releasing the guard early clears it |
+| charge | the guard pose (motions 9 / 33, R1) held 5 s primes it; the sword's mesh `c10w08__m` (frame word `c10w`) goes linearly to the green ambient add (80, 150, 20) through the Sun Sword's blade lever (`BladeTint`), held while primed. Releasing the guard early clears it |
 | trigger | the charge completing while locked on (`PlayerAction.LockHeld`, a live slot) drops it at once; with no lock it stays primed (green held) and drops the moment a lock is held. The green holds through the fall and fades out over 0.5 s from the impact |
 | rock | Master Utan's boulder `gedit\s96\chara\iwa.chr` (`IwaModel` over `CashModel`, cash label 30001): `iwa.mds` whole (5,968 B, one rigid mesh, root at the centre, ±20.4) and its one texture `d02b10` (IM2 256² 8-bit): a 128² stand-in goes through SetCashModel (the cash entry's 40,016-byte allocator holds a copy of the bank, and 66.6 KB never fits), then the entry is pointed at the FULL 256² picture kept at read buffer +0x300000 (`CashModel.FullTexture` / `ApplyFullTexture`: the texture manager uploads an entry from its own fields — width +2, height +4, bytes per texel +6, pixels +0x38 (mipmaps +0x3C…), CLUT +0x48, swizzled flag +0x4C, VRAM from TEX0 +0x28 — `ReloadTexture` 0x133070; TEX0 rewritten TBW 4 / TW 8 / TH 8 / CBP = TBP + 0x100, the model's packet swept to match, a 0x120-block window reserved above every block; the data checked every tick a copy is drawn and re-written if overwritten). `FullTexture` takes a list — Queens' trees (Super Steve's form) uses it for its two textures at +0x320000, each model its own read-buffer span (`FullOffset`). Loaded into the cash when the sword primes; drawn by `BladeProp` in slot 3 at 1×, facing Ungaga's yaw; `IwaModel.KeepTextures` every tick it is up |
 | fall | its bottom 500 above the floor under the target, falling from rest under 180 u/s² (the impact speed of the earlier 300 u drop at 0.6 × the judgement blade's 500, ~424 u/s, kept: g = v²/2h; 0.05 u/frame²; ~2.4 s) on the blade fall's MODE 4 (see below). Every tick until it lands the slot's x/z are set to the target's root and the cave's stop height to the floor under it (`DungeonFloor.HeightAt` from root + 20, else the root's height), so it tracks across the ground and over steps. It grows from 0.01× to full size over the first 150 units of the drop (`BladeProp.SetScale` each tick), and its shadow's scale (the shadow frame's TRS scale) grows over the first 300 units. Both are the fall-drive cave's drive rows (below), frame-exact. A target that dies mid-fall leaves it falling where it is |
@@ -61,7 +61,7 @@ a time, used by the rock and by Desert Bloom's cactus and Queens' trees (docs/ca
 
 ## Super Steve (a Terra Sword sphere) — the nut
 
-Xiao holding Super Steve with a Terra Sword SynthSphere has the same charge (her slingshot greened through `SolarBlade` on
+Xiao holding Super Steve with a Terra Sword SynthSphere has the same charge (her slingshot greened through `BladeTint` on
 `SuperSteve.WeaponModel`), lock-on trigger, drop height, gravity, tracking, growth (to 2×), shadow (its own radius) and darkening
 (lighter: to 0.8, not the rock's 0.55),
 but what falls is a nut, and it bonks:
@@ -86,7 +86,7 @@ Cactus, Zeus) are untouched. Each dungeon frame, at the end of the camera pass:
   or above the visible head, e.g. on Statue Dog);
 - vy += g, y −= vy, landing at the stop (flag 2), as mode 1 — unless the HOP is armed (`FallDrive` +0xB0): then the same frame
   +0xB4 is set, vy/x-drift/z-drift/stop come from +0xB8..+0xC4, the unit and stop source are cleared, and it stays mode 4;
-- slot 3's height is y, and across the ground the followed point's x/z (`BladeFall` +0x14: the target's root) plus the offsets — or, with no point, the slot's own x/z plus the offsets each frame (a drift: the nut's hop);
+- slot 3's height is y, and across the ground the followed point's x/z (`VerticalDrive` +0x14: the target's root) plus the offsets — or, with no point, the slot's own x/z plus the offsets each frame (a drift: the nut's hop);
 - five DRIVE ROWS (`FallDrive` +0x10, 0x20 each: dst, count, a, b, lo, hi) write clamp(a + b·y, lo, hi): the drop's scale (slot 3
   CObject scale ×3), the shadow disc's TRS scale (×3) and its two refresh words (DirtyTrs = 1.0f, WorldCacheA = 0), the target's
   `DimFloor` — all linear in the fall height, frame-exact.

@@ -55,7 +55,7 @@ namespace Dark_Cloud_Improved_Version
             if (floor != _floor) { if (_floor != 0xFF) { EndFlights(); Dissipate(); } _floor = floor; }
             if (SwordOfZeus.LightningSeeded) SwordOfZeus.MaintainScale();
             var p = ZeusShot.FlashProfile;
-            SolarLighting.ToanTintOwned = _guard == Guard.Charging;                      // the cyan build-up is hers while she charges; Zeus holds no primed white
+            SceneLighting.ToanTintOwned = _guard == Guard.Charging;                      // the cyan build-up is hers while she charges; Zeus holds no primed white
 
             // The shot charge, as her other charged shots: held ShotChargeSeconds, the charge-complete flash, and the next pellet
             // marked (the guard charge owns the tint while it runs). The room darkens as it builds, as it does under the sword's
@@ -64,17 +64,17 @@ namespace Dark_Cloud_Improved_Version
             if (_shot.Holding)
             {
                 if (_guard == Guard.Idle || _guard == Guard.Chain)
-                { _shotDimming = true; SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim * (float)Math.Min(1.0, _shot.Held / ShotChargeSeconds)); }
+                { _shotDimming = true; SceneLighting.BeginDim(); SceneLighting.DimTo(p.PrimeDim * (float)Math.Min(1.0, _shot.Held / ShotChargeSeconds)); }
             }
-            else if (_shotDimming && !_shot.Charged && !ChargedOut) { _shotDimming = false; SolarLighting.EndDim(); }   // let go short of the charge: the dim lifts
-            if (ChargedOut && _guard != Guard.Primed) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim); }   // the charge's dim held while its pellet flies, to the bolt
+            else if (_shotDimming && !_shot.Charged && !ChargedOut) { _shotDimming = false; SceneLighting.EndDim(); }   // let go short of the charge: the dim lifts
+            if (ChargedOut && _guard != Guard.Primed) { SceneLighting.BeginDim(); SceneLighting.DimTo(p.PrimeDim); }   // the charge's dim held while its pellet flies, to the bolt
             bool released = _shot.Released;
 
             if (_volleyPending)                                                            // the release with no lock: the plunge, then the volley and its flash
             {
                 double frames = (GameClock.Now - _volleyAt).TotalSeconds * 60.0;
-                SolarLighting.DimRamp(_volleyDimFrom, (float)(frames / SolarLighting.RampFrames));
-                if (frames >= SolarLighting.RampFrames)
+                SceneLighting.DimRamp(_volleyDimFrom, (float)(frames / SceneLighting.RampFrames));
+                if (frames >= SceneLighting.RampFrames)
                 {
                     _volleyPending = false;
                     int struck = SwordOfZeus.StrikeNearest(weapon: Items.supersteve);
@@ -91,8 +91,8 @@ namespace Dark_Cloud_Improved_Version
                     if (_bladeFading)
                     {
                         float k = (float)Math.Max(0.0, 1.0 - (GameClock.Now - _releasedAt).TotalSeconds / TintFadeSeconds);
-                        SolarBlade.Set(k, p.Model, p.Frame, p.Unlit, p.BladeWhite);
-                        if (k <= 0f) { _bladeFading = false; SolarBlade.Clear(); }
+                        BladeTint.Set(k, p.Model, p.Frame, p.Unlit, p.BladeWhite);
+                        if (k <= 0f) { _bladeFading = false; BladeTint.Clear(); }
                     }
                     if (!SunSword.BlindRunning && GuardWatch.IsGuarding()) { _guard = Guard.Charging; _holdStart = GameClock.Now; _bladeFading = false; }
                     break;
@@ -110,8 +110,8 @@ namespace Dark_Cloud_Improved_Version
                     break;
                 }
                 case Guard.Primed:
-                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);
-                    SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim);
+                    BladeTint.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);
+                    SceneLighting.BeginDim(); SceneLighting.DimTo(p.PrimeDim);
                     if ((GameClock.Now - _primedAt).TotalSeconds >= PrimedSeconds)
                     { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "charge went unused — dissipating"); Dissipate(); break; }
                     if (released)
@@ -125,18 +125,18 @@ namespace Dark_Cloud_Improved_Version
                         else
                         {   // not locked on: the volley, from where she stands, with no pellet
                             _guard = Guard.Idle; _bladeFading = true; _shot.RetirePellet = true; _shot.Charged = false;
-                            _volleyPending = true; _volleyAt = GameClock.Now; _volleyDimFrom = SolarLighting.LastDim;
+                            _volleyPending = true; _volleyAt = GameClock.Now; _volleyDimFrom = SceneLighting.LastDim;
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "released with no lock — the volley");
                         }
                     }
                     break;
                 case Guard.Chain:
-                    SolarBlade.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);           // primed through the window
-                    if (!_chainStruck) { SolarLighting.BeginDim(); SolarLighting.DimTo(p.PrimeDim); }   // the prime dim, until the first bolt's flash takes it over
+                    BladeTint.Set(1f, p.Model, p.Frame, p.Unlit, p.BladeWhite);           // primed through the window
+                    if (!_chainStruck) { SceneLighting.BeginDim(); SceneLighting.DimTo(p.PrimeDim); }   // the prime dim, until the first bolt's flash takes it over
                     if ((GameClock.Now - _chainStart).TotalSeconds >= ChainSeconds)
                     {
                         _guard = Guard.Idle; _bladeFading = true; _releasedAt = GameClock.Now;
-                        if (!_chainStruck) SolarLighting.EndDim();                              // no bolt came: the dim lifts
+                        if (!_chainStruck) SceneLighting.EndDim();                              // no bolt came: the dim lifts
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "strike window over — the charge is spent");
                     }
                     break;
@@ -184,7 +184,7 @@ namespace Dark_Cloud_Improved_Version
                     f.X = Memory.ReadFloat(pa); f.H = Memory.ReadFloat(pa + 4); f.Y = Memory.ReadFloat(pa + 8);
                     if (since < MissSeconds) continue;
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "pellet still out after 3 s — let go");
-                    _flights.Remove(f); if (f.Charged && _shotDimming) { _shotDimming = false; SolarLighting.EndDim(); }
+                    _flights.Remove(f); if (f.Charged && _shotDimming) { _shotDimming = false; SceneLighting.EndDim(); }
                     continue;
                 }
                 int hit = f.Slot == contactSlot && contactEnemy >= 0 ? contactEnemy : PelletWatch.EnemyAt(f.X, f.Y);   // the engine's word first
@@ -195,7 +195,7 @@ namespace Dark_Cloud_Improved_Version
                 bool struck = hit >= 0 ? SwordOfZeus.Strike(hit, weapon: Items.supersteve)
                                        : SwordOfZeus.StrikeAt(f.X, f.H, f.Y, -1, weapon: Items.supersteve);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (f.Charged ? "charged pellet" : "pellet") + $" ended at ({f.X:F0},{f.H:F0},{f.Y:F0})" + (hit >= 0 ? $" on slot {hit}" : "") + (struck ? " — the bolt" : " — no bolt was free: the flash alone"));
-                if (!struck && _guard != Guard.Chain) SolarLighting.EndDim();
+                if (!struck && _guard != Guard.Chain) SceneLighting.EndDim();
                 _chainStruck = true; _shotDimming = false;
                 SunSword.StrikeFlash(p);
             }
@@ -206,7 +206,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The guard charge spent with nothing to show: the slingshot's white off, the dim lifted.</summary>
         private static void Dissipate()
         {
-            SolarBlade.Clear(); ChargeTint.Clear(); SolarLighting.EndDim();
+            BladeTint.Clear(); ChargeTint.Clear(); SceneLighting.EndDim();
             _guard = Guard.Idle; _bladeFading = false; _volleyPending = false; _chainStruck = false;
         }
 
@@ -214,9 +214,9 @@ namespace Dark_Cloud_Improved_Version
         internal static void Stop()
         {
             EndFlights();
-            SolarBlade.Clear(); ChargeTint.Clear(); SolarLighting.Restore();
+            BladeTint.Clear(); ChargeTint.Clear(); SceneLighting.Restore();
             SunSword.EndBlinding();
-            SolarLighting.ToanTintOwned = false;
+            SceneLighting.ToanTintOwned = false;
             _pellets.Reset(); _shot.Reset();
             _guard = Guard.Idle; _bladeFading = false; _shotDimming = false; _volleyPending = false;
         }

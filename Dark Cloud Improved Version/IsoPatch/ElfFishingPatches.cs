@@ -2,13 +2,14 @@ using System;
 using System.IO;
 using static Dark_Cloud_Improved_Version.IsoBytes;
 using static Dark_Cloud_Improved_Version.MipsAsm;
+using static Dark_Cloud_Improved_Version.ElfCaveWriter;
 
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// The FISHING ELF patches (dispatched from ElfPatches.ElfPatchAndCrc): the LoadFish species-pool
-    /// rewrite, the fish collision box, the invalid-cast uncast gate and the fish-line split. Split out of
-    /// ElfPatches 2026-09, mirroring ElfCameraPatches / ElfWaterPatches.
+    /// rewrite, the fish collision box, the invalid-cast uncast gate, the fish-line split, the Brownboo stilts
+    /// heal and the prize exchange's slingshot.
     /// </summary>
     internal static class ElfFishingPatches
     {
@@ -94,7 +95,7 @@ namespace Dark_Cloud_Improved_Version
         // otherwise identical to vanilla ($f1=10, $f2/$f3/$f4=x/y/z, $f0 scratch; $v0 no longer needed).
         internal static void PatchFishBox(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint SITE = 0x00240B24;   // start of the box-build in Step__5CFish
+            const uint Site = 0x00240B24;   // start of the box-build in Step__5CFish
             uint[] vanilla =
             {
                 0x3C024120, 0x44820800, 0xC7A20040, 0x46020800, 0xE7A05090,
@@ -120,10 +121,10 @@ namespace Dark_Cloud_Improved_Version
                 0xE7A050A8,   // swc1  $f0, 0x50a8($sp)    ; min.z = z-10
             };
             for (int i = 0; i < vanilla.Length; i++)
-                if (RdU32(fs, ElfOff(SITE + (uint)i * 4)) != vanilla[i])
-                    throw new IOException($"Fish collision-box site 0x{SITE + (uint)i * 4:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+                if (RdU32(fs, ElfOff(Site + (uint)i * 4)) != vanilla[i])
+                    throw new IOException($"Fish collision-box site 0x{Site + (uint)i * 4:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
             for (int i = 0; i < patched.Length; i++)
-                WrU32(fs, ElfOff(SITE + (uint)i * 4), patched[i]);
+                WrU32(fs, ElfOff(Site + (uint)i * 4), patched[i]);
         }
 
         // ── Fishing invalid-cast auto-uncast: vanilla 31-frame timing, settled-gated height check ────
@@ -152,14 +153,10 @@ namespace Dark_Cloud_Improved_Version
             uint gotG = RdU32(fs, ElfOff(GateAddr)), gotL = RdU32(fs, ElfOff(LuiAddr)), gotM = RdU32(fs, ElfOff(MtcAddr));
             if (gotG != 0x2841001F || gotL != 0x3C0240A0 || gotM != 0x44820800)
                 throw new IOException($"Fishing uncast-gate sites are not vanilla (got 0x{gotG:X8}/0x{gotL:X8}/0x{gotM:X8}) — unmodified Dark Cloud (USA) ISO expected.");
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.fishlineUncastGate.bin")
-                ?? throw new IOException("Embedded EE function missing: fishlineUncastGate.bin (reassemble tools/stubs/fishline_uncast_gate.s and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            byte[] b = Embedded("fishlineUncastGate.bin", "Embedded EE function missing: fishlineUncastGate.bin (reassemble tools/stubs/fishline_uncast_gate.s and rebuild)");
             if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x3C0840A0)   // first insn = lui $t0,0x40a0
                 throw new IOException($"fishlineUncastGate.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(UncastGateCaveAddr + (uint)i), U32(b, i));
+            WriteBytes(fs, ElfOff, UncastGateCaveAddr, b);
             // (GateAddr left VANILLA — the check fires at 31 waiting frames, as shipped by the game.
             //  The verify above still confirms the site so a re-patch of a stale ISO is caught.)
             // Route the tail through QueensDragCheck (@ElfCave.CamBankSettledCave, camera_norm_side.s bank) FIRST: in Queens,
@@ -201,14 +198,10 @@ namespace Dark_Cloud_Improved_Version
             if (RdU32(fs, ElfOff(InitLwc1Addr)) != 0xC78087B4 || RdU32(fs, ElfOff(InitSubAddr)) != 0x46000801 ||
                 RdU32(fs, ElfOff(StepLwc1Addr)) != 0xC78187B4 || RdU32(fs, ElfOff(StepSubAddr)) != 0x46010081)
                 throw new IOException("FishLine-split sites are not vanilla `lwc1 distp`/`sub.S` — unmodified Dark Cloud (USA) ISO expected.");
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.fishlineSplitCaves.bin")
-                ?? throw new IOException("Embedded EE function missing: fishlineSplitCaves.bin (reassemble tools/stubs/fishline_split_caves.s and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            byte[] b = Embedded("fishlineSplitCaves.bin", "Embedded EE function missing: fishlineSplitCaves.bin (reassemble tools/stubs/fishline_split_caves.s and rebuild)");
             if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x2A080013)   // first insn = slti $t0,$s0,0x13
                 throw new IOException($"fishlineSplitCaves.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(StubAddr + (uint)i), U32(b, i));
+            WriteBytes(fs, ElfOff, StubAddr, b);
             WrU32(fs, ElfOff(InitLwc1Addr), J(StubAddr));    WrU32(fs, ElfOff(InitSubAddr), 0);   // j init_cave ; nop
             WrU32(fs, ElfOff(StepLwc1Addr), J(StepCaveAddr));  WrU32(fs, ElfOff(StepSubAddr), 0);   // j step_cave ; nop
         }
@@ -239,14 +232,10 @@ namespace Dark_Cloud_Improved_Version
             uint gotImm = RdU32(fs, ElfOff(HookAddr - 4)), got = RdU32(fs, ElfOff(HookAddr));
             if (gotImm != 0x24060015 || got != 0x0C05EEE9)   // addiu a2,zero,0x15 ; jal EARLY_STUB(0x17BBA4)
                 throw new IOException($"Water-reload site 0x{HookAddr:X} unexpected (got 0x{gotImm:X8}/0x{got:X8}) — PatchWaterRedraw must run first (its EARLY_STUB jal is chained here).");
-            using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.stiltsHeal.bin")
-                ?? throw new IOException("Embedded EE function missing: stiltsHeal.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
-            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            byte[] b = Embedded("stiltsHeal.bin");
             if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x3C08002A)   // first insn = lui $t0,0x2a
                 throw new IOException($"stiltsHeal.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            WriteBytes(fs, ElfOff, CaveAddr, b);
             WrU32(fs, ElfOff(HookAddr), Jal(CaveAddr));
         }
 
@@ -255,5 +244,21 @@ namespace Dark_Cloud_Improved_Version
         // the bobber; cast reach ≈ line length), and a pin-target scale never executes. The cast boost is the
         // C#-side LINE PAY-OUT in CustomFishingSpot instead: sling at vanilla length, then ramp distpAbove out
         // during the flight — see the fishing-line split feasibility notes.)
+
+        /// <summary>The fishing prize exchange's slingshot: the Flamingo for 1000 FP in place of the Matador. The exchange's
+        /// stock is a static (item id, FP price) halfword table at 0x2929D0 (baits, powders, then the weapons); the Matador's
+        /// pair sits between the Tsukikage (266, 1100) and the Magical Hammer (317, 1800).</summary>
+        internal static void PatchFishingPrizeSlingshot(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Entry = 0x00292A3Cu;                                                         // (item, price) of the slingshot on offer
+            const ushort VanillaItem = Items.matador, VanillaPrice = 1400, OurItem = Items.flamingo, OurPrice = 1000;
+            byte[] row = Rd(fs, ElfOff(Entry - 4), 12);                                             // the neighbour pairs frame the check
+            ushort item = U16(row, 4), price = U16(row, 6);
+            bool vanilla = item == VanillaItem && price == VanillaPrice, ours = item == OurItem && price == OurPrice;
+            if (!(vanilla || ours) || U16(row, 0) != Items.tsukikage || U16(row, 2) != 1100 || U16(row, 8) != Items.magicalhammer || U16(row, 10) != 1800)
+                throw new IOException($"Fishing prize entry 0x{Entry:X} is ({item}, {price}), not the Matador at 1400 FP between the Tsukikage and the Magical Hammer — unmodified Dark Cloud (USA) ISO expected.");
+            byte[] ours4 = new byte[4]; U16(ours4, 0, OurItem); U16(ours4, 2, OurPrice);
+            Wr(fs, ElfOff(Entry), ours4);
+        }
     }
 }

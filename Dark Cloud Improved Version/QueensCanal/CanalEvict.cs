@@ -63,7 +63,7 @@ namespace Dark_Cloud_Improved_Version
         /// otherwise, and zero the orbit angle under the Queens fade-out so East Harbor inherits no swing.</summary>
         internal static void Update(float shownWaterLevel, float target)
         {
-            // TIDE-EVICT — the timing is owned by NATIVE code now (IsoPatcher.PatchCanalEvictFadeHook hooks
+            // TIDE-EVICT — the timing is owned by NATIVE code now (ElfCanalPatches.PatchCanalEvictFadeHook hooks
             // EdFadeInOut's fully-black store @0x189970). This side only maintains the flag: ARM while the player
             // wades the drained low-tide canal, and at the period boundary (tide turns low→non-low) raise the
             // native evict flag if they were caught. The fade-hook reads it on the exact fully-black frame and
