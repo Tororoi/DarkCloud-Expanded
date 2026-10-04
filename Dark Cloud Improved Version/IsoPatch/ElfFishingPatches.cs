@@ -9,7 +9,7 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>
     /// The FISHING ELF patches (dispatched from ElfPatches.ElfPatchAndCrc): the LoadFish species-pool
     /// rewrite, the fish collision box, the invalid-cast uncast gate, the fish-line split, the Brownboo stilts
-    /// heal and the prize exchange's slingshot.
+    /// heal, the prize exchange's slingshot and the Blessed Bait keep.
     /// </summary>
     internal static class ElfFishingPatches
     {
@@ -237,6 +237,23 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException($"stiltsHeal.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             WriteBytes(fs, ElfOff, CaveAddr, b);
             WrU32(fs, ElfOff(HookAddr), Jal(CaveAddr));
+        }
+
+        /// <summary>Blessed Bait: EdMoveChara's two bait-loss rolls — `rand() % 100 < 20` when the float sinks (0x16C8DC) and
+        /// `rand() % 100 < 30` when a hooked fish gets off (0x16C9F0) — call rand() through SmoothRestCave.BaitKeep, which hands
+        /// back 99 while CodeCaves.BaitKeep is non-zero (a Blessing Gun owned, through the session), so neither roll passes.
+        /// Everything else about the rolls, and every other bait, is retail.</summary>
+        internal static void PatchBaitKeep(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Cave = SmoothRestCave.BaitKeep, SinkSite = 0x0016C8DC, HookedSite = 0x0016C9F0;
+            const uint JalRand = 0x0C0411BE;                                             // jal rand (0x1046F8)
+            byte[] b = Embedded("baitKeep.bin");
+            if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x27BDFFF0)        // first insn = addiu sp,sp,-16
+                throw new IOException($"baitKeep.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (Cave + (uint)b.Length > 0x0027D49C) throw new IOException("baitKeep.bin overruns the SmoothRest cave");
+            WriteBytes(fs, ElfOff, Cave, b);
+            ReplaceWord(fs, ElfOff, SinkSite,   JalRand, Jal(Cave), "the float-sink bait roll's rand() call");
+            ReplaceWord(fs, ElfOff, HookedSite, JalRand, Jal(Cave), "the hooked-fish-escape bait roll's rand() call");
         }
 
         // (No "cast-trajectory scale" cave hooks the FishLineSetUki/SetHook tails: the throw state (chara_fishing==3) passes the -1 sentinel weight, so the bobber is

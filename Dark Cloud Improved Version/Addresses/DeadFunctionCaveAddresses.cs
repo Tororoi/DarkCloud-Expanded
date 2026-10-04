@@ -162,4 +162,15 @@ namespace Dark_Cloud_Improved_Version
         internal const uint StarsStep = Host + 0xC0;      // 0x22B300, 144 B → 0x22B390 (the construct check + the gate)
         internal const uint StarsDraw = Host + 0x160;     // 0x22B3A0, 112 B → 0x22B410 (the Key host ends at 0x22B5B0)
     }
+
+    /// <summary>The dead <c>SmoothRest</c> body (262 zero words from 0x27D084, in the main ELF): the camera-height cave takes its head
+    /// (ElfCameraPatches, 0x27D090, 408 B → 0x27D228), the rest is free zero words up to 0x27D49C.</summary>
+    internal static class SmoothRestCave
+    {
+        internal const uint Host         = 0x0027D084;
+        internal const uint CameraHeight = 0x0027D090;   // 408 B → 0x27D228 (ElfCameraPatches.PatchNativeCameraPostPass)
+        /// <summary>tools/stubs/bait_keep.s (ElfFishingPatches.PatchBaitKeep): EdMoveChara's two bait-loss rolls call <c>rand()</c>
+        /// through here; 99 comes back while CodeCaves.BaitKeep is non-zero, so neither roll passes and the bait stays.</summary>
+        internal const uint BaitKeep     = 0x0027D230;   // 60 B → 0x27D26C
+    }
 }

@@ -102,7 +102,7 @@ is deliberately not in `ModReserved`, and the feature stays disabled until it is
 
 The ELF segment being full, later caves take the body of a function nothing reaches in retail: the first word becomes
 `jr ra` (plus the return value its one caller expects) and the cave starts at +8. `DeadFunctionCaveAddresses.cs`
-holds four hosts:
+holds five hosts:
 
 - `DunCave` — `MemoryMapDump` in dun.bin (0x1DAC070, 332 B): the cat guard-bypass.
 - `DebugIfCave` — `DebugInfomationIF` (0x1B47C0, 3,712 B): the magic circles, call request, pellet sprite/plant/contact,
@@ -111,6 +111,8 @@ holds four hosts:
 - `DebugInfoCave` — `DebugInfomationDraw` (0x1B3780, 3,952 B): shared shots, steel level-up, guard mask, auto-guard,
   stride scale, camera pin, lunge gravity, blade fall, WHP bill, guard crush, follow.
 - `DebugItemCave` — `DebugItemGetKey` / `DebugItemGetDraw` (0x22B240 / 0x22B5B0): confuse proc, stars step/draw.
+- `SmoothRestCave` — the dead `SmoothRest` body (0x27D084, 262 zero words): the camera-height cave, then the bait keep
+  (the Blessing Gun's Blessed Bait).
 
 Several of these form a once-a-frame **chain** hanging off the dungeon camera pass's epilogue (camera pin → blade fall
 → fall drive → follow → blade spin → WHP bill → call request): each cave's exit jumps to the next, so the engine's own

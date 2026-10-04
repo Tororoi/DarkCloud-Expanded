@@ -68,6 +68,7 @@ STUBS = [
     ('confuse_name.s',           'confuseName.bin',          0x1B561C),    # main ELF: DebugInfomationIF's tail after fallDrive — ability bit 14's name (ElfWeaponPatches.PatchConfuseAbility)
     ('confuse_proc.s',           'confuseProc.bin',          0x22B248),    # main ELF: dead DebugItemGetKey's body — the Confuse ability's on-hit roll (ElfWeaponPatches.PatchConfuseProc)
     ('follow.s',                 'follow.bin',               0x1B4690),    # main ELF: DebugInfomationDraw's free tail (ElfWeaponPatches.PatchFollow): a point carried with a unit
+    ('bait_keep.s',              'baitKeep.bin',             0x27D230),    # main ELF: dead SmoothRest body after the camera-height cave (ElfFishingPatches.PatchBaitKeep): the Poisonous Apple stays on the hook
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]

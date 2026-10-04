@@ -426,6 +426,12 @@ namespace Dark_Cloud_Improved_Version
 
             currentAddress = offset * 0x14A0 + 0x21D26FD9;
             characterIdData = Memory.ReadShort(currentAddress);     //store the ID value of nearby character
+
+            // A quest on offer makes the ally's "Hello" the quest dialogue itself (the PNACH pins an ally's greeting to the mod's
+            // message, so the intro is written there); the quest line is for ongoing quests (QuestOffers).
+            bool helloQuest = isAlly && !isSidequest && !finishedDialogue
+                              && QuestOffers.For(currentArea, characterIdData).Phase == QuestPhase.Available;
+            if (helloQuest) isSidequest = true;
             if (currentArea == 0)
             {
                 for (int i = 0; i < noruneCharacters.Length; i++)   //search through array to find character match
@@ -1043,7 +1049,7 @@ namespace Dark_Cloud_Improved_Version
             if (currentArea == 0)
             {
                 currentAddress = 0x206507BE; //gaffers first normal "hello" dialogue
-                if (isSidequest)
+                if (isSidequest && !helloQuest)
                 {
                     currentAddress = currentsidequestAddress;
                 }
@@ -1056,7 +1062,7 @@ namespace Dark_Cloud_Improved_Version
             else if (currentArea == 1)
             {
                 currentAddress = 0x2064ECBC; //pao's first normal "hello" dialogue
-                if (isSidequest)
+                if (isSidequest && !helloQuest)
                 {
                     currentAddress = currentsidequestAddress;
                 }
@@ -1069,7 +1075,7 @@ namespace Dark_Cloud_Improved_Version
             else if (currentArea == 2)
             {
                 currentAddress = 0x2064BED8; //suzy's first normal "hello" dialogue
-                if (isSidequest)
+                if (isSidequest && !helloQuest)
                 {
                     currentAddress = currentsidequestAddress;
                 }
@@ -1082,7 +1088,7 @@ namespace Dark_Cloud_Improved_Version
             else if (currentArea == 3)
             {
                 currentAddress = 0x20649A56; //bonka's first normal hello dialogue
-                if (isSidequest)
+                if (isSidequest && !helloQuest)
                 {
                     currentAddress = currentsidequestAddress;
                 }
@@ -1309,7 +1315,11 @@ namespace Dark_Cloud_Improved_Version
 
         }
 
-        public static void SetDialogueOptions(int currentArea, bool buildingCheck)
+        /// <summary>The talk menu's quest line: present only while the NPC's quest is ongoing.</summary>
+        static string QuestLine(QuestOffer offer) => offer.Phase == QuestPhase.Ongoing ? "^  " + offer.Label : "";
+
+        /// <summary>The talk menu's lines for the area and building, with the quest line of the NPC at hand (<paramref name="offer"/>).</summary>
+        public static void SetDialogueOptions(int currentArea, bool buildingCheck, QuestOffer offer = default)
         {
             bool dialogueSet = false;
             if (currentArea == 0)
@@ -1317,7 +1327,7 @@ namespace Dark_Cloud_Improved_Version
                 if (buildingCheck == false) //if player is not inside (storage) house
                 {
                     currentAddress = 0x206492F6; //norune dialogueoptions after event finish
-                    dialogueOptions = "Hello.^  How should I rebuild Norune?^  It´s finished!^  Do you have any sidequests?";
+                    dialogueOptions = "Hello.^  How should I rebuild Norune?^  It´s finished!" + QuestLine(offer);
                     dialogueSet = true;
                 }
                 else
@@ -1332,13 +1342,13 @@ namespace Dark_Cloud_Improved_Version
                     else if (Memory.ReadInt(0x202A2820) == -1) 
                     {
                         currentAddress = 0x206492F6; //norune dialogueoptions after event finish
-                        dialogueOptions = "Hello.^  Do you have any sidequests?";
+                        dialogueOptions = "Hello." + QuestLine(offer);
                         dialogueSet = true;
                     }
                     else
                     {
                         currentAddress = 0x206492F6; //norune dialogueoptions after event finish
-                        dialogueOptions = "Hello.^  How should I rebuild Norune?^  It´s finished!^  Do you have any sidequests?";
+                        dialogueOptions = "Hello.^  How should I rebuild Norune?^  It´s finished!" + QuestLine(offer);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "Entered building (not hag's)");
                         dialogueSet = true;
                     }
@@ -1349,7 +1359,7 @@ namespace Dark_Cloud_Improved_Version
                 if (buildingCheck == false) //if player is not inside (storage) house
                 {
                     currentAddress = 0x20649306; //matataki dialogueoptions after event finish
-                    dialogueOptions = "Hello.^  How should I rebuild Matataki Village?^  It´s finished!^  Do you have any sidequests?";
+                    dialogueOptions = "Hello.^  How should I rebuild Matataki Village?^  It´s finished!" + QuestLine(offer);
                     dialogueSet = true;
                 }
                 else
@@ -1364,7 +1374,7 @@ namespace Dark_Cloud_Improved_Version
                     else
                     {
                         currentAddress = 0x20649306; //matataki dialogueoptions after event finish
-                        dialogueOptions = "Hello.^  How should I rebuild Matataki Village?^  It´s finished!^  Do you have any sidequests?";
+                        dialogueOptions = "Hello.^  How should I rebuild Matataki Village?^  It´s finished!" + QuestLine(offer);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "Entered building (not couscous)");
                         dialogueSet = true;
                     }
@@ -1375,7 +1385,7 @@ namespace Dark_Cloud_Improved_Version
                 if (buildingCheck == false) //if player is not inside (storage) house
                 {
                     currentAddress = 0x206492DA; //queens dialogueoptions after event finish
-                    dialogueOptions = "Hi.^  Any requests for rebuilding Queens?^  It´s finished!^  Do you have any sidequests?";
+                    dialogueOptions = "Hi.^  Any requests for rebuilding Queens?^  It´s finished!" + QuestLine(offer);
                     dialogueSet = true;
                 }
                 else
@@ -1390,7 +1400,7 @@ namespace Dark_Cloud_Improved_Version
                     else
                     {
                         currentAddress = 0x206492DA; //queens dialogueoptions after event finish
-                        dialogueOptions = "Hi.^  Any requests for rebuilding Queens?^  It´s finished!^  Do you have any sidequests?";
+                        dialogueOptions = "Hi.^  Any requests for rebuilding Queens?^  It´s finished!" + QuestLine(offer);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "Entered building (not basker)");
                         dialogueSet = true;
                     }
@@ -1401,7 +1411,7 @@ namespace Dark_Cloud_Improved_Version
                 if (buildingCheck == false) //if player is not inside (storage) house
                 {
                     currentAddress = 0x20649288; //muska dialogueoptions after event finish
-                    dialogueOptions = "Hello.^  Any requests for building Muska Racka?^  It´s finished!^  Do you have any sidequests?";
+                    dialogueOptions = "Hello.^  Any requests for building Muska Racka?^  It´s finished!" + QuestLine(offer);
                     dialogueSet = true;
                 }
                 else
@@ -1416,7 +1426,7 @@ namespace Dark_Cloud_Improved_Version
                     else
                     {
                         currentAddress = 0x20649288; //muska dialogueoptions after event finish
-                        dialogueOptions = "Hi.^  Any requests for building Muska Racka?^  It´s finished!^  Do you have any sidequests?";
+                        dialogueOptions = "Hi.^  Any requests for building Muska Racka?^  It´s finished!" + QuestLine(offer);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "Entered building (not enga)");
                         dialogueSet = true;
                     }

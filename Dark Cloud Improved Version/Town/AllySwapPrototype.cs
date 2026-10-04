@@ -202,6 +202,27 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"fired event {AllySwapLabelId} → {name}");
         }
 
+        /// <summary>Label 405 as the mod's scratch event for OTHER town scripts: the script is written into the label and armed to
+        /// run on the next walking frame, as a swap is. Refused — false, try again later — while the label is not installed, a
+        /// swap is pending or unverified, or the game is not walking; the caller keeps its state until a tick succeeds. The swap's
+        /// own next fire rewrites the label, so nothing is left behind.</summary>
+        internal static bool FireScript(StbWriter w, string what)
+        {
+            if (_installedStb == 0 || _pendingAlly >= 0 || _firedAlly >= 0) return false;
+            if (Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeWalking) return false;
+            long stb = TownScript.Base();
+            if (stb != _installedStb) return false;
+            int labelCount = Memory.ReadInt(stb + TownScript.LabelCount);
+            int tbl = Memory.ReadInt(stb + TownScript.LabelTable);
+            ScriptLabel lab = FindLabelById(stb, labelCount, tbl, AllySwapLabelId);
+            if (lab == null) return false;
+            Memory.WriteInt(stb + lab.Entry, AllySwapLabelId);
+            WriteScript(stb, lab.Off, lab.Off + lab.Size, w, what);
+            Memory.WriteInt(EditLoop.StartEventNo, AllySwapLabelId);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"fired scratch event {AllySwapLabelId}: {what}");
+            return true;
+        }
+
         /// <summary>A fired swap counts only when the swap EVENT actually ran. Standing on an event trigger
         /// can swallow the StartEventNo write — the swap silently never runs; committing _currentAlly
         /// optimistically then blocked re-selecting that ally forever (the "different from current" gate).

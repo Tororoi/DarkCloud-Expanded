@@ -10,8 +10,11 @@ namespace Dark_Cloud_Improved_Version
     /// carrying a Scorpion SynthSphere has both (<see cref="Wielded"/>).
     ///
     /// The proc is seen as an enemy slot's poison timer (+0x0C, 0 at rest) going from zero to non-zero while the weapon is
-    /// out — the engine sets it the frame its poison roll succeeds; the slot is watched again once the timer has run back to 0.</summary>
-    internal static class ScorpionVenom
+    /// out — the engine sets it the frame its poison roll succeeds; the slot is watched again once the timer has run back to 0.
+    ///
+    /// Owned (any bag or storage), the Scorpion is also a fishing passive, "Venom Lure": the Poisonous Apple notices fish from twice
+    /// as far.</summary>
+    internal static class Scorpion
     {
         private const string Tag = "[Scorpion] ";
         private const int TickMs = 16;
@@ -69,6 +72,24 @@ namespace Dark_Cloud_Improved_Version
             }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"poison took hold of enemy slot {slot}" + (cured ? ": the wielder's poison drawn out" : "")
                               + (after >= 0 ? $"; ABS {before} → {after} (+{after - before} of half its {worth})" : ""));
+        }
+
+        // ── Venom Lure: the Poisonous Apple as bait (a fishing passive, Scorpion owned) ──────────────────────────────────
+        private const float NoticeFactor = 2f;                   // the apple's notice radius, over the table's (Flamingo bonus included)
+        /// <summary>Scorpion owned in any bag or storage.</summary>
+        internal static bool OwnedAnywhere() => WeaponOwnership.Owned(Items.scorpion);
+
+        /// <summary>Fishing session start, after the Flamingo's bonus is written: the Poisonous Apple's notice radius doubled.</summary>
+        internal static void ApplyBaitPassive(float flamingoBonus)
+        {
+            var apple = BaitDetectionRadiusTable.PoisonousApple;
+            if (!OwnedAnywhere())
+            {
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"Venom Lure: no Scorpion owned — the Poisonous Apple notices from {Memory.ReadFloat(apple.Radius):F0} units");
+                return;
+            }
+            Memory.WriteFloat(apple.Radius, (apple.DefaultRadius + flamingoBonus) * NoticeFactor);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"Venom Lure: the Poisonous Apple (table entry id {Memory.ReadInt(apple.Id)}) notices from {Memory.ReadFloat(apple.Radius):F0} units");
         }
     }
 }

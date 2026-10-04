@@ -292,7 +292,11 @@ namespace Dark_Cloud_Improved_Version
         /// Xiao's cat are never live together, so the cave and its tint word are free for the blade.</summary>
         internal const long SolarBladeVtable      = 0x21FAF4B0;
         internal const uint SolarBladeVtableGuest = 0x01FAF4B0;
-        // 0x21FAF4D0..0x21FAF830 FREE
+        /// <summary>BLESSED BAIT (BlessingGun.FishingTick): non-zero through a fishing session while a Blessing Gun is owned —
+        /// SmoothRestCave.BaitKeep then fails EdMoveChara's two bait-loss rolls, so bait is only spent on a fight.</summary>
+        internal const long BaitKeep      = 0x21FAF4D0;
+        internal const uint BaitKeepGuest = 0x01FAF4D0;
+        // 0x21FAF4E0..0x21FAF830 FREE
 
         /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
         /// <c>ElfToanMeleePatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's

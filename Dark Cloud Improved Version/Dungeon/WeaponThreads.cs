@@ -55,7 +55,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread partisanThread = new Thread(new ThreadStart(Partisan.QuickSwingEffect));
         private static Thread deSangaThread = new Thread(new ThreadStart(DeSanga.VampireEffect));
         private static Thread javelinThread = new Thread(new ThreadStart(Javelin.MarineEffect));
-        private static Thread scorpionVenomThread = new Thread(new ThreadStart(ScorpionVenom.VenomEffect));
+        private static Thread scorpionVenomThread = new Thread(new ThreadStart(Scorpion.VenomEffect));
         private static Thread cactusThread = new Thread(new ThreadStart(Cactus.DesertBloomEffect));
         private static Thread absorbThread = new Thread(new ThreadStart(Cactus.AbsorbEffect));   // the Cactus's second loop: 50 ms, Ungaga's own hand only, no pause gate — not Desert Bloom's 16 ms sphere-aware loop
         private static Thread herculesWrathThread = new Thread(new ThreadStart(HerculesWrath.AirStrikeEffect));
@@ -322,7 +322,7 @@ namespace Dark_Cloud_Improved_Version
                     Ensure(ref superSteveThread, SuperSteve.SphereInheritanceEffect);
                     Ensure(ref deSangaThread, DeSanga.Wielded, DeSanga.VampireEffect);   // every kill heals the weapon 5 WHP, for a DeSanga sphere
                     Ensure(ref javelinThread, Javelin.Wielded, Javelin.MarineEffect);   // marine enemies defenseless and worth double ABS, for a Javelin sphere
-                    Ensure(ref scorpionVenomThread, ScorpionVenom.Wielded, ScorpionVenom.VenomEffect);   // Scorpion's venom, for a Scorpion sphere
+                    Ensure(ref scorpionVenomThread, Scorpion.Wielded, Scorpion.VenomEffect);   // Scorpion's venom, for a Scorpion sphere
                     Ensure(ref babelSpearThread, BabelsSpear.Wielded, BabelsSpear.CurseOfBabelEffect);   // Curse of Babel, for a Babel's Spear sphere (Super Steve itself rises)
                     Ensure(ref cactusThread, Cactus.Wielded, Cactus.DesertBloomEffect);   // Desert Bloom, for a Cactus sphere (Queens' trees)
                     Ensure(ref terraSwordThread, TerraSword.Wielded, TerraSword.BigRockEffect);   // the nutfall, for a Terra Sword sphere
@@ -451,7 +451,7 @@ namespace Dark_Cloud_Improved_Version
 
                 case Items.scorpion:
                     Ensure(ref halberdLineChargeThread, Halberd.TornadoChargeBuffEffect);   // the Halberd line's charge
-                    Ensure(ref scorpionVenomThread, ScorpionVenom.VenomEffect);   // its poison landing cures the wielder and feeds the weapon
+                    Ensure(ref scorpionVenomThread, Scorpion.VenomEffect);   // its poison landing cures the wielder and feeds the weapon
                     break;
 
                 case Items.mirage:

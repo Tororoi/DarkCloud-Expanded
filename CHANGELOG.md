@@ -27,6 +27,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **No-drop enemies** — Regular enemy species that ship unable to drop items (flyers, Gol/Sil, …) had a working `DropChance` but a `DeathDropFlag` of 0, which made the engine skip their entire death-drop block. The flag is now flipped to 1 in the static species table so every spawn drops as intended. Scoped to regular `e####` enemies; bosses, effects, and the steal item are untouched.
 - **Log file names** — Mod log filenames now use a correct `yyyy-MM-dd` date format (was `yyyy-dd-M`, which sorted wrong and collided across months).
 - **Gacious in the randomizer** — The randomizer no longer places vanilla Gacious (a boss-type record that breaks as a regular enemy); Gacious (Enhanced) takes its slot at the same frequency.
+- **Bait notice-radius table** — The mod's map of the game's bait table was off by one word: each bait's radius address was the previous bait's, and the Flamingo's bonus also wrote into an unrelated float before the table (128 → 138 while a Flamingo was owned). Corrected against the game's `esa_info` layout.
 - **Dungeon character memory** — The dungeon's character-model pool is raised from 3.36 MB to 3.84 MB in the ISO's dungeon overlay (the disc-read staging buffer trimmed from 4.48 MB to 4.00 MB to pay for it), so Xiao's model with the cat baked in doesn't hang a party switch.
 - **Shot slots** — Floors are no longer limited to five monster shot types: the five slots are shared among every config the floor needs, each read from disc at most once per floor.
 
@@ -47,6 +48,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Casting & line feel** — The line pays out along the cast direction in normally unfishable areas due to the limitations of the vanilla line geometry (split into above/below-water segments at the bobber), casts into the Queens canal walls stop at the wall instead of clipping through, and the fishing camera centers on the bobber at a per-spot height (low over the canal floor).
 - **Brownboo pond rocks** — The three pond rocks have real collision: casts and fish no longer pass through them.
 - **Fishing prize exchange** — The slingshot on offer is now the Flamingo for 1000 FP, replacing the Matador (2000 FP in Dark Cloud Enhanced, 1400 in vanilla). Baked into the patched ISO's prize table.
+- **Fruit of Eden for sale** — The Queens fruit stand stocks the Fruit of Eden at 6000 gold.
 - **Fishing quest system** — Refactored fishing quest tracking. Tracks fishing quests for Pike (Norune, area 0), Pao (Matataki Waterfall, area 1), Sam (Area 19), and Devia (Area 3). Supports count quests and size-range quests; monitors quest state byte and fires the Sam post-loop queens-quest trigger after the required number of completions.
 - **Fish steering** — Passive fish-steering loop at Matataki Waterfall and East Harbor nudges all fish toward the player every 10 seconds. Mardan Eins ownership adds a separate steering pass for Garayan and Umadakara fish at an interval weighted by bait affinity.
 - **Mardan Sword rework** — Detects all Mardan swords from bag and storage (not only equipped). FP multipliers: Eins 1.2×, Twei 1.5×, Arise 2×. Mardan Twei and Arise Mardan trigger a second independent Garayan fish roll. Arise Mardan applies the full size transform: native smoothing, a linear scale to 2× the species max, then a second smoothing pass over the scaled range (hard cap at exactly 2× max).
@@ -63,6 +65,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Play as any ally in town** — Committing an ally in the town party menu now swaps your character **in place**: no reload, no respawn at the entrance, and town state (position, time, events) is untouched. Works in every walkable town. Fishing as an ally works too — the session runs normally and the ally is restored automatically afterward.
 - **Dungeon-style party menu commit** — Selecting an ally in the town party menu now plays the dungeon's own switch sequence: the confirm chime, the character portraits spreading off-screen, and the menu closing itself. Locked allies still get the vanilla reject beep.
 - **Full town animation sets for all five allies** — Each ally has a complete, hand-built town moveset: proper idle/run/walk, door opening, item pickup, ledge falls and landings, and a "no" refusal animation. Highlights: Xiao's cat form sits down when idle and gets battle-quality movement; Goro, Ruby, and Ungaga run with their dungeon-quality run animations; Ruby finally casts a shadow in town.
+- **Quest talk menus** — Quest NPCs no longer carry a permanent "Do you have any sidequests?" line: while a quest is on offer, saying "Hello" starts it; while one is under way, the menu gains an "About the sidequest." line instead. Every other NPC's menu drops the quest line.
 - **Per-ally ladder behavior** — Each ally handles ladders with their own animations: **Xiao** leaps up or down in one cat-like bound, **Goro** reproduces his treehouse cutscene climb (four quick hops up; crouch-and-spring jump down), **Ruby** floats up or down the ladder, **Osmond** dives off ledges and rides his helicopter backpack up (propeller deploy, spin, and stow included), and **Ungaga** flatly refuses at both ends. Refusals play in full — arms crossed, head shake — before control returns.
 
 ### Enemy System
@@ -298,6 +301,7 @@ Abilities marked come from the upstream mod; everything else is this fork's.
 - **Halberd ("Tornado Charge Buff")** — Ungaga's held-charge shot (fired every 30 frames) flies farther and faster and is drawn larger: 1.4× travel, 1.1× size. Scorpion, Mirage, Cactus, Hercules' Wrath, Terra Sword and Babel's Spear inherit it at higher tiers. **Super Steve's sphere** (any of the seven): a 0.5 s charged shot at 1.5× attack and 2× WHP, flying faster and drawn larger by the sphere's tier.
 - **DeSanga ("Vampire")** — Every kill restores the weapon 5 WHP. **Super Steve's sphere**: the same.
 - **Scorpion ("Venom")** — Each Poison proc cures Ungaga's own poison and gives the weapon 50% of that enemy's ABS (capped at its max). Halberd's Tornado Charge Buff at 1.7× travel, 1.3× size. **Super Steve's sphere**: the same (curing Xiao), and the Tornado charged shot at its tier.
+- **Scorpion ("Venom Lure")** — While a Scorpion is owned (any bag or storage), the Poisonous Apple notices fish from twice as far.
 - **Partisan ("Quick Combo")** — Combo swings play 4/3× faster (Shamshir's factor); the charge keeps its pace. **Super Steve's sphere** gives Swift Strikes' shot speed.
 - **Mirage ("Decoy")** — Holding guard 0.25 s plants a shimmering clone of Ungaga with a heat-haze effect; enemies chase it instead of him for 12 s (18 s when cast by Hercules' Wrath). The illusion breaks per enemy — hit one and it re-targets you — and a new hold hands off to a fresh decoy. The Mirage line (Mirage, Terra Sword, Hercules' Wrath, Babel's Spear) also locks on from 2× the distance. Only one targeting effect (decoy, shield ring, judgement blade) owns the enemies' target at a time; confusion yields to it. Halberd's Tornado Charge Buff at 2.0× travel, 1.5× size. **Super Steve's sphere** (Mirage or Hercules' Wrath): the decoy, and the Tornado charged shot at its tier.
 - **Cactus ("Absorb")** — Hits restore thirst by damage ÷ 10 (100 damage = one water drop); dry species (rock, metal, undead) give nothing. **Super Steve's sphere**: pellet hits restore Xiao's thirst.
@@ -311,7 +315,7 @@ Abilities marked come from the upstream mod; everything else is this fork's.
 - **Machine Gun** — TBD.
 - **Jackal** — TBD.
 - **Launcher V2** — TBD.
-- **Blessing Gun** — TBD.
+- **Blessing Gun ("Blessed Bait")** — While a Blessing Gun is owned (any bag or storage), bait is only spent on a fight: it stays on the hook when the float sinks or a hooked fish gets off (the two bait-loss rolls fail, patched into the ISO).
 - **Snail ("Slime Trail")** — 5% chance on hit to apply Gooey to the struck enemy. **Super Steve's sphere**: the same.
 - **Skunk ("Longer Flame")** — The flamethrower reaches twice as far.
 - **Swallow** — TBD.

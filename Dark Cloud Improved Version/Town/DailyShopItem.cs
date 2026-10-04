@@ -67,6 +67,9 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteUShort(0x20292042, Items.dragonslayer);
             Memory.WriteUShort(0x20292044, Items.goldbullion);
 
+            //Queens fruit stand (shop list 7, ItemShopList2[18][20] @0x20292020): Fruit of Eden in its first free slot
+            Memory.WriteUShort(0x20292148, Items.fruitofeden);
+
             //Fairy King attachment shop changes
             Memory.WriteUShort(0x202922E0, Items.metalbreaker);
             Memory.WriteUShort(0x202922E2, Items.mimicbreaker);

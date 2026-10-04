@@ -105,6 +105,29 @@ Both NPCs require **all 6 allies recruited** ("find our Boss first") before offe
 - **Repeatable:** yes — until **every ally's HP, thirst, and defence are maxed**, at which point the
   Mayor declares the quest line (and the mod's content) complete.
 
+## Talk menu and quest entry points
+
+How the mod puts quests on an NPC's talk menu (`Quests/QuestOffers.cs`, `Town/TownLoop.cs`, `Town/Dialogues.cs`):
+
+- The menu is talk message **11**; its text is rewritten by the mod (`Dialogues.SetDialogueOptions`) and the engine
+  makes one selectable line per `^`-separated line. Each line maps to a message id in the slots
+  `0x21D3D434 / 438 / 43C / 440` (lines 1–4), which the mod overwrites while the menu is up. The only "what was
+  picked" signal is the id of the talk message on screen, `0x21D1CC0C` (255 = none).
+- For an ally the PNACH pins line 1 ("Hello") to the mod's own message per area (`TownLoop.townDialogueIDs`),
+  whose text the mod writes; for Toan line 1 is the NPC's vanilla greeting read from slot `0x434`.
+- **`QuestOffers.For(area, npcId)`** reads the quest save bytes and returns the NPC's phase:
+  - **Available** (intro not heard, or no quest running / rumour not heard / mayor stage 0): the menu has **no quest
+    line** and **"Hello" opens the quest dialogue** — an ally's greeting text is the intro (`Dialogues.SetDialogue`
+    writes it to the greeting message); for Toan slot `0x434` is pointed at the quest message.
+  - **Ongoing** (running or finished-and-unrewarded; rumour heard; mayor past stage 0): "Hello" stays the greeting
+    and the menu gains the quest line (**"About the sidequest."**) routed to the
+    quest message.
+  - **None**: a three-line menu. Non-quest NPCs no longer carry "Do you have any sidequests?".
+- The menu is rewritten whenever the villager next to the player changes or that NPC's phase changes
+  (`TownLoop.NearNpc` / `NearNobody`); the quest state step runs once per showing of the quest dialogue
+  (`RouteQuestDialogue`), whichever line opened it.
+- Yellow Drops and Brownboo keep their own menus (shop / storage layouts) unchanged.
+
 ## How quest state persists
 
 The mod writes **no files of its own**. All quest state lives in **unused padding bytes inside the

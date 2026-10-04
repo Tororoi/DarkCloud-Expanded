@@ -13,6 +13,8 @@ namespace Dark_Cloud_Improved_Version
         internal const int ExitFishing     = 995;   // ()
         internal const int SetFishingEsa   = 994;   // ()
 
+        internal const int SItemGet       = 702;    // (itemId) — the item into the bag with the game's own "obtained" window
+        internal const int SItemLost      = 718;    // (itemId) — one of that item out of the bag
         internal const int LoadMainChara  = 999;    // (chrPath, cfgName, flag) — swaps the player's model
         // _MAP_JUMP(mapNo[, eventNo]) — VM cmd 15 (verified: handler 0x18bfe0 in the dispatch table).
         // mapNo is 1-BASED (the handler does MapJump(mapNo-1, eventNo)); eventNo defaults -1 = default entry.
