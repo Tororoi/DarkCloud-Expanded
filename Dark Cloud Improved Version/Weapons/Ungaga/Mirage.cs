@@ -10,7 +10,7 @@ namespace Dark_Cloud_Improved_Version
     /// from Hercules' Wrath; a re-cast hands off to a new one) every enemy is pointed at it through the per-slot target table
     /// (<see cref="TargetRedirectCaves"/>, held via <see cref="AggroTable"/>) PER ENEMY: one you HIT drops the illusion and
     /// re-targets you until the next decoy. The loop runs on every floor and tears the decoy down on expiry, weapon or party
-    /// swap and floor exit. docs/mirage.md.
+    /// swap and floor exit.
     /// </summary>
     internal static class Mirage
     {
@@ -135,7 +135,7 @@ namespace Dark_Cloud_Improved_Version
 
         // ── Clone heat-haze: the game's fire-raster distortion, drawn at the clone by ElfCave.MirageHazeDraw ──
         // HeatHaze names the clone's root CFrame in the mailbox and ramps the strength; the cave draws one raster
-        // there every frame, in the map's own raster pass. (The mechanisms tried before it: docs/mirage.md.)
+        // there every frame, in the map's own raster pass.
         //
         // Clone materialize / dematerialize. The clone fades IN over FadeSeconds, holds at full, then fades
         // OUT over the last FadeSeconds before the decoy expires. Derived from the DEADLINE, which is on GameClock,

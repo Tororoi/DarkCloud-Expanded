@@ -6,7 +6,7 @@ namespace Dark_Cloud_Improved_Version
     /// the Flamingo drive) ×<see cref="ReachFactor"/> while a weapon of the line is out — the Mirage and what is built up from it:
     /// the Terra Sword, Hercules' Wrath, Babel's Spear — Ungaga's own or Super Steve's sphere. Driven from Mirage's loop, which
     /// runs on every floor: <see cref="Hold"/> while <see cref="Wielded"/>, else <see cref="Release"/>. Needs the ISO's lock-on
-    /// table patch (<see cref="DunPatches.LockOnTableWord0"/>). docs/mirage.md.</summary>
+    /// table patch (<see cref="DunPatches.LockOnTableWord0"/>).</summary>
     internal static class MirageLineReach
     {
         private const string Tag = "[MirageLineReach] ";

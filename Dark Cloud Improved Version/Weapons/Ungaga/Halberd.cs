@@ -4,7 +4,7 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>"Tornado Charge Buff", the Halberd line's charge (docs/hercules-wrath.md): Ungaga's charge effect c10a_ex (the shot
+    /// <summary>"Tornado Charge Buff", the Halberd line's charge: Ungaga's charge effect c10a_ex (the shot
     /// UngagaKey_Play fires every 30 frames of a held charge from the main-character effect instance) travels faster and is drawn
     /// larger, hit spheres to match, at a form that grows down the build path (<see cref="TierOf"/>): the Halberd starts it, the
     /// Scorpion, the Mirage (and the Cactus beside it) and Hercules' Wrath (and the Terra Sword and Babel's Spear beside it) each

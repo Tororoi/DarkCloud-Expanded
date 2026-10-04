@@ -3,7 +3,7 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Hercules' Wrath — the ultimate, the guard charge's SECOND level (docs/hercules-wrath.md). Level 1 is the Mirage's
+    /// <summary>Hercules' Wrath — the ultimate, the guard charge's SECOND level. Level 1 is the Mirage's
     /// decoy (Mirage.cs: the guard pose held Mirage.GuardChargeMs); the guard held <see cref="ChargeSeconds"/> more charges level 2:
     /// the room dims as Big Bang's does (SceneLighting, <see cref="PrimeDim"/>) and the spear goes gold (<see cref="Gold"/>,
     /// <see cref="Curve"/>) through the Sun Sword's blade lever (<see cref="SetGold"/>), the Mirage clone's spear with it. Released

@@ -5,7 +5,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// The dungeon FIRE / HEAT-HAZE system — the only framebuffer distortion in the game, and the vehicle
-    /// for the Mirage clone's shimmer (ElfCave.MirageHazeDraw draws one raster at the clone; docs/mirage.md).
+    /// for the Mirage clone's shimmer (ElfCave.MirageHazeDraw draws one raster at the clone).
     ///
     /// DrawRaster__11CDungeonMap (0x1C4610) walks a 20x20 per-tile fire array, but ONLY tiles within +/-4 of
     /// the CAMERA and with dist &lt;= 240 (both camera-relative — DrawMap__11CDungeonMap @0x1C286C RECOMPUTES

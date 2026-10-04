@@ -3,7 +3,7 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Bandit's Ring — Steal Shot, inherited from Xiao's Bandit Slingshot (docs/bandit-slingshot.md): a steal that lands on
+    /// <summary>Bandit's Ring — Steal Shot, inherited from Xiao's Bandit Slingshot: a steal that lands on
     /// an enemy with a projectile takes the projectile, and every QUICK shot Ruby fires until the next steal or the floor's end is
     /// that enemy's. The steal, the victim, the notice and the shared driver are the slingshot's (<see cref="BanditSlingshot.Drive"/>);
     /// Ruby's own part is here: the stolen config is entered into the SECOND main-character instance (<see cref="StolenInstance"/>,

@@ -11,7 +11,7 @@ namespace Dark_Cloud_Improved_Version
     /// stands. Every pellet flies as Witch Illza's apple shot wearing the Bomb's mesh (<see cref="BombCarrier"/>) and bursts where it
     /// dies: a plain shot with the pellet's own damage, a shot held <see cref="ShotChargeSeconds"/> with half the drop's blast; her
     /// pellets themselves are drawn from the blank cell (<see cref="PelletHide"/>). Driven from Super Steve's sphere dispatch; the
-    /// helpers share this class's members through using static (docs/big-bang.md).</summary>
+    /// helpers share this class's members through using static.</summary>
     internal static class BigBangShot
     {
         /// <summary>Super Steve with a Big Bang sphere (BigBangShot): Big Bang's flash — twice the Sun Sword's share, the cool

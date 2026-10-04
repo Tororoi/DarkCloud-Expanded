@@ -62,7 +62,7 @@ back when the cursor still stands on it, and keeps it (reused by the next load) 
 Why a window at all: a copy drawn in the clone slot binds its texture before that slot's own upload lands (its draw is in
 the packet the GS reads first), and another pass — the apple shot's — uploads its own textures over the same pages. The
 Bomb's copy sampled whichever texture happened to hold them: the slingshot's atlas, the apple. Once uploaded into the
-window, the pages are the model's for good. The Divine Beast cat's textures use the same window (docs/divine-beast-title.md);
+window, the pages are the model's for good. The Divine Beast cat's textures use the same window;
 claiming a window without moving the manager's cursor lets later textures land on it.
 
 ## Textures too big for the entry: stand-ins, then the full picture
@@ -93,7 +93,7 @@ of its own instead.
 
 While a copy is drawn through another pass's block, the model's entries are re-tagged into that block and the block is
 marked unloaded (`BlkLoaded` = 0) every tick, so its uploader re-sends every entry, ours among them — the same trick the Sun
-Sword's disc uses to stay uploaded (docs/solar-flash.md). With the window above, one upload is enough and the rest are
+Sword's disc uses to stay uploaded (SolarGlow). With the window above, one upload is enough and the rest are
 cheap. The entries are tagged back into the cash's block when the copy goes. The cash's own block is kept unloaded too
 (`Tick`), so the game's own draw of the same cash model (a thrown Bomb) re-sends it there.
 

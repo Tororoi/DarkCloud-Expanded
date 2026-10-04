@@ -8,7 +8,7 @@ namespace Dark_Cloud_Improved_Version
     /// volley (SwordOfZeus.StrikeNearest) with no pellet, LOCKED ON it opens a <see cref="ChainSeconds"/> window in which every
     /// pellet that reaches an enemy brings a bolt down on it. The shot charge (<see cref="ShotChargeSeconds"/>) marks the next
     /// pellet: the charge bolt comes down wherever it ends. A bolt pellet hurts nothing itself (<see cref="NoDamage"/> + the
-    /// PelletPlant cave): the bolt is the hit. Solar Harvest and Big Bang's lock-on reach are inherited. (docs/sword-of-zeus.md)</summary>
+    /// PelletPlant cave): the bolt is the hit. Solar Harvest and Big Bang's lock-on reach are inherited.</summary>
     internal static class ZeusShot
     {
         /// <summary>Super Steve with a Sword of Zeus sphere (ZeusShot): the Sword of Zeus's look on her slingshot — its dim, its

@@ -9,7 +9,7 @@ namespace Dark_Cloud_Improved_Version
     /// from its loop and <see cref="End"/>s it. A confused slot's entry in the per-slot target table (<see cref="TargetRedirectCaves"/>) follows the nearest live
     /// enemy or the player, else its own wander spot; an enemy a confused one hits is PROVOKED and goes after it; the tint is the
     /// unit's ambient add. Its swings' and shots' friendly fire is <see cref="ConfusionFriendlyFire"/>, which shares this class's
-    /// members through using static (docs/confuse-ability.md; the friendly fire in docs/babels-spear.md).</summary>
+    /// members through using static (docs/confuse-ability.md).</summary>
     internal static class Confusion
     {
         private const string Tag = "[Confusion] ";

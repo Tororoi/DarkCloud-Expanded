@@ -3,7 +3,7 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>The judgement blade (docs/big-bang.md): a copy of a model (<see cref="BladeProp"/>) hung point-down over
+    /// <summary>The judgement blade: a copy of a model (<see cref="BladeProp"/>) hung point-down over
     /// the locked-on target for whichever owner holds it (<see cref="JudgementOwner"/> — Big Bang, the Sword of Zeus, the
     /// Big Bang shot), fading in with its glow, then let go to fall under the blade-fall cave's gravity and land where the
     /// owner's callback fires. Two hovers share the one copy: the lock-on hover (JudgementTick / BeginDrop) and the point

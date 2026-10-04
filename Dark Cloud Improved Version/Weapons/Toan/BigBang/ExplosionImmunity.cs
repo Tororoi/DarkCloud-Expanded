@@ -7,7 +7,7 @@ namespace Dark_Cloud_Improved_Version
     /// handler does not act on, so their entries are consumed and nothing reaches him; enemies are unaffected.
     /// <see cref="ArmImmunity"/> puts it on (retrying until the config table is up), <see cref="RestoreImmunity"/>
     /// puts the shared ELF words back, <see cref="DriveImmunity"/> is the switch for a wielder that inherits it (Super
-    /// Steve with a Big Bang sphere). Big Bang arms it every tick and restores it on Reset (docs/big-bang.md).</summary>
+    /// Steve with a Big Bang sphere). Big Bang arms it every tick and restores it on Reset.</summary>
     internal static class ExplosionImmunity
     {
         // ── immunity to explosions ───────────────────────────────────────────────────────

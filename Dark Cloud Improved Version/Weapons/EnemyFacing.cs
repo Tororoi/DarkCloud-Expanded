@@ -5,7 +5,7 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>Which way the enemies look. <see cref="TurnEnemiesToward"/> turns every live enemy to a point and holds
     /// it there for a few ticks (<see cref="FaceTick"/>), the yaw written in whichever of the engine's four conventions
     /// the floor's own enemies reveal (<see cref="YawConvention"/>). <see cref="PlayerFacing"/> is the player's own yaw, for
-    /// the things placed square to him. Big Bang, the Big Bang shot and JudgementBlade drive it (docs/big-bang.md); the
+    /// the things placed square to him. Big Bang, the Big Bang shot and JudgementBlade drive it; the
     /// target-table redirect while a judgement blade falls is the blade's own (<see cref="BladeRedirect"/>).</summary>
     internal static class EnemyFacing
     {

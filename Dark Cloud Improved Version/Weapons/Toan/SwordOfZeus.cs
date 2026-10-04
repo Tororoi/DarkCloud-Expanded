@@ -7,8 +7,7 @@ namespace Dark_Cloud_Improved_Version
     /// bolt (`gedit/s99/chara/lightning.chr`), and the primed flash brings it down on the locked target with every swing
     /// of the combo, or on each of the nearest <see cref="MaxStrikes"/> within <see cref="StrikeReach"/> when not locked
     /// on. A bolt touches nothing itself: its damage is Big Bang's falloff blast at its foot at <see cref="BlastScale"/>.
-    /// A full charge attack is a bolt as well (<see cref="ChargeTick"/>). Xiao's Zeus sphere fires the same bolt (ZeusShot).
-    /// (docs/sword-of-zeus.md)</summary>
+    /// A full charge attack is a bolt as well (<see cref="ChargeTick"/>). Xiao's Zeus sphere fires the same bolt (ZeusShot).</summary>
     internal static class SwordOfZeus
     {
         private const int    TickMs = 30;

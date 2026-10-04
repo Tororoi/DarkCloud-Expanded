@@ -4,7 +4,7 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Big Bang "Detonate" (docs/big-bang.md): Solar Harvest and Solar Flash from the Sun Sword line, a
+    /// <summary>Big Bang "Detonate": Solar Harvest and Solar Flash from the Sun Sword line, a
     /// whirlwind that IS the falloff blast at Toan's feet, and a guard charge that — locked on — hangs a judgement blade
     /// (<see cref="JudgementBlade"/>) over the target and drops it; the landing is the flash, the blast, every enemy
     /// turned to it and the weapon-HP bill. While the blade is held the game's explosions cannot hurt him
@@ -130,8 +130,8 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>DIAGNOSTIC, once per floor: what the engine has for the sword in his hand — the weapon object, its
         /// model root, the blade visual and the vtable it draws through, the object's opacity and dim, and whether the
-        /// blade copy's chara slot was left registered — the reference for a blade that fails to draw on entering a floor
-        /// (docs/big-bang.md). False until the weapon object exists.</summary>
+        /// blade copy's chara slot was left registered — the reference for a blade that fails to draw on entering a floor.
+        /// False until the weapon object exists.</summary>
         private static bool LogBlade()
         {
             uint obj = Memory.ReadGuestPtr(EquippedWeapon.WeaponObjGlobal);

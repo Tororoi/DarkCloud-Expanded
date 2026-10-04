@@ -8,7 +8,7 @@ namespace Dark_Cloud_Improved_Version
     /// head height scaled with the unit (<see cref="HeadHeight"/>), whether it still has HP (<see cref="HasHp"/>), and
     /// whether another live unit draws through the same model root (<see cref="RootShared"/>). Shared by the falloff
     /// blast, the judgement blade, EnemyHit, PelletWatch, Confusion and Ungaga's props — everything that plants a hit
-    /// on, hangs over, or measures against an enemy (docs/big-bang.md).</summary>
+    /// on, hangs over, or measures against an enemy.</summary>
     internal static class EnemyBody
     {
         /// <summary>The enemy's largest live body sphere placed this frame (centre and radius), the surest thing a hit sphere of the

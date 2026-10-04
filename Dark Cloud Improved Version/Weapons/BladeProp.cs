@@ -2,8 +2,8 @@ using System;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>A free-standing COPY of a rigid model, drawn by the engine in chara slot 3 wherever it is put
-    /// (docs/big-bang.md): the equipped sword as the judgement blade (<see cref="JudgementBlade"/>: Big Bang, the Sword of
+    /// <summary>A free-standing COPY of a rigid model, drawn by the engine in chara slot 3 wherever it is put:
+    /// the equipped sword as the judgement blade (<see cref="JudgementBlade"/>: Big Bang, the Sword of
     /// Zeus) or any root handed to <see cref="Spawn"/> — the Big Bang shot's bomb model, Babel's Spear, the Terra Sword's
     /// and the Cactus's parts. The same engine-drawn weapon copy Xiao's Guardian Reflector and the Matador use
     /// (<see cref="SlingshotProp"/>) and Ungaga's Mirage clone wears (<see cref="CharacterClone"/>), with the parts only

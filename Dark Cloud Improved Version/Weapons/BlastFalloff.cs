@@ -7,7 +7,7 @@ namespace Dark_Cloud_Improved_Version
     /// <see cref="KickStrength"/> / <see cref="KickDecay"/>, optionally crush-marked through any guard. Big Bang's whirlwind
     /// and judgement blade, the Sword of Zeus's bolt, Hercules' Wrath's strike and the Big Bang shot all plant it; the
     /// planted entries are tracked (<see cref="_shells"/>) and the unconsumed ones withdrawn by <see cref="ExpireShells"/>.
-    /// <see cref="LastBlast"/> is where the last one went off, for the flash fired on it. (docs/big-bang.md)</summary>
+    /// <see cref="LastBlast"/> is where the last one went off, for the flash fired on it.</summary>
     internal static class BlastFalloff
     {
         internal const float KickStrength     = 3.5f;   // the blast's kick; with KickDecay: distance ≈ force²/(2·decay) ≈ 50 units

@@ -2,7 +2,7 @@ using System;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Every enemy's eyes on the judgement blade (docs/big-bang.md, docs/aggro-redirect.md): while a blade falls,
+    /// <summary>Every enemy's eyes on the judgement blade (docs/aggro-redirect.md): while a blade falls,
     /// every slot's "where is the player" is pointed at CodeCaves.JudgementPos through the per-slot target table
     /// (<see cref="TargetRedirectCaves"/>, written through <see cref="AggroTable"/>), so their own AI turns them to it.
     /// <see cref="JudgementBlade"/> begins it at the drop and keeps JudgementPos on the blade and then the blast; the owners'

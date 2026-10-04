@@ -3,8 +3,8 @@ using System.Collections.Generic;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>A round shadow on the floor for a prop the engine draws none for — the Terra Sword's boulder, Desert Bloom's cactus
-    /// (docs/terra-sword.md, "The rock's shadow"). One at a time: the ISO's rock-shadow cave (DebugIfCave.RockShadow, in
+    /// <summary>A round shadow on the floor for a prop the engine draws none for — the Terra Sword's boulder, Desert Bloom's cactus.
+    /// One at a time: the ISO's rock-shadow cave (DebugIfCave.RockShadow, in
     /// Draw_MainUnitShadow's pass) draws the frame CodeCaves.RockShadow names with MGDrawShadowFast while its flag is set.
     ///
     /// The frame is a flat unit disc (<see cref="DiscSegments"/> segments, y 0, the fan wound both ways) loaded by LoadMDSFile as a

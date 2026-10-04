@@ -12,7 +12,7 @@ namespace Dark_Cloud_Improved_Version
     ///    `null4` (at the origin): two trees — trunk `cyl28__s` at (0, 8), 51 tall, its crown `ha__a7f`; trunk `cyl283__s` at
     ///    (−10, −11), 72.5 tall, its crown `ha2__a7f` — ten grass sprites `k1__a40by` … `k10__a40by` scattered between them, and a
     ///    50×50 grass square `grid__a7f` at y 0.1 (x −31 … 19, z −26 … 24, centred (−6, −1)) whose mesh is DROPPED (it is textured
-    ///    as Queens' paving; docs/cactus-spike.md, Lessons). More than BladeProp's eight-node cave: the copy goes to its
+    ///    as Queens' paving). More than BladeProp's eight-node cave: the copy goes to its
     ///    large-tree cave;
     ///  · its TEXTURE is e03b04 (the trees and the sprites) of the building bank e03b01.img in gedit\e03\img.pak — 256×256 8-bit.
     ///    The bank handed to the cash holds a <see cref="TexSize"/>² stand-in (nearest texel, CLUT kept, row-major under the IMG

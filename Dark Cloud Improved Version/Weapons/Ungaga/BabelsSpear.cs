@@ -13,8 +13,7 @@ namespace Dark_Cloud_Improved_Version
     /// <see cref="Confusion"/>) until the copy has fully faded after <see cref="SpearSeconds"/>. Once risen it turns on the spot and
     /// its spikes catch what touches it (<see cref="BabelSpikes"/>); the Dark Genie's beam marks the spot (<see cref="BabelBeam"/>);
     /// the wielder's weapon wears the copy's tint through the charge, the stand and the fade. The rise and the spin are the engine's
-    /// own frames (the blade-fall and blade-spin caves). The helpers share this class's members through using static
-    /// (docs/babels-spear.md).</summary>
+    /// own frames (the blade-fall and blade-spin caves). The helpers share this class's members through using static.</summary>
     internal static class BabelsSpear
     {
         private const string Tag = "[Babel] ";

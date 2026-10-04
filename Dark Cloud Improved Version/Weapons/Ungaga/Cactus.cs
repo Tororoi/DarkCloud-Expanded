@@ -4,7 +4,7 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Cactus — "Desert Bloom" (docs/cactus-spike.md): the guard pose held Mirage.GuardChargeMs raises a giant copy of the
+    /// <summary>Cactus — "Desert Bloom": the guard pose held Mirage.GuardChargeMs raises a giant copy of the
     /// cactus out of the floor <see cref="AheadDistance"/> ahead of the wielder, one per hold (a new hold while one stands moves it),
     /// on Babel's Spear's pieces (<see cref="BabelsSpear"/>: the blade-fall, blade-spin and spear-block caves, <see cref="BladeProp"/>).
     /// It rises in a poof of smoke (e228ex on the dead dun/effect/zibaku_t, in the second main-character instance), grows from
@@ -177,7 +177,7 @@ namespace Dark_Cloud_Improved_Version
             try
             {
                 // Ends the moment the active character changes — checked every tick, a menu open or not: the copy's slot is cloned
-                // from this character's objects, which an ally switch reloads under it (docs/cactus-spike.md, Lessons). A Cactus
+                // from this character's objects, which an ally switch reloads under it. A Cactus
                 // sphere on Super Steve keeps Wielded() true across the switch, so the character is what is watched; the thread
                 // starts again for the new one, with its own form.
                 while (Wielded() && Player.InDungeonFloor() && Player.CurrentCharacterNum() == ch)

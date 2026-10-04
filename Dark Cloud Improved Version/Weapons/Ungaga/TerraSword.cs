@@ -15,8 +15,7 @@ namespace Dark_Cloud_Improved_Version
     /// sphere drops a nut (<see cref="KinomiModel"/>) onto the target's head, bonking and confusing it. The fall, the growth, the shadow
     /// and the target's darkening are the engine's own frames (the ISO's fall-drive cave, <see cref="RockFall"/>); this thread sets a
     /// drop up and watches for its landing: the impact is <see cref="RockImpact"/>, the bonk <see cref="NutBonk"/>, the shockwave
-    /// <see cref="Shockwave"/>, the darkening <see cref="TargetDimming"/>, all sharing this class's members through using static
-    /// (docs/terra-sword.md).</summary>
+    /// <see cref="Shockwave"/>, the darkening <see cref="TargetDimming"/>, all sharing this class's members through using static.</summary>
     internal static class TerraSword
     {
         private const string Tag = "[TerraSword] ";
