@@ -98,6 +98,7 @@ namespace Dark_Cloud_Improved_Version
             if (!BorrowedShots.Burst(_lightning, x, h, y, 0, 1f)) return false;   // 1×: the root hold sizes every bolt alike
             MaintainScale();                                                        // …before its first frame
             SeSeq.Play(StrikeSe, 90);
+            GamePad.Knockdown();                                                    // the strike felt in the hands
             BlastFalloff.LastBlast = (x, h, y);
             BlastFalloff.PlantFalloff(x, h, y, noKickSlot: noKickSlot, damageScale: BlastScale, guardBreak: true);   // the bolt crushes any guard (the ISO's guard gate)
             if (bill) WeaponWhp.Drain(weapon, StrikeWhp, "[Zeus] bolt ");   // taken by the engine's own drain, as a landed hit's is (a volley bills once, StrikeNearest)

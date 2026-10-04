@@ -17,6 +17,15 @@ namespace Dark_Cloud_Improved_Version
         internal const int  TimerLarge = 0x3C;
         internal const int  Enabled    = 0x464;  // the player's own vibration option — 0 = off, and SetVibration obeys it
 
+        internal const int KnockdownStrength = 0xE6, KnockdownFrames = 22;   // the engine's knockdown rumble (OpB_DrawProcess)
+        internal const int LightHitStrength  = 0xDC, LightHitFrames  = 12;   // …and its lighter hit
+
+        /// <summary>The engine's knockdown rumble — what a heavy blast landing near the player should feel like.</summary>
+        internal static void Knockdown() => Rumble(KnockdownStrength, KnockdownFrames);
+
+        /// <summary>The engine's light-hit rumble.</summary>
+        internal static void LightHit() => Rumble(LightHitStrength, LightHitFrames);
+
         /// <summary>A shove of rumble on the big motor, if the player has vibration on.</summary>
         internal static void Rumble(int strength, int frames)
         {

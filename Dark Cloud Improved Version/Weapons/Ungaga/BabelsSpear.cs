@@ -50,7 +50,7 @@ namespace Dark_Cloud_Improved_Version
         internal const float SpearTint = 50f;           // the copy's own ambient add, neutral grey (brighter, not coloured)
         private static readonly float[] WeaponTint = { SpearTint, SpearTint, SpearTint };   // the wielder's weapon wears the copy's tint
         private const string ModelCode = "c10w10";      // Babel's Spear
-        private const uint   BladeFrame = 0x77303163;   // 'c','1','0','w' — its mesh frame
+        private const uint   BladeFrame = 0x00303177;   // 'w','1','0',NUL — its mesh frame, w10 (the spears' frames are not named alike: c10w08__m, w09__m, w10)
 
         /// <summary>The effect this weapon wants in the SECOND main-character instance: the Dark Genie's shockwave, whenever
         /// Curse of Babel is wielded (<see cref="Wielded"/>). Handed to BorrowedShots.Start as a provider. Every phase radius is zeroed: the effect is

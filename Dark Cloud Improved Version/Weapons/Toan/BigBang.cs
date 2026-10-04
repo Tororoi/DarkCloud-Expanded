@@ -215,6 +215,7 @@ namespace Dark_Cloud_Improved_Version
                 float x = Memory.ReadFloat(Addresses.dunPositionX), h = Memory.ReadFloat(Addresses.dunPositionZ), y = Memory.ReadFloat(Addresses.dunPositionY);
                 BlastFalloff.LastBlast = (x, h, y);
                 BlastFalloff.PlantFalloff(x, h, y);
+                GamePad.Knockdown();                                        // the blast felt in the hands, as the blade's landing is
                 EnemyFacing.TurnEnemiesToward(x, y);
                 DrainWhp();
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
@@ -351,6 +352,7 @@ namespace Dark_Cloud_Improved_Version
             SunSword.BigBangFlash.ArmLighting();
             SceneLighting.Flash();
             Burst(x, h, y);
+            GamePad.Knockdown();                                        // the blast felt in the hands, as the rock's impact is
             BlastFalloff.PlantFalloff(x, h, y, guardBreak: true);      // the judgement blade's landing crushes any guard (the ISO's guard gate)
             EnemyFacing.TurnEnemiesToward(x, y);
             DrainWhp();

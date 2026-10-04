@@ -23,7 +23,7 @@ around ASQ motions; the impact is `_PLAY_SPECIAL_SE 51` with no camera command n
 VM has no shake command at all (its camera set: `_SET_CAMERA*`, `_ADD_CAMERA_ANGLE/HEIGHT/DIST` 418–420, `_SET_CAMERA_ROLL` 441,
 `_CAMERA_STEP`); the only engine "shake" is controller vibration (`CGamePad::SetVibration` 0x12B940, called by
 `OpB_DrawProcess` when the player is hit: motor 1 at 0xE6/22 frames for a knockdown, 0xDC/12 for a light hit), which the
-impact reuses. A visual shake would be new: a per-frame offset added to the dungeon camera (`NowCamera` 0x202A3498) in the
+impact reuses as `GamePad.Knockdown` (Big Bang's landing and Zeus's bolts share it; Xiao's plain bombs take `GamePad.LightHit`). A visual shake would be new: a per-frame offset added to the dungeon camera (`NowCamera` 0x202A3498) in the
 camera-pin cave at the end of the camera pass, the mod writing a decaying jitter into a mailbox word.
 
 ## The rock's shadow (ISO: the rock-shadow cave) — `GroundShadow`

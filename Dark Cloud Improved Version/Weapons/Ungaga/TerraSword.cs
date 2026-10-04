@@ -46,7 +46,6 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly float KickStrength = (float)(Math.Sqrt(2.0) * BlastFalloff.KickStrength);   // twice Big Bang's throw distance (distance ≈ force²/(2·decay)): 4.95
         internal const float KickDecay       = BlastFalloff.KickDecay;
         private const float  ImpactWhp       = 10f;
-        private const int    RumbleStrength  = 0xE6, RumbleFrames = 22;   // the engine's knockdown rumble (OpB_DrawProcess)
         // syougekiha's one KEY (its cfg): frames 2–31 at 0.5.
         private const string ShockName       = "syougekiha";
         private const int    ShockTemplate   = 5;                   // a stock config's shape; the name and motions are replaced
@@ -282,7 +281,7 @@ namespace Dark_Cloud_Improved_Version
             Solid();
             Blast();
             ShockPlay();
-            GamePad.Rumble(RumbleStrength, RumbleFrames);
+            GamePad.Knockdown();
             WeaponWhp.Drain((ushort)Items.terrasword, ImpactWhp, Tag + "impact ");
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"impact at ({_x:F0},{_ground:F0},{_y:F0})");
         }

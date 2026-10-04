@@ -263,6 +263,7 @@ namespace Dark_Cloud_Improved_Version
                         {
                             f.BurstShown = true; f.EndedAt = GameClock.Now;
                             BombFx.Spawn(f.X, f.H, f.Y, PelletFxScale, ringRadius: 0f);
+                            GamePad.LightHit();
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"plain bomb bursts at ({f.X:F0},{f.H:F0},{f.Y:F0})");
                         }
                         bool planted  = Memory.ReadByte(inst + ShotEffectPack.OffLatch + f.Sub) != 0;
@@ -287,7 +288,7 @@ namespace Dark_Cloud_Improved_Version
                 EndFlight(f);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{(f.Kind == Shot.Bomb ? "charged" : "plain")} bomb bursts at ({f.X:F0},{f.H:F0},{f.Y:F0})" + (live ? " on contact" : " where it died"));
                 if (f.Kind == Shot.Bomb) Blast(f.X, f.H, f.Y, BombFxScale, BombDamage, KickFor(BombKick), BombReach, flash: false, ring: true);
-                else BombFx.Spawn(f.X, f.H, f.Y, PelletFxScale, ringRadius: 0f);              // a plain shot flying as a pellet (no apple shot entered): the visual alone
+                else { BombFx.Spawn(f.X, f.H, f.Y, PelletFxScale, ringRadius: 0f); GamePad.LightHit(); }              // a plain shot flying as a pellet (no apple shot entered): the visual alone
             }
         }
 
@@ -299,6 +300,7 @@ namespace Dark_Cloud_Improved_Version
         {
             BlastFalloff.LastBlast = (x, h, y);
             BombFx.Spawn(x, h + fxLift, y, fxScale, ringRadius: ring ? BlastFalloff.BlastRadius * reach : 0f);
+            GamePad.Knockdown();
             BlastFalloff.PlantFalloff(x, h, y, damageScale: damage, kickScale: kick, reachScale: reach);
             EnemyFacing.TurnEnemiesToward(x, y);
             if (flash) SunSword.FlashAt(BigBangShot.FlashProfile, x, h, y, _planted);
