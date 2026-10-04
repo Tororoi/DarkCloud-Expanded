@@ -56,8 +56,18 @@ STUBS = [
     ('cat_guard_bypass.s',       'catGuardBypass.bin',       0x1DAC070),   # dun.bin: MemoryMapDump's body (DunPatches writes it)
     ('borrowed_shots_enter.s',   'borrowedShotsEnter.bin',   0x1FB1ED0, 'borrowedShotsEnterTail.bin', 0x1FB3F40),
     ('shared_shots.s',           'sharedShots.bin',          0x1B3788),    # main ELF: DebugInfomationDraw's body + 8 (ElfPatches.PatchSharedShots)
-    ('pellet_sprite.s',          'pelletSprite.bin',         0x1B42C0),    # main ELF: DebugInfomationDraw's body, after sharedShots (ElfPatches.PatchPelletSprite)
     ('steel_level_up.s',         'steelLevelUp.bin',         0x1B42E0),    # main ELF: DebugInfomationDraw's body, after pelletSprite (ElfPatches.PatchSteelLevelUp)
+    ('circle_effects.s',         'circleEffects.bin',        0x1B47C8),    # main ELF: DebugInfomationIF's body + 8 (ElfWeaponPatches.PatchCircleEffects); dun.bin's Run_TrapCircle jumps here
+    ('spear_block.s',            'spearBlock.bin',           0x1B5030),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchSpearBlock): a solid sphere for enemies (Babel's spear)
+    ('player_spear_block.s',     'playerSpearBlock.bin',     0x1B5260),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchSpearBlock): the same sphere, solid to the player
+    ('shot_spear_block.s',       'shotSpearBlock.bin',       0x1B5350),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchSpearBlock): the same column stops enemy shots
+    ('rock_shadow.s',            'rockShadow.bin',           0x1B5460),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchRockShadow): the Terra Sword boulder's shadow
+    ('fall_drive.s',             'fallDrive.bin',            0x1B54B0),    # main ELF: DebugInfomationIF's body (ElfWeaponPatches.PatchFallDrive): the blade fall's mode 4
+    ('guard_crush.s',            'guardCrush.bin',           0x1B4650),    # main ELF: DebugInfomationDraw's free tail (ElfWeaponPatches.PatchGuardCrush): crush-marked hits pass guard windows
+    ('guard_mask.s',             'guardMask.bin',            0x1B4390),    # main ELF: DebugInfomationDraw's body after steelLevelUp — the guard gate's per-enemy window mask (ElfWeaponPatches.PatchGuardMask)
+    ('confuse_name.s',           'confuseName.bin',          0x1B561C),    # main ELF: DebugInfomationIF's tail after fallDrive — ability bit 14's name (ElfWeaponPatches.PatchConfuseAbility)
+    ('confuse_proc.s',           'confuseProc.bin',          0x22B248),    # main ELF: dead DebugItemGetKey's body — the Confuse ability's on-hit roll (ElfWeaponPatches.PatchConfuseProc)
+    ('follow.s',                 'follow.bin',               0x1B4690),    # main ELF: DebugInfomationDraw's free tail (ElfWeaponPatches.PatchFollow): a point carried with a unit
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]

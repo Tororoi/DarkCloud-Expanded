@@ -9,7 +9,7 @@
 # state machine below on chara slot 1 (the cat copy, resident and hidden until bound). The mod arms it, times the
 # landing pause (state 5 → 6) and ends the run; everything per-frame is here.
 #
-# STATES (Mailbox.CatState +0x98):
+# STATES (CatBlock.CatState +0x98):
 #   0 idle   3 waiting (armed: bind the next NEW pellet)   1 following the pellet (growing)   2 pellet ended early
 #   4 falling (broke away at full size)   5 landing (land clip playing; momentum until the paws touch)   6 running
 #   10 ready (in place)   7 take-off (in place until CatRampStart, then forward momentum ramps to full by CatRampEnd)
@@ -17,7 +17,7 @@
 #   Flying targets (target height − floor > CatFlyThreshold): straight from the ready into the ballistic arc of state 4
 #   (vh = Δh/T + g·T/2) in the float-up pose (CatFloatKey, +0x154) until the apex, the fall pose after — the town
 #   ladder jump's ready → vertical leap → fall → land sequence.
-# MAILBOX (the cat's own block at guest 0x01FB4000 + the offsets below — CodeCaveAddresses.Mailbox.CatBase. The
+# MAILBOX (the cat's own block at guest 0x01FB4000 + the offsets below — CodeCaveAddresses.CatBlock.CatBase. The
 # offsets start at 0x94 for historical reasons; ⚠ they must NOT be read from the PNACH mailbox page, whose 0x100+
 # span is the AI-stub table. $t0 = 0x01FB0000, offsets 0x40xx.):
 #   +0x94 CatPelletSlot int  bound pellet slot + 1 (0 = none; page boots zero-filled)      +0x9C CatGrowFrames int
@@ -1235,6 +1235,9 @@ lw    $t5, 0x41D8($s0)
 sw    $t5, 0x0094($t7)         # kick decay
 addiu $t5, $zero, 2
 sw    $t5, 0x0098($t7)         # kick type 2 = melee-style → the patched flinch rule lets it stagger
+lui   $t5, 0x4B49
+ori   $t5, $t5, 0x5243
+sw    $t5, 0x009C($t7)         # CodeCaves.CrushMark "CRIK": the guard gate (guard_crush.s) lets it through every guard window
 # ── acceptance sentinel: CheckDmg writes the hit sphere's index into the victim's +0x55750 ONLY on an accepted hit (after
 # the guard/invincibility gates); an entry can vanish without one (`_STATUS_SET_MUTEKI` skips the whole test — a mimic
 # wakes with 100 frames of it). −1 into every slot's word now; the mod reads them back when the entry is gone.

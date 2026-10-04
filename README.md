@@ -139,6 +139,19 @@ Power/testing tools kept out of normal play:
 
 ---
 
+## Developer tooling
+
+Not player-facing; listed so contributors know what exists.
+
+- **Ghidra EE decompiler toolchain** (`tools/ghidra/`) — one-command decompilation of the game's PS2 EE code (`decompile.sh main|dun "<function>"`), symbol export/apply scripts, and an xref finder. The game ELF ships a full demangled C++ symbol table (`symbols.txt`).
+- **Code cave scanner** (`Dev/CodeCaveScanner.cs` + `tools/find_code_caves.py`, runs only with `DebugDiagnostics.Enabled`) — background sweeps of EE RAM across sessions to find provably-unused regions for the mod's injected bytecode; findings accumulate in `CodeCaveFindings.txt`. Proven caves and mod cave layout live in `Addresses/CodeCaveAddresses.cs`.
+- **Georama probe** (`GeoramaProbe.cs`) — read-only dumper of town Georama parts, water surfaces, event points, and fishing-sign parameters, supporting the custom-fishing-spot research (`docs/custom-fishing-spot.md`).
+- **Asset tools** (`tools/`) — `.mes` menu-text decoder, TIM2/`.mds` surgery scripts, and generators for the motion/tile/model reference tables in `docs/`.
+- **Docs library** (`docs/`) — new reverse-engineering references: game damage formulas, per-attack enemy damage/guard tables, enemy & character motion tables, chest loot tables, dungeon tile grid, code caves, cave code execution, orphaned enemy models, and more. Existing root-level docs moved into `docs/`.
+- **Reusable effect primitives** — general building blocks for future weapon effects: elemental gem bursts at any point/scale (`GemBurst.cs`), engine-drawn copies of any rigid model (`BladeProp.cs`, `CashModel.cs`), falloff blasts with knockback (`BlastFalloff.cs`), engine-stepped vertical drives for dropped or rising props (`VerticalDrive.cs`), the shared enemy target table (`AggroTable.cs`), screen-space heat shimmer (`HeatHaze.cs`), glowing motion trails (`TrailRibbon.cs`), and a full player-clone renderer (`CharacterClone.cs`).
+
+---
+
 ## Testing Needed
 
 ### Platform
@@ -167,6 +180,7 @@ Power/testing tools kept out of normal play:
 - [ ] **Tsukikage (Moonlit Focus)** — Lunge charge ready in ~0.25s, whirlwind in ~0.75s; verify Heaven's Cloud inherits it
 - [ ] **Heaven's Cloud (charge scale)** — Hold the whirlwind charge: blade grows up to 3× with a flash at max; whirlwind reach matches the grown blade
 - [ ] **Sun Sword (Solar Harvest)** — Kill many enemies with Sun Sword or Big Bang wielded; confirm occasional (1%) Sun attachment drops
+- [ ] **Sun Sword (Solar Flash)** — Hold guard ~1.5 s: blade brightens, gold glow grows in over the last 0.25 s and is full exactly as the charge primes (release guard early: glow goes with it). Next swing floods the room warm gold-white (light fades over 5 s, fog over 1 s) and hits everything within 300 u. Whole floor stops: guard raised where the species has one, idle otherwise; each lowers its guard on its own clip's length before acting. Guards do not block during the flash — a hit staggers, then the enemy returns to guarding. No re-charging until the flash ends; an unused charge dissipates after 10 s. Mimics included, bosses excluded. Watch for: sliding, scripts left patched after a floor change, and the memory-card crash (restoring a reloaded script) that the ownership check guards
 - [ ] **Big Bang (Detonate)** — Hits explode with fireball + shockwave; nearby enemies take real splash damage and knockback; chained kills also explode
 - [ ] **Buster Sword (Buster Boost)** — Attach an anti-category attachment: value counts as +4 in menu stats, damage, evolution, and absorb
 - [ ] **Cross Hinder (Sanctifier)** — ~2× damage and ~2× ABS vs undead; undead killed by it never revive

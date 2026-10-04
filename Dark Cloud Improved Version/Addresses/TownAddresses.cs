@@ -1,12 +1,10 @@
+// Town / Georama editor address bank: the runtime state parsed out of gedit\<town>\mapinfo.cfg (EditInfo — part
+// definitions, placed parts, animated water surfaces, texture banks), CEditGround / CEditArea / CMapParts, the EditLoop
+// globals, the Georama tables, event points, villagers, the running event id, the BG file reader and the town's event.stb.
+// All vanilla; see docs/custom-fishing-spot.md for how these fit together. Cameras: DungeonAddresses.cs; fishing line/pool:
+// FishingAddresses.cs; the town script VM object (RunScript): StbAddresses.cs.
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>
-    /// The town / Georama editor's runtime state: the part definitions parsed out of
-    /// <c>gedit\&lt;town&gt;\mapinfo.cfg</c>, the placed parts, the animated water surfaces, and the
-    /// texture banks the town loaded.
-    ///
-    /// All vanilla. See docs/custom-fishing-spot.md for how these fit together.
-    /// </summary>
     /// <summary>Town map numbers (EditLoop.MapNo values) the mod branches on. See docs/town-event-labels.md.</summary>
     internal static class TownMapNo
     {
@@ -358,7 +356,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The player's TOWN world position (x, y, z), via <see cref="CharaPtr"/> — the
         /// pointer-chase the (since retired) GeoramaProbe validated live. Pattern moved here so every feature that
         /// needs the town player's world position (CustomFishingSpot, CanalTide, …) shares ONE correct
-        /// read instead of re-deriving it (or worse, reaching for <c>Player.positionX/Y/Z</c> —
+        /// read instead of re-deriving it (or worse, reaching for <c>PlayerAddresses.PositionX/Y/Z</c> —
         /// the retired GeoramaProbe's doc comment on <see cref="CharaPosition"/> explains why those mislead: a
         /// live reading showed the triple tracking EDITAREA base heights, not the player).
         /// ⚠ This is TOWN-ONLY. Do not reuse in a dungeon context (see <c>Addresses.dunPositionX/Y/Z</c>
@@ -391,36 +389,6 @@ namespace Dark_Cloud_Improved_Version
     /// (0x158D80) both start with <c>if (map &lt; 0 || 5 &lt; map) return NULL;</c>. All six slots are
     /// populated in the retail build, so there is no free slot for a seventh Georama town.
     /// </summary>
-    /// <summary>
-    /// The live town follow-camera (CCameraFollow), reached through the ELF's camera POINTER —
-    /// resolves to <see cref="EditLoop.MainCamera"/> while walking/fishing. One home for the
-    /// pointer and the Step-consumed field offsets (previously re-declared per feature file).
-    /// </summary>
-    internal static class FollowCamera
-    {
-        /// <summary>Pointer to the active CCameraFollow.</summary>
-        internal const long Ptr = 0x21D19678;
-
-        internal const int RefX = 0x2C0;       // ref (look-at) xyz used by Step
-        internal const int RefY = 0x2C4;
-        internal const int RefZ = 0x2C8;
-        internal const int Dist = 0x2D0;
-        internal const int Height = 0x2D4;
-        internal const int Angle = 0x2D8;      // target yaw (== EditLoop.CameraAngle)
-        internal const int AngleNow = 0x2DC;   // smoothed yaw (== EditLoop.CameraAngleNow)
-
-        /// <summary>The per-frame camera-collision gather arena struct pointer
-        /// (WorkBuffer: {+0 data, +8 used, +C cap}) — see TownCameraPolyBuffer.</summary>
-        internal const long WorkBufferPtr = 0x202A2388;
-
-        /// <summary>The camera object as an MMU address, or 0 if the pointer isn't live.</summary>
-        internal static long Base()
-        {
-            uint p = Memory.ReadGuestPtr(Ptr);
-            return Memory.IsValidGuest(p) ? Memory.ToMmu(p) : 0;
-        }
-    }
-
     internal static class GeoramaTables
     {
         internal const long EditPartsData   = 0x202540D0; // 6 maps x 25 parts x 188 B = 28,200
@@ -590,22 +558,6 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
-    /// The town's loaded <c>event.stb</c> — the script the event points run.
-    ///
-    /// <c>LoadScript</c> does <c>EdEventData = EdScriptBuffer; LoadFile2(dir + "event.stb", EdEventData, ...)</c>,
-    /// so <see cref="EdEventData"/> is a pointer straight at the STB image in RAM. The mod already patches STB
-    /// bytecode elsewhere (HarderEnemyAI), and the VM is fully reverse-engineered, so injecting a fishing
-    /// sequence here is tractable — see docs/custom-fishing-spot.md.
-    ///
-    /// Header (12-byte vmcodes; label table of {id, codeOffset} pairs):
-    /// <code>
-    /// +0x08  u32  codeBase
-    /// +0x0C  u32  labelTableOffset
-    /// +0x10  u32  labelCount
-    /// label[i] = { u32 id, u32 codeOffset }   // the code itself starts at codeOffset + 8
-    /// </code>
-    /// </summary>
-    /// <summary>
     /// The background (disc) file reader. <c>_LOAD_ITEM_FILE</c> issues <c>LoadFileBG</c> reads and returns
     /// immediately; <c>_LOAD_ITEM</c> then builds an item frame from the buffer — and if the read has not
     /// landed, it builds one out of nothing and the game dies calling through a garbage pointer
@@ -624,94 +576,6 @@ namespace Dark_Cloud_Improved_Version
     /// <c>entry[2]</c> is the only honest completion flag, and it is what the mod polls to release a script
     /// waiting on a load — instead of guessing at a frame count, which is a race that crashes when lost.
     /// </summary>
-    /// <summary>
-    /// The villager/fishing memory pool — a <c>CDataAlloc2</c> bump allocator (base, used, capacity), all
-    /// counts in 0x10-byte blocks. <c>Alloc</c> hangs (<c>while(true)</c>) if <c>used + size &gt; capacity</c>.
-    ///
-    /// This is the pool <c>_LOAD_MAIN_CHARA(turi, flag=1)</c> AND <c>_LOAD_FISHING_DATA</c> allocate from, so
-    /// the 1.73 MB fishing model has to fit here. <c>_CLEAR_VILLAGER_BUFF</c> recomputes
-    /// <c>capacity = BaseBuffer.capacity - BaseBuffer.used</c> — i.e. whatever the parent buffer has free —
-    /// so a town with more resident data gets a SMALLER fishing pool. Reading this tells us whether the model
-    /// fits, instead of finding out by crashing.
-    /// </summary>
-    // NOTE: the fish depth is NOT patched in code (FishingInitFish's inline `lui r2,0x4140` = 12.0). Patching
-    // that just-JIT'd fishing instruction crashes PCSX2; shallow fishing moves the fish by a data write to the
-    // fish-slot Y instead (FishingCollision.ApplyFishDepth). See FishLineShallow below.
-
-    /// <summary>
-    /// Shallow-hook via the fishing line's BOBBER ANCHOR, done recompiler-safely.
-    ///
-    /// The bobber (uki) binds to main-line point[18] in six FishLineStep instructions (`lui $2,0x1d5;
-    /// addiu $reg,$2,0x5f50`). Moving it toward the hook (point 23) shortens the below-water run so the hook
-    /// rests shallower with the line length (cast reach) unchanged. But patching those instructions directly
-    /// crashes PCSX2 once a prior fishing session has JIT-compiled FishLineStep (writing hot code). So instead:
-    ///
-    ///  (1) ONCE, in the COLD window (ApplyNewChanges, before any fishing), rewrite the six sites in place to
-    ///      `lui $reg,0x01FB; lw $reg,0x4000($reg)` — i.e. LOAD the bobber's point address from a mod global
-    ///      at game-addr 0x01FB4000 instead of computing point[18]. Rewriting cold code is safe.
-    ///  (2) Per town, a pure DATA write to that global selects the anchor: point[18] (vanilla) or point[20]
-    ///      (shallow). No further code writes, so no recompiler hazard.
-    ///
-    /// $2 is throwaway at every site (recomputed per address), so clobbering it is safe. See
-    /// the fishing engine RE notes §fishing-line.
-    ///
-    /// ⚠ RETIRED (2026-08): the anchor toggle is GONE. The ISO split caves (IsoPatcher.PatchFishLineSplit)
-    /// bake the above/below rest-length cutover at FIXED A=18 and hook depth is now the distpBelow data word
-    /// (CodeCaves.Mailbox.LineDistpBelow), so the cold patch is NO LONGER INSTALLED — the vanilla
-    /// instructions already compute point[18]. The Sites/NewLui machinery survives only so a mod RELAUNCH
-    /// against an already-patched game can detect the leftover patch and pin BobberPtr back to point[18]
-    /// (un-patching possibly-JIT'd code is the hot-write crash). DistpAddr/VanillaDistp remain live — they
-    /// are the split's distpAbove side. See the fishing-line split feasibility notes.
-    /// </summary>
-    internal static class FishLineShallow
-    {
-        internal const long BobberPtr    = 0x21FB4000;   // mod view of the global; game reads game-addr 0x01FB4000
-        // Anchor address for point index i = PointVanilla + (i-18)*0x10 (the line's points are 16B vec4s).
-        // ⚠ Prose around the codebase used to call the shallow anchor "point 21" — 0x5F70 is point **20**
-        // (0x5F80 would be 21). These addresses are authoritative.
-        internal const uint PointVanilla = 0x001D55F50;  // point[18] — the vanilla bobber anchor
-        internal const uint PointShallow = 0x001D55F70;  // point[20] — shallow anchor (Brownboo)
-        internal const uint PointStride  = 0x10;         // per-point stride, for picking another index
-
-        /// <summary>Address of main-line point[<paramref name="index"/>], for anchoring the bobber anywhere
-        /// along the line. Valid range is 18..22 — the HOOK lives at point 23, so the anchor must stay above
-        /// it (fewer points between anchor and hook = shallower resting hook).</summary>
-        internal static uint PointAt(int index) => PointVanilla + (uint)((index - 18) * (int)PointStride);
-
-        // Line LENGTH lever (separate from the bobber anchor): distp = the per-segment rest length of the
-        // 24-point Verlet line, a plain .data float read every frame by FishLineInit/FishLineStep — a pure
-        // data write is recompiler-safe. Scaling it stretches the WHOLE line (cast reach AND hang depth), so
-        // a spot over low water (Queens canal) can reach the surface. Restore to vanilla off-session.
-        internal const long  DistpAddr    = 0x202A1FA4;
-        internal const float VanillaDistp = 1.6666666f;   // 5/3 (read from SCUS_971.11 .data)
-
-        // Each site: (lui addr, addiu/lw addr, dest reg). reg = the original addiu's target ($4 or $5).
-        internal static readonly (long lui, long ld, int reg)[] Sites =
-        {
-            (0x201AA464, 0x201AA468, 5),
-            (0x201AA478, 0x201AA47C, 5),
-            (0x201AA954, 0x201AA958, 5),
-            (0x201AA9B4, 0x201AA9B8, 4),
-            (0x201AA9BC, 0x201AA9C0, 5),
-            (0x201AAB30, 0x201AAB34, 4),
-        };
-
-        internal const uint OrigLui = 0x3C0201D5;                                  // lui $2, 0x1d5
-        internal static uint OrigAddiu(int reg) => 0x24025F50u | ((uint)reg << 16); // addiu $reg,$2,0x5f50
-        internal static uint NewLui(int reg)    => 0x3C0001FBu | ((uint)reg << 16); // lui $reg, 0x01FB
-        internal static uint NewLw(int reg)     => 0x8C004000u | ((uint)reg << 21) | ((uint)reg << 16); // lw $reg,0x4000($reg)
-    }
-
-    internal static class FishingPool
-    {
-        internal const long Base     = 0x21D1B360;   // guest pointer to the pool memory
-        internal const long Used     = 0x21D1B368;   // blocks in use (x0x10 = bytes)
-        internal const long Capacity = 0x21D1B36C;   // block capacity (x0x10 = bytes)
-        internal const int  BlockSize = 0x10;
-
-        internal const int TuriModelBytes = 1814240; // chara/c01d_turi.chr — must fit
-    }
-
     internal static class BgRead
     {
         internal const long Table  = 0x21CBB0C0;   // bg_read_info
@@ -726,22 +590,21 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
-    /// The event script's VM object (ELF <c>CRunScript</c>) — <c>EdEventInit</c> calls
-    /// <c>reload__10CRunScript(0x1d4a430, ...)</c>. <c>exe()</c> reads the running frame's LOCAL VARIABLE
-    /// array from <c>this + 0x28</c>, so that is how the mod reaches a script's locals: each is an
-    /// 8-byte RS_STACKDATA of {type, value}, and type 1 = int.
+    /// The town's loaded <c>event.stb</c> — the script the event points run.
+    ///
+    /// <c>LoadScript</c> does <c>EdEventData = EdScriptBuffer; LoadFile2(dir + "event.stb", EdEventData, ...)</c>,
+    /// so <see cref="EdEventData"/> is a pointer straight at the STB image in RAM. The mod already patches STB
+    /// bytecode elsewhere (HarderEnemyAI), and the VM is fully reverse-engineered, so injecting a fishing
+    /// sequence here is tractable — see docs/custom-fishing-spot.md.
+    ///
+    /// Header (12-byte vmcodes; label table of {id, codeOffset} pairs):
+    /// <code>
+    /// +0x08  u32  codeBase
+    /// +0x0C  u32  labelTableOffset
+    /// +0x10  u32  labelCount
+    /// label[i] = { u32 id, u32 codeOffset }   // the code itself starts at codeOffset + 8
+    /// </code>
     /// </summary>
-    internal static class RunScript
-    {
-        internal const long Object   = 0x21D4A430;
-        internal const int  VarsBase = 0x28;
-
-        internal const int VarStride = 8;
-        internal const int VarType   = 0;
-        internal const int VarValue  = 4;
-        internal const int TypeInt   = 1;
-    }
-
     internal static class TownScript
     {
         /// <summary>ELF <c>EdEventData</c> — native ptr to the loaded event.stb image.</summary>
@@ -770,6 +633,32 @@ namespace Dark_Cloud_Improved_Version
             uint p = Memory.ReadGuestPtr(EdEventData);
             return Memory.IsValidGuest(p) ? Memory.ToMmu(p) : 0;
         }
+    }
+
+    /// <summary>Town villager (NPC) globals the fishing feature suspends for a session, to stop the
+    /// freed-villager crash/flicker (see CustomFishingSpot villager-hide).</summary>
+    internal static class Villagers
+    {
+        // The event-mode NPC stepper (EdEventNPCStep 0x1987D0) loops `for i < Count`; the town's villager clear
+        // must pair with suspending this count. Zeroing it for the fishing window covers every event-mode
+        // villager iterator (EdEventNPCStep, EdEventMode, GetNPC/GetChara).
+        internal const long Count = 0x21D3D3C8;    // ELF DAT_01d3d3c8 — live NPC count
+
+        // Villager DRAW (EdDrawCharacter 0x1725F0) is called from MainDraw with a HARDCODED count of 10, so the
+        // Count knob does NOT cover it. CheckDraw__12CNPCharacter (0x156670) draws a slot only when its draw
+        // flag @ +0x146C != 0. The objects live at a FIXED base (stride 0x14A0) the model load does NOT
+        // overwrite — only the VISUAL sub-object they point to (+0xA0) is freed; dispatching its vtable (+0xAC)
+        // through the garbage pointer is the recLUT crash. Zero the fixed draw flags and CheckDraw returns 0.
+        internal const long ObjBase   = 0x21D25B90;
+        internal const int  ObjStride = 0x14A0;
+        internal const int  DrawFlag  = 0x146C;
+        internal const int  DrawSlots = 10;        // MainDraw's hardcoded EdDrawCharacter count
+    }
+
+    /// <summary>The running-event id, set by EdEventInit before the enter script's fade + loads.</summary>
+    internal static class EditEvent
+    {
+        internal const long Info = 0x21D3D1D0;     // ELF 0x1d3d1d0 — running-event id
     }
 
     /// <summary>

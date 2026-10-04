@@ -1,3 +1,5 @@
+// Item address bank: the static per-item ELF tables (PriceList, ComItemInfo, ITEM_NAME_TBL_NEW, the per-dungeon drop-rate
+// lists and floor drop pools) under ItemAddresses, plus the dungeon's thrown-item / bomb-effect objects (ItemModels).
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
@@ -202,5 +204,28 @@ namespace Dark_Cloud_Improved_Version
         /// per-item static data are PriceList, ComItemInfo, ITEM_NAME_TBL_NEW, and the rate lists.
         /// </summary>
         internal static class ItemStaticTable { /* intentionally empty — see summary */ }
+    }
+
+    /// <summary>The thrown-item and bomb-effect objects (dungeon).</summary>
+    internal static class ItemModels
+    {
+        internal const long ItemModelPtr     = 0x21EC78A8;   // → CMainItemModel: cash roots at +0 (6), item ids +0x18, refcounts +0x30, model states +0x48 (16), model cash idx +0x88
+        internal const int  CashCount = 6, CashRootOffset = 0x00, CashItemOffset = 0x18, CashRefOffset = 0x30;
+        /// <summary>Each cash entry's allocator, a CDataAlloc2 (BtItemCashArea + i·0x10): +0 base, +8 units used, +0xC capacity (16-byte
+        /// units; Alloc hangs forever on an overrun). SetCashModel loads the entry's texture copy and model into it.</summary>
+        internal const long CashAllocBase    = 0x21F067E0;
+        internal const int  CashAllocStride  = 0x10, CashAllocUsed = 0x8, CashAllocCap = 0xC;
+        /// <summary>LoadMDSFile(mds, allocator, kind, 0, 0) → the root frame: kind 0 a lit model (SetCashModel's), 8 a SHADOW model
+        /// (CommandSHADOW_MODEL's: CVisualShadow visuals, which MGDrawShadowFast draws).</summary>
+        internal const uint LoadMDSFile      = 0x001262B0;
+        internal const uint MdsKindShadow    = 8;
+        internal const uint SetCashModel     = 0x001D45E0;   // SetCashModel(this, itemId, mds, img, imgSize): loads the model + its texture block (0x38 + cash idx)
+        internal const long MenuBufferPtr    = 0x202A2CD4;   // gp−0x6B1C: the item menu's read buffer, where it loads item models (mds at +0, img at +0xFA10) — allocated only while a menu is open (0 in play); ShotEffectPack.ReadBufferPtr is the loader's, idle between floor loads
+        internal const int  MenuBufferImgOffset = 0xFA10;
+        internal const int  BombItemId = 159;                // "bakudan"
+        internal const long BombEffectPtr    = 0x202A35E4;   // gp−0x620C → CItemBombEffect[3], 0xC0 each: 5 sprites (pos +i*0x10, spread +0x50, delay +0x64, size +0x78, alpha +0x8C, live +0xA0), scale +0xB4
+        internal const long ShockWavePtr     = 0x202A35E8;   // gp−0x6208 → the blast ring (pos +0, +0xC 1.0, +0x10/+0x14 radius, +0x1C, +0x28 on)
+        internal const int  BombSlots = 3, BombSlotStride = 0xC0;
+        internal const ushort BombSe = 0x6C;
     }
 }

@@ -136,6 +136,44 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
+        /// <summary>The copy as a STATUE (Super Steve's Curse of Babel): world-rooted like the projectile, but left whole — no
+        /// pouch re-path, not re-centred on the pouch. Upright is the projectile's own pose (<see cref="ProjectilePreset"/>: fork up,
+        /// the root's rotation folded into its children) — nothing more is turned: a world-rooted copy KEEPS its root's 3×3 under the
+        /// slot's yaw, so a turn written there laid it down, and the shield's preset stood it upside down. The slot position is
+        /// the model origin. Placed with <see cref="PlaceProjectile"/> / <see cref="SetHeight"/>; its
+        /// yaw is left to whoever turns slot 3 (the blade-spin cave). Drawn under <paramref name="tint"/> over <paramref name="dim"/>.</summary>
+        internal static bool SpawnStatue(float scale, float[] tint, float dim)
+        {
+            if (Active) return true;
+            _projectile = true; _tint = tint; _dim = dim;
+            _scale = scale; _up = 0f; _ahead = 0f; _pull = 0f;
+            _orbit = 0f;
+            Memory.WriteInt(Mailbox.PropFollowSlot, 0);                   // no pellet carries it: the Matador's follower off
+            if (!CopyTree() || !CopyMesh() || !RegisterSlot()) return false;
+            long s = SlotAddr();
+            Memory.WriteVec3(s + CCharacter.CharRot, 0f, 0f, 0f);
+            _key = KeyIdle;
+            Active = true;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"statue copy up (x{scale}, slot {Slot}), upright; her slingshot untouched");
+            return true;
+        }
+
+        /// <summary>A world-rooted copy's ground position alone (the slot's position X and Y) — its height and yaw left as they are.</summary>
+        internal static void SetXY(float x, float y)
+        {
+            if (!Active || !_projectile) return;
+            long s = SlotAddr();
+            Memory.WriteFloat(s + CCharacter.CharPos, x);
+            Memory.WriteFloat(s + CCharacter.CharPos + 8, y);
+        }
+
+        /// <summary>A world-rooted copy's height alone (the slot's position Y) — its x/y and yaw left as they are.</summary>
+        internal static void SetHeight(float h)
+        {
+            if (!Active || !_projectile) return;
+            Memory.WriteFloat(SlotAddr() + CCharacter.CharPos + 4, h);
+        }
+
         /// <summary>Wanted orbit bearing (radians) relative to her facing: the copy sits <c>ahead</c>
         /// units out along it and faces along it. 0 = straight in front of her. The orbit thread
         /// eases the live bearing (<see cref="Orbit"/>) toward it at frame rate.</summary>
@@ -213,6 +251,23 @@ namespace Dark_Cloud_Improved_Version
             h = Memory.ReadFloat(n + CFrameVu1.WorldMatrix + 0x34);
             y = Memory.ReadFloat(n + CFrameVu1.WorldMatrix + 0x38);
             return !(float.IsNaN(x) || float.IsNaN(h) || float.IsNaN(y)) && !(x == 0f && h == 0f && y == 0f);
+        }
+
+        /// <summary>A point in the frame of the copy's eff30 (the fork's centre bone, which the engine poses every frame) in world
+        /// space, through that bone's world matrix as last drawn (row vectors: p · M, its scale included); false until drawn. (The
+        /// skinned mesh node's own matrix is not kept current for the copy — a point taken through it lost the turn and collapsed
+        /// across the fork.)</summary>
+        internal static bool MuzzlePointWorld(float lx, float ly, float lz, out float x, out float h, out float y)
+        {
+            x = h = y = 0f;
+            if (!Active || !Memory.IsValidGuest(_muzzleGuest)) return false;
+            byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(_muzzleGuest) + CFrameVu1.WorldMatrix, 0x40);
+            if (b == null) return false;
+            float M(int k) => BitConverter.ToSingle(b, k * 4);
+            x = lx * M(0) + ly * M(4) + lz * M(8)  + M(12);
+            h = lx * M(1) + ly * M(5) + lz * M(9)  + M(13);
+            y = lx * M(2) + ly * M(6) + lz * M(10) + M(14);
+            return !(float.IsNaN(x) || float.IsNaN(h) || float.IsNaN(y)) && !(M(12) == 0f && M(13) == 0f && M(14) == 0f);
         }
 
         /// <summary>The copy's eff30 in world space — the fork's muzzle, where her own pellets leave from.</summary>
@@ -316,7 +371,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (s + DungeonCharaDraw.CharaRampB, 0);
             Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 1);
             Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)Slot * 4, Held ? 1 : 0);
-            Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 1);            // scene + chara step unlocked
+            Memory.WriteInt  (Mailbox.MirageSceneGate, 1);            // scene + chara step unlocked
             if (_projectile) return;
             long r = Memory.ToMmu(_rootGuest);
             if ((Memory.ReadGuestPtr(r + CFrameVu1.Parent)) != _playerRoot)
@@ -332,7 +387,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (s + DungeonCharaDraw.CharaActive, 0);
             Memory.WriteInt  (s + DungeonCharaDraw.CharaMotionA, 0);
             Memory.WriteFloat(s + CCharacter.NpcOpacity, 0f);
-            Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 2);            // restore vanilla gates
+            Memory.WriteInt  (Mailbox.MirageSceneGate, 2);            // restore vanilla gates
             Active = false;
             _orbit = 0f; _projectile = false;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "weapon copy down");
@@ -611,10 +666,7 @@ namespace Dark_Cloud_Improved_Version
         private static uint TrackCaveGuest => (uint)(CodeCaves.MeshCaveGuest + CodeCaves.MeshCaveSize - TrackCaveSize);
         private static long KeyTableCave      => TrackCave + 0x800;          // top half of the TrackCave (tracks use < 0x800)
         private static uint KeyTableCaveGuest => TrackCaveGuest + 0x800;
-        /// <summary>20 × vec4 (x, height, y, w) — the shield ring's per-enemy "where the player is" positions,
-        /// referenced by the AI redirect pointer table (16-byte aligned: sceVu0CopyVector copies a quadword).</summary>
-        internal static long RingTable      => TrackCave + 0xC00;
-        internal static uint RingTableGuest => TrackCaveGuest + 0xC00;
+        // TrackCave + 0xC00 .. + 0xD40 is the Angel Gear's shield-ring position table (CodeCaves.ShieldRingTable): not free.
 
         /// <summary>Clone the weapon's track list into the TrackCave with every translate track's
         /// draw window rescaled to <see cref="_pull"/> units of travel. Returns the new head (guest) or 0.</summary>

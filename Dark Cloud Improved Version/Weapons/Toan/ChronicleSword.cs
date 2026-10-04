@@ -22,10 +22,10 @@ namespace Dark_Cloud_Improved_Version
         {
             acquired = false;
 
-            if (Memory.ReadUShort(Player.Toan.WeaponSlot0.id) == 298 || Memory.ReadUShort(Player.Toan.WeaponSlot1.id) == 298 || Memory.ReadUShort(Player.Toan.WeaponSlot2.id) == 298
-                || Memory.ReadUShort(Player.Toan.WeaponSlot3.id) == 298 || Memory.ReadUShort(Player.Toan.WeaponSlot4.id) == 298 || Memory.ReadUShort(Player.Toan.WeaponSlot5.id) == 298
-                || Memory.ReadUShort(Player.Toan.WeaponSlot6.id) == 298 || Memory.ReadUShort(Player.Toan.WeaponSlot7.id) == 298 || Memory.ReadUShort(Player.Toan.WeaponSlot8.id) == 298
-                || Memory.ReadUShort(Player.Toan.WeaponSlot9.id) == 298)
+            if (Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 0, WeaponRecord.Id)) == 298 || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 1, WeaponRecord.Id)) == 298 || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 2, WeaponRecord.Id)) == 298
+                || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 3, WeaponRecord.Id)) == 298 || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 4, WeaponRecord.Id)) == 298 || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 5, WeaponRecord.Id)) == 298
+                || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 6, WeaponRecord.Id)) == 298 || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 7, WeaponRecord.Id)) == 298 || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 8, WeaponRecord.Id)) == 298
+                || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 9, WeaponRecord.Id)) == 298)
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has Chronicle 2");
                 acquired = true;
@@ -85,13 +85,13 @@ namespace Dark_Cloud_Improved_Version
             Thread.Sleep(50);
 
             //Save weapon Whp
-            chronicleCurrentWHP = ReusableFunctions.GetCurrentEquippedWhp(Player.CurrentCharacterNum(), Player.Toan.GetWeaponSlot());
+            chronicleCurrentWHP = WeaponRecord.ReadWhp(Player.CurrentCharacterNum(), Player.Toan.GetWeaponSlot());
 
             //Save every enemy's HP on the current floor
-            chronicleCurrentEnemyHP = ReusableFunctions.GetEnemiesHp();
+            chronicleCurrentEnemyHP = EnemyQueries.GetEnemiesHp();
 
             int damagedEnemyNum = 0;
-            if (chronicleCurrentWHP < chronicleFormerWHP && ReusableFunctions.GetRecentDamageDealtByPlayer() > 0)
+            if (chronicleCurrentWHP < chronicleFormerWHP && EnemyQueries.GetRecentDamageDealtByPlayer() > 0)
             {
                 float flashRGB_R = 0;
                 float flashRGB_G = 0;
@@ -111,7 +111,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
 
-                float[] enemiesDistance = ReusableFunctions.GetEnemiesDistance();
+                float[] enemiesDistance = EnemyQueries.GetEnemiesDistance();
                 List<int> enemiesinRange = new List<int>();
                 float[] enemiescoordinateX = new float[15];
                 float[] enemiescoordinateY = new float[15];
@@ -252,7 +252,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
             }
-            ReusableFunctions.ClearRecentDamageAndDamageSource();
+            EnemyQueries.ClearRecentDamageAndDamageSource();
             chronicleFormerWHP = chronicleCurrentWHP;
             chronicleFormerEnemyHP = chronicleCurrentEnemyHP;
         }

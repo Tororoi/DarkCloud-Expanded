@@ -53,7 +53,7 @@ namespace Dark_Cloud_Improved_Version
         /// charge was cancelled).</summary>
         internal static void Tick()
         {
-            if (_written < 0f) { Memory.WriteInt(CodeCaves.Mailbox.XiaoShotWhpOwner, 1); Write(Base); }
+            if (_written < 0f) { Memory.WriteInt(Mailbox.XiaoShotWhpOwner, 1); Write(Base); }
             long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
             if (!Memory.IsValidGuest(pool)) return;
             bool fired = false;
@@ -76,7 +76,7 @@ namespace Dark_Cloud_Improved_Version
         private static void Write(float factor)
         {
             if (factor == _written) return;
-            Memory.WriteFloat(CodeCaves.Mailbox.XiaoShotWhpFactor, factor);
+            Memory.WriteFloat(Mailbox.XiaoShotWhpFactor, factor);
             _written = factor;
         }
     }

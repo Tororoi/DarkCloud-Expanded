@@ -19,7 +19,7 @@ namespace Dark_Cloud_Improved_Version
         // Direct _MAP_JUMP: the Queens time-change is script EVENT 132 (RunEvent 0x84, GameMode 0xe). Rather
         // than queue a new event via start_event_no (which would run only AFTER 132 ends), we set the map-jump
         // on the CURRENTLY running event — NextMapNo + arrival StartEventNo + the return code EdEventMode reads.
-        private const long  CanalEvictFlag = CodeCaves.Mailbox.CanalEvict; // native fade-hook reads this on the fully-black frame
+        private const long  CanalEvictFlag = Mailbox.CanalEvict; // native fade-hook reads this on the fully-black frame
         private const float CanalBankY     = 31f;                        // afternoon (medium) tide height: caught = BELOW the
                                                                           //   incoming waterline (banks/ladder-top are ≈70, well above)
         private const float CanalZPad      = 60f;                        // canal wall z≈±50 + padding; the basin is the only
@@ -63,7 +63,7 @@ namespace Dark_Cloud_Improved_Version
         /// otherwise, and zero the orbit angle under the Queens fade-out so East Harbor inherits no swing.</summary>
         internal static void Update(float shownWaterLevel, float target)
         {
-            // TIDE-EVICT — the timing is owned by NATIVE code now (IsoPatcher.PatchCanalEvictFadeHook hooks
+            // TIDE-EVICT — the timing is owned by NATIVE code now (ElfCanalPatches.PatchCanalEvictFadeHook hooks
             // EdFadeInOut's fully-black store @0x189970). This side only maintains the flag: ARM while the player
             // wades the drained low-tide canal, and at the period boundary (tide turns low→non-low) raise the
             // native evict flag if they were caught. The fade-hook reads it on the exact fully-black frame and

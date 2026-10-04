@@ -94,7 +94,7 @@ namespace Dark_Cloud_Improved_Version
         private static int _lastMode = int.MinValue;
         private static int _lastGameMode = int.MinValue;
 
-        // ── Shallow-hook (Brownboo) — DATA-ONLY, recompiler-safe. See TownAddresses.FishLineShallow. ─────────
+        // ── Shallow-hook (Brownboo) — DATA-ONLY, recompiler-safe. See FishLineShallow (Addresses/FishingAddresses.cs). ─────────
         private static bool _shallowLineInstalled;
         /// <summary>Install the cold-window FishLineStep rewrite ONCE (from ApplyNewChanges, before any fishing
         /// has JIT-compiled the function). It re-points the bobber's six anchor loads at a mod data global, so
@@ -285,7 +285,7 @@ namespace Dark_Cloud_Improved_Version
             _lastMode = int.MinValue;
             // (anchor toggle retired — the bobber is always at point[18]; nothing to reset there)
             FishingCastPayout.Reset();
-            Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp);   // hang back to vanilla for the next town
+            Memory.WriteFloat(Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp);   // hang back to vanilla for the next town
             _lineAboveStart = 1f; _lineAbove = 1f; _lineBelow = FishLineShallow.VanillaDistp;
             PriscleenFish.Uninstall();
             FishingVillagers.Uninstall();
@@ -324,8 +324,8 @@ namespace Dark_Cloud_Improved_Version
         private static Spot _active;
         private static float _lastCamH = float.NaN;
 
-        /// <summary>Feed the patched fishing-camera SetHeight site (IsoPatcher.PatchFishingCameraHeight turned
-        /// its hard-coded 40 into a read of <see cref="CodeCaves.Mailbox.FishCamHeight"/>).
+        /// <summary>Feed the patched fishing-camera SetHeight site (ElfCameraPatches.PatchFishingCameraHeight turned
+        /// its hard-coded 40 into a read of <see cref="Mailbox.FishCamHeight"/>).
         ///
         /// The patched instruction runs every frame of every fishing session in EVERY town — including the
         /// vanilla ones this class never installs into — so this must ALWAYS hold a sane value, never 0. Away
@@ -338,17 +338,17 @@ namespace Dark_Cloud_Improved_Version
         /// spot installs.</summary>
         internal static void SeedFishCamHeight()
         {
-            Memory.WriteFloat(CodeCaves.Mailbox.FishCamHeight, VanillaFishCamHeight);
+            Memory.WriteFloat(Mailbox.FishCamHeight, VanillaFishCamHeight);
             _lastCamH = VanillaFishCamHeight;
-            Memory.WriteFloat(CodeCaves.Mailbox.CameraRestH, TownRestH);   // town-camera REST_H default (must be valid before any camera frame)
+            Memory.WriteFloat(Mailbox.CameraRestH, TownRestH);   // town-camera REST_H default (must be valid before any camera frame)
             _lastRestH = TownRestH;
             // Seed the split's BELOW-bobber rest length (the ISO caves read it @0x01F10048 every frame) so it's
             // never 0 (0 collapses the hang) before a session resolves the real per-spot value.
-            Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp);
+            Memory.WriteFloat(Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp);
         }
 
         /// <summary>Town-camera resting eye height (== IsoPatcher's REST_H, still baked into the climb-curve base
-        /// at word 471). The height-TARGET REST_H (word 147) now reads <see cref="CodeCaves.Mailbox.CameraRestH"/>
+        /// at word 471). The height-TARGET REST_H (word 147) now reads <see cref="Mailbox.CameraRestH"/>
         /// instead, which we drive below.</summary>
         internal const float TownRestH = 5f;
 
@@ -392,10 +392,10 @@ namespace Dark_Cloud_Improved_Version
             // TARGET equals the clamp value, so there's no desync and the distance recovers like it does in town.
             float restH = InFishingWindow ? h : TownRestH;
             if (float.IsNaN(_lastRestH) || Math.Abs(_lastRestH - restH) >= 0.01f)
-            { Memory.WriteFloat(CodeCaves.Mailbox.CameraRestH, restH); _lastRestH = restH; }
+            { Memory.WriteFloat(Mailbox.CameraRestH, restH); _lastRestH = restH; }
 
             if (!float.IsNaN(_lastCamH) && Math.Abs(_lastCamH - h) < 0.01f) return;
-            Memory.WriteFloat(CodeCaves.Mailbox.FishCamHeight, h);
+            Memory.WriteFloat(Mailbox.FishCamHeight, h);
             _lastCamH = h;
         }
         private static float _lastRestH = float.NaN;
@@ -538,7 +538,7 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // The trigger is now BAKED into the ISO — a native type-3 event point in the town's own scene.scn
-            // (IsoPatcher.BuildFishingFunc), created by the engine at town load. So we no longer create a
+            // (SceneBaker.BuildFishingFunc), created by the engine at town load. So we no longer create a
             // runtime event point; we only install the fishing SCRIPT here, and the baked point names label
             // 400. The baked point survives day/night AND town rebuilds; only the runtime script can be lost
             // (a same-map rebuild re-reads the stb), which FishingInstallPresent now detects by script content.
@@ -552,7 +552,7 @@ namespace Dark_Cloud_Improved_Version
             // toggle is retired — hook depth comes from distpBelow instead). Fish are moved to match on the
             // fishing-window open (ApplyShallowFishDepth) once they've spawned.
             (_lineAboveStart, _lineAbove, _lineBelow) = LineConfigSplit(spot);
-            Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, _lineBelow);
+            Memory.WriteFloat(Mailbox.LineDistpBelow, _lineBelow);
 
             if (spot.MapNo == TownMapNo.Brownboo) PriscleenFish.Install();   // Priscleen (DC2 fish) into species 8, Brownboo only
 
@@ -656,7 +656,7 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // Move the fish to the shallow depth once they spawn. The custom-town SPECIES now come straight
-            // from the loader (IsoPatcher.PatchFishingLoadFish bakes dedicated areas 5/6/7 into FishingLoadFish),
+            // from the loader (ElfFishingPatches.PatchFishingLoadFish bakes dedicated areas 5/6/7 into FishingLoadFish),
             // so there's no mod-side re-species and no race — nothing to do here for species. Depth still waits
             // for the fish: the window goes live (cpoly/water) a few frames before _INIT_FISH places them.
             if (!live) { _shallowFishApplied = false; _fishCPolySynced = false; }
@@ -685,7 +685,7 @@ namespace Dark_Cloud_Improved_Version
             // Length comes from the session-resolved SPLIT config (LineConfigSplit: Queens by tide, others
             // per-spot): distpBELOW = the spot's hook depth (bobber→hook hang), distpABOVE = aerial reach,
             // ramped out by the cast pay-out below. Anchor is FIXED at point[18] (A=18 baked in the ISO caves).
-            if (live) Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, _lineBelow);   // hang = the spot's hook depth
+            if (live) Memory.WriteFloat(Mailbox.LineDistpBelow, _lineBelow);   // hang = the spot's hook depth
             // Pay-out projects the rod tip along the player's LIVE facing: they can turn (and walk) before casting,
             // so the session-start stance yaw is only the fallback when the character can't be read.
             float facing = EditLoop.TryReadPlayerYaw(out float liveYaw) ? liveYaw : _active.Facing;

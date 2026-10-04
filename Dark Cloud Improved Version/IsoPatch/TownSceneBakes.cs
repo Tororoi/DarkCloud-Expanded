@@ -205,21 +205,21 @@ namespace Dark_Cloud_Improved_Version
         internal static byte[] TuneCanalWater(byte[] cfg)
         {
             string t = Encoding.Latin1.GetString(cfg);
-            const string OLD =
+            const string vanillaBlock =
                 "WATER_SURFACE \"\",48, 16,\r\n" +
                 "\t\t\t-320, 0, -70,\r\n\t\t\t320, 0, 70,\r\n\t\t\t0, 31, 0,\r\n" +
                 "\t\t\t0.1, 0.015, 0.0, 2.0,\r\n\t\t\t128, 128, 128,\r\n\t\t\t1, 0, 0\r\n" +
                 "\tWATER_SHAKE\t-1, -1, -0.5, 0.0";
-            const string NEW =
+            const string tunedBlock =
                 "WATER_SURFACE \"\",64, 14,\r\n" +                         // finest no-stretch grid (X cap = 64)
                 "\t\t\t-320, 0, -70,\r\n\t\t\t320, 0, 70,\r\n\t\t\t0, 31, 0,\r\n" +
                 "\t\t\t0.1, 0.015, 0.0, 2.0,\r\n\t\t\t128, 128, 128,\r\n\t\t\t1, 0, 0\r\n" +
                 "\tWATER_SHAKE\t-1, -1, -0.5, 0.0";
             int n = 0, idx = 0;
-            while ((idx = t.IndexOf(OLD, idx, StringComparison.Ordinal)) >= 0) { n++; idx += OLD.Length; }
+            while ((idx = t.IndexOf(vanillaBlock, idx, StringComparison.Ordinal)) >= 0) { n++; idx += vanillaBlock.Length; }
             if (n != 1)
                 throw new IOException($"Canal WATER_SURFACE block found {n} times in e03 mapinfo (expected 1).");
-            return Encoding.Latin1.GetBytes(t.Replace(OLD, NEW));
+            return Encoding.Latin1.GetBytes(t.Replace(vanillaBlock, tunedBlock));
         }
     }
 }

@@ -10,8 +10,9 @@ namespace Dark_Cloud_Improved_Version
     /// Dragon's shot instead; only when this floor has no slot for it does the pellet itself fly on at <see cref="PelletScale"/>×
     /// its sprite size and the same damage. The shot carries the Matador's kick strength: DunCave.CatGuardBypass stamps it
     /// on every entry whose base damage is <see cref="Mailbox.PelletKickDamage"/>, with the ORIGIN at that entry's own sphere
-    /// centre — the burst — so each enemy it catches is shoved straight out of the burst; the guard window stands (no crush
-    /// here). A charged shot costs ChargedShotWhp's weapon HP. Super Steve carrying a Dragon's Y SynthSphere has the same
+    /// centre — the burst — moved <see cref="KickOriginBack"/> back along the flight (Mailbox.PelletKickOrigin, an offset
+    /// here): the enemy struck head-on is shoved on along the flight, one caught by the burst's side mostly sideways; the guard
+    /// window stands (no crush here). A charged shot costs ChargedShotWhp's weapon HP. Super Steve carrying a Dragon's Y SynthSphere has the same
     /// shot, of its own selected element (<see cref="SuperSteve.SphereInheritanceEffect"/> drives it). The lock-on movement
     /// buff is <see cref="LockOnSpeedDrive"/>, inherited further.
     /// </summary>
@@ -24,6 +25,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  PelletScale   = 5.0f;   // no slot on this floor: the pellet itself, grown
         private const int    ElementOffset = 0x16;   // the weapon record's selected element: 00 Fire … 04 Holy, 05 None
         private const float  KickStrength  = 2.5f, KickDecay = 0.1f;   // the Matador's kick (Goro's hammer swing), out of the burst
+        private const float  KickOriginBack = 4f;                      // the kick's origin this far behind the burst on the flight line
         private static readonly bool[] _seen = new bool[PlayerShotPool.SlotCount];
         private static bool     _holding, _charged, _nativeWarned;
         private static DateTime _holdStart, _armedUntil = DateTime.MinValue;
@@ -83,10 +85,14 @@ namespace Dark_Cloud_Improved_Version
             int element = Player.Weapon.GetCurrentWeaponElement();                          // 5 = none → the Black Dragon's shot
             float x = Memory.ReadFloat(pa), h = Memory.ReadFloat(pa + 4), y = Memory.ReadFloat(pa + 8);
             float vx = Memory.ReadFloat(va), vh = Memory.ReadFloat(va + 4), vy = Memory.ReadFloat(va + 8);
-            // The kick, as the Matador's: the bypass cave stamps it on this damage's entries, out of each one's own sphere.
-            Memory.WriteFloat(CodeCaves.Mailbox.PelletKickStrength, KickStrength);
-            Memory.WriteFloat(CodeCaves.Mailbox.PelletKickDecay, KickDecay);
-            Memory.WriteInt  (CodeCaves.Mailbox.PelletKickDamage, damage);
+            // The kick, as the Matador's: the bypass cave stamps it on this damage's entries, out of each one's own sphere moved back
+            // along the flight (horizontal: CheckDmg drops the height from the shove).
+            float vl = MathF.Sqrt(vx * vx + vy * vy);
+            if (vl > 1e-4f) Memory.WriteVec3(Mailbox.PelletKickOrigin, -vx / vl * KickOriginBack, 0f, -vy / vl * KickOriginBack);
+            else Memory.WriteVec3(Mailbox.PelletKickOrigin, 0f, 0f, 0f);
+            Memory.WriteFloat(Mailbox.PelletKickStrength, KickStrength);
+            Memory.WriteFloat(Mailbox.PelletKickDecay, KickDecay);
+            Memory.WriteInt  (Mailbox.PelletKickDamage, damage);
             if (BorrowedShots.Fire(Shot(element), x, h, y, vx, vh, vy, damage, Memory.ReadInt(PlayerShotPool.LifetimeAddr(pool, slot))))
             {
                 Memory.WriteInt(PlayerShotPool.FlagAddr(pool, slot), 0);                    // the pellet gives way to the shot
@@ -124,7 +130,7 @@ namespace Dark_Cloud_Improved_Version
             => element >= 0 && element < ShotEffectPack.DragonsYCfg.Length ? BorrowedShots.TableConfig(ShotEffectPack.DragonsYCfg[element]) : null;
 
         /// <summary>The weapon or the floor went: no charge held, no kick mark.</summary>
-        internal static void Stop() { _holding = false; _armedUntil = DateTime.MinValue; ChargeTint.Clear(); Memory.WriteInt(CodeCaves.Mailbox.PelletKickDamage, 0); }
+        internal static void Stop() { _holding = false; _armedUntil = DateTime.MinValue; ChargeTint.Clear(); Memory.WriteInt(Mailbox.PelletKickDamage, 0); }
 
         // ── Dragon's Y ─────────────────────────────────────────────────────────────────────
         /// <summary>Xiao's Dragon's Y thread: hands every tick to <see cref="DragonsY.Drive"/> (the charged shot) while the

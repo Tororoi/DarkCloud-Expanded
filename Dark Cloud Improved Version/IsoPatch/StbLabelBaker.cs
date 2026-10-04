@@ -5,7 +5,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using static Dark_Cloud_Improved_Version.IsoBytes;
-using static Dark_Cloud_Improved_Version.IsoPatcher;
+using static Dark_Cloud_Improved_Version.SignPlacements;
 
 namespace Dark_Cloud_Improved_Version
 {

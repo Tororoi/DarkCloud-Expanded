@@ -81,6 +81,18 @@ namespace Dark_Cloud_Improved_Version
             return outb;
         }
 
+        /// <summary>The entries of a PAK in order — (name, ABSOLUTE data offset, size) — walked by stride from 0 until the first
+        /// entry whose name byte is 0.</summary>
+        internal static IEnumerable<(string name, int dataOff, int size)> PakEntries(byte[] pak)
+        {
+            int p = 0;
+            while (p < pak.Length && pak[p] != 0)
+            {
+                yield return (NameAt(pak, p, 0x20), p + (int)U32(pak, p + 0x40), (int)U32(pak, p + 0x44));
+                p += (int)U32(pak, p + 0x48);
+            }
+        }
+
         internal static int Find(byte[] hay, byte[] needle) => FindFrom(hay, needle, 0);
 
         internal static int FindFrom(byte[] hay, byte[] needle, int start) => ReusableFunctions.IndexOfBytes(hay, needle, start);

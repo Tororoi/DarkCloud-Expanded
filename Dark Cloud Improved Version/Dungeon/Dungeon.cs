@@ -42,7 +42,6 @@ namespace Dark_Cloud_Improved_Version
         static List<MiniBoss.MiniBossSnapshot> backfloorSnapshot = null;
         public static bool enemiesSpawn = false;
         public static bool doorIsOpen = false;
-        public static bool magicCircleChanged = false;
         public static List<byte> excludeFloors;
 
 //THREADS
@@ -120,25 +119,26 @@ namespace Dark_Cloud_Improved_Version
                     {
                         WeaponThreads.Launch();
                         CheckActiveItems();
+                        if (DebugDiagnostics.Enabled) TestWeaponGrant.Tick();     // the Partisan test grant
                     }
 
                     //Check if player is inside the weapon customize menu
                     if (Player.CheckIsWeaponCustomizeMenu())
                     {
                         //The Synthsphere Listener thread
-                        if (Weapons.weaponsMenuListener.ThreadState == ThreadState.Unstarted)
+                        if (WeaponSynthSphereLevel.Listener.ThreadState == ThreadState.Unstarted)
                         {
-                            Weapons.weaponsMenuListener.Start();
+                            WeaponSynthSphereLevel.Listener.Start();
                         }
-                        else if (Weapons.weaponsMenuListener.ThreadState == ThreadState.Stopped)
+                        else if (WeaponSynthSphereLevel.Listener.ThreadState == ThreadState.Stopped)
                         {
-                            Weapons.weaponsMenuListener = new Thread(new ThreadStart(Weapons.WeaponListenForSynthSphere));
-                            Weapons.weaponsMenuListener.Start();
+                            WeaponSynthSphereLevel.Listener = new Thread(new ThreadStart(WeaponSynthSphereLevel.Listen));
+                            WeaponSynthSphereLevel.Listener.Start();
                         }
                     }
 
                     //Check if the player has killed all the floor enemies
-                    if (ReusableFunctions.CheckIfAllEnemiesKilled() && !hasClearMessageShown)
+                    if (EnemyQueries.CheckIfAllEnemiesKilled() && !hasClearMessageShown)
                     {
                         DungeonMessages.DisplayMessage("DUMMY", 0, 0, 4000, true);
 
@@ -157,6 +157,7 @@ namespace Dark_Cloud_Improved_Version
                     currentFloor = Memory.ReadByte(Addresses.checkFloor);
 
                     //Check if the player has entered a new floor
+                    if (DebugDiagnostics.Enabled) ShotReactionAudit.Tick();         // DIAGNOSTIC: the shot config table against vanilla
                     if (currentFloor != prevFloor)
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Floor changed!");
@@ -166,7 +167,6 @@ namespace Dark_Cloud_Improved_Version
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has entered a new floor!");
 
                             doorIsOpen = false;
-                            magicCircleChanged = false;
                             dunUsedActiveEscape = false;
                             dunUsedEscapeCheck = false;
                             hasClearMessageShown = false;
@@ -232,7 +232,7 @@ namespace Dark_Cloud_Improved_Version
                     UpdateMiniBossFloorState();
                     if (CheckWeaponChange(currentWeapon))
                     {
-                        ReusableFunctions.ClearRecentDamageAndDamageSource();
+                        EnemyQueries.ClearRecentDamageAndDamageSource();
                         currentWeapon = Player.Weapon.GetCurrentWeaponId();
                     }
 
@@ -262,7 +262,7 @@ namespace Dark_Cloud_Improved_Version
                     EnemyRandomizer.StageFloorRoster(currentDungeon, Memory.ReadByte(Addresses.checkFloor) + 1);
                 }
 
-                if (MainMenuThread.userMode == true)
+                if (SessionController.userMode == true)
                 {
                     if (Memory.ReadByte(Addresses.mode) == 0 || Memory.ReadByte(Addresses.mode) == 1)
                     {
@@ -475,13 +475,15 @@ namespace Dark_Cloud_Improved_Version
 
             chronicle2 = ChronicleSword.CheckChronicle2(chronicle2);
             CustomChests.BasicChestRandomizer(currentDungeon, currentFloor, chronicle2); //Randomize the chest loot (old table-based version)
-            Weapons.StartHeavensCloudReach(); // extend Heaven's Cloud reach (dcol1 frame + swing radii)
-            Weapons.OnReachFloorEntered();    // re-locate the freshly reloaded model on this floor
+            Sax.OnFloorChestsReady();         // Fine Fare (Sax line): the floor's chest upgrades planned once, applied if the sword is out
+            WhirlwindScale.Start();           // the whirlwind visual sized to every Toan weapon's reach (Heaven's Cloud drives its own)
+            WhirlwindScale.OnFloorEntered();  // re-locate the freshly reloaded fuusya pool on this floor…
+            WeaponModelFrames.OnFloorEntered(); // …and the reloaded weapon model
 
             DungeonSidequests.CheckSidequests(currentDungeon, currentFloor);
 
             ChronicleSword.chronicleNewFloor = true;
-            ReusableFunctions.ClearRecentDamageAndDamageSource();
+            EnemyQueries.ClearRecentDamageAndDamageSource();
 
             DungeonSidequests.monsterQuestActive = SideQuestManager.CheckCurrentDungeonQuests(currentDungeon);
 
@@ -708,32 +710,9 @@ namespace Dark_Cloud_Improved_Version
 
                             int currentChar = Memory.ReadByte(0x21CD9550);
                             int currentWepNum = Memory.ReadByte(0x21CDD88C + (0x1 * currentChar));
-                            int whp;
-
-                            if (currentChar == 0)
-                            {
-                                whp = Player.Toan.WeaponSlot0.whp + (0xF8 * currentWepNum);
-                            }
-                            else if (currentChar == 1)
-                            {
-                                whp = Player.Xiao.WeaponSlot0.whp + (0xF8 * currentWepNum);
-                            }
-                            else if (currentChar == 2)
-                            {
-                                whp = Player.Goro.WeaponSlot0.whp + (0xF8 * currentWepNum);
-                            }
-                            else if (currentChar == 3)
-                            {
-                                whp = Player.Ruby.WeaponSlot0.whp + (0xF8 * currentWepNum);
-                            }
-                            else if (currentChar == 4)
-                            {
-                                whp = Player.Ungaga.WeaponSlot0.whp + (0xF8 * currentWepNum);
-                            }
-                            else
-                            {
-                                whp = Player.Osmond.WeaponSlot0.whp + (0xF8 * currentWepNum);
-                            }
+                            // Any character id outside 0-4 reads Osmond's record, as the old per-character branches did.
+                            int whpOwner = currentChar >= Player.ToanId && currentChar <= Player.UngagaId ? currentChar : Player.OsmondId;
+                            long whp = WeaponRecord.Address(whpOwner, currentWepNum, WeaponRecord.Whp);
                             float currentWHP = Memory.ReadFloat(whp);
                             if (currentWHP < currentmaxWHP)
                             {
@@ -926,21 +905,21 @@ namespace Dark_Cloud_Improved_Version
 
         public static void CheckSoZEffect(int wepOffset)
         {
-            ushort wepID = Memory.ReadUShort(Player.Toan.WeaponSlot0.id + (0xF8 * wepOffset));
+            ushort wepID = Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, wepOffset, WeaponRecord.Id));
 
             if (wepID == 296)
             {
                 //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "SoZ leveled up!");
-                byte currentThunder = Memory.ReadByte(Player.Toan.WeaponSlot0.thunder + (0xF8 * wepOffset));
+                byte currentThunder = Memory.ReadByte(WeaponRecord.Address(Player.ToanId, wepOffset, WeaponRecord.Thunder));
                 ushort storedThunder = (ushort)(Memory.ReadUShort(0x21CE446D) + currentThunder);
                 if (storedThunder > 30000)
                 {
                     storedThunder = 30000;
                 }
-                Memory.WriteByte(Player.Toan.WeaponSlot0.thunder + (0xF8 * wepOffset), 0);
-                if (Memory.ReadByte(Player.Toan.WeaponSlot0.elementHUD + (0xF8 * wepOffset)) == 2)
+                Memory.WriteByte(WeaponRecord.Address(Player.ToanId, wepOffset, WeaponRecord.Thunder), 0);
+                if (Memory.ReadByte(WeaponRecord.Address(Player.ToanId, wepOffset, WeaponRecord.ElementHud)) == 2)
                 {
-                    Memory.WriteByte(Player.Toan.WeaponSlot0.elementHUD + (0xF8 * wepOffset), 5);
+                    Memory.WriteByte(WeaponRecord.Address(Player.ToanId, wepOffset, WeaponRecord.ElementHud), 5);
                 }
                 Memory.WriteUShort(0x21CE446D, storedThunder);
                 ChangeSoZMaxAtt(storedThunder);

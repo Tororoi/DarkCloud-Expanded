@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using static Dark_Cloud_Improved_Version.CollisionGeom;
-using static Dark_Cloud_Improved_Version.TownCollisionData;
+using static Dark_Cloud_Improved_Version.QueensCollisionData;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -72,7 +72,7 @@ namespace Dark_Cloud_Improved_Version
         internal static List<double[][]> InvisibleTris(double maxHeight = 5.0)
         {
             var tris = TrisFrom(QueensCanalContainmentTris);
-            string K(double[] p) => $"{PyMath.Round(p[0], 1) + 0.0:R},{PyMath.Round(p[2], 1) + 0.0:R}";
+            string K(double[] p) => $"{ExactMath.Round(p[0], 1) + 0.0:R},{ExactMath.Round(p[2], 1) + 0.0:R}";
             var ground = new Dictionary<string, double>();
             foreach (var t in tris) foreach (var p in t) { string k = K(p); ground[k] = ground.TryGetValue(k, out double g) ? Math.Min(g, p[1]) : p[1]; }
             return tris.Select(t => t.Select(p => new[] { p[0], Math.Min(p[1], ground[K(p)] + maxHeight), p[2] }).ToArray()).ToList();
@@ -225,7 +225,7 @@ namespace Dark_Cloud_Improved_Version
         // ───────────────────────── bridge gate torches ─────────────────────────
         private static string GateKey(double[][] t, double dx = 0.0)
         {
-            var v = t.Select(p => new[] { PyMath.Round(p[0] + dx, 1) + 0.0, PyMath.Round(p[1], 1) + 0.0, PyMath.Round(p[2], 1) + 0.0 }).ToList();
+            var v = t.Select(p => new[] { ExactMath.Round(p[0] + dx, 1) + 0.0, ExactMath.Round(p[1], 1) + 0.0, ExactMath.Round(p[2], 1) + 0.0 }).ToList();
             v.Sort((a, b) => { for (int i = 0; i < 3; i++) { int c = a[i].CompareTo(b[i]); if (c != 0) return c; } return 0; });
             return string.Join("|", v.Select(p => $"{p[0]:R},{p[1]:R},{p[2]:R}"));
         }
@@ -237,7 +237,7 @@ namespace Dark_Cloud_Improved_Version
         {
             double xmin = tris.SelectMany(t => t).Min(p => p[0]), xmax = tris.SelectMany(t => t).Max(p => p[0]);
             double zmin = tris.SelectMany(t => t).Min(p => p[2]), zmax = tris.SelectMany(t => t).Max(p => p[2]);
-            double dx = PyMath.Round(xmin - GateXMinRef, 0);
+            double dx = ExactMath.Round(xmin - GateXMinRef, 0);
             var dropKeys = new HashSet<string>(TrisFrom(GateRailingTris).Concat(TrisFrom(GateOuterFillerTris)).Select(rt => GateKey(rt, dx)));
             var raiseKeys = new HashSet<string>(TrisFrom(GateWalkwayRaiseTris).Select(rt => GateKey(rt, dx)));
             var extendKeys = new HashSet<string>(TrisFrom(GateOuterFaceExtendTris).Select(rt => GateKey(rt, dx)));

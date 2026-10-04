@@ -48,22 +48,20 @@ namespace Dark_Cloud_Improved_Version
             Label_FishFarmer_Sessions.Text =
                 $"Sessions: {FishDataFarmer.SessionCount}   Queue: {FishDataFarmer.PendingCount}";
 
-            int[] p = TownCharacter.FishProbe;
+            int[] p = Fishing.FishProbe;
             Label_FishFarmer_Probe.Text =
                 $"708={p[0]:X8}  714={p[1]:X8}  3E20={p[2]:X8}  3E24={p[3]:X8}  3E28={p[4]:X8}";
             Label_FishFarmer_Survey.Text = FishDataFarmer.GetSurveyText();
         }
 
-        public static Thread townThread = new Thread(new ThreadStart(TownCharacter.MainScript)) { IsBackground = true };
-        public static Thread TASSThread = new Thread(new ThreadStart(TASThread.RunTAS)) { IsBackground = true };
-        public static Thread TASSThread2 = new Thread(new ThreadStart(TASThread.RecordTAS)) { IsBackground = true };
+        public static Thread townThread = new Thread(new ThreadStart(GameLoop.Run)) { IsBackground = true };
         public static Thread dungeonthread = new Thread(new ThreadStart(Dungeon.InsideDungeonThread)) { IsBackground = true };
-        public static Thread debugThread = new Thread(new ThreadStart(CheatCodes.DebugOptions)) { IsBackground = true };
-        public static Thread launchThread = new Thread(new ThreadStart(MainMenuThread.CheckEmulatorAndGame)) { IsBackground = true };
+        public static Thread launchThread = new Thread(new ThreadStart(SessionController.CheckEmulatorAndGame)) { IsBackground = true };
 
-        public int[] attackSoundAddresses = { 0x20265DBC, 0x20265DC2, 0x20265DC8, 0x20265DCE, 0x20265F0C, 0x20265F12, 0x2026605C, 0x20266062, 0x202661AC, 0x202661B8, 0x202662FC, 0x20266302, 0x20266308, 0x2026644C };
-        public byte[] attackSoundValues = { 68, 69, 70, 71, 83, 84, 98, 99, 113, 115, 128, 129, 130, 156 };
         public bool nightlyVersion = false;
+
+        /// <summary>The sixteen per-floor-slot enemy HP boxes on Dev page 2, in slot order.</summary>
+        private TextBox[] EnemyHpBoxes => new[] { DEV_Page2_TextBox_Enemy1, DEV_Page2_TextBox_Enemy2, DEV_Page2_TextBox_Enemy3, DEV_Page2_TextBox_Enemy4, DEV_Page2_TextBox_Enemy5, DEV_Page2_TextBox_Enemy6, DEV_Page2_TextBox_Enemy7, DEV_Page2_TextBox_Enemy8, DEV_Page2_TextBox_Enemy9, DEV_Page2_TextBox_Enemy10, DEV_Page2_TextBox_Enemy11, DEV_Page2_TextBox_Enemy12, DEV_Page2_TextBox_Enemy13, DEV_Page2_TextBox_Enemy14, DEV_Page2_TextBox_Enemy15, DEV_Page2_TextBox_Enemy16 };
 
         #region Static callbacks (called from background threads)
 
@@ -174,7 +172,7 @@ namespace Dark_Cloud_Improved_Version
             Dispatcher.UIThread.InvokeAsync(async () =>
             {
                 Label_UserMode_PlaceholderText.Text = "Detected a save file already running!\n\nPlease re-boot Dark Cloud to start the Mod.";
-                MainMenuThread.saveFileMessageBox = true;
+                SessionController.saveFileMessageBox = true;
                 string message = "Detected a save file already running! Enhanced Mod currently not active.\n\nThe mod needs to be launched while in the Main Menu.\n\nDo you want the mod to return your game to Main Menu?";
                 var box = MessageBoxManager.GetMessageBoxStandard("Save file running!", message, MsBoxButtonEnum.YesNo, MsBoxIcon.Warning);
                 var result = await box.ShowWindowDialogAsync(this);
@@ -253,13 +251,13 @@ namespace Dark_Cloud_Improved_Version
             Dispatcher.UIThread.InvokeAsync(async () =>
             {
                 Topmost = true;
-                MainMenuThread.saveStateUsed = true;
+                SessionController.saveStateUsed = true;
                 string message = "The mod has detected a possible save state load!\n\nUsing save states is NOT ALLOWED while using the Enhanced Mod, since it can cause major issues.\n\nThe game has been reset, and this mod will be closed.";
                 var box = MessageBoxManager.GetMessageBoxStandard("Save state detected!", message, MsBoxButtonEnum.Ok, MsBoxIcon.Warning);
                 await box.ShowWindowDialogAsync(this);
                 Topmost = false;
                 Label_UserMode_PlaceholderText.Text = "A possible save state used! Mod has been terminated.";
-                Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 0);
+                Memory.WriteByte(Mailbox.PineProbe, 0);
                 Close();
             });
         }
@@ -282,87 +280,35 @@ namespace Dark_Cloud_Improved_Version
                 Label_UserMode_PlaceholderText.Text = "Another instance of Enhanced Mod is already active!\n\nYou can close this window.");
         }
 
-        // ── Persisted options, bit-packed into three category-grouped save bytes (all-zero = everything off) ──
-        //   Graphics 0x21CE4490 : bit0 graphical improvements, bit1 FOV          (bits 2-7 free)
-        //   Audio    0x21CE4491 : bit0 weapon beeps, bit1 battle music,
-        //                         bit2 attack sounds, bit3 mute music            (bits 4-7 free)
-        //   Gameplay 0x21CE4492 : bit0 faster enemies, bit1 stronger enemies, bit2 randomized enemies (bits 3-7 free)
-        //
-        // FREE SAVE BYTES for new options (no need to re-derive):
-        //   • 0x21CE4493, 0x21CE4494, 0x21CE4495 are fully UNUSED proven-free bytes — grab one for a new
-        //     category, or pack into the spare upper bits of the three bytes above.
-        //   • The proven-free padding block is exactly 0x21CE4490–0x21CE4495 (zero on every save, mod-only).
-        //   • DO NOT use 0x21CE4496 or later: those are LIVE game save data (old saves hold non-zero there;
-        //     a read-breakpoint fires only via the save memcpy, and writing them risks corruption / wrong
-        //     defaults). Verified by comparing a fresh new-game save vs. an existing save.
-        //
-        // Persistence mechanism: each handler read-modify-writes its bit here (these bytes live in the save-
-        // data region, so they ride along to the memory card); ModWindowSettingsCheck reads them back on load.
-        private const int OptGraphicsByte = 0x21CE4490;
-        private const int OptAudioByte    = 0x21CE4491;
-        private const int OptGameplayByte = 0x21CE4492;
-
-        // Read-modify-write a single option bit, preserving the other toggles packed into that byte.
-        private static void WriteOptionBit(int addr, int mask, bool on)
-        {
-            byte v = Memory.ReadByte(addr);
-            v = (byte)(on ? (v | mask) : (v & ~mask));
-            Memory.WriteByte(addr, v);
-        }
-
+        // Restore the Options tab from the persisted toggles (ModOptions owns the save bytes and each toggle's effect):
+        // every box is set from its bit and the effect re-applied, so a loaded save plays with the options it was saved with.
         void ModWindowSettingsCheck(bool enable)
         {
             Dispatcher.UIThread.Post(() =>
             {
-                // Read the three category bytes once; each bit drives one toggle (all-zero = all off).
-                byte gfx  = Memory.ReadByte(OptGraphicsByte);
-                byte aud  = Memory.ReadByte(OptAudioByte);
-                byte play = Memory.ReadByte(OptGameplayByte);
+                ModOptions.State saved = ModOptions.Load();   // the three category bytes, read once
 
                 // ── Graphics ──
-                bool graphicsOn = (gfx & 0x01) != 0;
-                CBox_UserMode_Graphics.IsChecked = graphicsOn;
-                Memory.WriteByte(CodeCaves.Mailbox.Option4, (byte)(graphicsOn ? 1 : 0));
-
-                bool fovOn = (gfx & 0x02) != 0;
-                CBox_UserMode_Widescreen.IsChecked = fovOn;
-                Memory.WriteByte(CodeCaves.Mailbox.Option3, (byte)(fovOn ? 1 : 0));
-
+                RestoreOption(CBox_UserMode_Graphics,          ModOption.Graphics,          saved);
+                RestoreOption(CBox_UserMode_Widescreen,        ModOption.Fov,               saved);
                 // ── Audio ──
-                bool beepsOn = (aud & 0x01) != 0;
-                CBox_UserMode_WeaponBeeps.IsChecked = beepsOn;
-                Memory.WriteByte(CodeCaves.Mailbox.Option1, (byte)(beepsOn ? 1 : 0));
-
-                bool battleMusicOn = (aud & 0x02) != 0;
-                CBox_UserMode_BattleMusic.IsChecked = battleMusicOn;
-                Memory.WriteByte(CodeCaves.Mailbox.Option2, (byte)(battleMusicOn ? 1 : 0));
-
-                bool attackSoundsOn = (aud & 0x04) != 0;
-                Cbox_Usermode_AttackSounds.IsChecked = attackSoundsOn;
-                for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
-                    Memory.WriteByte(attackSoundAddresses[c], (byte)(attackSoundsOn ? 0 : attackSoundValues[c]));
-
-                bool muteMusicOn = (aud & 0x08) != 0;
-                CBox_UserMode_MuteMusic.IsChecked = muteMusicOn;
-                Memory.WriteUShort(0x20299F53, (ushort)(muteMusicOn ? 0 : 25637));
-
+                RestoreOption(CBox_UserMode_WeaponBeeps,       ModOption.WeaponBeeps,       saved);
+                RestoreOption(CBox_UserMode_BattleMusic,       ModOption.BattleMusic,       saved);
+                RestoreOption(Cbox_Usermode_AttackSounds,      ModOption.AttackSounds,      saved);
+                RestoreOption(CBox_UserMode_MuteMusic,         ModOption.MuteMusic,         saved);
                 // ── Gameplay ──
-                bool fasterOn = (play & 0x01) != 0;
-                CBox_UserMode_FasterEnemies.IsChecked = fasterOn;
-                FasterEnemies.Enabled = fasterOn;
-
-                bool strongerOn = (play & 0x02) != 0;
-                CBox_UserMode_StrongerEnemies.IsChecked = strongerOn;
-                EnemyStatNormalizer.StrongerEnemies = strongerOn;
-
-                bool randomizedOn = (play & 0x04) != 0;
-                CBox_UserMode_RandomizedEnemies.IsChecked = randomizedOn;
-                EnemyRandomizer.RandomizeEnemies = randomizedOn;
-
-                bool harderAiOn = (play & 0x08) != 0;
-                CBox_UserMode_HarderAI.IsChecked = harderAiOn;
-                HarderEnemyAI.Enabled = harderAiOn;
+                RestoreOption(CBox_UserMode_FasterEnemies,     ModOption.FasterEnemies,     saved);
+                RestoreOption(CBox_UserMode_StrongerEnemies,   ModOption.StrongerEnemies,   saved);
+                RestoreOption(CBox_UserMode_RandomizedEnemies, ModOption.RandomizedEnemies, saved);
+                RestoreOption(CBox_UserMode_HarderAI,          ModOption.HarderAi,          saved);
             });
+        }
+
+        private static void RestoreOption(CheckBox box, ModOption option, ModOptions.State saved)
+        {
+            bool on = saved[option];
+            box.IsChecked = on;
+            ModOptions.Apply(option, on);
         }
 
         void UserModeLaunch()
@@ -382,7 +328,7 @@ namespace Dark_Cloud_Improved_Version
 
         protected override void OnClosed(EventArgs e)
         {
-            Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 0);
+            Memory.WriteByte(Mailbox.PineProbe, 0);
             base.OnClosed(e);
             Environment.Exit(0);
         }
@@ -405,7 +351,7 @@ namespace Dark_Cloud_Improved_Version
 
             DEV_Page2_TextBox_Gilda.Text = Player.Gilda.ToString();
 
-            var enemyBoxes = new[] { DEV_Page2_TextBox_Enemy1, DEV_Page2_TextBox_Enemy2, DEV_Page2_TextBox_Enemy3, DEV_Page2_TextBox_Enemy4, DEV_Page2_TextBox_Enemy5, DEV_Page2_TextBox_Enemy6, DEV_Page2_TextBox_Enemy7, DEV_Page2_TextBox_Enemy8, DEV_Page2_TextBox_Enemy9, DEV_Page2_TextBox_Enemy10, DEV_Page2_TextBox_Enemy11, DEV_Page2_TextBox_Enemy12, DEV_Page2_TextBox_Enemy13, DEV_Page2_TextBox_Enemy14, DEV_Page2_TextBox_Enemy15, DEV_Page2_TextBox_Enemy16 };
+            TextBox[] enemyBoxes = EnemyHpBoxes;
             for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
                 enemyBoxes[i].Text = Memory.ReadUInt(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.Hp)).ToString();
         }
@@ -436,105 +382,44 @@ namespace Dark_Cloud_Improved_Version
 
         #region User Page 2 — Options
 
+        // Each toggle: ModOptions performs its effect and persists its bit (Core/ModOptions.cs).
         private void CBox_UserMode_WeaponBeepsChanged(object sender, RoutedEventArgs e)
-        {
-            bool on = CBox_UserMode_WeaponBeeps.IsChecked == true;
-            Memory.WriteByte(CodeCaves.Mailbox.Option1, (byte)(on ? 1 : 0));
-            WriteOptionBit(OptAudioByte, 0x01, on);   // audio bit0
-        }
+            => ModOptions.Set(ModOption.WeaponBeeps, CBox_UserMode_WeaponBeeps.IsChecked == true);
 
+        // Handles the Battle Music toggle (legacy method name).
         private void CBox_UserMode_GraphicsChanged(object sender, RoutedEventArgs e)
-        {
-            // Handles the Battle Music toggle (legacy method name).
-            bool on = CBox_UserMode_BattleMusic.IsChecked == true;
-            Memory.WriteByte(CodeCaves.Mailbox.Option2, (byte)(on ? 1 : 0));
-            WriteOptionBit(OptAudioByte, 0x02, on);   // audio bit1
-        }
+            => ModOptions.Set(ModOption.BattleMusic, CBox_UserMode_BattleMusic.IsChecked == true);
 
         private void CBox_UserMode_Widescreen_Changed(object sender, RoutedEventArgs e)
-        {
-            bool on = CBox_UserMode_Widescreen.IsChecked == true;
-            Memory.WriteByte(CodeCaves.Mailbox.Option3, (byte)(on ? 1 : 0));
-            WriteOptionBit(OptGraphicsByte, 0x02, on);   // graphics bit1
-        }
+            => ModOptions.Set(ModOption.Fov, CBox_UserMode_Widescreen.IsChecked == true);
 
         private void CBox_UserMode_Graphics_Changed(object sender, RoutedEventArgs e)
-        {
-            bool on = CBox_UserMode_Graphics.IsChecked == true;
-            Memory.WriteByte(CodeCaves.Mailbox.Option4, (byte)(on ? 1 : 0));
-            WriteOptionBit(OptGraphicsByte, 0x01, on);   // graphics bit0
-        }
+            => ModOptions.Set(ModOption.Graphics, CBox_UserMode_Graphics.IsChecked == true);
 
         // Difficulty toggles. "Faster enemies" = FasterEnemies (movement + attack speed, with the hit-window dwell);
         // "Stronger enemies" = EnemyStatNormalizer normalizing every enemy to the next dungeon/band up.
         private void CBox_UserMode_FasterEnemies_Changed(object sender, RoutedEventArgs e)
-        {
-            bool on = CBox_UserMode_FasterEnemies.IsChecked == true;
-            FasterEnemies.Enabled = on;
-            WriteOptionBit(OptGameplayByte, 0x01, on);   // gameplay bit0
-        }
+            => ModOptions.Set(ModOption.FasterEnemies, CBox_UserMode_FasterEnemies.IsChecked == true);
 
         private void CBox_UserMode_StrongerEnemies_Changed(object sender, RoutedEventArgs e)
-        {
-            bool on = CBox_UserMode_StrongerEnemies.IsChecked == true;
-            EnemyStatNormalizer.StrongerEnemies = on;
-            WriteOptionBit(OptGameplayByte, 0x02, on);   // gameplay bit1
-        }
+            => ModOptions.Set(ModOption.StrongerEnemies, CBox_UserMode_StrongerEnemies.IsChecked == true);
 
         private void CBox_UserMode_RandomizedEnemies_Changed(object sender, RoutedEventArgs e)
-        {
-            bool on = CBox_UserMode_RandomizedEnemies.IsChecked == true;
-            EnemyRandomizer.RandomizeEnemies = on;
-            WriteOptionBit(OptGameplayByte, 0x04, on);   // gameplay bit2
-        }
+            => ModOptions.Set(ModOption.RandomizedEnemies, CBox_UserMode_RandomizedEnemies.IsChecked == true);
 
         // "Harder enemy AI" — first behavior: every enemy with a get-up motion can revive after death
         // (HarderEnemyAI splices a revive roll into each loaded death script; native revivers get buffed odds).
         private void CBox_UserMode_HarderAI_Changed(object sender, RoutedEventArgs e)
-        {
-            bool on = CBox_UserMode_HarderAI.IsChecked == true;
-            HarderEnemyAI.Enabled = on;
-            WriteOptionBit(OptGameplayByte, 0x08, on);   // gameplay bit3
-        }
+            => ModOptions.Set(ModOption.HarderAi, CBox_UserMode_HarderAI.IsChecked == true);
 
         private void Cbox_Usermode_AttackSounds_CheckedChanged(object sender, RoutedEventArgs e)
-        {
-            bool on = Cbox_Usermode_AttackSounds.IsChecked == true;
-            for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
-                Memory.WriteByte(attackSoundAddresses[c], (byte)(on ? 0 : attackSoundValues[c]));
-            WriteOptionBit(OptAudioByte, 0x04, on);   // audio bit2
-        }
+            => ModOptions.Set(ModOption.AttackSounds, Cbox_Usermode_AttackSounds.IsChecked == true);
 
-        // Sets the current dungeon's spawn roster so every spawn is the given species (by TableIndex).
-        // Pure data writes (crash-free); takes effect when you re-enter / descend to a floor.
+        // Sets the current dungeon's spawn roster from the box's spec ("20", "20,3,6", "20!,60" = one Gyon + Cursed Roses,
+        // "iq" = the exact Ice Queen boss block) — SpawnRoster.ApplySpec parses and writes it; takes effect on the next floor.
         private void Btn_Injector_Test_Click(object sender, RoutedEventArgs e)
         {
-            // Box accepts "20" or a comma list "20,3,6". A trailing "!" marks a species spawn-once
-            // (at most 1 per floor; the rest fill normally, total stays 15), e.g. "20!,60" = one Gyon + Cursed Roses.
-            // Special token "iq" = write the exact real Ice Queen (SW floor-18) boss block, incl. the Count field.
-            if (Tbox_Injector_Table.Text.Trim().ToLowerInvariant() == "iq")
-            {
-                SpawnRoster.SetIceQueenFloorExact();
-                return;
-            }
-            var idx = new System.Collections.Generic.List<int>();
-            var once = new System.Collections.Generic.List<bool>();
-            foreach (string p in Tbox_Injector_Table.Text.Split(','))
-            {
-                string t = p.Trim();
-                bool o = t.EndsWith("!");
-                if (o) t = t.Substring(0, t.Length - 1).Trim();
-                if (!int.TryParse(t, out int v)) continue;
-                idx.Add(v); once.Add(o);
-            }
-            if (idx.Count == 0)
-            {
-                Console.WriteLine("Injector: enter a TableIndex or list, e.g. 20  |  20,3,6  |  20!,60 (Gyon once)");
-                return;
-            }
-            int population = 0; // 0 (or unparseable) = keep original
-            if (idx.Count == 1) SpawnRoster.SetSpawnRosterToSpecies(idx[0], population);
-            else SpawnRoster.SetSpawnRosterMix(idx.ToArray(), once.ToArray(), population);
+            SpawnRoster.ApplySpec(Tbox_Injector_Table.Text);
         }
 
         // Post-spawn cap: keep at most 1 of the TableIndex species on the current floor, remove extras.
@@ -550,22 +435,12 @@ namespace Dark_Cloud_Improved_Version
 
         private void CBox_UserMode_MuteMusic_CheckedChanged(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_MuteMusic.IsChecked == true)
-            {
-                Memory.WriteUShort(0x20299F53, 0);
-                WriteOptionBit(OptAudioByte, 0x08, true);   // audio bit3
+            bool on = CBox_UserMode_MuteMusic.IsChecked == true;
+            ModOptions.Set(ModOption.MuteMusic, on);
 
-                if (CBox_UserMode_BattleMusic.IsChecked == false)
-                {
-                    // Muting also forces Battle Music off (its handler writes the effect + audio bit1).
-                    CBox_UserMode_BattleMusic.IsChecked = true;
-                }
-            }
-            else
-            {
-                Memory.WriteUShort(0x20299F53, 25637);
-                WriteOptionBit(OptAudioByte, 0x08, false);
-            }
+            // Muting also forces Battle Music off (its handler writes the effect + audio bit1).
+            if (on && CBox_UserMode_BattleMusic.IsChecked == false)
+                CBox_UserMode_BattleMusic.IsChecked = true;
         }
 
         #endregion
@@ -578,10 +453,10 @@ namespace Dark_Cloud_Improved_Version
 
         private void DEV_Page1_Btn_Mike(object sender, RoutedEventArgs e)
         {
-            if (MainMenuThread.changesThread.ThreadState == ThreadState.Unstarted)
-                MainMenuThread.changesThread.Start();
-            if (Weapons.weaponsMenuListener.ThreadState == ThreadState.Unstarted)
-                Weapons.weaponsMenuListener.Start();
+            if (SessionController.changesThread.ThreadState == ThreadState.Unstarted)
+                SessionController.changesThread.Start();
+            if (WeaponSynthSphereLevel.Listener.ThreadState == ThreadState.Unstarted)
+                WeaponSynthSphereLevel.Listener.Start();
         }
 
         private void DEV_Page1_Btn_Plgue(object sender, RoutedEventArgs e)
@@ -605,12 +480,13 @@ namespace Dark_Cloud_Improved_Version
                 townThread.Start();
         }
 
+        // Starts the debug-menu button watcher (the same thread the in-game "debug menus" cheat starts).
         private void DEV_Page1_CBox_DebugThread(object sender, RoutedEventArgs e)
         {
             if (CBox_DebugThread.IsChecked == true)
             {
-                if (debugThread.ThreadState == ThreadState.Unstarted)
-                    debugThread.Start();
+                if (CheatCodes.InputBuffer.debugThread.ThreadState == ThreadState.Unstarted)
+                    CheatCodes.InputBuffer.debugThread.Start();
                 CBox_DebugThread.IsEnabled = false;
             }
         }
@@ -639,7 +515,7 @@ namespace Dark_Cloud_Improved_Version
         private void DEV_Page2_Btn_SetEnemiesMaxHP_Click(object sender, RoutedEventArgs e)
         {
             int max = int.MaxValue;
-            var enemyBoxes = new[] { DEV_Page2_TextBox_Enemy1, DEV_Page2_TextBox_Enemy2, DEV_Page2_TextBox_Enemy3, DEV_Page2_TextBox_Enemy4, DEV_Page2_TextBox_Enemy5, DEV_Page2_TextBox_Enemy6, DEV_Page2_TextBox_Enemy7, DEV_Page2_TextBox_Enemy8, DEV_Page2_TextBox_Enemy9, DEV_Page2_TextBox_Enemy10, DEV_Page2_TextBox_Enemy11, DEV_Page2_TextBox_Enemy12, DEV_Page2_TextBox_Enemy13, DEV_Page2_TextBox_Enemy14, DEV_Page2_TextBox_Enemy15, DEV_Page2_TextBox_Enemy16 };
+            TextBox[] enemyBoxes = EnemyHpBoxes;
             for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
             {
                 enemyBoxes[i].Text = max.ToString();
@@ -647,112 +523,28 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        private void DEV_Page2_TextBox_Enemy1_TextChanged(object sender, TextChangedEventArgs e)
+        // One handler for all sixteen enemy HP boxes: each box's Tag (ModWindow.axaml) is its 0-based floor slot.
+        // An emptied box is reset to "0" (which re-enters here and writes 0); a parseable value is written to that slot's HP.
+        private void DEV_Page2_TextBox_Enemy_TextChanged(object sender, TextChangedEventArgs e)
         {
-            if (DEV_Page2_TextBox_Enemy1.Text == "") DEV_Page2_TextBox_Enemy1.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy1.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(0, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy2_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy2.Text == "") DEV_Page2_TextBox_Enemy2.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy2.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(1, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy3_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy3.Text == "") DEV_Page2_TextBox_Enemy3.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy3.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(2, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy4_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy4.Text == "") DEV_Page2_TextBox_Enemy4.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy4.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(3, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy5_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy5.Text == "") DEV_Page2_TextBox_Enemy5.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy5.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(4, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy6_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy6.Text == "") DEV_Page2_TextBox_Enemy6.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy6.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(5, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy7_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy7.Text == "") DEV_Page2_TextBox_Enemy7.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy7.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(6, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy8_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy8.Text == "") DEV_Page2_TextBox_Enemy8.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy8.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(7, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy9_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy9.Text == "") DEV_Page2_TextBox_Enemy9.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy9.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(8, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy10_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy10.Text == "") DEV_Page2_TextBox_Enemy10.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy10.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(9, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy11_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy11.Text == "") DEV_Page2_TextBox_Enemy11.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy11.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(10, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy12_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy12.Text == "") DEV_Page2_TextBox_Enemy12.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy12.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(11, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy13_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy13.Text == "") DEV_Page2_TextBox_Enemy13.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy13.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(12, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy14_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy14.Text == "") DEV_Page2_TextBox_Enemy14.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy14.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(13, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy15_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy15.Text == "") DEV_Page2_TextBox_Enemy15.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy15.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.Hp), v);
-        }
-
-        private void DEV_Page2_TextBox_Enemy16_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DEV_Page2_TextBox_Enemy16.Text == "") DEV_Page2_TextBox_Enemy16.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy16.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(15, EnemySlotOffsets.Hp), v);
+            var box = (TextBox)sender;
+            int slot = Convert.ToInt32(box.Tag);
+            if (box.Text == "") box.Text = "0";
+            if (int.TryParse(box.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Hp), v);
         }
 
         #endregion
 
         #region Info/links
 
-        private void button1_Click(object sender, RoutedEventArgs e)
+        // "Submit Bug Report" — opens the feedback form.
+        private void Btn_BugReport_Click(object sender, RoutedEventArgs e)
         {
             Process.Start(new ProcessStartInfo("https://docs.google.com/forms/d/e/1FAIpQLSdIaCjLTJ9aRqQVO731o2UwQKByF85W_yAj54pssO1RMkLewQ/viewform?usp=sf_link") { UseShellExecute = true });
         }
 
-        private void button2_Click(object sender, RoutedEventArgs e)
+        // "Join our Discord!"
+        private void Btn_Discord_Click(object sender, RoutedEventArgs e)
         {
             Process.Start(new ProcessStartInfo("https://discord.gg/8KcnBjgRHP") { UseShellExecute = true });
         }

@@ -546,34 +546,12 @@ namespace Dark_Cloud_Improved_Version
                                     if (Player.InDungeonFloor() == true && (Memory.ReadUInt(Addresses.dungeonDebugMenu) == 0 || Memory.ReadUInt(Addresses.dungeonDebugMenu) == 10))
                                     {
                                         byte currentSlot = Memory.ReadByte(0x21CDD88C + (currentCharacter * 0x1));
-                                        int currentWepElemAddr;
-                                        if (currentCharacter == 0)
-                                        {
-                                            currentWepElemAddr = Player.Toan.WeaponSlot0.elementHUD + (0xF8 * currentSlot);
-                                        }
-                                        else if (currentCharacter == 1)
-                                        {
-                                            currentWepElemAddr = Player.Xiao.WeaponSlot0.elementHUD + (0xF8 * currentSlot);
-                                        }
-                                        else if (currentCharacter == 2)
-                                        {
-                                            currentWepElemAddr = Player.Goro.WeaponSlot0.elementHUD + (0xF8 * currentSlot);
-                                        }
-                                        else if (currentCharacter == 3)
-                                        {
-                                            currentWepElemAddr = Player.Ruby.WeaponSlot0.elementHUD + (0xF8 * currentSlot);
-                                        }
-                                        else if (currentCharacter == 4)
-                                        {
-                                            currentWepElemAddr = Player.Ungaga.WeaponSlot0.elementHUD + (0xF8 * currentSlot);
-                                        }
-                                        else
-                                        {
-                                            currentWepElemAddr = Player.Osmond.WeaponSlot0.elementHUD + (0xF8 * currentSlot);
-                                        }
+                                        // Any character id outside 0-4 reads Osmond's record, as the old per-character branches did.
+                                        int elemOwner = currentCharacter >= Player.ToanId && currentCharacter <= Player.UngagaId ? currentCharacter : Player.OsmondId;
+                                        long currentWepElemAddr = WeaponRecord.Address(elemOwner, currentSlot, WeaponRecord.ElementHud);
 
                                         elementSelected = Memory.ReadByte(currentWepElemAddr);
-                                        int weaponElemAmount = currentWepElemAddr + 0x00000001;
+                                        long weaponElemAmount = currentWepElemAddr + 0x00000001;
                                         bool validElement = false;
                                         if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.DPad_Up ||
                                             Memory.ReadUShort(Addresses.buttonInputs) == 4104)  //DPad_Up + R1
@@ -702,7 +680,7 @@ namespace Dark_Cloud_Improved_Version
 
                                                 if (currentCharacter == 3)
                                                 {
-                                                    Memory.WriteByte(CodeCaves.Mailbox.Element, 1);
+                                                    Memory.WriteByte(Mailbox.Element, 1);
                                                 }
 
                                                 Memory.WriteByteArray(0x21E59450, elemRGBs[elementSelected]);
@@ -731,7 +709,7 @@ namespace Dark_Cloud_Improved_Version
                         }
                 }
 
-                if (MainMenuThread.userMode == true)
+                if (SessionController.userMode == true)
                 {
                     if (Memory.ReadByte(Addresses.mode) == 0 || Memory.ReadByte(Addresses.mode) == 1)
                     {
@@ -813,7 +791,7 @@ namespace Dark_Cloud_Improved_Version
 
         static void CheckSpecials1()
         {
-            Specials1 special1 = (Specials1)Memory.ReadByte(Player.Toan.WeaponSlot0.special1); //Pull our value from the memory and cast it to our enumerated Specials type
+            Specials1 special1 = (Specials1)Memory.ReadByte(WeaponRecord.Address(Player.ToanId, 0, WeaponRecord.Special1)); //Pull our value from the memory and cast it to our enumerated Specials type
 
             if (special1.HasFlag(Specials1.Unknown))
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Weapon Slot 0 has Unknown Ability");
@@ -952,9 +930,9 @@ namespace Dark_Cloud_Improved_Version
 
             while (1 == 1)
             {
-                Memory.WriteFloat(Player.Ungaga.WeaponSlot4.whp, 5000);
+                Memory.WriteFloat(WeaponRecord.Address(Player.UngagaId, 4, WeaponRecord.Whp), 5000);
 
-                int currentCharacter = Memory.ReadInt(Player.currentCharacter); //Read 4 bytes of currentCharacter value and check if Toan, Xiao, etc. Toan = 1680945251, Xiao = 1647587427
+                int currentCharacter = Memory.ReadInt(PlayerAddresses.CurrentCharacter); //Read 4 bytes of currentCharacter value and check if Toan, Xiao, etc. Toan = 1680945251, Xiao = 1647587427
 
                 if (Memory.ReadUInt(Addresses.dungeonClear) == 4294967281)
                 {

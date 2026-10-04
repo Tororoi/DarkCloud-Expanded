@@ -7,7 +7,7 @@ namespace Dark_Cloud_Improved_Version
     //   • chests / trap circles — the same CDungeonMap sub-tables as ChestAddresses, as absolute literals per map
     //     instance (firstChest / backfloorFirstChest are one field on two maps: map + 0xB680)
     //   • item tables — ItemPriceTable / ItemTbl* duplicate ItemAddresses (which says so in its own comments)
-    //   • player position / game mode / checkFloor / checkDungeon — duplicated verbatim in Player.cs
+    //   • player position / game mode / checkFloor / checkDungeon — duplicated verbatim in PlayerAddresses.cs
     // It also holds MOD MECHANISM, not addresses: functionOverride / functionBGMPlay / functionBGMStop are
     // assembled MIPS `jal` words the mod writes into the game, as MUTABLE public static byte[] in a constants
     // file. Those belong with the feature that installs them (TownCharacter / audio).
@@ -128,39 +128,6 @@ namespace Dark_Cloud_Improved_Version
         /// <br>7 = Next Floor Screen</br>
         ///</summary>
         public const int dungeonMode = 0x202A355C;
-
-        /// <summary>
-        ///     0 = Null
-        /// <br>1 = Spawned</br>
-        /// <br>2 = Destroy animation</br>
-        /// </summary>
-        public const int circleSpawn1 = 0x21DD56A0;
-
-        /// <summary>
-        ///     0 = Player stamina
-        /// <br>1 = Funds Increased</br>
-        /// <br>2 = Abs full</br>
-        /// <br>3 = Max Whp increased</br>
-        /// <br>4 = Whp recover</br>
-        /// <br>5 = Monster stamina</br>
-        /// <br>6 = Funds Decreased</br>
-        /// <br>7 = Status changed</br>
-        /// <br>8 = Max Whp decreased</br>
-        /// <br>9 = Whp decrease</br>
-        /// <br>10 = Unused effect (item "melted" into blank)</br>
-        /// </summary>
-        public const int circleEffect1 = 0x21DD56A4;
-        public const int circleSpawn2 = 0x21DD56C0;
-        public const int circleEffect2 = 0x21DD56C4;
-        public const int circleSpawn3 = 0x21DD56E0;
-        public const int circleEffect3 = 0x21DD56E4;
-
-        public const int backfloorcircleSpawn1 = 0x21DE61B0;
-        public const int backfloorcircleEffect1 = 0x21DE61B4;
-        public const int backfloorcircleSpawn2 = 0x21DE61D0;
-        public const int backfloorcircleEffect2 = 0x21DE61D4;
-        public const int backfloorcircleSpawn3 = 0x21DE61F0;
-        public const int backfloorcircleEffect3 = 0x21DE61F4;
 
         public const int dunBackFloorFlag = 0x202A34B4;
 
@@ -319,7 +286,7 @@ namespace Dark_Cloud_Improved_Version
         public const int itemDebugMenu = 0x21D9EC08;
         // TODO (needs live testing): 0x202A35EC has TWO contradictory names in this codebase —
         //   Addresses.dungeonDebugMenu   (here; 11 call sites)
-        //   Player.dunCameraPerspective  (0 = Normal, 10 = FPS, 155 = Static; read as a ushort)
+        //   PlayerAddresses.DunCameraPerspective  (0 = Normal, 10 = FPS, 155 = Static; read as a ushort)
         // and Dungeon.cs:1503/1508/1595 pokes it as a RAW LITERAL (writes 170, tests 171). At most one of these
         // labels is right. Someone has to watch the value live across a camera change / the debug menu / a chest
         // open and settle it, then collapse to ONE name and drop the literals. Until then, treat both names as
@@ -416,7 +383,7 @@ namespace Dark_Cloud_Improved_Version
         /// Address of the lui instruction that sets the fish detection (bite) radius. The PNACH patches this
         /// UNCONDITIONALLY ("more consistentfishing") — there is no flag and nothing to set from PINE.
         /// (A `fishRangeBoostFlag` mailbox slot was once reserved for a conditional boost that was never
-        /// built; it was removed, and it had been squatting on Mirage's scene-gate slot CodeCaves.Mailbox.MirageSceneGate.)
+        /// built; it was removed, and it had been squatting on Mirage's scene-gate slot Mailbox.MirageSceneGate.)
         /// </summary>
         public const int fishDetectionRadiusPatch = 0x20240364;
 

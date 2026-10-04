@@ -18,7 +18,7 @@ namespace Dark_Cloud_Improved_Version
     {
         private const string Tag = "[DoubleImpact] ";
         private const float DamageFactor = 0.75f;   // each pellet's attack, of the shot's
-        private const float PairWidth    = 2f;      // the pair this far apart, side by side across the flight line
+        private const float PairWidth    = 1f;      // the pair this far apart, side by side across the flight line
         private static bool _spriteSet;
 
         private static readonly bool[] _live = new bool[PlayerShotPool.SlotCount];   // the slots seen live last tick
@@ -28,8 +28,8 @@ namespace Dark_Cloud_Improved_Version
         internal static void Drive(bool active)
         {
             if (!active) return;
-            if (!_spriteSet || Memory.ReadInt(CodeCaves.Mailbox.PelletSpriteId) != Items.steelslingshot)
-            { Memory.WriteInt(CodeCaves.Mailbox.PelletSpriteId, Items.steelslingshot); _spriteSet = true; }   // every pellet a single stone
+            if (!_spriteSet || Memory.ReadInt(Mailbox.PelletSpriteId) != Items.steelslingshot)
+            { Memory.WriteInt(Mailbox.PelletSpriteId, Items.steelslingshot); _spriteSet = true; }   // every pellet a single stone
             Hardshooter.Drive(true);                                             // its ricochets, first: a ricochet is not twinned
             long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
             if (!Memory.IsValidGuest(pool)) return;
@@ -75,7 +75,7 @@ namespace Dark_Cloud_Improved_Version
         /// game, the latches start over.</summary>
         internal static void Stop()
         {
-            if (_spriteSet) { Memory.WriteInt(CodeCaves.Mailbox.PelletSpriteId, 0); _spriteSet = false; }
+            if (_spriteSet) { Memory.WriteInt(Mailbox.PelletSpriteId, 0); _spriteSet = false; }
             Hardshooter.Stop();
             Array.Clear(_live, 0, _live.Length); Array.Clear(_twin, 0, _twin.Length);
         }

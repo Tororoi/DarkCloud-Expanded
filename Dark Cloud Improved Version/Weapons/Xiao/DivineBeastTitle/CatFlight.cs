@@ -21,75 +21,121 @@ namespace Dark_Cloud_Improved_Version
         /// clears it, so a new charged shot always starts clean.</summary>
         internal static void ArmCave()
         {
-            Memory.WriteInt  (CodeCaves.Mailbox.CatPelletSlot, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatState, 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGrowInv, 1f / GrowFrames);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatHeadX, CatScale * _headX);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatHeadH, CatScale * _headH);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatHeadZ, CatScale * _headZ);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGrowFrames, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGrowN, GrowFrames);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGravity, FallGravity);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatFloorH, Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4));
-            Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatLandStopFrame, LandStopFrame);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatLandEndFrame, LandEndFrame);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatTrackHalf, _look.Track ? 1f : 0f);   // the winged cat re-aims until halfway down from the apex
-            Memory.WriteFloat(CodeCaves.Mailbox.CatLandLead, LandLeadFrames);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatMoveKey, KeyWalk);                // a brisk walk reads better than the run
-            Memory.WriteFloat(CodeCaves.Mailbox.CatMoveFrac, MoveFrac);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatMoveAbs, MoveSpeedAbs);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatFloatLaunch, FloatLaunchFrame);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatFloatStart, FloatStartFrame);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatFloatRate, CharacterMotion.MotionSpeedUseKey);   // KEY rate — FloatRate is baked into the KEY entry at spawn (see RegisterSlot)
-            Memory.WriteFloat(CodeCaves.Mailbox.CatFallBlend, 1f / FallBlendSteps);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatFallBlendFrames, FallBlendSteps);   // the cave switches float → fall this many frames before the land clip starts
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, GlowScale);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatScaleMul, CatScale);          // the size the cave grows the cat to on the pellet
-            _glowFade = -1;
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, GlowFlags);
+            Memory.WriteInt  (CatBlock.CatPelletSlot, 0);
+            Memory.WriteInt  (CatBlock.CatState, 0);
+            Memory.WriteFloat(CatBlock.CatGrowInv, 1f / GrowFrames);
+            Memory.WriteFloat(CatBlock.CatHeadX, CatScale * _headX);
+            Memory.WriteFloat(CatBlock.CatHeadH, CatScale * _headH);
+            Memory.WriteFloat(CatBlock.CatHeadZ, CatScale * _headZ);
+            Memory.WriteInt  (CatBlock.CatGrowFrames, 0);
+            Memory.WriteInt  (CatBlock.CatGrowN, GrowFrames);
+            Memory.WriteFloat(CatBlock.CatGravity, FallGravity);
+            Memory.WriteFloat(CatBlock.CatFloorH, Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4));
+            Memory.WriteInt  (CatBlock.CatTargetPtr, 0);
+            Memory.WriteFloat(CatBlock.CatLandStopFrame, LandStopFrame);
+            Memory.WriteFloat(CatBlock.CatLandEndFrame, LandEndFrame);
+            Memory.WriteFloat(CatBlock.CatTrackHalf, _look.Track ? 1f : 0f);   // the winged cat re-aims until halfway down from the apex
+            Memory.WriteFloat(CatBlock.CatLandLead, LandLeadFrames);
+            Memory.WriteInt  (CatBlock.CatMoveKey, KeyWalk);                // a brisk walk reads better than the run
+            Memory.WriteFloat(CatBlock.CatMoveFrac, MoveFrac);
+            Memory.WriteFloat(CatBlock.CatMoveAbs, MoveSpeedAbs);
+            Memory.WriteFloat(CatBlock.CatFloatLaunch, FloatLaunchFrame);
+            Memory.WriteFloat(CatBlock.CatFloatStart, FloatStartFrame);
+            Memory.WriteFloat(CatBlock.CatFloatRate, CharacterMotion.MotionSpeedUseKey);   // KEY rate — FloatRate is baked into the KEY entry at spawn (see RegisterSlot)
+            Memory.WriteFloat(CatBlock.CatFallBlend, 1f / FallBlendSteps);
+            Memory.WriteFloat(CatBlock.CatFallBlendFrames, FallBlendSteps);   // the cave switches float → fall this many frames before the land clip starts
+            Memory.WriteInt  (CatBlock.CatGlowOn, 0);
+            Memory.WriteFloat(CatBlock.CatGlowScale, GlowScale);
+            Memory.WriteFloat(CatBlock.CatScaleMul, CatScale);          // the size the cave grows the cat to on the pellet
+            _glowFadeFrom = DateTime.MinValue;
+            Memory.WriteInt  (CatBlock.CatGlowFlags, GlowFlags);
             WriteGlowName();                                                      // (clears CatGlowReady: the copy's texture entries are remade per spawn — rebind)
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, GlowPull);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, GlowLift);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatBlendDefault, BlendDefault);
+            Memory.WriteFloat(CatBlock.CatGlowPull, GlowPull);
+            Memory.WriteFloat(CatBlock.CatGlowLift, GlowLift);
+            Memory.WriteFloat(CatBlock.CatBlendDefault, BlendDefault);
             Memory.WriteFloat(CodeCaves.MotionCave + MotionType.StateSpeed, BlendDefault);   // the copy's channel: a hit mid-fall can leave the slow fade armed
-            Memory.WriteInt  (CodeCaves.Mailbox.CatSitKey, KeySit);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatProbeUp, ProbeUp);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatProbeDown, ProbeDown);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatProbeFront, ProbeFront);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatProbeBack, ProbeBack);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatRateBase, RateBase);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatRatePerSpeed, RatePerSpeed);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatRateMax, RateMax);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatIdleKey, KeyStand);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatBlocked, 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceRange, RangeFor(_target));
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceFrames, PounceFrames);   // per target: ApplyFlightTime
-            Memory.WriteInt  (CodeCaves.Mailbox.CatHitEntry, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatHitLatch, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatHitDamage, 0);                 // 0 = not stamped yet: the cave tests no touch until WriteHitStamps at bind. A stale non-zero value lets the hidden copy deal a 1-damage hit on its first frame
-            Memory.WriteInt  (CodeCaves.Mailbox.CatHitAttr, 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatKickStrength, KickStrength);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatKickDecay, KickDecay);
+            Memory.WriteInt  (CatBlock.CatSitKey, KeySit);
+            Memory.WriteFloat(CatBlock.CatProbeUp, ProbeUp);
+            Memory.WriteFloat(CatBlock.CatProbeDown, ProbeDown);
+            Memory.WriteFloat(CatBlock.CatProbeFront, ProbeFront);
+            Memory.WriteFloat(CatBlock.CatProbeBack, ProbeBack);
+            Memory.WriteFloat(CatBlock.CatRateBase, RateBase);
+            Memory.WriteFloat(CatBlock.CatRatePerSpeed, RatePerSpeed);
+            Memory.WriteFloat(CatBlock.CatRateMax, RateMax);
+            Memory.WriteInt  (CatBlock.CatIdleKey, KeyStand);
+            Memory.WriteInt  (CatBlock.CatBlocked, 0);
+            Memory.WriteFloat(CatBlock.CatPounceRange, RangeFor(_target));
+            Memory.WriteFloat(CatBlock.CatPounceFrames, PounceFrames);   // per target: ApplyFlightTime
+            Memory.WriteInt  (CatBlock.CatHitEntry, 0);
+            Memory.WriteInt  (CatBlock.CatHitLatch, 0);
+            Memory.WriteInt  (CatBlock.CatHitDamage, 0);                 // 0 = not stamped yet: the cave tests no touch until WriteHitStamps at bind. A stale non-zero value lets the hidden copy deal a 1-damage hit on its first frame
+            Memory.WriteInt  (CatBlock.CatHitAttr, 0);
+            Memory.WriteFloat(CatBlock.CatKickStrength, KickStrength);
+            Memory.WriteFloat(CatBlock.CatKickDecay, KickDecay);
             _hitFade = false;
-            Memory.WriteFloat(CodeCaves.Mailbox.CatReadyEnd, ReadyEndFrame);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatPounceFly, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatFloatKey, KeyFloat);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatReadyStart, ReadyStartFrame);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceMaxDist, RangeFor(_target) * 2f);
+            Memory.WriteFloat(CatBlock.CatReadyEnd, ReadyEndFrame);
+            Memory.WriteInt  (CatBlock.CatPounceFly, 0);
+            Memory.WriteInt  (CatBlock.CatFloatKey, KeyFloat);
+            Memory.WriteFloat(CatBlock.CatReadyStart, ReadyStartFrame);
+            Memory.WriteFloat(CatBlock.CatPounceMaxDist, RangeFor(_target) * 2f);
             long sl = SlotAddr();
             Memory.WriteVec3(sl + CCharacter.CharScale, 0f, 0f, 0f);
             Memory.WriteFloat(sl + CCharacter.NpcOpacity, 0f);
-            _scale = 0f; _alpha = 0f; _pelletSlot = -1; _fade = 0; _caveOwns = true; _disarmTicks = 0;
+            _scale = 0f; _alpha = 0f; _pelletSlot = -1; _fadeFrom = default; _caveOwns = true; _disarmTicks = 0;
             _phase = Phase.Resident; _phaseStart = GameClock.Now;
-            Memory.WriteInt  (CodeCaves.Mailbox.CatState, 3);                   // waiting — armed
+            FaceAlong(0f, 0f);                                                    // along Xiao's facing — the shot's way — until the bind faces it along the pellet (a bind seen late keeps this, not the last flight's)
+            Memory.WriteInt  (CatBlock.CatState, 3);                   // waiting — armed
             Log("shot released — the cave binds the next pellet on its birth frame");
+        }
+
+        /// <summary>The cave bound the released shot's pellet: the flight's setup — full opacity and tint, the 20 s clock from now, the
+        /// target, the hit stamps. Normally seen in state 1, but that lasts only the few frames the cat rides the pellet, and a slow
+        /// tick can miss it: then it runs on the first cave-driven state seen after the release (<paramref name="late"/>), else the
+        /// cat would fly with the release's zero opacity and tint and the previous flight's clock.</summary>
+        private static bool BindFromCave(int state, bool late)
+        {
+            long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
+            int slot = Memory.ReadInt(CatBlock.CatPelletSlot) - 1;
+            if (!Memory.IsValidGuest(pool) || slot < 0)
+            {
+                if (!late) return false;
+                // The pellet is already gone: everything but the pellet's own facing — seen, tinted, a fresh clock, a target, and the
+                // hit stamps (without them the cave tests no touch at all: the cat would leap through its target), the damage the
+                // last pellet carried.
+                _alpha = 1f; _fadeFrom = default; _glowFadeFrom = DateTime.MinValue; _caveOwns = true; _disarmTicks = 0;
+                _target = PickTarget();
+                _floor = _target >= 0 ? Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(_target) + 4)
+                                      : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
+                WriteHitStamps();
+                ApplyFlightTime();
+                _phase = Phase.Flying; _phaseStart = GameClock.Now; _hitDone = false; _boundAt = GameClock.Now; _gaitLogged = false; _blockedLogged = false; _pounceLogged = false; _pounceKind = 0; _sitLogged = false; _retargetTick = 0;
+                Memory.WriteFloat(CatBlock.CatFloorH, _floor);
+                WriteTargetAim();
+                Log($"cat bound (caught late, cave state {state}, the pellet already gone)" + (_target >= 0 ? $", target enemy slot {_target}" : "") + $"; hit damage {Memory.ReadInt(CatBlock.CatHitDamage)}");
+                return true;
+            }
+            _pool = pool; _pelletSlot = slot; _alpha = 1f; _fadeFrom = default; _glowFadeFrom = DateTime.MinValue; _caveOwns = true; _disarmTicks = 0;
+            ReseedCape();
+            long va = PlayerShotPool.VelAddr(pool, slot);
+            FaceAlong(Memory.ReadFloat(va), Memory.ReadFloat(va + 8));
+            _target = PickTarget();                                   // locked-on first, else the nearest to Xiao
+            _floor = _target >= 0 ? Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(_target) + 4)
+                                  : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
+            _pelletDamage = Memory.ReadInt(PlayerShotPool.DamageAddr(pool, slot));
+            WriteHitStamps();                                         // the entry the cave will plant: pellet + attack, the weapon's element
+            ApplyFlightTime();
+            _phase = Phase.Flying; _phaseStart = GameClock.Now; _hitDone = false; _boundAt = GameClock.Now; _gaitLogged = false; _blockedLogged = false; _pounceLogged = false; _pounceKind = 0; _sitLogged = false; _retargetTick = 0;
+            _flightFrame0 = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
+            Memory.WriteFloat(CatBlock.CatFloorH, _floor);
+            WriteTargetAim();
+            Log(
+                $"cat bound to pellet slot {slot} " + (late ? $"(caught late, cave state {state})" : "on its birth frame") + (_target >= 0 ? $", locked enemy slot {_target}" : "") + $" (motion frame {_flightFrame0:F1})");
+            return true;
         }
 
         internal static void DisarmCave()
         {
-            if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }   // CatGlowOn is PollCave's (the glow may linger past the cat)
+            if (_native) { Memory.WriteInt(CatBlock.CatPelletSlot, 0); Memory.WriteInt(CatBlock.CatState, 0); }   // CatGlowOn is PollCave's (the glow may linger past the cat)
             _caveOwns = false; _disarmTicks = 0;
         }
 
@@ -101,7 +147,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void PollCave()
         {
             if (!Active) return;
-            int state = Memory.ReadInt(CodeCaves.Mailbox.CatState);
+            int state = Memory.ReadInt(CatBlock.CatState);
             if (_disarmTicks > 0 && --_disarmTicks == 0 && state == 3) { DisarmCave(); Hide(); Log("charge released without a shot — cat stays hidden"); return; }
             if (_target >= 0 && state >= 4) WriteTargetAim();                                                  // the aim point follows the target's body every tick
             // A lock-on made after the cat picked its target wins, or it keeps a far one: checked every ~0.5 s
@@ -109,81 +155,56 @@ namespace Dark_Cloud_Improved_Version
             if (_target >= 0 && (state == 6 || state == 10) && ++_retargetTick >= 30) { _retargetTick = 0; RetargetToLockOn(state); }
             // Hold the crouch while the target cannot be hit: a chest-mimic still shut, or any enemy inside its invincibility
             // frames (`_STATUS_SET_MUTEKI`: 9 after a hit, 100 when a mimic wakes, 1000 dying) — CheckDmg skips every hit then.
-            if (state == 1 || state == 4 || state == 5 || state == 8 || state == 11) CrushGuardsNearCat();
             bool hold = _target >= 0 && state >= 4 && (IsUnopenedMimic(_target) || Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(_target, EnemySlotOffsets.HitStunTimer)) > 0);
-            Memory.WriteInt(CodeCaves.Mailbox.CatHoldReady, hold ? 1 : 0);
+            Memory.WriteInt(CatBlock.CatHoldReady, hold ? 1 : 0);
             if (hold != _holdLogged)
             {
                 _holdLogged = hold;
                 Log((hold ? $"target slot {_target} cannot be hit yet (shut mimic / invincibility frames) — crouching until it can" : "target hittable — leaping"));
-                // Released: a chest-mimic's init label ran when it woke (its guard windows — the disc bake makes the wake a
-                // guard — are registered only now); crush them for this flight so the leap lands through the guard.
-                if (!hold && _target >= 0) CrushGuard(_target, again: true);
             }
-            // The glow follows the cat's visibility. While the cat fades out (hit or 20 s expiry: opacity over FadeTicks) the glow
-            // SHRINKS on its own, longer clock (GlowFadeTicks), so it lingers a beat where the cat vanished — size is the
+            // The glow follows the cat's visibility. While the cat fades out (hit or 20 s expiry: opacity over FadeSeconds) the glow
+            // SHRINKS on its own, clock (GlowFadeSeconds), so it lingers a beat where the cat vanished — size is the
             // fade, since the torch tint global does not take. Its clock starts with the fade and keeps running past Hide();
             // a new bind resets it. Once the shrink has run out the glow stays OFF until the next bind: PollCave runs before
             // Step in the tick, so snapping back to "follow the cat" here would show one full-size frame before Step hid it.
             bool fading = _hitFade || _phase == Phase.Fading;
-            if (fading && _glowFade < 0) _glowFade = 0;
-            if (_glowFade >= 0 && _glowFade < GlowFadeTicks) _glowFade++;
-            bool shrinking = _glowFade >= 0 && _glowFade < GlowFadeTicks, done = _glowFade >= GlowFadeTicks;
+            if (fading && _glowFadeFrom == DateTime.MinValue) _glowFadeFrom = GameClock.Now;
+            double glowT = _glowFadeFrom == DateTime.MinValue ? -1.0 : (GameClock.Now - _glowFadeFrom).TotalSeconds / GlowFadeSeconds;
+            bool shrinking = glowT >= 0.0 && glowT < 1.0, done = glowT >= 1.0;
             bool glow = !done && ((state != 0 && state != 3) || shrinking);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, glow ? 1 : 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, GlowScale * (shrinking ? 1f - _glowFade / (float)GlowFadeTicks : done ? 0f : 1f));
-            int ent = Memory.ReadInt(CodeCaves.Mailbox.CatHitEntry);
+            Memory.WriteInt  (CatBlock.CatGlowOn, glow ? 1 : 0);
+            Memory.WriteFloat(CatBlock.CatGlowScale, GlowScale * (shrinking ? (float)(1.0 - glowT) : done ? 0f : 1f));
+            int ent = Memory.ReadInt(CatBlock.CatHitEntry);
             if (ent != 0)                                                        // the cave planted a damage entry at a contact (the pellet's own recipe)
             {
-                Memory.WriteInt(CodeCaves.Mailbox.CatHitEntry, 0);
+                Memory.WriteInt(CatBlock.CatHitEntry, 0);
                 lock (_planted) _planted.Add((ent - 1, PlantedLifeTicks, true));
-                int hitAttr = Memory.ReadInt(CodeCaves.Mailbox.CatHitAttr);
-                Log($"cat contact — damage entry {ent - 1} planted natively (base {Memory.ReadInt(CodeCaves.Mailbox.CatHitDamage)}, attr 0x{hitAttr:X} = {ElementNameOf(hitAttr)})");
+                int hitAttr = Memory.ReadInt(CatBlock.CatHitAttr);
+                Log($"cat contact — damage entry {ent - 1} planted natively (base {Memory.ReadInt(CatBlock.CatHitDamage)}, attr 0x{hitAttr:X} = {ElementNameOf(hitAttr)})");
             }
             if (state >= 4 && state <= 11 && state != 9)                        // every cave-owned state: face the cave's live direction (it re-aims in the ready crouch, the float wind-up and the take-off)
             {
-                float ddx = Memory.ReadFloat(CodeCaves.Mailbox.CatDirX), ddz = Memory.ReadFloat(CodeCaves.Mailbox.CatDirZ);
+                float ddx = Memory.ReadFloat(CatBlock.CatDirX), ddz = Memory.ReadFloat(CatBlock.CatDirZ);
                 if (ddx * ddx + ddz * ddz > 1e-6f) { _dirX = ddx; _dirY = ddz; _yaw = (float)Math.Atan2(ddx, ddz); }
             }
+            if (_phase == Phase.Resident && _caveOwns && state >= 4 && state <= 11) BindFromCave(state, late: true);   // the bind (state 1) went by between ticks
             if (state >= 4 && state <= 11 && LifetimeOver()) { FadeKeepingPose(); return; }   // the lifetime is absolute from the bind: on the ground, crouched at a shut mimic or mid-leap alike, it shrinks and fades as it stands
             switch (state)
             {
                 case 1:
-                    if (_phase != Phase.Flying)
-                    {
-                        long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
-                        int slot = Memory.ReadInt(CodeCaves.Mailbox.CatPelletSlot) - 1;
-                        if (!Memory.IsValidGuest(pool) || slot < 0) break;
-                        _pool = pool; _pelletSlot = slot; _alpha = 1f; _fade = 0; _glowFade = -1; _caveOwns = true; _disarmTicks = 0;
-                        ReseedCape();
-                        long va = PlayerShotPool.VelAddr(pool, slot);
-                        FaceAlong(Memory.ReadFloat(va), Memory.ReadFloat(va + 8));
-                        _target = PickTarget();                                   // locked-on first, else the nearest to Xiao
-                        _floor = _target >= 0 ? Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(_target) + 4)
-                                              : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
-                        _pelletDamage = Memory.ReadInt(PlayerShotPool.DamageAddr(pool, slot));
-                        WriteHitStamps();                                         // the entry the cave will plant: pellet + attack, the weapon's element
-                        CrushGuard(_target);                                      // Guard Crush: the target's guard windows are dropped for this flight
-                        ApplyFlightTime();
-                        _phase = Phase.Flying; _phaseStart = GameClock.Now; _hitDone = false; _boundAt = GameClock.Now; _gaitLogged = false; _blockedLogged = false; _pounceLogged = false; _pounceKind = 0; _sitLogged = false; _retargetTick = 0;
-                        _flightFrame0 = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
-                        Memory.WriteFloat(CodeCaves.Mailbox.CatFloorH, _floor);
-                        WriteTargetAim();
-                        Log(
-                            $"cat bound to pellet slot {slot} on its birth frame" + (_target >= 0 ? $", locked enemy slot {_target}" : "") + $" (motion frame {_flightFrame0:F1})");
-                    }
+                    if (_phase != Phase.Flying) BindFromCave(state, late: false);
                     break;
                 case 4:                                                          // falling: off the pellet's line, or a flying pounce's arc
                     if (_phase != Phase.Falling)
                     {
                         _phase = Phase.Falling; _phaseStart = GameClock.Now;
-                        if (Memory.ReadInt(CodeCaves.Mailbox.CatPounceFly) != 0)
+                        if (Memory.ReadInt(CatBlock.CatPounceFly) != 0)
                         {
-                            Log($"vertical leap at flying enemy slot {_target}, v=({Memory.ReadFloat(CodeCaves.Mailbox.CatVx):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVh):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVz):F2})/frame (decided at distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1})");
+                            Log($"vertical leap at flying enemy slot {_target}, v=({Memory.ReadFloat(CatBlock.CatVx):F2},{Memory.ReadFloat(CatBlock.CatVh):F2},{Memory.ReadFloat(CatBlock.CatVz):F2})/frame (decided at distance {Memory.ReadFloat(CatBlock.CatDbgDist):F1})");
                             break;
                         }
                         Log(
-                            $"full size after {Memory.ReadInt(CodeCaves.Mailbox.CatGrowFrames)} frames — off the pellet's line, v=({Memory.ReadFloat(CodeCaves.Mailbox.CatVx):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVh):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVz):F2})/frame, run speed {Memory.ReadFloat(CodeCaves.Mailbox.CatRunSpeed):F2}");
+                            $"full size after {Memory.ReadInt(CatBlock.CatGrowFrames)} frames — off the pellet's line, v=({Memory.ReadFloat(CatBlock.CatVx):F2},{Memory.ReadFloat(CatBlock.CatVh):F2},{Memory.ReadFloat(CatBlock.CatVz):F2})/frame, run speed {Memory.ReadFloat(CatBlock.CatRunSpeed):F2}");
                     }
                     break;
                 case 5:                                                          // land clip started (ahead of touchdown); the cave stops momentum at paw contact and runs at clip end
@@ -191,7 +212,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         _phase = Phase.Landing; _phaseStart = GameClock.Now;
                         long lp = SlotAddr() + CCharacter.CharPos;
-                        Log($"land clip started at ({Memory.ReadFloat(lp):F1},{Memory.ReadFloat(lp + 4):F1},{Memory.ReadFloat(lp + 8):F1}), {Memory.ReadFloat(lp + 4) - Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2} above the floor, motion frame {Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1}");
+                        Log($"land clip started at ({Memory.ReadFloat(lp):F1},{Memory.ReadFloat(lp + 4):F1},{Memory.ReadFloat(lp + 8):F1}), {Memory.ReadFloat(lp + 4) - Memory.ReadFloat(CatBlock.CatFloorH):F2} above the floor, motion frame {Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1}");
                     }
                     break;
                 case 6:                                                          // running (cave moves it); face along its direction, decide the end
@@ -199,7 +220,7 @@ namespace Dark_Cloud_Improved_Version
                     if (_phase != Phase.Running)
                     {
                         _phase = Phase.Running; _phaseStart = GameClock.Now; _pounceLogged = false; _pounceKind = 0;
-                        Log($"land clip done (frame {Memory.ReadFloat(CodeCaves.Mailbox.CatPrevFrame):F1}) — moving off, floor {Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2}");
+                        Log($"land clip done (frame {Memory.ReadFloat(CatBlock.CatPrevFrame):F1}) — moving off, floor {Memory.ReadFloat(CatBlock.CatFloorH):F2}");
                     }
                     long rp = SlotAddr() + CCharacter.CharPos;
                     _x = Memory.ReadFloat(rp); _h = Memory.ReadFloat(rp + 4); _y = Memory.ReadFloat(rp + 8);
@@ -210,7 +231,7 @@ namespace Dark_Cloud_Improved_Version
                         int was = _target;
                         _target = PickTarget();                                   // the next nearest, if any
                         WriteTargetAim();
-                        CrushGuard(_target); ApplyFlightTime();
+                        ApplyFlightTime();
                         Log($"target slot {was} is gone — now {(_target >= 0 ? $"slot {_target}" : "none (walking straight)")}");
                     }
                     if (_target >= 0)
@@ -228,18 +249,18 @@ namespace Dark_Cloud_Improved_Version
                             if (_target >= 0)
                             {
                                 WriteTargetAim();
-                                CrushGuard(_target); ApplyFlightTime();
+                                ApplyFlightTime();
                                 _sitLogged = false; _gaitLogged = false;
                                 Log($"enemy slot {_target} came within range — up and after it");
                             }
                         }
                     }
-                    else if (!_gaitLogged && Memory.ReadInt(CodeCaves.Mailbox.CatBlocked) == 0)
+                    else if (!_gaitLogged && Memory.ReadInt(CatBlock.CatBlocked) == 0)
                     {
                         _gaitLogged = true;
-                        Log($"walking at {Memory.ReadFloat(CodeCaves.Mailbox.CatRunSpeed):F3}/frame, clip rate {Memory.ReadFloat(SlotAddr() + CharacterMotion.MotionSpeedOffset):F2} (town mapping)");
+                        Log($"walking at {Memory.ReadFloat(CatBlock.CatRunSpeed):F3}/frame, clip rate {Memory.ReadFloat(SlotAddr() + CharacterMotion.MotionSpeedOffset):F2} (town mapping)");
                     }
-                    bool blocked = Memory.ReadInt(CodeCaves.Mailbox.CatBlocked) != 0;
+                    bool blocked = Memory.ReadInt(CatBlock.CatBlocked) != 0;
                     if (blocked && !_blockedLogged) { _blockedLogged = true; Log("a wall stops the cat — waiting"); }
                     if (!blocked) _blockedLogged = false;
                     break;
@@ -248,16 +269,16 @@ namespace Dark_Cloud_Improved_Version
                     if (_pounceKind != 3) { _pounceKind = 3; _phase = Phase.TakeOff; Log($"float wind-up at enemy slot {_target} — jump at frame {FloatLaunchFrame:F0}"); }
                     break;
                 case 10:                                                         // ready: in place before the jump, or held there while the target cannot be hit
-                    if (!_pounceLogged) { _pounceLogged = true; _phase = Phase.TakeOff; _phaseStart = GameClock.Now; Log($"readying a pounce at enemy slot {_target} (cave compared distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1} vs range {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgRange):F1})"); }
+                    if (!_pounceLogged) { _pounceLogged = true; _phase = Phase.TakeOff; _phaseStart = GameClock.Now; Log($"readying a pounce at enemy slot {_target} (cave compared distance {Memory.ReadFloat(CatBlock.CatDbgDist):F1} vs range {Memory.ReadFloat(CatBlock.CatDbgRange):F1})"); }
                     break;
                 case 2:
                 {
                     long sp = SlotAddr() + CCharacter.CharPos;                       // hold the last placed spot through the fade
                     _x = Memory.ReadFloat(sp); _h = Memory.ReadFloat(sp + 4); _y = Memory.ReadFloat(sp + 8);
-                    int frames = Memory.ReadInt(CodeCaves.Mailbox.CatGrowFrames);
+                    int frames = Memory.ReadInt(CatBlock.CatGrowFrames);
                     float mf = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
                     _scale = 1f; _pelletSlot = -1;
-                    Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
+                    Memory.WriteInt(CatBlock.CatState, 0);
                     _caveOwns = false;
                     Log($"pellet ended after {frames} frames; motion frame {_flightFrame0:F1} → {mf:F1}");
                     Enter(Phase.Fading, KeyLeap);
@@ -275,7 +296,7 @@ namespace Dark_Cloud_Improved_Version
             _target = LockedTarget();
             _floor = _target >= 0 ? Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(_target) + 4)
                                   : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
-            _pool = pool; _pelletSlot = slot; _scale = 0f; _alpha = 1f; _fade = 0; _glowFade = -1;
+            _pool = pool; _pelletSlot = slot; _scale = 0f; _alpha = 1f; _fadeFrom = default; _glowFadeFrom = DateTime.MinValue;
             PlaceRootUnderHead();
             _phase = Phase.Flying; _phaseStart = GameClock.Now; _hitDone = false;
             Maintain();
@@ -286,8 +307,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Back to resident: invisible, scale 0, fall pose looping, ready for the next charge.</summary>
         private static void Hide()
         {
-            _alpha = 0f; _scale = 0f; _pelletSlot = -1; _fade = 0; _caveOwns = false; _hitFade = false;
-            RestoreGuardsNow();
+            _alpha = 0f; _scale = 0f; _pelletSlot = -1; _fadeFrom = default; _caveOwns = false; _hitFade = false;
             _phase = Phase.Resident; _phaseStart = GameClock.Now;
             SetKey(KeyLeap);
             Maintain();
@@ -299,7 +319,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool LifetimeOver()
         {
             if ((GameClock.Now - _boundAt).TotalSeconds < LifetimeSeconds) return false;
-            Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
+            Memory.WriteInt(CatBlock.CatState, 0);
             _scale = 1f; _caveOwns = false;
             Log("20 s lifetime over — shrinking away");
             return true;
@@ -309,7 +329,7 @@ namespace Dark_Cloud_Improved_Version
         private static void FadeKeepingPose()
         {
             _key = Memory.ReadInt(SlotAddr() + CCharacter.MotionId);
-            _phase = Phase.Fading; _phaseStart = GameClock.Now; _fade = 0;
+            _phase = Phase.Fading; _phaseStart = GameClock.Now; _fadeFrom = GameClock.Now;
         }
 
         // ───────────────────────────────────────── aim + targeting ─────────────────────────────────────────
@@ -340,7 +360,7 @@ namespace Dark_Cloud_Improved_Version
                 if (EnemySpecies.VerticalLeapTargets.TryGetValue(species, out string name)) { frames = PounceFramesTall; why = name; }
                 else if (MiniBoss.miniBossEnemyNumbers.Contains(_target) || scale >= 1.25f) { frames = PounceFramesTall; why = $"miniboss (model scale {scale:F2})"; }
             }
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceFrames, frames);
+            Memory.WriteFloat(CatBlock.CatPounceFrames, frames);
             if (why.Length > 0) Log($"target slot {_target}: {frames:F0}-frame leap ({why})");
         }
 
@@ -354,10 +374,10 @@ namespace Dark_Cloud_Improved_Version
         /// tick; CatTargetPtr points at that vector. No target → pointer 0 (the cat sits).</summary>
         private static void WriteTargetAim()
         {
-            if (_target < 0) { Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, 0); return; }
+            if (_target < 0) { Memory.WriteInt(CatBlock.CatTargetPtr, 0); return; }
             float range = RangeFor(_target);                                     // per target, every tick (a mimic may open mid-approach)
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceRange, range);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceMaxDist, range * 2f);
+            Memory.WriteFloat(CatBlock.CatPounceRange, range);
+            Memory.WriteFloat(CatBlock.CatPounceMaxDist, range * 2f);
             long root = EnemyAddresses.CharObjects.PosAddr(_target);
             float x = Memory.ReadFloat(root), h = Memory.ReadFloat(root + 4), y = Memory.ReadFloat(root + 8);
             if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(_target, EnemySlotOffsets.RenderStatus)) != 2)
@@ -365,8 +385,8 @@ namespace Dark_Cloud_Improved_Version
                 // Dormant (a chest-mimic that has not opened): its script has not declared any spheres, so the sphere table
                 // is whatever the slot's previous occupant left — aiming at that sent the cat wandering off.
                 // The root is the chest's spot (SetMimicEvent places the box at the enemy's spawn position).
-                Memory.WriteVec3(CodeCaves.Mailbox.CatAimPos, x, h, y);
-                Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, (int)Memory.ToGuest(CodeCaves.Mailbox.CatAimPos));
+                Memory.WriteVec3(CatBlock.CatAimPos, x, h, y);
+                Memory.WriteInt(CatBlock.CatTargetPtr, (int)Memory.ToGuest(CatBlock.CatAimPos));
                 if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Log($"aim at enemy slot {_target}: dormant (chest) — its root at ({x:F1},{h:F1},{y:F1})"); }
                 return;
             }
@@ -399,8 +419,8 @@ namespace Dark_Cloud_Improved_Version
                 }
                 if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Log($"aim at enemy slot {_target}: sphere r={best:F1} at ({x:F1},{h:F1},{y:F1}){(anyDamaging ? "" : " — NO sphere can take Xiao's damage; aiming at the biggest anyway")}"); }
             }
-            Memory.WriteVec3(CodeCaves.Mailbox.CatAimPos, x, h, y);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, (int)Memory.ToGuest(CodeCaves.Mailbox.CatAimPos));
+            Memory.WriteVec3(CatBlock.CatAimPos, x, h, y);
+            Memory.WriteInt  (CatBlock.CatTargetPtr, (int)Memory.ToGuest(CatBlock.CatAimPos));
         }
 
         // A chest-mimic waits as a DORMANT slot; while the cat's target is one, the cat crouches and waits.
@@ -426,12 +446,12 @@ namespace Dark_Cloud_Improved_Version
             int locked = LockedTarget();
             if (locked < 0 || locked == _target || !Enemies.IsLive(locked)) return;
             int was = _target; _target = locked;
-            WriteTargetAim(); CrushGuard(_target); ApplyFlightTime();
+            WriteTargetAim(); ApplyFlightTime();
             _gaitLogged = false; _pounceLogged = false; _sitLogged = false;
             if (state == 10)
             {
                 SetMotionFlags(clear: CCharacter.MotionPlayOnce);
-                Memory.WriteInt(CodeCaves.Mailbox.CatState, 6);
+                Memory.WriteInt(CatBlock.CatState, 6);
             }
             Log($"lock-on moved: target slot {was} → {locked}{(state == 10 ? " (leaving the crouch, walking)" : "")}");
         }
@@ -480,109 +500,10 @@ namespace Dark_Cloud_Improved_Version
         internal static void WriteHitStamps()
         {
             int attack = Memory.ReadShort(BattleWeaponAttack);
-            uint elem = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
+            uint elem = (uint)WeaponModelFrames.SelectedElementBits(WeaponModelFrames.EquippedRecord()) & 0x1F;
             uint attr = (elem != 0 && (elem & (elem - 1)) == 0) ? elem : 0u;      // one pure element bit or none
-            Memory.WriteInt(CodeCaves.Mailbox.CatHitDamage, Math.Max(1, _pelletDamage + attack));
-            Memory.WriteInt(CodeCaves.Mailbox.CatHitAttr, (int)attr);
-        }
-
-        internal static readonly List<(int slot, int ticks, ushort[] flags)> _guardRestore = new();
-        /// <summary>Guard Crush for the cat: the target's guard-frame windows are zeroed for the flight (a guarding enemy
-        /// would otherwise take the hit on its guard); restored by <see cref="RetirePlanted"/> after the cat's lifetime
-        /// or at once by <see cref="RestoreGuardsNow"/>.</summary>
-        private static void CrushGuard(int enemy, bool again = false)
-        {
-            if (enemy < 0 || enemy >= EnemyAddresses.FloorSlots.Count) return;
-            lock (_planted)
-            {
-                int have = _guardRestore.FindIndex(g => g.slot == enemy);
-                if (have >= 0 && !again) return;                                     // already crushed this flight
-                if (have >= 0)
-                {   // again: windows registered AFTER the first crush (a chest-mimic's init label runs when it wakes) — zero
-                    // them too; the snapshot keeps the first non-zero flag per window so the restore puts everything back
-                    var (slot, ticks, snap) = _guardRestore[have];
-                    bool more = false;
-                    for (int w = 0; w < snap.Length; w++)
-                    {
-                        long a = EnemyAddresses.GuardWindows.FlagAddr(enemy, w);
-                        ushort cur = Memory.ReadUShort(a);
-                        if (cur != 0) { Memory.WriteUShort(a, 0); if (snap[w] == 0) snap[w] = cur; more = true; }
-                    }
-                    if (more) Log($"guard windows of enemy slot {enemy} zeroed again (registered since the first crush)");
-                    return;
-                }
-            }
-            var snap0 = new ushort[EnemyAddresses.GuardWindows.WindowCount];
-            bool any = false;
-            for (int w = 0; w < snap0.Length; w++)
-            {
-                long a = EnemyAddresses.GuardWindows.FlagAddr(enemy, w);
-                snap0[w] = Memory.ReadUShort(a);
-                if (snap0[w] != 0) { Memory.WriteUShort(a, 0); any = true; }
-            }
-            if (!any) return;
-            lock (_planted) _guardRestore.Add((enemy, (int)(LifetimeSeconds * 60) + 120, snap0));
-            Log($"guard windows of enemy slot {enemy} zeroed for this flight (Guard Crush)");
-        }
-
-        private const float GuardCrushRadius = 30f;      // the cat's reach while it is airborne
-        private const int   GuardSweepTicks  = 45;       // how long a swept crush holds after the last sweep (~1.5 s)
-        /// <summary>Guard Crush, every tick the cat can deal damage. <see cref="CrushGuard"/> covers only the chosen target and
-        /// only when called, but an enemy re-registers its guard windows whenever its script runs <c>_SET_GUARD_FRAME</c>, and
-        /// the cat's contact test hits whatever body sphere it touches — which need not be the target. CheckDmg (0x1D9F10)
-        /// offers the attacker no "unguardable" flag: the window IS the guard, so it has to be down at the instant of contact.
-        /// Reads every slot's window flags in one block and crushes those live and within <see cref="GuardCrushRadius"/> (the
-        /// target always counts); <see cref="RetirePlanted"/> restores them.</summary>
-        private static void CrushGuardsNearCat()
-        {
-            int n = EnemyAddresses.FloorSlots.Count, wc = EnemyAddresses.GuardWindows.WindowCount;
-            byte[] blk = Memory.ReadBytesBatch(EnemyAddresses.GuardWindows.FlagAddr(0, 0), n * EnemyAddresses.GuardWindows.Stride);
-            if (blk == null) return;
-            long sl = SlotAddr();
-            float cx = Memory.ReadFloat(sl + CCharacter.CharPos), cy = Memory.ReadFloat(sl + CCharacter.CharPos + 8);
-            for (int slot = 0; slot < n; slot++)
-            {
-                var cur = new ushort[wc];
-                bool any = false;
-                for (int w = 0; w < wc; w++)
-                {
-                    cur[w] = BitConverter.ToUInt16(blk, slot * EnemyAddresses.GuardWindows.Stride + w * 2);
-                    if (cur[w] != 0) any = true;
-                }
-                if (!any) continue;                                                  // nothing registered: nothing to crush
-                if (slot != _target)
-                {
-                    long p = EnemyAddresses.CharObjects.PosAddr(slot);
-                    float dx = Memory.ReadFloat(p) - cx, dy = Memory.ReadFloat(p + 8) - cy;
-                    if (dx * dx + dy * dy > GuardCrushRadius * GuardCrushRadius) continue;
-                }
-                for (int w = 0; w < wc; w++) if (cur[w] != 0) Memory.WriteUShort(EnemyAddresses.GuardWindows.FlagAddr(slot, w), 0);
-                lock (_planted)
-                {
-                    int i = _guardRestore.FindIndex(g => g.slot == slot);
-                    if (i < 0)
-                    {
-                        _guardRestore.Add((slot, GuardSweepTicks, cur));
-                        Log($"guard windows of enemy slot {slot} zeroed (in the cat's reach)");
-                    }
-                    else
-                    {
-                        var (s2, ticks, snap) = _guardRestore[i];
-                        for (int w = 0; w < wc && w < snap.Length; w++) if (snap[w] == 0 && cur[w] != 0) snap[w] = cur[w];
-                        _guardRestore[i] = (s2, Math.Max(ticks, GuardSweepTicks), snap);
-                    }
-                }
-            }
-        }
-
-        private static void RestoreGuardsNow()
-        {
-            lock (_planted)
-            {
-                foreach (var (slot, _, flags) in _guardRestore)
-                    for (int w = 0; w < flags.Length; w++) if (flags[w] != 0) Memory.WriteUShort(EnemyAddresses.GuardWindows.FlagAddr(slot, w), flags[w]);
-                _guardRestore.Clear();
-            }
+            Memory.WriteInt(CatBlock.CatHitDamage, Math.Max(1, _pelletDamage + attack));
+            Memory.WriteInt(CatBlock.CatHitAttr, (int)attr);
         }
 
         // ───────────────────────────────────────────── flight ──────────────────────────────────────────────
@@ -595,8 +516,9 @@ namespace Dark_Cloud_Improved_Version
             double t = (GameClock.Now - _phaseStart).TotalSeconds;
             if (_hitFade)                                                        // after a landed hit: keep flying/landing under the cave, fade out meanwhile
             {
-                _fade++; _alpha = Math.Max(0f, 1f - _fade / (float)FadeTicks);
-                if (_fade >= FadeTicks) { DisarmCave(); Hide(); return; }      // the cave stops driving the (now invisible) cat
+                double ft = (GameClock.Now - _fadeFrom).TotalSeconds / FadeSeconds;
+                _alpha = (float)Math.Max(0.0, 1.0 - ft);
+                if (ft >= 1.0) { DisarmCave(); Hide(); return; }      // the cave stops driving the (now invisible) cat
             }
             if (_target >= 0 && !Enemies.IsLive(_target)) _target = -1;
             float tx = 0, th = 0, ty = 0;
@@ -679,9 +601,9 @@ namespace Dark_Cloud_Improved_Version
                     if (t >= LandSeconds) Enter(Phase.Fading, KeyStand);
                     break;
                 case Phase.Fading:
-                    _fade++;
-                    _alpha = Math.Max(0f, 1f - _fade / (float)FadeTicks);
-                    if (_fade >= FadeTicks) { Hide(); return; }
+                    double ft = (GameClock.Now - _fadeFrom).TotalSeconds / FadeSeconds;
+                    _alpha = (float)Math.Max(0.0, 1.0 - ft);
+                    if (ft >= 1.0) { Hide(); return; }
                     break;
             }
             Maintain();

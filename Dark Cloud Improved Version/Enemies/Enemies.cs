@@ -374,15 +374,15 @@ namespace Dark_Cloud_Improved_Version
                             if (!anyChanges)
                             {
                                 anyChanges = true;
-                                float px = Memory.ReadFloat(Player.dunPositionX);
-                                float py = Memory.ReadFloat(Player.dunPositionY);
-                                float pz = Memory.ReadFloat(Player.dunPositionZ);
-                                int charId = Memory.ReadByte(Player.currentCharacter);
+                                float px = Memory.ReadFloat(PlayerAddresses.DunPositionX);
+                                float py = Memory.ReadFloat(PlayerAddresses.DunPositionY);
+                                float pz = Memory.ReadFloat(PlayerAddresses.DunPositionZ);
+                                int charId = Memory.ReadByte(PlayerAddresses.CurrentCharacter);
                                 string charName = Player.GetCharacterName(charId) ?? "Unknown";
                                 ushort charHp = Player.Toan.GetHp();
-                                int lastDmg = Memory.ReadInt(Player.mostRecentDamage);
-                                int dmgSrc = Memory.ReadInt(Player.damageSource);
-                                int animId = Memory.ReadInt(Player.animationId);
+                                int lastDmg = Memory.ReadInt(PlayerAddresses.MostRecentDamage);
+                                int dmgSrc = Memory.ReadInt(PlayerAddresses.DamageSource);
+                                int animId = Memory.ReadInt(PlayerAddresses.AnimationId);
                                 Console.WriteLine($"[PlayerState] {charName} hp={charHp} pos=({px:F1},{py:F1},{pz:F1}) anim={animId} lastDmg={lastDmg} dmgSrc={dmgSrc}");
                             }
                             int off = w * 4;
@@ -613,7 +613,7 @@ namespace Dark_Cloud_Improved_Version
                 sumZ += Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationZ);
                 zCount++;
             }
-            float playerZ = Memory.ReadFloat(Player.dunPositionZ);
+            float playerZ = Memory.ReadFloat(PlayerAddresses.DunPositionZ);
             float avgZ    = zCount > 0 ? sumZ / zCount : 0f;
             // At floor entry all peers may have Z=0 (not yet placed by engine), so fall back to
             // player Z — player is at stable floor height by the time this correction runs.
@@ -640,8 +640,8 @@ namespace Dark_Cloud_Improved_Version
                 }
                 else
                 {
-                    targetX = Memory.ReadFloat(Player.dunPositionX);
-                    targetY = Memory.ReadFloat(Player.dunPositionY);
+                    targetX = Memory.ReadFloat(PlayerAddresses.DunPositionX);
+                    targetY = Memory.ReadFloat(PlayerAddresses.DunPositionY);
                 }
 
                 float dx = x - targetX, dy = y - targetY;
@@ -679,6 +679,10 @@ namespace Dark_Cloud_Improved_Version
             return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Hp)) > 0;
         }
 
+        /// <summary>Whether a floor slot's enemy is a boss or boss companion (monster type 2 — the type Critical skips).</summary>
+        internal static bool IsBoss(int slot)
+            => Memory.ReadShort(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MonsterType)) == 2;
+
         /// <summary>
         /// An area-of-effect KNOCKBACK centred on a world point: launch every live enemy within
         /// <paramref name="radius"/> radially OUTWARD, away from the centre. Returns how many it caught.
@@ -687,7 +691,7 @@ namespace Dark_Cloud_Improved_Version
         /// CheckDmg owns the death path (death motion, drops, de-targeting, removing it from the AI), so an enemy
         /// zeroed by a direct HP write keeps walking and attacking while everything that tests HP treats it as
         /// dead: an untargetable, unkillable corpse. Damage must always be dealt by something the engine itself
-        /// resolves (a real pellet — <see cref="ShrapnelBurst"/> — or an effect's own collision sphere).
+        /// resolves (a real pellet in the player's shot pool — <see cref="PlayerShotPool"/> — or an effect's own collision sphere).
         ///
         /// The knockback is the engine's own, not a teleport. Step__CMonstorUnit feeds
         /// <see cref="EnemySlotOffsets.KnockbackForce"/> into the enemy's velocity every frame and drains it by
@@ -713,32 +717,47 @@ namespace Dark_Cloud_Improved_Version
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
                 if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) <= 0) continue;
-
-                long pos = EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX);   // X, height, Y
-                float ex = Memory.ReadFloat(pos), ey = Memory.ReadFloat(pos + 8);
-                float dx = ex - cx, dy = ey - cy;
-                float dist = (float)Math.Sqrt(dx * dx + dy * dy);
-                if (dist > radius) continue;
-
-                // An enemy standing exactly on the centre has no direction to be thrown in — give it one rather
-                // than dividing by zero.
-                if (dist < 0.001f) { dx = 1f; dy = 0f; }
-                else { dx /= dist; dy /= dist; }
-
-                float need  = radius - dist + clearMargin;
-                float force = (float)Math.Sqrt(2.0 * decay * Math.Max(0f, need)) * forceScale;
-                if (force > maxForce) force = maxForce;
-
-                long slot = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
-                Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingX, dx);
-                Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingY, 0f);   // horizontal launch
-                Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingZ, dy);
-                Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingW, 0f);   // W=0 => a direction, not a point
-                Memory.WriteFloat(slot + EnemySlotOffsets.KnockbackForce, force);
-                Memory.WriteFloat(slot + EnemySlotOffsets.KnockbackDecay, decay);
-                caught++;
+                if (LaunchClear(s, cx, cy, radius, decay, maxForce, clearMargin, forceScale)) caught++;
             }
             return caught;
+        }
+
+        /// <summary>Launch ONE enemy radially outward from (cx, cy) with the force that carries it just clear of
+        /// <paramref name="radius"/> — the per-slot half of <see cref="RadialKnockback"/>, split out so a caller that
+        /// already has its own filtering (a height band, a knockback-resistance skip) can reuse the same launch
+        /// without a second copy of the force inversion. False when the enemy is outside the radius.
+        ///
+        /// <paramref name="multScale"/> scales the force after the inversion: pass the enemy's own
+        /// <see cref="EnemySlotOffsets.KnockbackMult"/> to make the launch honour the species' knockback resistance
+        /// (0.0 = immovable, bosses and rooted plants; 0.5-0.8 = heavies and stone), since writing the force field
+        /// DIRECTLY bypasses the scaling CheckDmg would normally apply.</summary>
+        internal static bool LaunchClear(int s, float cx, float cy, float radius, float decay,
+                                         float maxForce, float clearMargin = 0f, float forceScale = 1f,
+                                         float multScale = 1f)
+        {
+            long pos = EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX);   // X, height, Y
+            float ex = Memory.ReadFloat(pos), ey = Memory.ReadFloat(pos + 8);
+            float dx = ex - cx, dy = ey - cy;
+            float dist = (float)Math.Sqrt(dx * dx + dy * dy);
+            if (dist > radius) return false;
+
+            // An enemy standing exactly on the centre has no direction to be thrown in — give it one rather
+            // than dividing by zero.
+            if (dist < 0.001f) { dx = 1f; dy = 0f; }
+            else { dx /= dist; dy /= dist; }
+
+            float need  = radius - dist + clearMargin;
+            float force = (float)Math.Sqrt(2.0 * decay * Math.Max(0f, need)) * forceScale * multScale;
+            if (force > maxForce) force = maxForce;
+
+            long slot = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+            Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingX, dx);
+            Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingY, 0f);   // horizontal launch
+            Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingZ, dy);
+            Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingW, 0f);   // W=0 => a direction, not a point
+            Memory.WriteFloat(slot + EnemySlotOffsets.KnockbackForce, force);
+            Memory.WriteFloat(slot + EnemySlotOffsets.KnockbackDecay, decay);
+            return true;
         }
     }
 }

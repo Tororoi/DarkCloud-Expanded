@@ -1,6 +1,7 @@
-// GENERATED from the authored Python data modules (tools/queens/queens_snake_statue_surgery_data.py,
-// tools/yellowdrops/yellowdrops_westbank_data.py, tools/queens/queens_fishing_collision.py) — every row is one
-// triangle as 9 doubles (x, y, z × 3), the values verbatim. Regenerate rather than edit by hand.
+// Authored once from the Python data modules tools/queens/queens_snake_statue_surgery_data.py,
+// tools/yellowdrops/yellowdrops_westbank_data.py and tools/queens/queens_fishing_collision.py (values verbatim) — there is no
+// generator in tools/, so edit by hand (and keep the Python modules in step if they are still used). Every row is one triangle
+// as 9 doubles (x, y, z × 3).
 namespace Dark_Cloud_Improved_Version
 {
     internal static class SceneCollisionData

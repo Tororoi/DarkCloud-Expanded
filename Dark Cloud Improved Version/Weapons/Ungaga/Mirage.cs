@@ -4,43 +4,48 @@ using System.Threading;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// Ungaga's "Mirage" (weapon 354): releasing a charge plants a stationary DECOY at the player's spot.
-    /// While it lives (10s, refreshed by a new charge), enemies path toward the decoy instead of the
-    /// player — PER ENEMY, so an enemy you HIT drops the illusion and re-targets you.
-    ///
-    /// Hard-won implementation (6 crashes): two independent PCSX2 limits. (1) Patching HOT, actively-
-    /// executing EE code crashes the recompiler → the _GET_POSITION patch is applied ONLY at the COLD
-    /// window (in-game entry, before any enemy has called it — same window the ABS patches use).
-    /// (2) Executing native code from a PINE-written CAVE crashes when a fresh path is first hit → no
-    /// cave stub; the redirect is a 5-word IN-PLACE rewrite (runs in _GET_POSITION's own compiled block)
-    /// that reads the player pointer from a per-slot DATA table. The rewrite is UNCONDITIONAL, so a fast
-    /// loop keeps the table = the live player position for un-fooled slots; fooled slots hold the decoy.
+    /// Ungaga's "Mirage" (weapon 354; Super Steve inherits it through a Mirage / Hercules' Wrath sphere): the guard pose held
+    /// <see cref="GuardChargeMs"/> flashes the player and plants a stationary DECOY at their spot — a clone of the wielder in
+    /// the guard pose (<see cref="CharacterClone"/>) under a heat shimmer (<see cref="HeatHaze"/>). While it stands (12 s, 18 s
+    /// from Hercules' Wrath; a re-cast hands off to a new one) every enemy is pointed at it through the per-slot target table
+    /// (<see cref="TargetRedirectCaves"/>, held via <see cref="AggroTable"/>) PER ENEMY: one you HIT drops the illusion and
+    /// re-targets you until the next decoy. The loop runs on every floor and tears the decoy down on expiry, weapon or party
+    /// swap and floor exit.
     /// </summary>
     internal static class Mirage
     {
-        private const double DecoySeconds = 12.0;
+        private const string Tag = "[Mirage] ";
+        private const double MirageSeconds = 12.0, HerculesSeconds = 18.0;   // the decoy's life: the Mirage's, and Hercules' Wrath's longer one
+        private static double DecoySeconds = MirageSeconds;                  // latched at each cast (PlaceDecoyAt) from the weapon or sphere that cast it
+
+        /// <summary>Hercules' Wrath (Ungaga's, or Super Steve's sphere of it) is the one casting.</summary>
+        private static bool HerculesCasts() => UngagaWeapon.WieldsOrSphere(Items.herculeswrath);
+
+        /// <summary>For Hercules' Wrath's ultimate: a decoy is up (a hand-off counts), where it stands, and how far its clone has
+        /// dissolved at the END of its life (1 until the last fade, then down to 0 — the fade-in and a hand-off do not count).</summary>
+        internal static bool  DecoyUp => _decoyActive;
+        internal static bool  InHandoff => _handoff;
+        internal static (float x, float h, float y) DecoyPosition => (_dx, _dz, _dy);
+        internal static float DecoyOutroAlpha
+        {
+            get
+            {
+                if (!_decoyActive) return 0f;
+                if (_handoff) return 1f;
+                double outT = (_decoyDeadline - GameClock.Now).TotalSeconds - HazeRampSeconds;
+                return (float)Math.Clamp(outT / FadeSeconds, 0.0, 1.0);
+            }
+        }
         private const int    FastTickMs   = 25;    // table maintenance cadence while armed + in a dungeon
         private const int    IdleTickMs   = 150;
-        // Guard-hold motions. Ungaga AND Xiao both use 9 (guard loop) / 33 (guard move) — see
-        // docs/character-motion-table.md — so the same trigger and hold-pose work for either wielder.
-        private const int    GuardLoopMotion = 9;   // guard-hold loop (spawn here, not on guard-enter)
-        private const int    GuardMoveMotion = 33;  // guard-while-moving; the hold pose oscillates 9<->33 under R1
-        private const int    GuardChargeMs   = 250; // hold the guard pose this long before the flash + decoy fire
+        // The guard-hold pose is GuardWatch's (GuardLoopMotion 9 / GuardMoveMotion 33, read by GuardWatch.HoldPose): Ungaga AND Xiao
+        // both use them — see docs/character-motion-table.md — so the same trigger and hold-pose work for either wielder.
+        internal const int   GuardChargeMs   = 250; // hold the guard pose this long before the flash + decoy fire (level 1; Hercules' Wrath's ultimate is level 2)
 
         // ── What MIRAGE chooses (as opposed to what the game dictates) ───────────────────────────────
         // Engine struct layouts live in CCharacter/CFrameVu1/CCloth/...; cave addresses AND their capacities
         // live in CodeCaves. These are the mod's own decisions.
         private const int MaxSlots = 20;      // enemy slots the mod actively manages (FloorSlots is 16)
-
-        /// <summary>Copy ONLY the draw-relevant CCharacter fields (through the light block @0xD60). The chara
-        /// slot's own gate fields begin further in, so copying the player's FULL object clobbers them and
-        /// corrupts the instance (it teleported the player off-map). 0xD60 is the safe cut.</summary>
-
-        /// <summary>The clone's WEAPON draws in its own chara slot rather than being grafted into the body tree
-        /// (which would share the body's texture pass → wrong texture). Slot 3, because the per-chara texgroup
-        /// formula is patched to (i*4 + 0x11): chara[0] = 0x11 (body), chara[3] = 0x1D (weapon). Drawn but NOT
-        /// stepped (DungeonCharaDraw.StepSkipTable).</summary>
-
 
         /// <summary>Pose the clone. During a re-cast hand-off the instance is still the OUTGOING clone, so it
         /// stays parked at the old pose while it dissolves — _dx/_dy already point at the NEW decoy (which the
@@ -51,45 +56,21 @@ namespace Dark_Cloud_Improved_Version
             float cz   = _handoff ? _oldDz  : _dz;
             float cy   = _handoff ? _oldDy  : _dy;
             float cyaw = _handoff ? _oldYaw : _decoyYaw;
-            CharacterClone.HoldMotion = GuardLoopMotion;   // hold the guard pose regardless of what the player does
+            CharacterClone.HoldMotion = GuardWatch.GuardLoopMotion;   // hold the guard pose regardless of what the player does
             if (spawn) CharacterClone.Spawn(cx, cz, cy, cyaw, CloneAlpha());
             else       CharacterClone.Maintain(cx, cz, cy, cyaw, CloneAlpha());
         }
 
+        /// <summary>The weapons that grant the Mirage: the Mirage itself and Hercules' Wrath, the spear built up from it.</summary>
+        private static readonly int[] MirageLine = { Items.mirage, Items.herculeswrath };
 
-        /// <summary>Is the Mirage ability currently wielded? Two ways in:
-        ///   • UNGAGA holding <b>Mirage</b> or <b>Hercules' Wrath</b> (the spear line that grants it), or
-        ///   • XIAO holding <b>Super Steve</b> with a Mirage / Hercules' Wrath SynthSphere attached — the
-        ///     standard Super Steve inheritance (the sphere's SOURCE weapon id selects the effect).
-        ///
-        /// Both wielders work unchanged because Ungaga and Xiao share the guard motions this triggers on
-        /// (9 / 33), and Xiao fits the clone's mesh cave. Mirage is NOT driven from SuperSteve's
-        /// SphereInheritanceEffect hub — it owns a thread and a state machine (guard charge → decoy → clone → haze),
-        /// so it gates itself here rather than being pulsed per-tick like the stateless abilities.</summary>
-        private static bool MirageArmed()
-        {
-            int ch = Player.CurrentCharacterNum();
-
-            if (ch == Player.UngagaId)
-            {
-                int w = Player.Weapon.GetCurrentWeaponId();
-                return w == Items.mirage || w == Items.herculeswrath;
-            }
-
-            if (ch == Player.XiaoId)
-            {
-                int equipSlot = Memory.ReadByte(DngStatusData.Base +
-                                                DngStatusData.EquipSlotArrayOffset + ch);
-                if ((uint)equipSlot > 9) return false;
-                long rec = DngStatusData.WeaponRecord(ch, equipSlot);
-                if (Memory.ReadUShort(rec) != Items.supersteve) return false;
-                int sphere = SuperSteve.AttachedSphere(rec);
-                return sphere == Items.mirage || sphere == Items.herculeswrath;
-            }
-
-            return false;
-        }
-
+        /// <summary>Is the Mirage ability currently wielded? UNGAGA holding a weapon of <see cref="MirageLine"/>, or XIAO holding
+        /// Super Steve with one of their SynthSpheres attached — the standard Super Steve inheritance (the sphere's SOURCE weapon
+        /// id selects the effect). Both wielders work unchanged because Ungaga and Xiao share the guard motions this triggers on
+        /// (9 / 33), and Xiao fits the clone's mesh cave. Mirage is NOT driven from SuperSteve's SphereInheritanceEffect hub — it
+        /// owns a thread and a state machine (guard charge → decoy → clone → haze), so it gates itself here rather than being
+        /// pulsed per-tick like the stateless abilities.</summary>
+        private static bool MirageArmed() => UngagaWeapon.WieldsOrSphere(MirageLine);
 
         // ── Character-swap safety ───────────────────────────────────────────────────────────────────
         // A clone is a deep copy of ONE character's frame tree, and it SHARES that model's geometry pointers
@@ -122,16 +103,24 @@ namespace Dark_Cloud_Improved_Version
             return DateTime.UtcNow - _seenSince >= TimeSpan.FromMilliseconds(CharSettleMs);
         }
 
+        /// <summary>Hercules' Wrath's ultimate lands on the mirage: the decoy dispelled at once (under the strike's flash) — clone,
+        /// shimmer and every lure gone; the enemies turn back to the player.</summary>
+        internal static void Dispel()
+        {
+            if (!_decoyActive && !CharacterClone.IsActive) return;
+            EndDecoy();
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "dispelled by the strike");
+        }
+
         /// <summary>Tear the decoy + clone + shimmer down. Used on expiry, weapon swap, floor exit, party swap.</summary>
         private static void EndDecoy()
         {
             _decoyActive = false; _handoff = false; _aggroHoldUntil = default; _decoyChar = -1;
+            AggroTable.Release(AggroTable.Holder.MirageDecoy);
             Array.Clear(_fooled, 0, _fooled.Length);
             CharacterClone.Despawn();
             HeatHaze.Hide();
         }
-
-        private static bool _armed;                 // both caves hosted + dispatch repointed this session (cold)
 
         private static bool     _decoyActive;
         private static DateTime _decoyDeadline;
@@ -142,28 +131,11 @@ namespace Dark_Cloud_Improved_Version
 
         internal static void Start() => new Thread(Loop) { IsBackground = true }.Start();
 
-        /// <summary>Both per-slot redirect caves armed (the pointer table is live for every enemy read).</summary>
-        internal static bool Armed => _armed;
-
-        /// <summary>Arm both engine redirects at the COLD window (from ApplyNewChanges, retried from the loop).
-        /// _GET_POSITION and _GET_DISTANCE are hosted in COLD-PINE CAVES reached via the STB external-command
-        /// dispatch table — a pure DATA path (see docs/cave-code-execution.md), so there's no in-place code
-        /// surgery and nothing to defer. Fill the per-slot pointer table first so the first enemy read is valid.</summary>
-        internal static void ArmColdPatch()
-        {
-            if (_armed) return;
-            FillWholeTablePlayer();                 // every slot → live-player pointer (valid before any enemy read)
-            bool pos  = ArmDecoyCave("_GET_POSITION", StbExternCmd.GetPositionFn, CodeCaves.PosCave,  CodeCaves.PosCaveGuest,
-                                     StbExternCmd.GetPositionSlot,  StbExternCmd.PosPlayerLdOff,  StbExternCmd.PosCopyJalOff);
-            bool dist = ArmDecoyCave("_GET_DISTANCE", StbExternCmd.GetDistanceFn, CodeCaves.DistCave, CodeCaves.DistCaveGuest,
-                                     StbExternCmd.GetDistanceSlot, StbExternCmd.DistPlayerLdOff, StbExternCmd.DistCopyJalOff);
-            _armed = pos && dist;                   // retry from the loop if either couldn't arm (e.g. not vanilla yet)
-        }
 
 
         // ── Clone heat-haze: the game's fire-raster distortion, drawn at the clone by ElfCave.MirageHazeDraw ──
         // HeatHaze names the clone's root CFrame in the mailbox and ramps the strength; the cave draws one raster
-        // there every frame, in the map's own raster pass. (The mechanisms tried before it: docs/mirage.md.)
+        // there every frame, in the map's own raster pass.
         //
         // Clone materialize / dematerialize. The clone fades IN over FadeSeconds, holds at full, then fades
         // OUT over the last FadeSeconds before the decoy expires. Derived from the DEADLINE, which is on GameClock,
@@ -244,48 +216,6 @@ namespace Dark_Cloud_Improved_Version
             => HeatHaze.Show(CharacterClone.RootGuest, HazeBodyY, HazeGain01());   // pinned to the clone's root by the haze cave
 
 
-        // ── The decoy's cave payload ─────────────────────────────────────────────────────────────────
-        // The generic hosting mechanism (copy → detour → repoint dispatch) lives in CodeCaveFunctions; what
-        // is Mirage-specific is only the HELPER below — the code we splice into the copy.
-        //
-        // _GET_POSITION / _GET_DISTANCE both read the PLAYER global (0x1EA1D30) directly. We copy each into a
-        // cave and replace that hardcoded load with `j helper / nop`; the helper resolves the CURRENT enemy's
-        // slot and sets a1 = *(PtrTable + slot*4) — the per-slot target (fooled → decoy, else → the live
-        // player global itself, so un-fooled enemies read bit-identical vanilla and the mod isn't in the loop).
-        // It then jumps back into the copy at the sceVu0CopyVector jal. Explicit-coord queries are untouched.
-        private const int FnCopySize = 0xF0;    // both functions fit in this
-        private const int HelperOff  = 0x100;   // helper sits after the copied body
-
-        private static uint[] DecoyHelper(uint caveGuest, int jalOff) => new[]
-        {
-            0x8F889CE0u,                                     // lw   t0, -0x6320(gp)   ; NowMonstorUnit
-            0x8D080090u,                                     // lw   t0, 0x90(t0)      ; current enemy slot
-            0x00084080u,                                     // sll  t0, t0, 2         ; slot*4
-            // Materialize PtrTable's FULL 32-bit address. `lui` alone only sets the high half — it silently
-            // truncates any base whose low 16 bits are non-zero. That is not theoretical: PtrTable used to be
-            // 0x01F30000 (low half zero, so lui sufficed); when the cave band was relaid it moved to
-            // 0x01F19000 and `lui 0x01F1` produced 0x01F10000 — the PNACH MAILBOX. Every enemy then read its
-            // target pointer out of flag bytes, so they all walked toward the origin, with no cast needed.
-            // `ori` is zero-extended (unlike addiu), so this is correct for any low half, including >= 0x8000.
-            0x3C050000u | (CodeCaves.PtrTableGuest >> 16),      // lui  a1, HI(PtrTable)
-            0x34A50000u | (CodeCaves.PtrTableGuest & 0xFFFFu),  // ori  a1, a1, LO(PtrTable)
-            0x00A82821u,                                     // addu a1, a1, t0        ; &PtrTable[slot]
-            0x8CA50000u,                                     // lw   a1, 0(a1)         ; a1 = per-slot target pointer
-            CodeCaveFunctions.J(caveGuest + (uint)jalOff),   // j    cave+jalOff       ; back into the copy
-            CodeCaveFunctions.Nop,                           // (j delay)
-        };
-
-        /// <summary>Arm one of the two decoy caves. Returns true once armed (idempotent — safe to retry).</summary>
-        private static bool ArmDecoyCave(string name, long vanillaFn, long cave, uint caveGuest, long dispatch, int detourOff, int jalOff)
-            => CodeCaveFunctions.ArmDispatchCave(
-                name, vanillaFn, FnCopySize, cave, caveGuest, dispatch,
-                pristine: new[] { (0, StbExternCmd.VanillaPrologue),            // addiu sp,-0x50
-                                  (detourOff, StbExternCmd.VanillaPlayerLd) },  // lui v0,0x1ea (the player-addr load)
-                detours:  new[] { (detourOff, new[] { CodeCaveFunctions.J(caveGuest + HelperOff),   // was lui v0,0x1ea
-                                                      CodeCaveFunctions.Nop }) },                   // was addiu a1,v0,0x1d30
-                helperOff: HelperOff, helper: DecoyHelper(caveGuest, jalOff));
-
-
         private static void Loop()
         {
             bool guardLatched = false;
@@ -296,9 +226,10 @@ namespace Dark_Cloud_Improved_Version
                 try
                 {
                     bool inDun = Player.InDungeonFloor();
-                    if (!_armed && !inDun) ArmColdPatch();
+                    if (!TargetRedirectCaves.Armed && !inDun) TargetRedirectCaves.ArmColdPatch();   // the engine redirect, retried out of a dungeon until it arms
+                    if (inDun) { if (MirageLineReach.Wielded()) MirageLineReach.Hold(); else MirageLineReach.Release(); }   // the line's lock-on reach (needs no decoy patch)
 
-                    if (_armed && inDun)
+                    if (TargetRedirectCaves.Armed && inDun)
                     {
 
                         // Keep un-fooled slots on the live player (the patch reads the table for EVERY
@@ -306,7 +237,7 @@ namespace Dark_Cloud_Improved_Version
                         // A live clone cannot survive a party swap (its source model gets unloaded).
                         if ((_decoyActive || CharacterClone.IsActive) && Player.CurrentCharacterNum() != _decoyChar)
                         {
-                            Console.WriteLine($"[Mirage] party swapped away from char {_decoyChar} — tearing down the decoy " +
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"party swapped away from char {_decoyChar} — tearing down the decoy " +
                                               "(the clone is bound to its source model; its geometry would dangle)");
                             EndDecoy();
                         }
@@ -321,9 +252,7 @@ namespace Dark_Cloud_Improved_Version
                             // (loop) and 33 (move) under R1, so we can't edge-trigger on a single motion. Latch on
                             // the first hold-pose motion while guarding and only clear the latch when R1 is released
                             // (guard exited) — so re-entering guard plants a fresh decoy, but 9<->33 doesn't.
-                            bool guarding = (Memory.ReadUShort(Addresses.buttonInputs) & (ushort)Button.R1) != 0;
-                            int  mid = Memory.ReadInt(CCharacter.Base + CCharacter.MotionId);
-                            bool inGuardPose = guarding && (mid == GuardLoopMotion || mid == GuardMoveMotion);
+                            var (guarding, inGuardPose) = GuardWatch.HoldPose();
                             if (!guarding) { guardLatched = false; guardPoseSince = default; }   // released guard → re-arm
                             if (inGuardPose && !guardLatched && CharacterSettled())
                             {
@@ -355,32 +284,28 @@ namespace Dark_Cloud_Improved_Version
                             EndDecoy();   // weapon swapped away from Mirage
                         }
 
-                        // Angel Gear's shield ring OWNS the per-slot table while it is up (Mirage and Angel
-                        // Gear can never be wielded simultaneously) — stand down, resume when it releases.
-                        if (!AngelGear.RingActive)
-                            WriteTable();   // fills the per-slot table both _GET_POSITION and _GET_DISTANCE now read
-                        // PNACH gate flag: 1 = clone drawn → NOP the chara-loop gates; 2 = in a dungeon w/o a decoy
-                        // → RESTORE the vanilla gates (they don't auto-revert). 0 (town) is set below so the shared
-                        // town overlay at those addresses is never touched.
-                        // 1 = decoy up (NOP scene+step gates; a hold freezes the clone's own slot instead, so the
-                        // PNACH's 3 = "up but paused" state is never written); 2 = dungeon, no decoy (restore vanilla).
-                        // Guardian Reflector's slingshot prop and Divine Beast Title's cat share this gate flag
-                        // (and the chara slots / caves): while either copy is up, IT drives the flag — stand down.
-                        // (Mirage and Xiao's weapons can never be wielded simultaneously.) A competing 2 here made
-                        // the slot loop run only on the frames the other writer won — the cat flickered.
-                        if (!SlingshotProp.Active && !DivineBeastTitle.Active)
-                            Memory.WriteInt(CodeCaves.MirageSceneGateFlag, (_decoyActive && CharacterClone.IsActive) ? 1 : 2);
+                        if (_decoyActive) WriteTable();   // the decoy holds the table while it is up (AggroTable): fooled slots on the decoy, the rest on the player
+                        // PNACH gate flag: 1 = decoy up (NOP the chara-loop scene+step gates so the clone draws; a hold freezes the
+                        // clone's own slot instead, so the PNACH's 3 = "up but paused" state is never written); 2 = in a dungeon
+                        // without a decoy → RESTORE the vanilla gates (they don't auto-revert). 0 (town) is set below so the
+                        // shared town overlay at those addresses is never touched.
+                        // Guardian Reflector's slingshot prop, Divine Beast Title's cat and Big Bang's judgement blade
+                        // share this gate flag (and the chara slots / caves): while any copy is up, IT drives the flag —
+                        // stand down. (Mirage and Xiao's weapons can never be wielded simultaneously.) A competing 2 here
+                        // made the slot loop run only on the frames the other writer won — the cat flickered.
+                        if (!SlingshotProp.Active && !DivineBeastTitle.Active && !BladeProp.Active)
+                            Memory.WriteInt(Mailbox.MirageSceneGate, (_decoyActive && CharacterClone.IsActive) ? 1 : 2);
                         sleep = FastTickMs;
                     }
                     else
                     {
                         guardLatched = false;
                         if (_decoyActive || CharacterClone.IsActive) EndDecoy();   // left the floor
-                        if (!SlingshotProp.Active && !DivineBeastTitle.Active)
-                            Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 0);   // town: leave the gates to the overlay reload
+                        if (!SlingshotProp.Active && !DivineBeastTitle.Active && !BladeProp.Active)
+                            Memory.WriteInt(Mailbox.MirageSceneGate, 0);   // town: leave the gates to the overlay reload
                     }
                 }
-                catch (Exception e) { Console.WriteLine("[Mirage] tick failed: " + e.Message); }
+                catch (Exception e) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "tick failed: " + e.Message); }
                 Thread.Sleep(sleep);
             }
         }
@@ -416,16 +341,18 @@ namespace Dark_Cloud_Improved_Version
             // send them at the OUTGOING clone. Instead we preserve _brokenThisDecoy so they keep chasing the
             // player through the hand-off, and fold them back in when the new clone finishes materializing.
             if (refreshAggro) RefreshAggro();
+            AggroTable.Claim(AggroTable.Holder.MirageDecoy);                           // the table is the decoy's while it stands
             _decoyActive = true;
             _decoyChar = Player.CurrentCharacterNum();   // the clone is bound to THIS character's model
+            DecoySeconds = HerculesCasts() ? HerculesSeconds : MirageSeconds;
             _decoyDeadline = GameClock.Now.AddSeconds(DecoySeconds);   // timer + haze ramp start HERE
             if (spawnClone)
             {
                 CharacterClone.Despawn();   // clear any stale slot from a previous decoy
                 PoseClone(spawn: true);
-                if (CharacterClone.IsActive) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 1);   // arm the PNACH scene-gate NOP (clone draws)
+                if (CharacterClone.IsActive) Memory.WriteInt(Mailbox.MirageSceneGate, 1);   // arm the PNACH scene-gate NOP (clone draws)
             }
-            Console.WriteLine($"[Mirage] decoy planted at ({_dx:0.#},{_dy:0.#}); enemies redirected");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"decoy planted at ({_dx:0.#},{_dy:0.#}); enemies redirected");
         }
 
         /// <summary>(Re-)deceive every live enemy: clear the "broke the illusion" set and fool them all, so they
@@ -435,7 +362,7 @@ namespace Dark_Cloud_Improved_Version
         {
             Array.Clear(_fooled, 0, _fooled.Length);
             Array.Clear(_brokenThisDecoy, 0, _brokenThisDecoy.Length);
-            _prevHp = ReusableFunctions.GetEnemiesHp();
+            _prevHp = EnemyQueries.GetEnemiesHp();
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count && s < MaxSlots; s++)
                 if (Enemies.IsLive(s)) _fooled[s] = true;
         }
@@ -452,7 +379,7 @@ namespace Dark_Cloud_Improved_Version
             _aggroHoldUntil = _handoffStart.AddSeconds(AggroHoldSeconds);    // aggro lags on the old spot past the swap
             var o = ReadDecoyOrigin();
             PlaceDecoyAt(o.dx, o.dz, o.dy, o.yaw, spawnClone: false, refreshAggro: false);   // new decoy live now; aggro state preserved
-            Console.WriteLine($"[Mirage] re-cast: new decoy live; outgoing clone dissolving over {HandoffFade:0.###}s, aggro held on the old spot for {AggroHoldSeconds:0.###}s");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"re-cast: new decoy live; outgoing clone dissolving over {HandoffFade:0.###}s, aggro held on the old spot for {AggroHoldSeconds:0.###}s");
         }
 
         private static void CompleteHandoff()
@@ -460,7 +387,7 @@ namespace Dark_Cloud_Improved_Version
             _handoff = false;   // NOTE: aggro does NOT move here — it stays on the old spot until _aggroHoldUntil
             CharacterClone.Despawn();   // swap the clone INSTANCE; the haze is the decoy's, so it keeps ramping undisturbed
             PoseClone(spawn: true);
-            if (CharacterClone.IsActive) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 1);
+            if (CharacterClone.IsActive) Memory.WriteInt(Mailbox.MirageSceneGate, 1);
         }
 
         private static void UpdateDecoyState()
@@ -472,17 +399,17 @@ namespace Dark_Cloud_Improved_Version
                 _aggroHoldUntil = default;   // new clone is fully materialized → enemies finally notice the switch
                 RefreshAggro();              // incl. the ones that had broken the old illusion: they only fall for the NEW clone
                 WriteDecoyPos();
-                Console.WriteLine("[Mirage] hand-off: new clone fully faded in — enemies re-target it");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "hand-off: new clone fully faded in — enemies re-target it");
             }
             if (GameClock.Now > _decoyDeadline)
             {
                 EndDecoy();
-                Console.WriteLine("[Mirage] decoy faded; enemies re-target the player");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "decoy faded; enemies re-target the player");
                 return;
             }
             PoseClone();
             ShowDecoyHaze();
-            int[] hp = ReusableFunctions.GetEnemiesHp();
+            int[] hp = EnemyQueries.GetEnemiesHp();
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count && s < MaxSlots; s++)
             {
                 if (!Enemies.IsLive(s)) { _fooled[s] = false; continue; }
@@ -502,17 +429,7 @@ namespace Dark_Cloud_Improved_Version
             for (int s = 0; s < MaxSlots; s++)
                 BitConverter.GetBytes(_fooled[s] ? CodeCaves.DecoyPosGuest : StbExternCmd.PlayerPosGuest)
                     .CopyTo(buf, s * CodeCaves.PtrStride);
-            Memory.WriteBytesBatch(CodeCaves.PtrTable, buf);
-        }
-
-        /// <summary>Point every slot at the live player global (vanilla) — done at cold-arm before any enemy reads,
-        /// so out-of-range slots and the pre-first-tick window are valid without the mod having run.</summary>
-        private static void FillWholeTablePlayer()
-        {
-            var buf = new byte[CodeCaves.TableSlots * CodeCaves.PtrStride];
-            for (int s = 0; s < CodeCaves.TableSlots; s++)
-                BitConverter.GetBytes(StbExternCmd.PlayerPosGuest).CopyTo(buf, s * CodeCaves.PtrStride);
-            Memory.WriteBytesBatch(CodeCaves.PtrTable, buf);
+            AggroTable.Write(AggroTable.Holder.MirageDecoy, buf);
         }
 
         /// <summary>Write the stationary decoy position (x,z,y,w) that fooled slots' pointers reference.</summary>

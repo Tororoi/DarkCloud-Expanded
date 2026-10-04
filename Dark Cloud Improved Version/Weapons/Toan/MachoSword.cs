@@ -440,7 +440,7 @@ namespace Dark_Cloud_Improved_Version
         // blocks live). The floor-load window did NOT save these two functions (crashed on
         // floor load, 2026-07-06 — by then the menu/HUD draw code had already run, unlike the
         // ToanKey case that window was verified on), so this is applied from
-        // MainMenuThread.ApplyNewChanges at in-game entry instead, while the menu/HUD draw
+        // SessionController.ApplyNewChanges at in-game entry instead, while the menu/HUD draw
         // code is still cold for the session. Original words are read-verified first: a
         // mismatch (different game build / emulator state) logs once and never writes.
         private struct AbsCodePatch { public long Addr; public uint[] Orig; public uint[] New; }
@@ -518,12 +518,12 @@ namespace Dark_Cloud_Improved_Version
         // char) + level × step (+0x32, short), clamped to 1..999 with the engine's own ≤0 → 99
         // fallback. Reads the live table so any modded base values are honored. Returns 0 for
         // ids outside the weapon table.
-        private static int MachoMaxExp(int weaponId, int level)
+        internal static int MachoMaxExp(int weaponId, int level)
         {
-            int row = weaponId - Weapons.daggerid;
+            int row = weaponId - WeaponTable.DaggerId;
             if (row < 0 || row > 118) return 0;
-            int baseAbs = (sbyte)Memory.ReadByte(Weapons.abs + row * Weapons.weaponoffset);
-            int step = Memory.ReadShort(Weapons.absadd + row * Weapons.weaponoffset);
+            int baseAbs = (sbyte)Memory.ReadByte(WeaponTable.Abs + row * WeaponTable.Stride);
+            int step = Memory.ReadShort(WeaponTable.AbsAdd + row * WeaponTable.Stride);
             long max = baseAbs + (long)level * step;
             if (max > 999) max = 999;
             if (max < 1) max = 99;
@@ -537,7 +537,7 @@ namespace Dark_Cloud_Improved_Version
         // equipped == defWeapon[char], and defWeapon holds the BROKEN id. So INTACT defaults (Dagger,
         // Mallet, …) earn ABS and roll over like any weapon — only the broken forms are excluded.
         // (The Serpent Sword's flag-gated no-ABS state is not replicated; it self-limits anyway.)
-        private static bool MachoIsAbslessWeapon(int id)
+        internal static bool MachoIsAbslessWeapon(int id)
         {
             return id == Item.DaggerBroken.Id
                 || id == Item.WoodenSlingshotBroken.Id

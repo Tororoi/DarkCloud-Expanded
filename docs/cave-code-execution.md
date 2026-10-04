@@ -31,7 +31,7 @@ techniques were previously the only safe ones, and both have hard limits:
 A cave **does** execute cleanly if you satisfy **two** conditions together:
 
 1. **Write it cold.** Populate the cave via PINE at the cold window
-   (`MainMenuThread.ApplyNewChanges`, in-game entry) — *before* anything executes. The
+   (`SessionController.ApplyNewChanges`, in-game entry) — *before* anything executes. The
    recompiler has never touched the page, so when the EE first runs it, it compiles it
    fresh with no stale cache to trip over.
 2. **Reach it via a data-driven indirect call, not an in-place jump.** Instead of
@@ -129,7 +129,7 @@ per-slot helper.
   room and a clean function.
 
 Reference implementation: `Mirage.ArmFuncCave()` (Mirage.cs) — one generalized helper that
-hosts *both* `_GET_POSITION` and `_GET_DISTANCE` this way (called from `Mirage.ArmColdPatch`),
+hosts *both* `_GET_POSITION` and `_GET_DISTANCE` this way (called from `TargetRedirectCaves.ArmColdPatch`),
 parameterized by the vanilla function, cave address, dispatch slot, and detour/jal offsets — plus
 the STB dispatch addresses (`MirageDecoy.PosDispatch`/`DistDispatch`) in `DungeonAddresses.cs`. It
 verifies the function is pristine vanilla (prologue `0x27BDFFB0` + detour word `0x3C0201EA`) before

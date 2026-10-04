@@ -1,3 +1,5 @@
+// Enemy spawn-layout address bank: the per-dungeon / per-floor BtEnemyLayout tables that decide which species spawn
+// on each floor (normal and Ura), their geometry and the entry field offsets.
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
