@@ -71,7 +71,7 @@ namespace Dark_Cloud_Improved_Version
             return _fx;
         }
 
-        public static void UltimateEffect()
+        public static void AirStrikeEffect()
         {
             _xiao = Player.CurrentCharacterNum() == Player.XiaoId;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"ultimate: keep guarding {ChargeSeconds:F0} s past the Mirage to prime; the next " + (_xiao ? "pellet" : "swing") + " brings it down");

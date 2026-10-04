@@ -234,6 +234,9 @@ namespace Dark_Cloud_Improved_Version
                 //Athenas Armlet
                 Memory.WriteByte((WeaponTable.Effect2 + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.athenasarmlet - WeaponTable.DaggerId)))), 32);     //Adds ABS up effect
 
+                //Goddess Ring
+                Memory.WriteByte((WeaponTable.Effect2 + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.goddessring - WeaponTable.GoldRingId)))), 8);      //Heal
+
 
 
 
@@ -254,6 +257,9 @@ namespace Dark_Cloud_Improved_Version
                         Memory.WriteUShort((WeaponTable.Endurance + (WeaponTable.UngagaOffset + (WeaponTable.Stride * (ungagaweaponid - WeaponTable.FightingStickId)))), (ushort)(CurrWeaponEndurance + 15)); //Adds +15 Endurance to the current weapon being looped through
                     }
                 }
+
+                //DeSanga
+                Memory.WriteByte((WeaponTable.Effect2 + (WeaponTable.UngagaOffset + (WeaponTable.Stride * (Items.desanga - WeaponTable.FightingStickId)))), 4);  //Drain
 
                 //Babel Spear
                 Memory.WriteUShort((WeaponTable.Synth4 + (WeaponTable.UngagaOffset + (WeaponTable.Stride * (Items.babelsspear - WeaponTable.FightingStickId)))), 1); //Adds a 4th regular attachment slot

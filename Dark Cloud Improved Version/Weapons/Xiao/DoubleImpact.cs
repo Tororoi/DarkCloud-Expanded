@@ -18,7 +18,7 @@ namespace Dark_Cloud_Improved_Version
     {
         private const string Tag = "[DoubleImpact] ";
         private const float DamageFactor = 0.75f;   // each pellet's attack, of the shot's
-        private const float PairWidth    = 2f;      // the pair this far apart, side by side across the flight line
+        private const float PairWidth    = 1f;      // the pair this far apart, side by side across the flight line
         private static bool _spriteSet;
 
         private static readonly bool[] _live = new bool[PlayerShotPool.SlotCount];   // the slots seen live last tick

@@ -16,7 +16,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Ungaga with DeSanga, or Xiao with Super Steve and a DeSanga sphere.</summary>
         internal static bool Wielded() => UngagaWeapon.WieldsOrSphere(Items.desanga);
 
-        public static void KillHealEffect()
+        public static void VampireEffect()
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"every kill heals the weapon {HealPerKill:F0} WHP");
             int n = EnemyAddresses.FloorSlots.Count;

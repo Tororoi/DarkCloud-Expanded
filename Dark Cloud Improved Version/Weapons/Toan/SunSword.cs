@@ -512,7 +512,7 @@ namespace Dark_Cloud_Improved_Version
                 byte toanSlot = Memory.ReadByte(WeaponHave.InventoryEquipSlotAddr);
                 ushort equippedId = Memory.ReadUShort(WeaponHave.InventoryWeaponSlot0Id +
                         toanSlot * WeaponHave.InventoryWeaponSlotStride);
-                if (equippedId != Items.sunsword && equippedId != Items.bigbang)
+                if (equippedId != Items.sunsword && equippedId != Items.bigbang && equippedId != Items.swordofzeus)
                     break;
 
                 // Kills while a sidekick is out aren't Sun Sword kills — winners keep their win

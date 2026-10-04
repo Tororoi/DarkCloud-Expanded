@@ -101,7 +101,7 @@ namespace Dark_Cloud_Improved_Version
         private static string What            => _xiao ? "nut" : "boulder";
         private static void  SetTint(float k)  => WielderTint.Set(k, ModelCode, BladeFrame, Tint, _xiao);   // the spear's frame, or the whole slingshot
 
-        public static void RockfallEffect()
+        public static void BigRockEffect()
         {
             int ch = Player.CurrentCharacterNum();
             _xiao = ch == Player.XiaoId;

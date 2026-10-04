@@ -194,7 +194,7 @@ namespace Dark_Cloud_Improved_Version
                 // Solar Harvest (Sun Sword / Big Bang): ~1% of the floor's enemies drop a Sun attachment.
                 SunSword.SunHarvestDrive(sphere == Items.sunsword || sphere == Items.bigbang || sphere == Items.swordofzeus, ssSun);
 
-                // Solar Shot (Sun Sword): a 5 s guard charge, and the next pellet carries the Sun Sword's flash to where it lands.
+                // Solar Shot (Sun Sword): a 2 s guard charge, and the next pellet carries the Sun Sword's flash to where it lands.
                 if (lastSphere == Items.sunsword && sphere != Items.sunsword) SolarShot.Stop();
                 SolarShot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.sunsword);
 

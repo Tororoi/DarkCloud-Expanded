@@ -24,16 +24,21 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 ## Fixes
 
-- **Max Thirst memory addresses** — Corrected the memory addresses used to read and write Max Thirst value.
 - **No-drop enemies** — Regular enemy species that ship unable to drop items (flyers, Gol/Sil, …) had a working `DropChance` but a `DeathDropFlag` of 0, which made the engine skip their entire death-drop block. The flag is now flipped to 1 in the static species table so every spawn drops as intended. Scoped to regular `e####` enemies; bosses, effects, and the steal item are untouched.
 - **Log file names** — Mod log filenames now use a correct `yyyy-MM-dd` date format (was `yyyy-dd-M`, which sorted wrong and collided across months).
-- **Copied-mesh pointer re-basing** — The block copier behind the Mirage decoy, the Angel Gear slingshot and the cat shot re-pointed any 32-bit word whose low bits fell inside the source block's address range, floats included. On the cat that bent five muzzle vertices into the floor (thin strips hanging from the chin); on the other copies it could bend any vertex whose float happened to match. Only words carrying a real EE pointer segment are re-based now.
+- **Gacious in the randomizer** — The randomizer no longer places vanilla Gacious (a boss-type record that breaks as a regular enemy); Gacious (Enhanced) takes its slot at the same frequency.
+- **Dungeon character memory** — The dungeon's character-model pool is raised from 3.36 MB to 3.84 MB in the ISO's dungeon overlay (the disc-read staging buffer trimmed from 4.48 MB to 4.00 MB to pay for it), so Xiao's model with the cat baked in doesn't hang a party switch.
+- **Shot slots** — Floors are no longer limited to five monster shot types: the five slots are shared among every config the floor needs, each read from disc at most once per floor.
 
 ---
 
 ## Game Mechanics
 
 - **Heal ability cadence** — Every weapon with the Heal ability now heals every 3 seconds instead of 4 (patched into the dungeon overlay on the ISO).
+- **Weapon effects bill WHP** — The big weapon effects below (Solar Flash 5, Big Bang blast 20, Zeus bolt 10, Terra Sword impact 10, Hercules' Wrath 20) charge WHP through the game's own weapon-wear routine, so Endurance, Durable, Fragile, Auto Repair Powder and breaking all apply.
+- **Ungaga's charge shot no longer drains on hit** — His held charge fires a shot every 30 frames (~0.5 s), each costing 0.8 WHP as before; the hits those shots land, blocked or not, used to drain the weapon again and now cost nothing (patched into the ISO's damage routine).
+- **Confuse (new weapon ability)** — A new ability with its own menu name and icon: a 5% flat chance per hit (bosses immune) to confuse the enemy for 20 s. A confused enemy attacks whatever is nearest, enemy or player, and its hits hurt other enemies; an enemy it hits turns on it. Carried natively by Babel's Spear and passed on by its SynthSphere.
+
 ### Fishing
 
 - **Custom fishing spots — Queens, Brownboo, Yellow Drops** — Three new towns are fishable. Each spot gets a native carved sign and trigger, the vanilla entry/quit menus, bait menu, and catch text, all baked into a patched copy of the player's own ISO so the minigame runs fully natively. Each town has its own fish species pool, plus two vanilla pool tweaks (Matataki: Gummy → Niler; East Harbor: Piccoly → Gobbler).
@@ -66,7 +71,6 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Themed floors** — A randomized floor has a chance to spawn a single themed group (cards, days of the week, dragons, …) instead of the random mix — either filling the whole floor with the group or capping it to one-of-each and backfilling with mimics or dungeon natives.
 - **Spawn any species on regular floors** — Replacing spawn-table entity IDs/models lets any enemy — including bosses and minibosses (Master Utan, Minotaur Joe, Black Knight Mount, King's Curse, Ice Queen, Dark Genie final form) and mimics — appear on normal dungeon floors. Boss behavior scripts are patched in loaded memory so a non-native boss spawns at its floor position instead of snapping to its arena origin, and on death it collapses/fades and interrupts its motion instead of triggering a victory cutscene. Multi-part bosses are forced spawn-once (one skeleton).
 - **Mesh-buffer guard** — Randomized rosters are budgeted against measured per-species model footprints so a floor never overruns the engine's mesh buffer.
-- **Mimic visibility** — Roster-spawned mimics had their view-gate baked off in the model template and rendered invisible; the gate is now set after spawn so they appear correctly.
 - **Stat normalization** — Non-native / randomized spawns are rescaled toward the current dungeon's power level (HP, defense, and damage), so out-of-place enemies aren't trivial or unfair.
 - **Reusable stat scaling** — Live per-slot / per-species stat scaling (HP, defense, melee, projectile) is driven through one shared pipeline used by the normalizer, the difficulty options, and miniboss buffs.
 
@@ -191,163 +195,177 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 - **In-game weapon descriptions** — The weapon description text in the in-game menus is rewritten live to describe each weapon's modded effect (including dynamic hints such as the 7 Branch Sword's Status Break rule), so the menu always matches what the weapon actually does.
 
-#### This Fork
+Abilities marked come from the upstream mod; everything else is this fork's.
 
 **Toan**
 - **Mardan Eins** — Draws rare fish to the player's location at an interval weighted by their bait affinity. FP x1.2 for all non-Garayan fish.
 - **Mardan Twei** — Reroll non-Garayan fish for an additional chance (same as native game's initial chance) to turn them into Mardan or Baron Garayan. Mardan Eins ability occurs at an increased rate. FP x1.5 for all non-Garayan fish.
 - **Arise Mardan** — Smooths the native size distribution, then scales fish up to 2x their original size (larger initial sizes receiving a scale factor closer to 2x), then smooths again over the scaled range; final size is hard-capped at exactly 2x the species max. Mardan Eins ability occurs at an increased rate. FP x2 for all non-Garayan fish. Fishing records grant it bonus Max Magic (see Fishing).
-- **Evilcise ("Jealous Soul")** — Applies curse immediately on equip (including from pause menu). Breaking the curse with holy water applies poison and sets HP to 1. Curse is reapplied on floor change; stripped on unequip or leaving the dungeon.
-- **Maneater ("Blood Price")** — Cursed each floor like Evilcise, but curing it with holy water carries no penalty (it just stays off until the next floor). While the sword's durability is critically low it drains 1 HP per second to restore durability (never fatal).
-- **Aga's Sword ("Defensive Legacy")** — Grants Toan +15 defense while equipped; boost is re-applied if external changes alter defense. Removed on unequip.
-- **Brave Ark ("Hero's Courage")** — Resist Freeze, Poison, Curse, and Goo status effects.
-- **Wise Owl Sword ("Wise Owl Always Knows")** — While a Wise Owl Sword is owned, a message displays when you are near an enemy carrying one of the three keys in Wise Owl Forest.
-- **Small Sword ("Quick Draw")** — The opening combo swing comes out almost instantly, skipping the wind-up. Inherited by Tsukikage and Heaven's Cloud through the buildup line.
-- **Tsukikage ("Moonlit Focus")** — Charge attacks build twice as fast (lunge ready in ~0.25 s, whirlwind in ~0.75 s). Inherits Small Sword effect. Inherited by Heaven's Cloud.
-- **Heaven's Cloud ("Typhoon")** — Holding the whirlwind charge grows the blade — up to 3× at a full hold, with a flash at max — for a bigger, longer-reaching whirlwind. Also inherits Small Sword and Tsukikage effects.
-- **Sun Sword ("Solar Harvest")** — While wielding Sun Sword (or its evolution Big Bang), every enemy killed has a 1% chance to drop a Sun attachment.
-- **Sun Sword ("Solar Flash")** — Hold guard for a second and a half and the blade brightens as a golden glow gathers around Toan; at full charge it holds, ready, until you swing. As that swing comes forward the dungeon floods with light: a warm gold-white that fades back over five seconds while the fog it burns through clears in one. Every enemy within 300 units takes a light hit — a quarter of the sword's attack, with its element — and the whole floor is blinded for those five seconds. Blinded enemies stop where they stand and raise their guard, or simply stand if their kind cannot guard, each lowering it again in its own time just before it can act. While the light lasts nothing can block: a hit staggers an enemy, and it returns to its guard afterwards. Only one flash at a time, and a charge left unused for ten seconds fades away.
-- **Big Bang ("Detonate")** — Every enemy Toan hits triggers an explosion.
+- **Dagger** — TBD.
+- **Baselard ("Heavy Hand")** — Every hit throws the enemy ~17 units. **Super Steve's sphere** gives every pellet the throw.
+- **Gladius ("Jacket Hunter")** — Master Jacket kills give 4× ABS. **Super Steve's sphere**: the same.
+- **Crysknife ("Crystal Affinity")** — Thrown gems deal 2× damage while it is wielded. **Super Steve's sphere**: the same.
+- **Crysknife ("Circle Amplifier")** — Shared with Goro's Magical Hammer. Owning one (bag or storage) doubles every magic circle's effect; owning both triples it: attack-up lasts 30 → 60/90 s, WHP and stat rolls ×2/×3, enemy rage or slow 5 → 10/15 s, the WHP-loss circle drops WHP to 1, and the ABS-max and WHP-cure circles add 1/2 Powerup or Auto Repair Powder. Not passed on by a sphere.
+- **Bone Rapier ("Gravedigger")** — Alongside its Skeleton Key door bypass, the reviving undead it kills stay down. **Super Steve's sphere** (Cross Hinder, Bone Rapier or Bone Slingshot): the same.
+- **Bone Rapier ("Skeleton Key")** — Allows bypassing bone doors while equipped. **Super Steve's sphere** (Bone Rapier or Bone Slingshot): the same.
+- **Shamshir ("Swift Strikes")** — Combo swings play 4/3× faster; charge attacks unchanged. Inherited by Dusack, 7 Branch Sword, Atlamillia Sword and Chronicle Sword. **Super Steve's sphere** (any of the five, or a Partisan's): the draw plays 1.6× faster and the shot fires sooner.
+- **Small Sword ("Quick Draw")** — The opening combo swing comes out almost instantly, skipping the wind-up. Inherited by Tsukikage and Heaven's Cloud through the buildup line. **Super Steve's sphere** (also a Tsukikage or Heaven's Cloud sphere): the shot fires instantly on release.
+- **Serpent Sword** — TBD.
 - **Buster Sword ("Buster Boost")** — Anti-category attachments (Dinoslayer … Mage Slayer) are worth +4 instead of +3 when attached to a Buster Sword.
-- **Cross Hinder ("Sanctifier")** — Roughly double damage and double ABS reward against undead, and undead it kills can no longer revive.
-- **Bone Rapier ("Gravedigger")** — Alongside its Skeleton Key door bypass, the reviving undead it kills stay down. Super Steve inherits the Cross Hinder and both bone-key abilities with their spheres.
-- **Dark Cloud ("Guard Crush")** — Toan's hits cut straight through enemy guards; every blow connects even while an enemy is blocking. Inherited by 7th Heaven.
-- **7th Heaven ("Divine Guard")** — Perfect guard: blocks every enemy attack and projectile, including heavy hits that normally break guard (those just knock Toan back instead). Also inherits Dark Cloud effect.
-- **Kitchen Knife ("Spring's Blessing")** — Stepping into a healing spring blesses the knife for ~60 seconds: the blade visibly grows to triple length and its attack doubles. Standing in the spring refreshes the timer.
+- **Kitchen Knife ("Spring's Blessing")** — Stepping into a healing spring blesses the knife for ~60 seconds: the blade visibly grows to triple length and its attack doubles. Standing in the spring refreshes the timer. Stepping into a spring also restores its WHP to max.
+- **Sax ("Fine Fare")** — The floor's chests upgrade while it is drawn: water → Premium Water, bread/cheese → Premium Chicken. Dusack, 7 Branch Sword, Atlamillia Sword and Chronicle Sword inherit it, each adding its own upgrade. **Super Steve's sphere** (any of the five swords): that sword's tier.
+- **Sand Breaker** — TBD.
+- **Chopper** — TBD.
+- **Wise Owl Sword ("Wise Owl Always Knows")** — While a Wise Owl Sword is owned, a message displays when you are near an enemy carrying one of the three keys in Wise Owl Forest.
+- **Antique Sword** — TBD.
+- **Dusack ("No Fool's Gold")** — Mimics and king mimics can be hit while they wake (their guard still blocks). Inherits Sax's Fine Fare and adds Treasure Key → Gold Bullion; inherits Shamshir's Swift Strikes. **Super Steve's sphere** (Dusack or Brave Ark): the same; Dusack's also Fine Fare at its tier and Swift Strikes.
+- **Tsukikage ("Moonlit Focus")** — Charge attacks build twice as fast (lunge ready in ~0.25 s, whirlwind in ~0.75 s). Inherits Small Sword's Quick Draw. Inherited by Heaven's Cloud. **Super Steve's sphere** (also a Heaven's Cloud sphere): pellets fly 2× faster, plus Quick Draw.
+- **Evilcise ("Jealous Soul")** — Applies curse immediately on equip (including from pause menu). Breaking the curse with holy water applies poison and sets HP to 1. Curse is reapplied on floor change; stripped on unequip or leaving the dungeon. **Super Steve's sphere** curses Xiao the same way.
 - **Macho Sword ("Overtraining")** — While a Macho Sword is owned (bag or storage), every weapon's ABS keeps filling past its max — up to 2× — and the overflow carries into the next level, so a weapon starts its new level with a head start. (Replaces the old Shadow Boxing effect.)
-- **7 Branch Sword ("Sevenfold Rite")** — Refuses to Status Break below +7; at +7 or higher the resulting SynthSphere keeps 77% of the weapon's stats instead of the normal 60%. The Status Break menu hint explains the rule.
-- **Atlamillia Sword ("Atlamillia Insurance")** — While owned (bag or storage), a weapon breaking in a dungeon is no longer a total loss: an Atla appears on a random floor of that dungeon containing a SynthSphere of the broken weapon, keeping 10% of its stats per weapon level (up to 50% at +4 or higher). Attachments are lost. Collecting the Atla delivers the sphere like any georama Atla.
+- **Choora** — TBD.
+- **Lamb's Sword** — TBD.
+- **Drain Seeker** — TBD.
+- **Sun Sword ("Solar Harvest")** — While wielding the Sun Sword, Big Bang or Sword of Zeus, every enemy killed has a 1% chance to drop a Sun attachment. **Super Steve's sphere** (any of the three): the same.
+- **Sun Sword ("Solar Flash")** — Hold guard 1.5 s to prime the blade (the room dims while charging); the next swing floods the floor with light: every enemy within 300 units takes an elementless hit at 0.25× attack with a short knockback, and the whole floor is blinded for 5 s — enemies stop and guard, and while the light lasts nothing can block. 5 WHP. One flash at a time; an unused charge fades after 10 s. **Super Steve's sphere**: guard 2 s primes, and the next pellet carries the flash to wherever it lands (the struck enemy takes the pellet instead of the light hit).
+- **Claymore ("Greatsword")** — The blade is 1.8× its size and reach (hit point 10.4 → 18.7 units), with the Baselard's throw on every hit. **Super Steve's sphere** gives the throw only.
+- **Maneater ("Blood Price")** — Cursed each floor like Evilcise, but curing it with holy water carries no penalty (it just stays off until the next floor). While the sword's durability is critically low it drains 1 HP per second to restore durability (never fatal). **Super Steve's sphere** curses Xiao the same way; the drain restores Super Steve.
+- **Aga's Sword ("Defensive Legacy")** — Grants Toan +15 defense while equipped; boost is re-applied if external changes alter defense. Removed on unequip. **Super Steve's sphere** gives Xiao the +15.
+- **Brave Ark ("Hero's Courage")** — Resist Freeze, Poison, Curse, and Goo status effects. Inherits Dusack's No Fool's Gold. **Super Steve's sphere**: clears the same four statuses from Xiao, and No Fool's Gold.
+- **7 Branch Sword ("Sevenfold Rite")** — Refuses to Status Break below +7; at +7 or higher the resulting SynthSphere keeps 77% of the weapon's stats instead of the normal 60%. The Status Break menu hint explains the rule. Inherits Shamshir's Swift Strikes, and Sax's Fine Fare with Dusack's upgrade plus Repair → Auto Repair Powder (25%). **Super Steve's sphere**: Swift Strikes and Fine Fare at its tier.
+- **Heaven's Cloud ("Typhoon")** — Holding the whirlwind charge grows the blade — up to 3× at a full hold, with a flash at max — for a bigger, longer-reaching whirlwind. Also inherits Small Sword's Quick Draw and Tsukikage's Moonlit Focus. **Super Steve's sphere**: a 3 s held shot grows the pellet up to 8× at up to 1.5× attack, and its hit raises a wind blast — 60 → 160-unit radius with charge, 0.75× attack × (0.5 + 0.5 × charge) — with knockback; plus Quick Draw and Moonlit Focus.
+- **Cross Hinder ("Sanctifier")** — Roughly double damage and double ABS reward against undead, and undead it kills can no longer revive. Also lock-on reach ×2, inherited by Big Bang and Sword of Zeus. **Super Steve's sphere** (Cross Hinder, Big Bang or Sword of Zeus): the reach.
+- **Atlamillia Sword ("Atlamillia Insurance")** — While owned (bag or storage), a weapon breaking in a dungeon is no longer a total loss: an Atla appears on a random floor of that dungeon containing a SynthSphere of the broken weapon, keeping 10% of its stats per weapon level (up to 50% at +4 or higher). Attachments are lost. Collecting the Atla delivers the sphere like any georama Atla. Inherits Shamshir's Swift Strikes, and Sax's Fine Fare with Dusack's upgrade plus Repair → Auto Repair Powder (25%). **Super Steve's sphere**: Swift Strikes and Fine Fare at its tier.
+- **Dark Cloud ("Guard Crush")** — Toan's hits cut straight through enemy guards; every blow connects even while an enemy is blocking. Inherited by 7th Heaven. **Super Steve's sphere**: her pellets pass every guard.
+- **Big Bang ("Detonate")** — The whirlwind is a blast at Toan's feet: 4×/3×/2×/1× attack at 10/25/40/50 units, elementless, ~50-unit knockback, every guard broken, 20 WHP. Inherits the Sun Sword's Solar Flash at 0.5× attack; primed and locked on, a 2× copy of the blade hangs over the target and drops on the first swing — the landing is the same blast plus the flash and the 5 s blind, with every enemy turned to face it (20 WHP). Explosions (Halloween, self-destructs) can't hurt Toan while it is held. Inherits Cross Hinder's lock-on reach ×2. Replaces the old per-hit explosion. **Super Steve's sphere**: guard 3 s primes a 4× bomb over the locked target that drops on release for the blast, flash and blind (20 WHP; unlocked, the flash alone for 5 WHP); a 1 s charged shot throws a 2× bomb at 0.5–2× attack within 25 units (10 WHP); plain pellets are 1× bombs at pellet damage; explosions can't hurt her either; plus Solar Harvest and the lock-on reach.
+- **7th Heaven ("Divine Guard")** — Perfect guard: blocks every enemy attack and projectile, including heavy hits that normally break guard (those just knock Toan back instead). Also inherits Dark Cloud's Guard Crush. Only while Toan is the active character. **Super Steve's sphere** gives Xiao the perfect guard and Guard Crush.
+- **Sword of Zeus ("Lightning")** — Inherits the Sun Sword's Solar Harvest and Solar Flash (the flash itself does no damage; 5 s blind) and Cross Hinder's lock-on reach ×2. A bolt is half a Big Bang blast — 2×/1.5×/1×/0.5× attack at 10/25/40/50 units — through any guard, 10 WHP. Primed and locked on, the blade drops on the first swing and each later combo hit calls a bolt on the target; not locked on, one bolt on each of the nearest 6 enemies within 300 units (10 WHP for the volley). Its charge attack is always a lunge (no whirlwind); held 3 s past the lunge threshold it jumps 1.5× higher and lands a bolt where it comes down. **Super Steve's sphere**: guard 3 s primes — released unlocked, bolts on the nearest 6 within 300 units (10 WHP); locked on, a 5 s window in which every pellet that lands calls a bolt (10 WHP each); a 1 s charged shot calls a bolt wherever the pellet ends; bolt-calling pellets do no damage themselves; plus Solar Harvest and the lock-on reach.
+- **Chronicle Sword** — Attacks hit all nearby targets for a percentage of damage. Inherits Shamshir's Swift Strikes, and Sax's Fine Fare with Dusack's upgrade plus Repair → Auto Repair Powder (25%). **Super Steve's sphere**: Swift Strikes and Fine Fare at its tier.
+- **Chronicle 2** — While owned (bag or storage), every chest is a big chest, a Powerup Powder roll always stands (otherwise 80% are re-rolled), and the clown always rolls the weapon table.
 
 **Xiao**
-- **Angel Shooter ("Guardian Grace")** — While Xiao guards, the slingshot's heal ability keeps ticking and each tick tops her up to 4 HP, with a spring sparkle, a soft white flash and the heal chime. Angel Gear inherits it at 8 HP per tick with a golden burst and the change jingle. Super Steve inherits either version with the matching sphere.
-- **Angel Gear ("Guardian Reflector")** — While Xiao guards, a giant copy of the slingshot stands in front of her and orbits to face the nearest incoming shot or enemy. Enemy shots that reach its pouch are caught (drawn back with the weapon's own animation) and fired back at the nearest enemy, dealing damage through the normal weapon formula with the shot's own element or status: fireballs burn, sticky shots goo, poison gas poisons; resistances, immunities and the "No Effect" flash all apply. The slingshot is also a physical shield: enemies stop at it and swing at it instead of her. Five melee hits break it (weapon-break sound), and the attack gauge doubles as its health bar, refilling before it can return. Super Steve carrying an Angel Gear sphere raises its own model as the shield. Replaces the earlier "Halo & Homing" ability.
-- **Divine Beast Title ("Spirit Beast")** — Hold the shot for a one-second charge (the charge flash marks it) and the pellet that leaves the slingshot becomes Xiao's cat: it flies out along the pellet's line, lands, runs at the locked-on enemy (straight ahead when nothing is locked), pounces, and the pounce hits through the normal weapon formula with the weapon's selected element. The cat rig, textures and leap clips are baked into Xiao's dungeon model by the ISO patcher (hidden until summoned), so it is resident in every dungeon. The cat copy is built once and kept hidden while the weapon is equipped, and a native catcher in the ISO binds it to the charged pellet on the very frame the pellet is born, then hands it the pellet's freshly stepped position every frame, so it never trails; it grows from the pellet's size to full over the first tenth of a second while the pellet's own sprite fades out. At full size the pellet is spent and the cat leaves its line: it falls with the pellet's forward speed, lands (its momentum dies the frame its paws touch), and as the landing motion ends it sets off toward its target (the locked-on enemy, otherwise the enemy nearest Xiao), following the real floor under it at the town's own walk pacing, stopping at walls, and pouncing when it gets close: a ready crouch and the town cat's own spring-up, during both of which it keeps turning to face the enemy, then a jump aimed at where the enemy is as the spring-up ends, and a landing. A script event that wipes the cat's textures (the chasm jump) no longer leaves it unable to appear: they are put back on the next charge. Its motions cross-fade into one another the way the town model's do, using the engine's own ten-frame blend; only the jump itself (take-off into leap into landing) and the drop into the landing cut straight across, as the town's own landing does. Touching an enemy while airborne or landing, from the first flight off the slingshot onward, lands one hit through the normal weapon formula as if the weapon's attack were doubled, with magic and the weapon's element applied, any guard the enemy holds ignored, and the same stagger and shove a sword blow gives (the game's own rule that Xiao's hits never stagger now exempts a hit that carries a melee-type kick, which only the cat's does); the cat sails on through and fades out over the next half second as it lands. It gives up after twenty seconds. The cat carries a glow in the summoning weapon's colour, drawn by the game's own wall-torch routine from a re-tinted copy of the Gallery of Time's purple torch disc, centred on its torso and fading with it.
-- **Spirit Beast up the line** — Angel Shooter and Angel Gear inherit the cat and dress it up: their cats fly on wings, come a little larger (1.1× and 1.2×), pounce from farther away and keep steering toward the target through the top of the leap. Super Steve fires the cat with a Divine Beast Title, Angel Shooter or Angel Gear sphere; its cat wears a cape and a mask instead of wings, and the cape, mask and glow take the colour of the slingshot's selected element (switching elements recolours them live).
-- **Dungeon character memory** — The dungeon's character-model pool (shared by the active character, their weapons and shot effects) is raised from 3.36 MB to 3.84 MB in the ISO's dungeon overlay, paid for by trimming the dungeon's 4.48 MB disc-read staging buffer to 4.00 MB (its largest single file is 3.86 MB). Xiao's model already sat within about 150 KB of the old ceiling, and the cat baked into it pushed a party switch to her into the allocator's silent hang.
-- **Super Steve ("Sphere Inheritance")** — Super Steve inherits the custom effect of whichever weapon's SynthSphere is attached to it (one sphere at a time = one inherited effect), and recolors itself in the source weapon's palette. Ownership/upgrade passives (Macho Sword, Wise Owl Sword, Chronicle 2, Buster Sword, 7 Branch Sword) deliberately don't transfer.
-- **Steel Slingshot ("Endurance Up")** — While its WHP is low (the gauge's warning state), each shot costs half the WHP; Durable and Fragile stack on top. Level-ups grant +2 endurance instead of +1 and twice the max-WHP roll. Super Steve inherits the WHP half with its sphere.
-- **Bandit Slingshot ("Steal Shot")** — A steal that lands on an enemy with a projectile takes the projectile: until another steal or the floor ends, every pellet is that enemy's shot, flags and all, at 2× attack and with its own element. The item's "acquired" notice adds "[enemy]'s projectile is now yours". Self-detonations are never taken (a species' other shot is). Super Steve inherits with either Bandit sphere.
-- **Bone Slingshot ("Skeleton Key", "Gravedigger")** — Bone doors open without their key, and the reviving undead stay down, as with the Bone Rapier. Super Steve inherits with either bone sphere.
-- **Hardshooter ("Ricochet")** — A pellet that lands on an enemy spawns a second pellet at the impact that flies at the next nearest enemy (or in a random direction with none near), once per shot; it cannot strike the enemy it came from. Super Steve inherits with its sphere.
-- **Double Impact** — Every shot is two real pellets side by side, each at 0.75× attack and each rolling the weapon's abilities on its own, drawn as the Steel Slingshot's stone; both ricochet as the Hardshooter's do, at different targets. Super Steve inherits with its sphere.
-- **Dragon's Y ("Dragon's Breath")** — Locked on, Xiao moves at 1.3× speed (inherited by Divine Beast Title, Angel Shooter and Angel Gear). Dragon's Breath: a shot held for a second fires the Gemron ball of the selected element (the Black Dragon's with none) at 1.5× attack with a knockback that shoves enemies out of the burst. Super Steve inherits the shot with its sphere and the speed with any of the four's.
-- **Flamingo ("Lock-On Distance")** — Enemies can be locked on to from twice as far (inherited by Dragon's Y, Divine Beast Title, Angel Shooter and Angel Gear, and by Super Steve with any of the five's sphere). Owned, up to three Flamingos each add 10 units to every bait's notice radius when fishing.
-- **Matador ("Charging Bull")** — Hold the shot for a second (the charge flash marks it) and the pellet released is charged: 1.5× damage, it lands through an enemy's guard, and it hits with a hammer-swing shove that knocks the enemy back along its flight line. The charged pellet flies as a projection of the slingshot itself: an orange copy of the model at its own size, wrapped in the cat's glow, with the pellet hidden inside. Super Steve inherits it with a Matador sphere, projecting its own model on the charged pellet. Super Steve's pellet is drawn as the sphere weapon's when the sphere came from a slingshot.
-- **Shot slots** — Floors are no longer limited to five monster shot types: the five slots are shared among every config the floor needs, each read from disc at most once per floor.
+- **Wooden Slingshot** — TBD.
+- **Bone Slingshot ("Skeleton Key", "Gravedigger")** — Bone doors open without their key, and the reviving undead stay down, as with the Bone Rapier. **Super Steve's sphere** (either bone weapon): the same.
+- **Steel Slingshot ("Endurance Up")** — While its WHP is low (the gauge's warning state), each shot costs half the WHP; Durable and Fragile stack on top. Level-ups grant +2 endurance instead of +1 and twice the max-WHP roll. **Super Steve's sphere**: the low WHP effect only.
+- **Steve** — TBD.
+- **Bandit Slingshot ("Steal Shot")** — A steal that lands on an enemy with a projectile takes the projectile: until another steal or the floor ends, every pellet is that enemy's shot, flags and all, at 2× attack and with its own element. The item's "acquired" notice adds "[enemy]'s projectile is now yours". Self-detonations are never taken (a species' other shot is). **Super Steve's sphere** (either Bandit): the same.
+- **Flamingo ("Lock-On Distance")** — Enemies can be locked on to from twice as far (inherited by Dragon's Y, Divine Beast Title, Angel Shooter and Angel Gear). **Super Steve's sphere** (any of the five, or Cross Hinder, Big Bang or Sword of Zeus): the same.
+- **Flamingo ("Bait Flamboyance")** — While owned (Xiao's bag or storage), every bait's notice radius — the distance at which a fish turns toward the hook — grows 10 units per Flamingo, up to three.
+- **Hardshooter ("Ricochet")** — A pellet that lands on an enemy spawns a second pellet at the impact that flies at the next nearest enemy (or in a random direction with none near), once per shot; it cannot strike the enemy it came from. A pellet that ends on a wall does not ricochet. **Super Steve's sphere**: the same.
+- **Double Impact** — Every shot is two real pellets side by side, each at 0.75× attack and each rolling the weapon's abilities on its own, drawn as the Steel Slingshot's stone; both ricochet as the Hardshooter's do, at different targets. **Super Steve's sphere**: the same.
+- **Matador ("Charging Bull")** — Hold the shot for a second (the charge flash marks it) and the pellet released is charged: 1.5× damage, it lands through an enemy's guard, and it hits with a hammer-swing shove that knocks the enemy back along its flight line. The charged pellet flies as a projection of the slingshot itself: an orange copy of the model at its own size, wrapped in the cat's glow, with the pellet hidden inside. **Super Steve's sphere**: the same, projecting its own model on the charged pellet.
+- **Super Steve ("Sphere Inheritance")** — Super Steve inherits the custom effect of whichever weapon's SynthSphere is attached (one sphere at a time); the sphere's weapon icon shows on the dungeon HUD and a slingshot sphere lends its pellet sprite. Each inherited form is described with its weapon. Ownership passives and upgrade-related abilities (Macho Sword, Wise Owl Sword, Chronicle 2, Buster Sword, 7 Branch Sword, Crysknife) don't transfer.
+- **Dragon's Y ("Dragon's Breath")** — Locked on, Xiao moves at 1.3× speed (inherited by Divine Beast Title, Angel Shooter and Angel Gear). Dragon's Breath: a shot held for a second fires the Gemron ball of the selected element (the Black Dragon's with none) at 1.5× attack; the weapon's abilities roll on it (the ball's own ailment is stripped), and its knockback comes from 4 units behind the burst along the flight line, so a head-on target is pushed onward. **Super Steve's sphere**: the shot; the speed with any of the four's.
+- **Divine Beast Title ("Spirit Beast")** — Hold the shot 1 s (the charge flash marks it) and the pellet becomes Xiao's cat: it flies out along the shot, lands, walks at the locked-on enemy (else the nearest), and pounces. Touching an enemy in the air or on landing lands one hit at 2× attack with the weapon's magic and selected element, through any guard, with a sword blow's stagger and shove; the cat then fades out over 0.5 s. It times out after 20 s. It wears a glow in the weapon's colour; the rig is baked into Xiao's dungeon model by the ISO patcher, so it is resident in every dungeon. **Super Steve's sphere**: the same cat.
+- **Angel Shooter ("Guardian Grace")** — While Xiao guards, the slingshot's heal ability keeps ticking and each tick tops her up to 4 HP, with a spring sparkle, a soft white flash and the heal chime. Inherits Divine Beast Title's Spirit Beast: its cat flies on wings, is 1.1× larger, pounces from farther and steers through the leap. **Super Steve's sphere**: the heal, and the cat at this size and range wearing a cape and mask in the slingshot's selected element colour instead of wings.
+- **Angel Gear ("Guardian Reflector")** — While Xiao guards, a giant copy of the slingshot stands in front of her and orbits to face the nearest incoming shot or enemy. Enemy shots that reach its pouch are caught (drawn back with the weapon's own animation) and fired back at the nearest enemy, dealing damage through the normal weapon formula with the shot's own element or status: fireballs burn, sticky shots goo, poison gas poisons; resistances, immunities and the "No Effect" flash all apply. The slingshot is also a physical shield: enemies stop at it and swing at it instead of her. Five melee hits break it (weapon-break sound), and the attack gauge doubles as its health bar, refilling before it can return. Inherits Angel Shooter's Guardian Grace at 8 HP per tick with a golden burst and the change jingle, and Divine Beast Title's Spirit Beast: its cat flies on wings, is 1.2× larger, pounces from farther and steers through the leap. **Super Steve's sphere**: its own model stands as the shield, the 8 HP heal, and the cat at this size and range wearing a cape and mask in the slingshot's selected element colour instead of wings.
+- **Angel Gear** — Applies Heal regeneration to all allies while equipped. **Super Steve's sphere** keeps the party heal.
 
 **Goro**
-- **Frozen Tuna ("Cold Storage")** — Each point of WHP lost banks 2 HP into a healing pool. When Goro takes damage, the pool drains at 1 HP per 0.5 seconds. Healing pauses if HP reaches max; banked HP is preserved until the next hit. The pool resets on weapon repair or switch. On hit, 5% chance stops all non-ice enemies and freezes Goro for 3 seconds. Blizzard, Sam, and Ice Gemron are immune to the stop proc.
-
-**Ungaga**
-- **Cactus ("Absorb")** — Custom thirst effect which drains moisture from enemies. Dry enemies are unaffected.
-- **Mirage ("Decoy")** — Holding guard charges a mirage; on release a shimmering clone of Ungaga with a heat-haze effect is planted at that spot, and enemies chase the decoy instead of him for ~12 seconds (a new charge refreshes it). The illusion breaks per enemy — hit one and it re-targets you. Hercules' Wrath inherits the effect.
+- **Mallet** — TBD.
+- **Frozen Tuna ("Cold Storage")** — Each point of WHP lost banks 2 HP into a healing pool. When Goro takes damage, the pool drains at 1 HP per 0.5 seconds. Healing pauses if HP reaches max; banked HP is preserved until the next hit. The pool resets on weapon repair or switch. On hit, 5% chance stops all non-ice enemies and freezes Goro for 3 seconds. Blizzard, Sam, and Ice Gemron are immune to the stop proc. **Super Steve's sphere**: the pool and the 5% stop work for Xiao (freezing her too).
+- **Steel Hammer** — TBD.
+- **Trial Hammer** — TBD.
+- **Turtle Shell** — TBD.
+- **Big Bucks Hammer** — TBD.
+- **Plate Hammer** — TBD.
+- **Magical Hammer ("Circle Amplifier")** — Shared with Toan's Crysknife. Owning one (bag or storage) doubles every magic circle's effect; owning both triples it: attack-up lasts 30 → 60/90 s, WHP and stat rolls ×2/×3, enemy rage or slow 5 → 10/15 s, the WHP-loss circle drops WHP to 1, and the ABS-max and WHP-cure circles add 1/2 Powerup or Auto Repair Powder. Not passed on by a sphere.
+- **Battle Ax** — TBD.
+- **Gaia Hammer** — TBD.
+- **Last Judgement** — TBD.
+- **Satan's Ax** — TBD.
+- **Tall Hammer** — Gradually reduces enemy size on hit until they reach 30% of their original size. **Super Steve's sphere** shrinks the enemies her pellets hit.
+- **Inferno** — Scales attack power with missing HP (up to +100%) and missing thirst (up to +50%).
 
 **Ruby**
-- **Bandit's Ring ("Steal Shot")** — The Bandit Slingshot's stolen projectile for Ruby's quick fire only; her charged shot stays her own.
+- **Gold Ring** — TBD.
+- **Platinum Ring** — TBD.
+- **Pocklekul** — TBD.
+- **Bandit's Ring ("Steal Shot")** — The Bandit Slingshot's stolen projectile for Ruby's quick fire only; her charged shot stays her own. **Super Steve's sphere**: the stolen shot.
+- **Fairy's Ring** — TBD.
+- **Crystal Ring** — TBD.
+- **Goddess Ring** — TBD.
+- **Satan's Ring** — TBD.
+- **Destruction Ring** — TBD.
+- **Thorn Armlet** — TBD.
+- **Athena's Armlet** — TBD.
+- **Mobius Ring** — Increases damage output the longer Ruby charges an attack. **Super Steve's sphere**: damage ×1.5 per 1.5 s of hold (the pellet grows to match, up to 15×).
+- **Secret Armlet ("Favoured Circles")** — While owned (bag or storage), every bad magic circle is dealt as its good counterpart: gilda, WHP, stat and element losses become the same gains, and enemy rage becomes every enemy slowed for 5 s. Replaces the equipped-only re-roll.
+
+**Ungaga**
+- **Fighting Stick** — TBD.
+- **Javelin ("Marine Hunter")** — Marine enemies have 0 defense and give 2× ABS while it is equipped. **Super Steve's sphere**: the same.
+- **5 Foot Nail** — TBD.
+- **Halberd ("Tornado Charge Buff")** — Ungaga's held-charge shot (fired every 30 frames) flies farther and faster and is drawn larger: 1.4× travel, 1.1× size. Scorpion, Mirage, Cactus, Hercules' Wrath, Terra Sword and Babel's Spear inherit it at higher tiers. **Super Steve's sphere** (any of the seven): a 0.5 s charged shot at 1.5× attack and 2× WHP, flying faster and drawn larger by the sphere's tier.
+- **DeSanga ("Vampire")** — Every kill restores the weapon 5 WHP. **Super Steve's sphere**: the same.
+- **Scorpion ("Venom")** — Each Poison proc cures Ungaga's own poison and gives the weapon 50% of that enemy's ABS (capped at its max). Halberd's Tornado Charge Buff at 1.7× travel, 1.3× size. **Super Steve's sphere**: the same (curing Xiao), and the Tornado charged shot at its tier.
+- **Partisan ("Quick Combo")** — Combo swings play 4/3× faster (Shamshir's factor); the charge keeps its pace. **Super Steve's sphere** gives Swift Strikes' shot speed.
+- **Mirage ("Decoy")** — Holding guard 0.25 s plants a shimmering clone of Ungaga with a heat-haze effect; enemies chase it instead of him for 12 s (18 s when cast by Hercules' Wrath). The illusion breaks per enemy — hit one and it re-targets you — and a new hold hands off to a fresh decoy. The Mirage line (Mirage, Terra Sword, Hercules' Wrath, Babel's Spear) also locks on from 2× the distance. Only one targeting effect (decoy, shield ring, judgement blade) owns the enemies' target at a time; confusion yields to it. Halberd's Tornado Charge Buff at 2.0× travel, 1.5× size. **Super Steve's sphere** (Mirage or Hercules' Wrath): the decoy, and the Tornado charged shot at its tier.
+- **Cactus ("Absorb")** — Hits restore thirst by damage ÷ 10 (100 damage = one water drop); dry species (rock, metal, undead) give nothing. **Super Steve's sphere**: pellet hits restore Xiao's thirst.
+- **Cactus ("Desert Bloom")** — Hold guard 0.25 s: a 3× cactus rises 10 units ahead and stands 10 s as a solid column (radius 6), pricking enemies within 2 units of it for 1/6 attack every 0.25 s with a short throw; no WHP. Holding again moves it. Halberd's Tornado Charge Buff at 2.0× travel, 1.5× size. **Super Steve's sphere**: raises Queens' two trees instead — a wall (no damage) for 10 s; plus the Tornado charged shot at its tier.
+- **Hercules' Wrath ("Air Strike")** — Level 1 is the Mirage decoy (0.25 s guard; it lasts 18 s). Keep guarding 5 s more and the room dims as the spear turns gold; the next swing summons a beam from above that dispels the decoy with a blast with 4×/3×/2×/1× attack at 20/50/80/100 units, through any guard, 20 WHP cost. Halberd's Tornado Charge Buff at 2.5× travel, 1.7× size. **Super Steve's sphere**: the beam strikes where her first primed pellet dies (20 WHP); the decoy comes with it, and the Tornado charged shot at its tier.
+- **Terra Sword ("Big Rock")** — Hold guard 5 s to prime (the weapon turns green); locked on, Master Utan's boulder drops from 500 units (~2.4 s) onto the target: 4× attack to every enemy within 26 units, about twice Big Bang's knockback, through any guard, 10 WHP. The rock rests 20 s as a solid column and deals 1× attack per second to enemies under it. Halberd's Tornado Charge Buff at 2.5× travel, 1.7× size. **Super Steve's sphere**: drops a 2× nut on the locked target's head instead — 0.5× attack through guard, and the target is confused while the nut rests (~20 s); no blast; plus the Tornado charged shot at its tier.
+- **Babel's Spear ("Curse of Babel")** — Hold guard 5 s: a 5× spear rises under the locked target (else the nearest enemy within 60 units, else 15 units ahead). The tip strikes for 1× attack with the Baselard's throw; the spear then stands 20 s spinning at 240°/s, its spikes hitting enemies within 2 units of the column for 1/6 attack every 0.25 s (no WHP), solid to enemies, shots and the player. Every non-boss enemy on the floor is confused until it fades (~24 s). Its own hits carry the new Confuse ability. Replaces the 6% Stop. Halberd's Tornado Charge Buff at 2.5× travel, 1.7× size. **Super Steve's sphere**: raises a 4× statue of Super Steve in the spear's place; its hands strike enemies within 6 units for 0.5× attack every 0.75 s; same 5 s charge and floor-wide confusion; plus the Tornado charged shot at its tier.
 
 **Osmond**
-- **Snail ("Slime Trail")** — 5% chance on hit to apply Gooey to the struck enemy.
+- **Launcher** — TBD.
+- **Machine Gun** — TBD.
+- **Jackal** — TBD.
+- **Launcher V2** — TBD.
+- **Blessing Gun** — TBD.
+- **Snail ("Slime Trail")** — 5% chance on hit to apply Gooey to the struck enemy. **Super Steve's sphere**: the same.
 - **Skunk ("Longer Flame")** — The flamethrower reaches twice as far.
-
-#### Dark Cloud Enhanced
-
-**Toan**
-- **Bone Rapier** — Allows bypassing bone doors while equipped.
-- **Chronicle Sword** — Attacks hit all nearby targets for a percentage of damage.
-
-**Xiao**
-- **Angel Gear** — Applies Heal regeneration to all allies while equipped.
-
-**Goro**
-- **Tall Hammer** — Gradually reduces enemy size on hit until they reach 30% of their original size.
-- **Inferno** — Scales attack power with missing HP and missing thirst; bonus scales up to 100% of current total attack.
-
-**Ruby**
-- **Mobius Ring** — Increases damage output the longer Ruby charges an attack.
-- **Secret Armlet** — All magic circle effects on the current floor are turned into positive outcomes while equipped.
-
-**Ungaga**
-- **Babel Spear** — 6% chance on hit to stop all enemies for 5 seconds.
-- **Hercules' Wrath** — 30% chance on taking a hit to gain the Stamina status effect.
-
-**Osmond**
-- **Supernova** — 10% chance per hit to apply a random status effect (Freeze, Poison, Stamina, or Gooey) to each enemy struck.
-- **Star Breaker ("Shooting Stars")** — 2% chance on kill to receive an empty synthsphere.
+- **Swallow** — TBD.
+- **G Crusher** — TBD.
+- **Hexa Blaster** — TBD.
+- **Star Breaker ("Shooting Stars")** — 2% chance on kill to receive an empty synthsphere. **Super Steve's sphere**: the same.
+- **Supernova** — 11% chance per hit to apply a random status effect (Freeze, Poison, Stamina, or Gooey) to each enemy struck.
 
 ### Weapon Ability Changes
 
-#### This Fork
+**Toan**
+- **Evilcise** — 100% Poor
+- **Macho Sword** — 100% Abs Up
 
 **Xiao**
 - **Bone Slingshot** — 50% Fragile
-- **Hardshooter** — 50% Fragile; builds up to Double Impact only
-- **Double Impact** — builds up to Matador only
+- **Hardshooter** — 50% Fragile
+- **Matador** — 100% Critical
 
 **Goro**
 - **Frozen Tuna** — 100% Stop
 
 **Ruby**
-- **Thorn Armlet** — 50% Poison
+- **Goddess Ring** — 100% Heal
+- **Athena's Armlet** — 100% Abs Up
 
 **Ungaga**
-- **De Sanga** — 30% Drain
+- **DeSanga** — 100% Drain
+- **Babel's Spear** — Confuse (new ability: 5% per hit, 20 s, bosses immune; see Game Mechanics)
 
-#### Dark Cloud Enhanced
-
-**Toan**
-- **Macho Sword** — 100% Abs Up
-- **Heaven's Cloud** — 25% Poison, 25% Critical
-- **Dark Cloud** — 25% Poison, 25% Stop
-- **Big Bang** — 25% Critical, 25% Stop
-- **Atlamillia Sword** — 25% Heal, 25% Stop
-- **Dusack** — 50% Steal
-
-**Xiao**
-- **Matador** — 100% Critical
-
-**Ruby**
-- **Athena's Armlet** — 100% Abs Up
-- **Goddess Ring** — 50% Heal
-- **Destruction Ring** — 50% Critical
-- **Satan's Ring** — 50% Drain
-
-**Osmond**
-- **Skunk** — 50% Poison
-- **Swallow** — 50% Steal
 
 ### Weapon Stat Changes
 
-#### This Fork
-
-- **Frozen Tuna** — Max attack 100, max MP 678, third attachment slot
-- **Heaven's Cloud** — Max attack 180, max magic 180, third attachment slot
-- **Aga's Sword** — Max attack 190
-- **Skunk** — Max attack 143, max magic 105
-- **Blessing Gun** — Max attack 87, max magic 80
-- **Thorn Armlet** — Stone Breaker and Beast Buster set to 20
-
-#### Dark Cloud Enhanced
-
 **Toan**
 - **Baselard** — Endurance set to 30.
-- **Antique Sword** — Speed set to 70, Fire set to 15.
-- **Kitchen Knife** — WHP set to 50, Attack set to 25, Endurance set to 30, Ice removed, Thunder set to 8, Sea Killer set to 90.
-- **Tsukikage** — Endurance set to 33, Speed set to 80
-- **Heaven's Cloud** — Third attachment slot
-- **Lamb's Sword** — Third attachment slot; transform and stats thresholds set to 50%
-- **Brave Ark** — Third attachment slot
-- **Big Bang** — Speed set to 70
+- **Bone Rapier** — WHP set to 38, Magic set to 26
 - **Small Sword** — WHP set to 35, Magic set to 17, Sea Killer removed, Metal Breaker set to 10
+- **Kitchen Knife** — WHP set to 50, Attack set to 25, Endurance set to 30, Ice removed, Thunder set to 8, Sea Killer set to 90.
+- **Sax** — Speed set to 60, Fire set to 6, Sky Hunter set to 10
 - **Sand Breaker** — WHP set to 45, Endurance set to 25, third attachment slot
-- **Drain Seeker** — WHP set to 60
 - **Chopper** — Speed set to 60
+- **Antique Sword** — Speed set to 70, Fire set to 15.
+- **Tsukikage** — Endurance set to 33, Speed set to 80
 - **Choora** — WHP set to 57, Attack set to 45, Speed set to 70, Ice set to 10, Thunder set to 15, Undead Buster set to 15, Beast Buster set to 15, Metal Breaker set to 15, third attachment slot
+- **Lamb's Sword** — Third attachment slot; transform and stats thresholds set to 50%
+- **Drain Seeker** — WHP set to 60
 - **Claymore** — Undead Buster set to 10, Beast Buster set to 10, Mage Slayer set to 10
 - **Maneater** — Endurance set to 44, Speed set to 70, Magic set to 45, Ice/Thunder/Holy/Undead/Beast/Metal set to 15, Mimic Breaker set to 10
-- **Bone Rapier** — WHP set to 38, Magic set to 26
-- **Sax** — Speed set to 60, Fire set to 6, Sky Hunter set to 10
+- **Aga's Sword** — Max attack 190
+- **Brave Ark** — Third attachment slot
 - **7 Branch Sword** — WHP set to 47, Endurance set to 47, Magic set to 37; Dino Slayer, Undead, Sea, Stone, Plant, Sky, Mimic set to 7; Beast Buster and Mage Slayer set to 8; Metal Breaker set to 10
+- **Heaven's Cloud** — Max attack 180, max magic 180, third attachment slot
 - **Cross Hinder** — Endurance set to 50, Speed set to 70, Magic set to 32
+- **Big Bang** — Speed set to 70
 - **Chronicle 2** — Max Attack set to 999
 
 **Xiao**
@@ -356,38 +374,26 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Hardshooter** — Speed set to 60
 
 **Goro**
-- **Turtle Shell** — Magic set to 10
-- **Frozen Tuna** — WHP set to 65
-- **Gaia Hammer** — Endurance set to 25
+- **Frozen Tuna** — WHP set to 65, max attack 100, max MP 678, fourth attachment slot
 - **Trial Hammer** — Attack set to 30, Endurance set to 25
+- **Turtle Shell** — Magic set to 10
+- **Gaia Hammer** — Endurance set to 25
 
 **Ruby**
 - **Gold Ring** — Attack set to 15, Magic set to 30
-- **Bandit's Ring** — Attack set to 30, Max Attack set to 50, Magic set to 20
 - **Platinum Ring** — Attack set to 23
 - **Pocklekul** — Attack set to 28, Magic set to 28, Holy removed
+- **Bandit's Ring** — Attack set to 30, Max Attack set to 50, Magic set to 20
+- **Thorn Armlet** — Max attack 90, max magic 72, Stone Breaker and Beast Buster set to 20
 
 **Ungaga**
 - **All weapons** — +10 Attack, +10 Max Attack, +15 Endurance
-- **Babel Spear** — Fourth attachment slot
+- **Babel's Spear** — Fourth attachment slot
 
 **Osmond**
 - **All weapons** — +15 Attack, +15 Max Attack
-
----
-
-## Developer Tooling
-
-Not player-facing; listed so contributors know what exists.
-
-- **Ghidra EE decompiler toolchain** (`tools/ghidra/`) — one-command decompilation of the game's PS2 EE code (`decompile.sh main|dun "<function>"`), symbol export/apply scripts, and an xref finder. The game ELF ships a full demangled C++ symbol table (`symbols.txt`).
-- **Code cave scanner** (`CodeCaveScanner.cs` + `tools/find_code_caves.py`) — background sweeps of EE RAM across sessions to find provably-unused regions for the mod's injected bytecode; findings accumulate in `CodeCaveFindings.txt`. Proven caves and mod cave layout live in `CodeCaveAddresses.cs`.
-- **Georama probe** (`GeoramaProbe.cs`) — read-only dumper of town Georama parts, water surfaces, event points, and fishing-sign parameters, supporting the custom-fishing-spot research (`docs/custom-fishing-spot.md`).
-- **Asset tools** (`tools/`) — `.mes` menu-text decoder, TIM2/`.mds` surgery scripts, and generators for the motion/tile/model reference tables in `docs/`.
-- **Docs library** (`docs/`) — new reverse-engineering references: game damage formulas, per-attack enemy damage/guard tables, enemy & character motion tables, chest loot tables, dungeon tile grid, code caves, cave code execution, orphaned enemy models, and more. Existing root-level docs moved into `docs/`.
-- **Reusable effect primitives** — general building blocks for future weapon effects: elemental gem bursts at any point/scale (`GemBurst.cs`), rings of real damaging pellets (`ShrapnelBurst.cs`), screen-space heat shimmer (`HeatHaze.cs`), glowing motion trails (`TrailRibbon.cs`), radial knockback shockwaves, and a full player-clone renderer (`CharacterClone.cs`).
-
----
+- **Blessing Gun** — Max attack 87, max magic 80
+- **Skunk** — Max attack 143, max magic 105
 
 ## Weapon Buildup Paths
 
