@@ -68,8 +68,8 @@ namespace Dark_Cloud_Improved_Version
         internal const int Slot1Mimic                = 0x45;
         internal const int Slot1Mage                 = 0x46;
 
-        // ── Mod bookkeeping (words the synth-sphere listener in Weapons.cs keeps inside the record) ──
-        internal const int HasChangedBySynth      = 0xC8;   // ushort: flag for Weapons.WeaponListenForSynthSphere
+        // ── Mod bookkeeping (words the synth-sphere listener in WeaponSynthSphereLevel keeps inside the record) ──
+        internal const int HasChangedBySynth      = 0xC8;   // ushort: flag for WeaponSynthSphereLevel.Listen
         internal const int WeaponFormerStatsValue = 0xCA;   // ushort: the level delta that listener last applied
 
         // ── Ability bitfields ──

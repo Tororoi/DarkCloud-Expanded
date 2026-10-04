@@ -25,13 +25,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Item id the mayor hands over at the end of his quest (SideQuestManager picks it).</summary>
         public static byte mayorReward;
 
-        /// <summary>Thread-start entry kept for MainMenuThread / ModWindow: the all-mode game loop.</summary>
-        public static void MainScript() => GameLoop.Run();
 
-        /// <summary>Entry kept for MainMenuThread: seeds the relocated .chr/.cfg path slots with Toan.</summary>
-        public static void InitializeCharacterOffsetValues() => AllySwitch.InitializeCharacterOffsetValues();
 
-        /// <summary>Entry kept for ModWindow's status panel: the fishing sub-state probe (<see cref="Fishing.FishProbe"/>).</summary>
-        internal static int[] FishProbe => Fishing.FishProbe;
     }
 }

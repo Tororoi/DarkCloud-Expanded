@@ -171,7 +171,7 @@ namespace Dark_Cloud_Improved_Version
                 (Items.doubleimpact, 0x00000200u, 0x00001000u, "Double Impact → Matador"),
             })
             {
-                uint addr = (uint)(Weapons.buildup - 0x20000000 + Weapons.xiaooffset + Weapons.weaponoffset * (item - Weapons.woodenid));
+                uint addr = (uint)(WeaponTable.BuildUp - 0x20000000 + WeaponTable.XiaoOffset + WeaponTable.Stride * (item - WeaponTable.WoodenSlingshotId));
                 ReplaceWord(fs, ElfOff, addr, vanilla, ours,   // {what}
                             cur => $"Build-up word of weapon {item} at 0x{addr:X} is 0x{cur:X}, not vanilla 0x{vanilla:X} — unmodified Dark Cloud (USA) ISO expected.");
             }

@@ -48,13 +48,13 @@ namespace Dark_Cloud_Improved_Version
             Label_FishFarmer_Sessions.Text =
                 $"Sessions: {FishDataFarmer.SessionCount}   Queue: {FishDataFarmer.PendingCount}";
 
-            int[] p = TownCharacter.FishProbe;
+            int[] p = Fishing.FishProbe;
             Label_FishFarmer_Probe.Text =
                 $"708={p[0]:X8}  714={p[1]:X8}  3E20={p[2]:X8}  3E24={p[3]:X8}  3E28={p[4]:X8}";
             Label_FishFarmer_Survey.Text = FishDataFarmer.GetSurveyText();
         }
 
-        public static Thread townThread = new Thread(new ThreadStart(TownCharacter.MainScript)) { IsBackground = true };
+        public static Thread townThread = new Thread(new ThreadStart(GameLoop.Run)) { IsBackground = true };
         public static Thread TASSThread = new Thread(new ThreadStart(TASThread.RunTAS)) { IsBackground = true };
         public static Thread TASSThread2 = new Thread(new ThreadStart(TASThread.RecordTAS)) { IsBackground = true };
         public static Thread dungeonthread = new Thread(new ThreadStart(Dungeon.InsideDungeonThread)) { IsBackground = true };
@@ -580,8 +580,8 @@ namespace Dark_Cloud_Improved_Version
         {
             if (MainMenuThread.changesThread.ThreadState == ThreadState.Unstarted)
                 MainMenuThread.changesThread.Start();
-            if (Weapons.weaponsMenuListener.ThreadState == ThreadState.Unstarted)
-                Weapons.weaponsMenuListener.Start();
+            if (WeaponSynthSphereLevel.Listener.ThreadState == ThreadState.Unstarted)
+                WeaponSynthSphereLevel.Listener.Start();
         }
 
         private void DEV_Page1_Btn_Plgue(object sender, RoutedEventArgs e)

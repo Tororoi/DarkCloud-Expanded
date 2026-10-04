@@ -7,7 +7,7 @@ namespace Dark_Cloud_Improved_Version
     /// out again, the weapon goes back to the level and stats it had. The two bookkeeping words that make the second half possible
     /// live in the record itself (<see cref="WeaponRecord.HasChangedBySynth"/>, <see cref="WeaponRecord.WeaponFormerStatsValue"/>).
     ///
-    /// <see cref="Listener"/> is the thread: Dungeon.InsideDungeonThread and TownCharacter.MainScript start it when the weapon
+    /// <see cref="Listener"/> is the thread: Dungeon.InsideDungeonThread and TownLoop start it when the weapon
     /// customize menu opens (a stopped one is replaced with a fresh thread first); <see cref="Listen"/> polls the hovered
     /// character and weapon every 64 ms until the menu closes.</summary>
     internal static class WeaponSynthSphereLevel

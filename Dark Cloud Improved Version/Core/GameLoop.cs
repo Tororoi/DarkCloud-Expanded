@@ -5,7 +5,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// The mod's all-mode game loop: one background thread, started once a save is in play
-    /// (MainMenuThread / ModWindow start it through <see cref="TownCharacter.MainScript"/>).
+    /// (MainMenuThread and ModWindow start it as <see cref="Run"/>).
     /// Start-up applies the save-load pokes (item table, mayor-quest HP, daily shop, Sword of Zeus max
     /// attack, the ally .chr/.cfg path slots). Then, every 50 ms, in this order: the weapon ownership
     /// passives (<see cref="WeaponPassives"/>), the town branch while the game is in town mode 2

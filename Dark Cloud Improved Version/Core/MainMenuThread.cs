@@ -16,7 +16,7 @@ namespace Dark_Cloud_Improved_Version
         public static int currentFrameCounter = 0;
         public static int previousFrameCounter = 0;
         public static int previousMode = -1;
-        public static Thread townThread = new Thread(new ThreadStart(TownCharacter.MainScript));
+        public static Thread townThread = new Thread(new ThreadStart(GameLoop.Run));
         public static Thread changesThread = new Thread(new ThreadStart(ApplyNewChanges));
         public static Thread dungeonthread = new Thread(new ThreadStart(Dungeon.InsideDungeonThread));
         public static Thread weaponspecialeffectThread = new Thread(new ThreadStart(WeaponSpecialReroll.Run));
@@ -29,7 +29,7 @@ namespace Dark_Cloud_Improved_Version
             Enemies.EnableEnemyDrops();   // let the "can't drop" species (flyers, Gol/Sil) drop on death (static species-table patch)
             WeaponDescriptions.StartDescriptionPatcher();   // keep weapon menu descriptions = WeaponData.ModDescription
             MachoSword.ApplyAbsCodePatches();   // ABS rollover display patches (EE code; menu/HUD code is still cold here)
-            Mirage.ArmColdPatch();   // Ungaga's Mirage: host clean _GET_POSITION + _GET_DISTANCE in cold-PINE caves (per-slot target)
+            TargetRedirectCaves.ArmColdPatch();   // the enemy target redirect: clean _GET_POSITION + _GET_DISTANCE copies in cold-PINE caves, reading the per-slot target table (AggroTable)
             ShieldPatches.ArmBlockPatch();   // Angel Gear shield: MoveCheck2's enemy-block addend becomes a data word (cold; enemy code never ran yet)
             ShieldPatches.ArmShotPatch();    // Angel Gear shield: checkCollision's player position becomes a pointer (cold) — shots can collide with the pouch
             HarderEnemyAI.StartThread();   // "Harder enemy AI" toggle: enemies with a get-up motion can revive
@@ -163,7 +163,7 @@ namespace Dark_Cloud_Improved_Version
             // Claim the flag immediately to minimise the gap during which PNACH shows the "Launch Enhanced Mod" message
             Memory.WriteByte(Mailbox.PineProbe, 1);
 
-            TownCharacter.InitializeCharacterOffsetValues();
+            AllySwitch.InitializeCharacterOffsetValues();
             while (true)
             {
                 currentFrameCounter = Memory.ReadInt(0x202A2400);
@@ -223,7 +223,7 @@ namespace Dark_Cloud_Improved_Version
                                     {
                                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Entered ingame, starting all threads!");
                                         changesThread = new Thread(() => ApplyNewChanges());
-                                        townThread = new Thread(() => TownCharacter.MainScript());
+                                        townThread = new Thread(() => GameLoop.Run());
                                         dungeonthread = new Thread(() => Dungeon.InsideDungeonThread());
                                         weaponspecialeffectThread = new Thread(() => WeaponSpecialReroll.Run());
                                         if (!changesThread.IsAlive) changesThread.Start();

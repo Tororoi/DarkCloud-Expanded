@@ -121,7 +121,7 @@ namespace Dark_Cloud_Improved_Version
                         _armedCharge = empowered;
                         // The burst LOOKS like wind but HURTS like the weapon: it inherits whatever element is
                         // selected on Super Steve (0 = none). Frozen at the shot, like the charge.
-                        _armedElement = Weapons.SelectedElementBits(Weapons.EquippedRecord());
+                        _armedElement = WeaponModelFrames.SelectedElementBits(WeaponModelFrames.EquippedRecord());
                         _pelletHandled[i] = true;
                     }
                     else if (!live) _pelletHandled[i] = false;

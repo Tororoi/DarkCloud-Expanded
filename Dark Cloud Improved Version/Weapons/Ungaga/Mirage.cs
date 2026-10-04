@@ -131,8 +131,6 @@ namespace Dark_Cloud_Improved_Version
 
         internal static void Start() => new Thread(Loop) { IsBackground = true }.Start();
 
-        /// <summary>Forwarder for Core/MainMenuThread.cs only: the engine redirect is <see cref="TargetRedirectCaves"/>'s.</summary>
-        internal static void ArmColdPatch() => TargetRedirectCaves.ArmColdPatch();
 
 
         // ── Clone heat-haze: the game's fire-raster distortion, drawn at the clone by ElfCave.MirageHazeDraw ──

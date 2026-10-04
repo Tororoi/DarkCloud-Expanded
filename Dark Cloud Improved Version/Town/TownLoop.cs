@@ -687,14 +687,14 @@ namespace Dark_Cloud_Improved_Version
             if (Player.CheckIsWeaponCustomizeMenu())
             {
                 //The Synthsphere Listener thread
-                if (Weapons.weaponsMenuListener.ThreadState == ThreadState.Unstarted)
+                if (WeaponSynthSphereLevel.Listener.ThreadState == ThreadState.Unstarted)
                 {
-                    Weapons.weaponsMenuListener.Start();
+                    WeaponSynthSphereLevel.Listener.Start();
                 }
-                else if (Weapons.weaponsMenuListener.ThreadState == ThreadState.Stopped)
+                else if (WeaponSynthSphereLevel.Listener.ThreadState == ThreadState.Stopped)
                 {
-                    Weapons.weaponsMenuListener = new Thread(new ThreadStart(Weapons.WeaponListenForSynthSphere));
-                    Weapons.weaponsMenuListener.Start();
+                    WeaponSynthSphereLevel.Listener = new Thread(new ThreadStart(WeaponSynthSphereLevel.Listen));
+                    WeaponSynthSphereLevel.Listener.Start();
                 }
             }
 
