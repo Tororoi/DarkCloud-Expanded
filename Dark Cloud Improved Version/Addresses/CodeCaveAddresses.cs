@@ -189,6 +189,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int  PropMeshReserve       = 0xC000;                                             // the prop's mesh region
         internal const long CatMeshCaveEnd        = MeshCave + MeshCaveSize - 0x1000 - PropMeshReserve;  // the cat's meshes end here
         internal const long PropMeshCave          = CatMeshCaveEnd;
+        /// <summary>Inside the prop's 0x1000 track cave at the top of the MeshCave (its cloned tracks below +0x800, their key table at
+        /// +0x800): 20 × vec4 (x, height, y, w) at +0xC00 — the Angel Gear shield ring's per-enemy "where the player is" positions,
+        /// referenced by the AI redirect <see cref="PtrTable"/> (16-byte aligned: sceVu0CopyVector copies a quadword).</summary>
+        internal const long ShieldRingTable       = MeshCave + MeshCaveSize - 0x400;
+        internal const uint ShieldRingTableGuest  = (uint)(MeshCaveGuest + MeshCaveSize - 0x400);
         internal const int  PropFrameInfCaveSize  = 0x800;                                              // 9 × 0xD0 = 0x750
         internal const long PropFrameInfCave      = FrameInfCave + FrameInfCaveSize - PropFrameInfCaveSize;
         internal const long PropFrameInfCaveGuest = FrameInfCaveGuest + FrameInfCaveSize - PropFrameInfCaveSize;

@@ -12,7 +12,7 @@
 | hit placement | every hit sits on the victim's largest active hurt sphere placed THIS frame (`EnemyBody.BodyCentre` skips a sphere more than 80 from its unit — not posed this frame — and falls back to the unit's own position; a stale sphere put the hit where the enemy no longer was, and one Dragon took neither the blast nor the pinned hits). Each Terra hit logs where it was planted against the unit, and the victim's HP |
 | rest | centre at floor + 20.4 − 4 (sunk 4); solid through the spear-block mailbox (r = 20, top = its top); every 1 s each live enemy whose root is inside the rock's 20.4 footprint takes 1× attack, no throw. 20 s from the impact, then `BladeProp.Alpha` 1 → 0 over 0.5 s; no new charge starts while a rock falls, rests or fades |
 
-Locks on from twice as far (the Mirage line's reach, `Mirage.HoldReach` — see docs/mirage.md). No ISO change of its own: it rides the blade-fall, spear-block, no-drain and second-effect caves. The shockwave is entered
+Locks on from twice as far (the Mirage line's reach, `MirageLineReach.Hold` — see docs/mirage.md). No ISO change of its own: it rides the blade-fall, spear-block, no-drain and second-effect caves. The shockwave is entered
 on floor load (`BorrowedShots` provider `TerraSword.WantedShot`), so it plays from the next floor after the sword is first
 equipped.
 
@@ -62,7 +62,7 @@ a time, used by the rock and by Desert Bloom's cactus and Queens' trees (docs/ca
 ## Super Steve (a Terra Sword sphere) — the nut
 
 Xiao holding Super Steve with a Terra Sword SynthSphere has the same charge (her slingshot greened through `SolarBlade` on
-`SuperSteveRig.WeaponModel`), lock-on trigger, drop height, gravity, tracking, growth (to 2×), shadow (its own radius) and darkening
+`SuperSteve.WeaponModel`), lock-on trigger, drop height, gravity, tracking, growth (to 2×), shadow (its own radius) and darkening
 (lighter: to 0.8, not the rock's 0.55),
 but what falls is a nut, and it bonks:
 

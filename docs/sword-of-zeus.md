@@ -85,7 +85,7 @@ ground`) or `charge bolt with the blade still falling — ChargeFallSeconds is t
 ## Super Steve — a Sword of Zeus sphere (`ZeusShot`)
 
 Xiao holding Super Steve with a Sword of Zeus SynthSphere fires the sword's lightning from the slingshot, with the sword's
-lighting throughout: `ZeusShot.FlashProfile` is the Zeus profile on `Items.supersteve` and `SuperSteveRig.WeaponModel`
+lighting throughout: `ZeusShot.FlashProfile` is the Zeus profile on `Items.supersteve` and `SuperSteve.WeaponModel`
 (0.5 dim, the electric white, 2 s ease, no white on her, no disc, no hit of its own). Solar Harvest and Big Bang's lock-on
 reach are inherited alongside. Bolts bill the weapon as the sword's do (`SwordOfZeus.Strike` / `StrikeAt` /
 `StrikeNearest` with `weapon: Items.supersteve`).

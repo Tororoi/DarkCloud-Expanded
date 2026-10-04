@@ -313,6 +313,8 @@ namespace Dark_Cloud_Improved_Version
             {
 
                 case Items.angelgear:
+                    // The party regen only: the reflector itself (shield, ring, intercept) runs on AngelGear's own loop, started at the
+                    // main menu, which is also what drives it for Super Steve's Angel Gear sphere (SuperSteve's loop pulses the regen).
                     Ensure(ref angelGearThread, AngelGear.GuardianReflectorEffect);
                     break;
 

@@ -1,8 +1,10 @@
 # Ungaga's Mirage — the decoy clone and its heat shimmer
 
 Design and runtime: `Weapons/Ungaga/Mirage.cs` (the state machine), `Weapons/CharacterClone.cs` (the clone),
-`Weapons/Ungaga/HeatHaze.cs` (the shimmer). Super Steve inherits the ability through the same code when a Mirage
-sphere is attached.
+`Weapons/Ungaga/Mirage/HeatHaze.cs` (the shimmer), `Weapons/Ungaga/Shared/MirageLineReach.cs` (the line's lock-on reach).
+The enemy redirect the decoy rides — the `_GET_POSITION` / `_GET_DISTANCE` caves and the per-slot target table — is shared
+infrastructure: `Weapons/TargetRedirectCaves.cs` and `Weapons/AggroTable.cs` (docs/aggro-redirect.md). Super Steve inherits
+the ability through the same code when a Mirage sphere is attached.
 
 ## The heat shimmer
 
@@ -45,7 +47,7 @@ timer, hand-off fade and aggro hold read `GameClock`, so they stand still on the
 
 The Mirage, and every weapon built up from it — the Terra Sword, Hercules' Wrath, Babel's Spear — locks on from twice as far:
 the active character's entry of the lock-on factor table (`CodeCaves.LockOnFactorTable`, the same data the Cross Hinder and the
-Flamingo drive) is held at 2× the vanilla factor (`Mirage.HoldReach` / `ReleaseReach`) from the Mirage loop, which runs on every
+Flamingo drive) is held at 2× the vanilla factor (`MirageLineReach.Hold` / `Release`) from the Mirage loop, which runs on every
 floor, while Ungaga holds one of them or Xiao holds Super Steve with one of their spheres; a character switch hands the raised
 entry back first. Needs the ISO's lock-on table patch (`DunPatches.LockOnTableWord0`).
 

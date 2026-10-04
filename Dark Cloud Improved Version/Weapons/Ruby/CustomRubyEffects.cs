@@ -33,7 +33,7 @@ namespace Dark_Cloud_Improved_Version
             ushort chargeTimer = 0;
 
             //Check these addresses which tells us if Ruby is charging an attack
-            if (Player.Ruby.IsChargingAttack())
+            if (Player.IsChargingAttack())
             {
                 //Initialize the damage
                 int damage = Player.Weapon.GetCurrentWeaponAttack() + Player.Weapon.GetCurrentWeaponMagic();
@@ -45,7 +45,7 @@ namespace Dark_Cloud_Improved_Version
                 bool fullyCharged = false;
                 float ballScale = 1.0f;
 
-                while (Player.Ruby.IsChargingAttack())
+                while (Player.IsChargingAttack())
                 {
                     //Check if the game is paused during the charge
                     if (Player.CheckDunIsPaused())
@@ -74,7 +74,7 @@ namespace Dark_Cloud_Improved_Version
                     }
 
                     //Keep looping until chargeGlowTimer reaches the value 17008 or the player stops charging
-                    while (Memory.ReadUShort(chargeGlowTimer) < 17008 && Player.Ruby.IsChargingAttack())
+                    while (Memory.ReadUShort(chargeGlowTimer) < 17008 && Player.IsChargingAttack())
                     {
                         if (Player.CheckDunIsPaused())
                         {
@@ -104,14 +104,14 @@ namespace Dark_Cloud_Improved_Version
 
                     //Once fully charged, grow the energy ball in step with the damage multiplier the Mobius
                     //ramp has reached (scale = 1 + (M-1)*perMultiple, clamped). Re-applied every tick so the
-                    //effect stays sized as the charge is held. See Weapons.SetRubyBallScale.
+                    //effect stays sized as the charge is held. See MobiusRing.SetBallScale.
                     if (fullyCharged)
                     {
                         float m = (float)damage / baseDamage;
                         ballScale = 1.0f + (m - 1.0f) * RubyBallGrowthPerMultiple;
                         if (ballScale > RubyBallMaxScale) ballScale = RubyBallMaxScale;
                         if (ballScale < 1.0f) ballScale = 1.0f;
-                        Weapons.SetRubyBallScale(ballScale);
+                        MobiusRing.SetBallScale(ballScale);
                     }
 
                     Thread.Sleep(100);
@@ -119,12 +119,12 @@ namespace Dark_Cloud_Improved_Version
 
                 //Charge released. Freeze the final size and re-apply it so the fired orbs (same effect pool
                 //as the ball) fly at the grown size, and inflate enemy body radii so the orbs' COLLISION
-                //grows to match (equivalent to a bigger damage sphere; see Weapons.MaintainRubyOrbHitbox).
+                //grows to match (equivalent to a bigger damage sphere; see MobiusRing.MaintainOrbHitbox).
                 float finalBallScale = ballScale;
                 if (fullyCharged)
                 {
-                    Weapons.SetRubyBallScale(finalBallScale);
-                    Weapons.MaintainRubyOrbHitbox(finalBallScale);
+                    MobiusRing.SetBallScale(finalBallScale);
+                    MobiusRing.MaintainOrbHitbox(finalBallScale);
                 }
 
                 //Wait for the fired orbs to actually spawn before tracking them. The release animation takes
@@ -136,7 +136,7 @@ namespace Dark_Cloud_Improved_Version
                 for (int wait = 0; liveOrbs.Count == 0 && wait < 60; wait++)   // up to ~3s (fire lands ~1.5s in)
                 {
                     Thread.Sleep(50);
-                    if (Player.Ruby.IsChargingAttack()) break;                 // interrupted → recharging already
+                    if (Player.IsChargingAttack()) break;                 // interrupted → recharging already
                     liveOrbs = RubyOrbs.GetRubyActiveOrbs();
                 }
 
@@ -157,20 +157,20 @@ namespace Dark_Cloud_Improved_Version
                     //reset below, and let the dispatcher start a clean ramp for the new charge. Any old orbs
                     //still flying keep their (already latched) boosted damage but snap to 1× visuals — brief
                     //and acceptable.
-                    if (Player.Ruby.IsChargingAttack()) break;
+                    if (Player.IsChargingAttack()) break;
 
                     foreach (int id in liveOrbs)
                         Memory.WriteInt(RubyOrbs.Orb0.damage + 4 * id, damage);
                     if (fullyCharged && ++hitboxTick % 20 == 0)
-                        Weapons.MaintainRubyOrbHitbox(finalBallScale);
+                        MobiusRing.MaintainOrbHitbox(finalBallScale);
                     Thread.Sleep(10);
                     liveOrbs = RubyOrbs.GetRubyActiveOrbs();
                 }
 
                 //All orbs expired (or a new charge took over) — snap the effect pool back to its original
                 //size so the next charge starts from a clean 1× template, and restore enemy hitboxes.
-                Weapons.SetRubyBallScale(1.0f);
-                Weapons.RestoreRubyOrbHitbox();
+                MobiusRing.SetBallScale(1.0f);
+                MobiusRing.RestoreOrbHitbox();
             }
         }
 

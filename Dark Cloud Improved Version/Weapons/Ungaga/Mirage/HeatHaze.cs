@@ -14,7 +14,7 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class HeatHaze
     {
-        private const string Tag = "[HeatHaze] ";
+        private const string Tag = "[Mirage/HeatHaze] ";
         private static bool  _on;
         private static float _gainOrig;      // the vanilla distortion gain (~1.3), captured once
         private static bool  _nativeWarned;

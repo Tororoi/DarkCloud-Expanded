@@ -8,10 +8,10 @@ namespace Dark_Cloud_Improved_Version
     /// resolves it via GetItemTypeInfo (type must be 2 = ItemClass.Weapon) then WeaponList[index].
     /// Readers: GetWeaponData__Fi (ELF 0x1D0F50), GetWeaponDataInfo__Fi (ELF 0x1D0D90).
     ///
-    /// This backs the per-Dagger absolute addresses in Weapons.cs (its "Base database table Dagger
-    /// addresses" are WeaponList[1] = the entry for item 258 at EE 0x2027A70C). The field
-    /// offsets below are those names made relative to the entry base. Stat fields are signed shorts
-    /// unless noted; the Dagger entry is also used at runtime (see Weapons.cs "(ALSO RUNTIME)").
+    /// This backs the per-Dagger absolute addresses in <see cref="WeaponTable"/> (WeaponList[1] = the entry
+    /// for item 258 at EE 0x2027A70C). The field offsets below are those names made relative to the entry
+    /// base. Stat fields are signed shorts unless noted; the Dagger entry is also used at runtime (see
+    /// WeaponTable's "(ALSO RUNTIME)" columns).
     ///
     /// <see cref="ItemData.ChestPools"/> ranks weapon rarity by power = <see cref="MaxAttack"/> +
     /// <see cref="MaxMagic"/>/3 (+0x44/+0x46): stronger = rarer (Inferno tops the stats, but
@@ -25,7 +25,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int FirstItemId  = 257;        // index 0 = item 257 (Dagger broken)
         internal const int Count        = 120;        // item IDs 257-376
 
-        // ── Field offsets within a weapon entry (from Weapons.cs Dagger map) ──
+        // ── Field offsets within a weapon entry (WeaponTable has them as the Dagger entry's absolute addresses) ──
         internal const int Whp          = 0x00; // short — base weapon health points
         internal const int Attack       = 0x02; // short - base attack (ChestPools power metric)
         internal const int Endurance    = 0x04; // short — base endurance (durability)
@@ -79,6 +79,71 @@ namespace Dark_Cloud_Improved_Version
             int e = EntryAddr(itemId);
             return e < 0 ? -1 : e + fieldOffset;
         }
+    }
+
+    /// <summary>
+    /// The mod's ABSOLUTE-address view of <see cref="WeaponList"/>, as its startup table edits address it
+    /// (WeaponBalance, WeaponSpecialReroll, MachoSword's ABS columns, ElfWeaponPatches): every field address is the
+    /// Dagger entry's (WeaponList[1] = item 258 at EE 0x2027A70C), and a weapon's own field is
+    /// <c>field + Stride × (itemId − &lt;the character's default weapon id&gt;) + &lt;the character's block offset&gt;</c>
+    /// (Toan's block has no offset). Each constant is <see cref="DaggerEntry"/> + the <see cref="WeaponList"/> field
+    /// offset of the same name; the EE address it comes to is in its trailing comment. "(ALSO RUNTIME)" marks the
+    /// columns the engine reads back during play, not only when it builds a weapon.
+    /// </summary>
+    internal static class WeaponTable
+    {
+        internal const int DaggerEntry = 0x2027A70C;                        // WeaponList.Base + Stride: item 258 (Dagger)
+        internal const int Stride      = WeaponList.Stride;                 // 0x4C between weapons
+
+        // ── Per-character block offsets from the Dagger entry: the block starts at the character's default weapon ──
+        internal const int XiaoOffset   = 0xC78;    // Wooden Slingshot's entry
+        internal const int GoroOffset   = 0x10EC;   // Mallet's entry
+        internal const int RubyOffset   = 0x15F8;   // Gold Ring's entry
+        internal const int UngagaOffset = 0x1AB8;   // Fighting Stick's entry
+        internal const int OsmondOffset = 0x1F78;   // Machine Gun's entry
+
+        // ── Default weapon ids: the weapon each character's block is indexed from ──
+        internal const int DaggerId         = Items.dagger;
+        internal const int WoodenSlingshotId = Items.woodenslingshot;
+        internal const int MalletId         = Items.mallet;
+        internal const int GoldRingId       = Items.goldring;
+        internal const int FightingStickId  = Items.fightingstick;
+        internal const int MachineGunId     = Items.machinegun;
+
+        // ── Dagger-entry field addresses ──
+        internal const int Whp          = DaggerEntry + WeaponList.Whp;          // 0x2027A70C base weapon health points
+        internal const int Attack       = DaggerEntry + WeaponList.Attack;       // 0x2027A70E base Attack
+        internal const int Endurance    = DaggerEntry + WeaponList.Endurance;    // 0x2027A710 base Endurance
+        internal const int Speed        = DaggerEntry + WeaponList.Speed;        // 0x2027A712 base Speed
+        internal const int Magic        = DaggerEntry + WeaponList.Magic;        // 0x2027A714 base Magic
+        internal const int Synth3       = DaggerEntry + WeaponList.Synth3;       // 0x2027A719 synth slot 3 (0 = none, 1 = regular gray slot, 2 = synth blue slot) (ALSO RUNTIME)
+        internal const int Synth4       = DaggerEntry + WeaponList.Synth4;       // 0x2027A71A synth slot 4 (same values) (ALSO RUNTIME)
+        internal const int Fire         = DaggerEntry + WeaponList.Fire;         // 0x2027A71E
+        internal const int Ice          = DaggerEntry + WeaponList.Ice;          // 0x2027A720
+        internal const int Thunder      = DaggerEntry + WeaponList.Thunder;      // 0x2027A722
+        internal const int Wind         = DaggerEntry + WeaponList.Wind;         // 0x2027A724
+        internal const int Holy         = DaggerEntry + WeaponList.Holy;         // 0x2027A726
+        internal const int DinoSlayer   = DaggerEntry + WeaponList.DinoSlayer;   // 0x2027A728
+        internal const int UndeadBuster = DaggerEntry + WeaponList.UndeadBuster; // 0x2027A72A
+        internal const int SeaKiller    = DaggerEntry + WeaponList.SeaKiller;    // 0x2027A72C
+        internal const int StoneBreaker = DaggerEntry + WeaponList.StoneBreaker; // 0x2027A72E
+        internal const int PlantBuster  = DaggerEntry + WeaponList.PlantBuster;  // 0x2027A730
+        internal const int BeastBuster  = DaggerEntry + WeaponList.BeastBuster;  // 0x2027A732
+        internal const int SkyHunter    = DaggerEntry + WeaponList.SkyHunter;    // 0x2027A734
+        internal const int MetalBreaker = DaggerEntry + WeaponList.MetalBreaker; // 0x2027A736
+        internal const int MimicBreaker = DaggerEntry + WeaponList.MimicBreaker; // 0x2027A738
+        internal const int MageSlayer   = DaggerEntry + WeaponList.MageSlayer;   // 0x2027A73A
+        internal const int Abs          = DaggerEntry + WeaponList.Abs;          // 0x2027A73C base absorption points (ALSO RUNTIME)
+        internal const int AbsAdd       = DaggerEntry + WeaponList.AbsAdd;       // 0x2027A73E ABS added per weapon level (ALSO RUNTIME)
+        internal const int Effect1      = DaggerEntry + WeaponList.Effect1;      // 0x2027A744 special effects set 1 (ALSO RUNTIME): 2=Big Bucks, 4=Poor, 8=Quench, 16=Thirst, 32=Poison, 64=Stop, 128=Steal
+        internal const int Effect2      = DaggerEntry + WeaponList.Effect2;      // 0x2027A745 special effects set 2 (ALSO RUNTIME): 1=Fragile, 2=Durable, 4=Drain, 8=Heal, 16=Critical, 32=Abs Up
+        internal const int BuildUp      = DaggerEntry + WeaponList.BuildUp;      // 0x2027A748 build-up branches
+        internal const int MaxAttack    = DaggerEntry + WeaponList.MaxAttack;    // 0x2027A750 (ALSO RUNTIME)
+        internal const int MaxMagic     = DaggerEntry + WeaponList.MaxMagic;     // 0x2027A752 (ALSO RUNTIME)
+
+        // ── Lamb's Sword: the two ELF thresholds its transform and stat upgrade compare against ──
+        internal const int LambTransformThreshold = Addresses.lambSwordPercent;      // 0x202A1818 double: the percent at which it transforms into the Wolf Sword (vanilla 0.2; WeaponBalance writes 0.5)
+        internal const int LambStatsThreshold     = Addresses.lambSwordStatsPercent; // 0x202A188C float:  the percent at which its stats upgrade (vanilla 0.2; WeaponBalance writes 0.5)
     }
 
     /// <summary>
@@ -140,8 +205,8 @@ namespace Dark_Cloud_Improved_Version
     {
 
         // ── Charge attack state (ToanKey_Play, RE'd from SCUS_971.11) ──
-        // Drives HeavensCloud.TyphoonEffect's charge ramp + MaintainEnemyHitbox's whirl gate. See
-        // Weapons.IsChargingWhirlwind / IsWhirlwindActive.
+        // Drives HeavensCloud.TyphoonEffect's charge ramp + HeavensCloud.MaintainEnemyHitbox's whirl gate. See
+        // HeavensCloud.IsChargingWhirlwind / IsWhirlwindActive.
         internal const long ChargeActionState = 0x21DC4494; // DAT_01dc4494 action id (values below)
         internal const int  ActionWindup      = 0xE;        // charge wind-up (meter accumulates; lunge OR whirlwind)
         internal const int  ActionLunge       = 0xF;        // charge lunge executing: the wind-up clip (15)…
@@ -158,6 +223,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ActionWhirlwind   = 0x18;       // whirlwind executing
         internal const int  ActionComboFirst  = 0x24;       // combo swing states 0x24-0x28 = melee hits 1-5
         internal const int  ActionComboLast   = 0x28;       //   (each combo hit is its own action state)
+        /// <summary>The hit radius Toan's combo swings 3, 4 and 5 SHARE (ELF float, vanilla 6.2; swings 1 and 2 have their
+        /// own at 0x202A1C68 / 0x202A1C6C). Plain ELF data, unlike the charge radii, which the game baked into instructions
+        /// (CodeCaves.ChargeHitRadius). ⚠ Shared: anything that widens it must snapshot the old value and put it back, and
+        /// must expect to be holding it for swings 3 and 4 as well as 5. Recorded; nothing in the mod writes it.</summary>
+        internal const long ComboHitRadius3to5 = 0x202A1C70;
 
         // ── Xiao shot states (BattleActionPlay_Jinn, dun 0x1DBC930) — SAME ChargeActionState global ──
         // Xiao's slingshot shot is three c04b motions: idx 11 構え引き "draw" (frames 240-251, spd 0.7)
@@ -317,7 +387,7 @@ namespace Dark_Cloud_Improved_Version
         // The battle in-hand weapon id (0x21EA7590, Player.Weapon.GetCurrentWeaponId) only refreshes once Toan
         // is walking again after the menu, so keying off it lags a swap. The inventory equip slot updates
         // IMMEDIATELY: a byte slot index at InventoryEquipSlotAddr indexes the weapon list at
-        // InventoryWeaponSlot0Id + slot*InventoryWeaponSlotStride (ushort id). See Weapons.GetEquippedWeaponId.
+        // InventoryWeaponSlot0Id + slot*InventoryWeaponSlotStride (ushort id). See WhirlwindScale.EquippedWeaponId.
         internal const long InventoryEquipSlotAddr    = 0x21CDD88C; // byte: current equipped weapon slot (0-9)
         internal const long InventoryWeaponSlot0Id    = 0x21CDDA58; // ushort: slot 0's weapon id
         internal const int  InventoryWeaponSlotStride = 0xF8;       // stride between weapon-list slots
@@ -395,7 +465,7 @@ namespace Dark_Cloud_Improved_Version
         // Weapon model assets in data.dat: commenu/weapon/cXXwNN.chr (XX char, NN = WeaponList +0x48).
         // Heaven's Cloud = c01w14.chr (Toan, within-char idx 14).
 
-        // ── Heaven's Cloud melee reach (see Weapons.cs ReachTick) ─────────────────────
+        // ── Heaven's Cloud melee reach (see WhirlwindScale.Tick / HeavensCloud) ───────
         // RE'd from SCUS_971.11 (ToanKey_Play 0x241690): every Toan melee hit is SearchFrame(equippedModel,
         // "dcol1") -> CCollisionData::Set(pos, radius); the engine only ever uses the frame named "dcol1".
         // Reach is extended by scaling the whole blade mesh at runtime (see the "Runtime weapon-model SCALE"
@@ -403,7 +473,7 @@ namespace Dark_Cloud_Improved_Version
 
         // The "dcol1" CFrame in the loaded weapon model (CFrameVu1 template; name = "dcol"+'1'+NUL, local-matrix
         // translation (X,Y,Z) at name+0xE8/+0xEC/+0xF0; Toan weapons are (0,0,Z), Z = the reach). Used by
-        // Weapons.LocateWeaponDcol1 to read a weapon's dcol1 Z for sizing its whirl when it's not in ToanWeapons.
+        // WhirlwindScale.LocateWeaponDcol1 to read a weapon's dcol1 Z for sizing its whirl when it's not in ToanWeapons.
         internal const uint  DcolNameWord     = 0x6C6F6364; // "dcol" little-endian
         internal const byte  Dcol1Digit       = 0x31;       // '1' (the active hit-point frame)
         internal const int   DcolNameToLocalX = 0xE8;       // local-matrix X (Y at +0xEC, Z at +0xF0)
@@ -773,7 +843,7 @@ namespace Dark_Cloud_Improved_Version
         /// characters' weapon arrays: 0x450C + 6×0xAA8 = 0x84FC) = <see cref="Addresses.firstBagAttachment"/>.</summary>
         internal const long Base      = Addresses.firstBagAttachment; // 0x21CE1A48
         internal const int  Stride    = 0x20;
-        internal const int  ScanCount = Player.inventorySizeAttachments + 2; // 42, mirrors Player.GetBagAttachments
+        internal const int  ScanCount = PlayerAddresses.InventorySizeAttachments + 2; // 42, mirrors Inventory.GetBagAttachments
         internal const int  EntryItemId      = 0x00; // ushort; SynthSphere = 0x5A; empty <= 0x50
         internal const int  EntrySourceId    = 0x02; // ushort — sphere: source weapon item id
         internal const int  EntryFlags       = 0x04; // ushort — sphere: ability flags
@@ -797,7 +867,7 @@ namespace Dark_Cloud_Improved_Version
     /// THE KEY BEHAVIOR: the whole grant is SKIPPED when abs &gt;= GetWeaponMaxExp — a crossing kill clamps to
     /// exactly max and queues the "ABS MAX" popup; above max the engine is fully inert. Max ABS is never
     /// stored: it is COMPUTED per call as table base (+0x30, SIGNED CHAR) + level × step (+0x32, short),
-    /// clamped to 1..999 (the live Weapons.abs / Weapons.absadd table columns — which is also why the table
+    /// clamped to 1..999 (the live WeaponTable.Abs / WeaponTable.AbsAdd columns — which is also why the table
     /// can't just be doubled: base values run up to 125, so 2× overflows the signed char for ~54 weapons).
     /// Special cases in the same block: Serpent Sword (id 268) grants nothing until game flag 0x30 is set, and
     /// while the player is monster-transformed (<see cref="DngStatusData.TransformStateOffset"/> == 10) kills

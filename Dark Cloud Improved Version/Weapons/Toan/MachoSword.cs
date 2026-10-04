@@ -520,10 +520,10 @@ namespace Dark_Cloud_Improved_Version
         // ids outside the weapon table.
         internal static int MachoMaxExp(int weaponId, int level)
         {
-            int row = weaponId - Weapons.daggerid;
+            int row = weaponId - WeaponTable.DaggerId;
             if (row < 0 || row > 118) return 0;
-            int baseAbs = (sbyte)Memory.ReadByte(Weapons.abs + row * Weapons.weaponoffset);
-            int step = Memory.ReadShort(Weapons.absadd + row * Weapons.weaponoffset);
+            int baseAbs = (sbyte)Memory.ReadByte(WeaponTable.Abs + row * WeaponTable.Stride);
+            int step = Memory.ReadShort(WeaponTable.AbsAdd + row * WeaponTable.Stride);
             long max = baseAbs + (long)level * step;
             if (max > 999) max = 999;
             if (max < 1) max = 99;

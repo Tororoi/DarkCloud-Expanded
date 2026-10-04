@@ -73,16 +73,16 @@ namespace Dark_Cloud_Improved_Version
                     //Check on which slot is the weapon equipped on and save its Whp
                     switch (weaponslotid)
                     {
-                        case 0: whp = Memory.ReadFloat(Player.Toan.WeaponSlot0.whp); break;
-                        case 1: whp = Memory.ReadFloat(Player.Toan.WeaponSlot1.whp); break;
-                        case 2: whp = Memory.ReadFloat(Player.Toan.WeaponSlot2.whp); break;
-                        case 3: whp = Memory.ReadFloat(Player.Toan.WeaponSlot3.whp); break;
-                        case 4: whp = Memory.ReadFloat(Player.Toan.WeaponSlot4.whp); break;
-                        case 5: whp = Memory.ReadFloat(Player.Toan.WeaponSlot5.whp); break;
-                        case 6: whp = Memory.ReadFloat(Player.Toan.WeaponSlot6.whp); break;
-                        case 7: whp = Memory.ReadFloat(Player.Toan.WeaponSlot7.whp); break;
-                        case 8: whp = Memory.ReadFloat(Player.Toan.WeaponSlot8.whp); break;
-                        case 9: whp = Memory.ReadFloat(Player.Toan.WeaponSlot9.whp); break;
+                        case 0: whp = Memory.ReadFloat(WeaponRecord.Address(Player.ToanId, 0, WeaponRecord.Whp)); break;
+                        case 1: whp = Memory.ReadFloat(WeaponRecord.Address(Player.ToanId, 1, WeaponRecord.Whp)); break;
+                        case 2: whp = Memory.ReadFloat(WeaponRecord.Address(Player.ToanId, 2, WeaponRecord.Whp)); break;
+                        case 3: whp = Memory.ReadFloat(WeaponRecord.Address(Player.ToanId, 3, WeaponRecord.Whp)); break;
+                        case 4: whp = Memory.ReadFloat(WeaponRecord.Address(Player.ToanId, 4, WeaponRecord.Whp)); break;
+                        case 5: whp = Memory.ReadFloat(WeaponRecord.Address(Player.ToanId, 5, WeaponRecord.Whp)); break;
+                        case 6: whp = Memory.ReadFloat(WeaponRecord.Address(Player.ToanId, 6, WeaponRecord.Whp)); break;
+                        case 7: whp = Memory.ReadFloat(WeaponRecord.Address(Player.ToanId, 7, WeaponRecord.Whp)); break;
+                        case 8: whp = Memory.ReadFloat(WeaponRecord.Address(Player.ToanId, 8, WeaponRecord.Whp)); break;
+                        case 9: whp = Memory.ReadFloat(WeaponRecord.Address(Player.ToanId, 9, WeaponRecord.Whp)); break;
                     }
                     break;
 
@@ -90,16 +90,16 @@ namespace Dark_Cloud_Improved_Version
                     //Check on which slot is the weapon equipped on and save its Whp
                     switch (weaponslotid)
                     {
-                        case 0: whp = Memory.ReadFloat(Player.Xiao.WeaponSlot0.whp); break;
-                        case 1: whp = Memory.ReadFloat(Player.Xiao.WeaponSlot1.whp); break;
-                        case 2: whp = Memory.ReadFloat(Player.Xiao.WeaponSlot2.whp); break;
-                        case 3: whp = Memory.ReadFloat(Player.Xiao.WeaponSlot3.whp); break;
-                        case 4: whp = Memory.ReadFloat(Player.Xiao.WeaponSlot4.whp); break;
-                        case 5: whp = Memory.ReadFloat(Player.Xiao.WeaponSlot5.whp); break;
-                        case 6: whp = Memory.ReadFloat(Player.Xiao.WeaponSlot6.whp); break;
-                        case 7: whp = Memory.ReadFloat(Player.Xiao.WeaponSlot7.whp); break;
-                        case 8: whp = Memory.ReadFloat(Player.Xiao.WeaponSlot8.whp); break;
-                        case 9: whp = Memory.ReadFloat(Player.Xiao.WeaponSlot9.whp); break;
+                        case 0: whp = Memory.ReadFloat(WeaponRecord.Address(Player.XiaoId, 0, WeaponRecord.Whp)); break;
+                        case 1: whp = Memory.ReadFloat(WeaponRecord.Address(Player.XiaoId, 1, WeaponRecord.Whp)); break;
+                        case 2: whp = Memory.ReadFloat(WeaponRecord.Address(Player.XiaoId, 2, WeaponRecord.Whp)); break;
+                        case 3: whp = Memory.ReadFloat(WeaponRecord.Address(Player.XiaoId, 3, WeaponRecord.Whp)); break;
+                        case 4: whp = Memory.ReadFloat(WeaponRecord.Address(Player.XiaoId, 4, WeaponRecord.Whp)); break;
+                        case 5: whp = Memory.ReadFloat(WeaponRecord.Address(Player.XiaoId, 5, WeaponRecord.Whp)); break;
+                        case 6: whp = Memory.ReadFloat(WeaponRecord.Address(Player.XiaoId, 6, WeaponRecord.Whp)); break;
+                        case 7: whp = Memory.ReadFloat(WeaponRecord.Address(Player.XiaoId, 7, WeaponRecord.Whp)); break;
+                        case 8: whp = Memory.ReadFloat(WeaponRecord.Address(Player.XiaoId, 8, WeaponRecord.Whp)); break;
+                        case 9: whp = Memory.ReadFloat(WeaponRecord.Address(Player.XiaoId, 9, WeaponRecord.Whp)); break;
                     }
                     break;
 
@@ -107,16 +107,16 @@ namespace Dark_Cloud_Improved_Version
                     //Check on which slot is the weapon equipped on and save its Whp
                     switch (weaponslotid)
                     {
-                        case 0: whp = Memory.ReadFloat(Player.Goro.WeaponSlot0.whp); break;
-                        case 1: whp = Memory.ReadFloat(Player.Goro.WeaponSlot1.whp); break;
-                        case 2: whp = Memory.ReadFloat(Player.Goro.WeaponSlot2.whp); break;
-                        case 3: whp = Memory.ReadFloat(Player.Goro.WeaponSlot3.whp); break;
-                        case 4: whp = Memory.ReadFloat(Player.Goro.WeaponSlot4.whp); break;
-                        case 5: whp = Memory.ReadFloat(Player.Goro.WeaponSlot5.whp); break;
-                        case 6: whp = Memory.ReadFloat(Player.Goro.WeaponSlot6.whp); break;
-                        case 7: whp = Memory.ReadFloat(Player.Goro.WeaponSlot7.whp); break;
-                        case 8: whp = Memory.ReadFloat(Player.Goro.WeaponSlot8.whp); break;
-                        case 9: whp = Memory.ReadFloat(Player.Goro.WeaponSlot9.whp); break;
+                        case 0: whp = Memory.ReadFloat(WeaponRecord.Address(Player.GoroId, 0, WeaponRecord.Whp)); break;
+                        case 1: whp = Memory.ReadFloat(WeaponRecord.Address(Player.GoroId, 1, WeaponRecord.Whp)); break;
+                        case 2: whp = Memory.ReadFloat(WeaponRecord.Address(Player.GoroId, 2, WeaponRecord.Whp)); break;
+                        case 3: whp = Memory.ReadFloat(WeaponRecord.Address(Player.GoroId, 3, WeaponRecord.Whp)); break;
+                        case 4: whp = Memory.ReadFloat(WeaponRecord.Address(Player.GoroId, 4, WeaponRecord.Whp)); break;
+                        case 5: whp = Memory.ReadFloat(WeaponRecord.Address(Player.GoroId, 5, WeaponRecord.Whp)); break;
+                        case 6: whp = Memory.ReadFloat(WeaponRecord.Address(Player.GoroId, 6, WeaponRecord.Whp)); break;
+                        case 7: whp = Memory.ReadFloat(WeaponRecord.Address(Player.GoroId, 7, WeaponRecord.Whp)); break;
+                        case 8: whp = Memory.ReadFloat(WeaponRecord.Address(Player.GoroId, 8, WeaponRecord.Whp)); break;
+                        case 9: whp = Memory.ReadFloat(WeaponRecord.Address(Player.GoroId, 9, WeaponRecord.Whp)); break;
                     }
                     break;
 
@@ -124,16 +124,16 @@ namespace Dark_Cloud_Improved_Version
                     //Check on which slot is the weapon equipped on and save its Whp
                     switch (weaponslotid)
                     {
-                        case 0: whp = Memory.ReadFloat(Player.Ruby.WeaponSlot0.whp); break;
-                        case 1: whp = Memory.ReadFloat(Player.Ruby.WeaponSlot1.whp); break;
-                        case 2: whp = Memory.ReadFloat(Player.Ruby.WeaponSlot2.whp); break;
-                        case 3: whp = Memory.ReadFloat(Player.Ruby.WeaponSlot3.whp); break;
-                        case 4: whp = Memory.ReadFloat(Player.Ruby.WeaponSlot4.whp); break;
-                        case 5: whp = Memory.ReadFloat(Player.Ruby.WeaponSlot5.whp); break;
-                        case 6: whp = Memory.ReadFloat(Player.Ruby.WeaponSlot6.whp); break;
-                        case 7: whp = Memory.ReadFloat(Player.Ruby.WeaponSlot7.whp); break;
-                        case 8: whp = Memory.ReadFloat(Player.Ruby.WeaponSlot8.whp); break;
-                        case 9: whp = Memory.ReadFloat(Player.Ruby.WeaponSlot9.whp); break;
+                        case 0: whp = Memory.ReadFloat(WeaponRecord.Address(Player.RubyId, 0, WeaponRecord.Whp)); break;
+                        case 1: whp = Memory.ReadFloat(WeaponRecord.Address(Player.RubyId, 1, WeaponRecord.Whp)); break;
+                        case 2: whp = Memory.ReadFloat(WeaponRecord.Address(Player.RubyId, 2, WeaponRecord.Whp)); break;
+                        case 3: whp = Memory.ReadFloat(WeaponRecord.Address(Player.RubyId, 3, WeaponRecord.Whp)); break;
+                        case 4: whp = Memory.ReadFloat(WeaponRecord.Address(Player.RubyId, 4, WeaponRecord.Whp)); break;
+                        case 5: whp = Memory.ReadFloat(WeaponRecord.Address(Player.RubyId, 5, WeaponRecord.Whp)); break;
+                        case 6: whp = Memory.ReadFloat(WeaponRecord.Address(Player.RubyId, 6, WeaponRecord.Whp)); break;
+                        case 7: whp = Memory.ReadFloat(WeaponRecord.Address(Player.RubyId, 7, WeaponRecord.Whp)); break;
+                        case 8: whp = Memory.ReadFloat(WeaponRecord.Address(Player.RubyId, 8, WeaponRecord.Whp)); break;
+                        case 9: whp = Memory.ReadFloat(WeaponRecord.Address(Player.RubyId, 9, WeaponRecord.Whp)); break;
                     }
                     break;
 
@@ -141,16 +141,16 @@ namespace Dark_Cloud_Improved_Version
                     //Check on which slot is the weapon equipped on and save its Whp
                     switch (weaponslotid)
                     {
-                        case 0: whp = Memory.ReadFloat(Player.Ungaga.WeaponSlot0.whp); break;
-                        case 1: whp = Memory.ReadFloat(Player.Ungaga.WeaponSlot1.whp); break;
-                        case 2: whp = Memory.ReadFloat(Player.Ungaga.WeaponSlot2.whp); break;
-                        case 3: whp = Memory.ReadFloat(Player.Ungaga.WeaponSlot3.whp); break;
-                        case 4: whp = Memory.ReadFloat(Player.Ungaga.WeaponSlot4.whp); break;
-                        case 5: whp = Memory.ReadFloat(Player.Ungaga.WeaponSlot5.whp); break;
-                        case 6: whp = Memory.ReadFloat(Player.Ungaga.WeaponSlot6.whp); break;
-                        case 7: whp = Memory.ReadFloat(Player.Ungaga.WeaponSlot7.whp); break;
-                        case 8: whp = Memory.ReadFloat(Player.Ungaga.WeaponSlot8.whp); break;
-                        case 9: whp = Memory.ReadFloat(Player.Ungaga.WeaponSlot9.whp); break;
+                        case 0: whp = Memory.ReadFloat(WeaponRecord.Address(Player.UngagaId, 0, WeaponRecord.Whp)); break;
+                        case 1: whp = Memory.ReadFloat(WeaponRecord.Address(Player.UngagaId, 1, WeaponRecord.Whp)); break;
+                        case 2: whp = Memory.ReadFloat(WeaponRecord.Address(Player.UngagaId, 2, WeaponRecord.Whp)); break;
+                        case 3: whp = Memory.ReadFloat(WeaponRecord.Address(Player.UngagaId, 3, WeaponRecord.Whp)); break;
+                        case 4: whp = Memory.ReadFloat(WeaponRecord.Address(Player.UngagaId, 4, WeaponRecord.Whp)); break;
+                        case 5: whp = Memory.ReadFloat(WeaponRecord.Address(Player.UngagaId, 5, WeaponRecord.Whp)); break;
+                        case 6: whp = Memory.ReadFloat(WeaponRecord.Address(Player.UngagaId, 6, WeaponRecord.Whp)); break;
+                        case 7: whp = Memory.ReadFloat(WeaponRecord.Address(Player.UngagaId, 7, WeaponRecord.Whp)); break;
+                        case 8: whp = Memory.ReadFloat(WeaponRecord.Address(Player.UngagaId, 8, WeaponRecord.Whp)); break;
+                        case 9: whp = Memory.ReadFloat(WeaponRecord.Address(Player.UngagaId, 9, WeaponRecord.Whp)); break;
                     }
                     break;
 
@@ -158,16 +158,16 @@ namespace Dark_Cloud_Improved_Version
                     //Check on which slot is the weapon equipped on and save its Whp
                     switch (weaponslotid)
                     {
-                        case 0: whp = Memory.ReadFloat(Player.Osmond.WeaponSlot0.whp); break;
-                        case 1: whp = Memory.ReadFloat(Player.Osmond.WeaponSlot1.whp); break;
-                        case 2: whp = Memory.ReadFloat(Player.Osmond.WeaponSlot2.whp); break;
-                        case 3: whp = Memory.ReadFloat(Player.Osmond.WeaponSlot3.whp); break;
-                        case 4: whp = Memory.ReadFloat(Player.Osmond.WeaponSlot4.whp); break;
-                        case 5: whp = Memory.ReadFloat(Player.Osmond.WeaponSlot5.whp); break;
-                        case 6: whp = Memory.ReadFloat(Player.Osmond.WeaponSlot6.whp); break;
-                        case 7: whp = Memory.ReadFloat(Player.Osmond.WeaponSlot7.whp); break;
-                        case 8: whp = Memory.ReadFloat(Player.Osmond.WeaponSlot8.whp); break;
-                        case 9: whp = Memory.ReadFloat(Player.Osmond.WeaponSlot9.whp); break;
+                        case 0: whp = Memory.ReadFloat(WeaponRecord.Address(Player.OsmondId, 0, WeaponRecord.Whp)); break;
+                        case 1: whp = Memory.ReadFloat(WeaponRecord.Address(Player.OsmondId, 1, WeaponRecord.Whp)); break;
+                        case 2: whp = Memory.ReadFloat(WeaponRecord.Address(Player.OsmondId, 2, WeaponRecord.Whp)); break;
+                        case 3: whp = Memory.ReadFloat(WeaponRecord.Address(Player.OsmondId, 3, WeaponRecord.Whp)); break;
+                        case 4: whp = Memory.ReadFloat(WeaponRecord.Address(Player.OsmondId, 4, WeaponRecord.Whp)); break;
+                        case 5: whp = Memory.ReadFloat(WeaponRecord.Address(Player.OsmondId, 5, WeaponRecord.Whp)); break;
+                        case 6: whp = Memory.ReadFloat(WeaponRecord.Address(Player.OsmondId, 6, WeaponRecord.Whp)); break;
+                        case 7: whp = Memory.ReadFloat(WeaponRecord.Address(Player.OsmondId, 7, WeaponRecord.Whp)); break;
+                        case 8: whp = Memory.ReadFloat(WeaponRecord.Address(Player.OsmondId, 8, WeaponRecord.Whp)); break;
+                        case 9: whp = Memory.ReadFloat(WeaponRecord.Address(Player.OsmondId, 9, WeaponRecord.Whp)); break;
                     }
                     break;
             }
@@ -250,7 +250,7 @@ namespace Dark_Cloud_Improved_Version
         /// <returns></returns>
         public static int GetRecentDamageDealtByPlayer()
         {
-            int damage = Memory.ReadInt(Player.mostRecentDamage);
+            int damage = Memory.ReadInt(PlayerAddresses.MostRecentDamage);
             return damage;
         }
 
@@ -260,7 +260,7 @@ namespace Dark_Cloud_Improved_Version
         /// <returns>PlayerId, if source is a character's weapon. -1 if source is a throwable.</returns>
         public static int GetDamageSourceCharacterID()
         {
-            int character = Memory.ReadInt(Player.damageSource);
+            int character = Memory.ReadInt(PlayerAddresses.DamageSource);
             return character;
         }
 
@@ -269,8 +269,8 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         public static void ClearRecentDamageAndDamageSource()
         {
-            Memory.WriteInt(Player.mostRecentDamage, -1);
-            Memory.WriteInt(Player.damageSource, -1);
+            Memory.WriteInt(PlayerAddresses.MostRecentDamage, -1);
+            Memory.WriteInt(PlayerAddresses.DamageSource, -1);
         }
     }
 }

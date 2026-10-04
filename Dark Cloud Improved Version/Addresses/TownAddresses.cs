@@ -358,7 +358,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The player's TOWN world position (x, y, z), via <see cref="CharaPtr"/> — the
         /// pointer-chase the (since retired) GeoramaProbe validated live. Pattern moved here so every feature that
         /// needs the town player's world position (CustomFishingSpot, CanalTide, …) shares ONE correct
-        /// read instead of re-deriving it (or worse, reaching for <c>Player.positionX/Y/Z</c> —
+        /// read instead of re-deriving it (or worse, reaching for <c>PlayerAddresses.PositionX/Y/Z</c> —
         /// the retired GeoramaProbe's doc comment on <see cref="CharaPosition"/> explains why those mislead: a
         /// live reading showed the triple tracking EDITAREA base heights, not the player).
         /// ⚠ This is TOWN-ONLY. Do not reuse in a dungeon context (see <c>Addresses.dunPositionX/Y/Z</c>

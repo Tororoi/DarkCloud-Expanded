@@ -218,7 +218,7 @@ intercepts at the CheckHitUser match (dun 0x1DBB0E0), consumes a reaction-5 entr
   pointed at `CodeCaves.JudgementPos` 0x21FAF860 (x, h, y, 1) — the blade, then the blast — and their own AI turns them
   to it; the pointers go back to the live player `RedirectRelease` 0.4 s before the blinding ends, or `RedirectOrphan`
   2 s after a drop that never flashed. Mirage's writer only runs for Ungaga and Angel Gear's for Xiao, so nothing else
-  writes the table while Toan holds it; `Mirage.Armed` (the caves armed at the main menu) gates it.
+  writes the table while Toan holds it; `TargetRedirectCaves.Armed` (the caves armed at the main menu) gates it.
 - `PlayerFacing()` is Toan's model-root Euler Y (or the CCharacter yaw when the Euler is stale), for the things placed
   square to him.
 

@@ -66,9 +66,9 @@ namespace Dark_Cloud_Improved_Version
             {
                 List<int> killed = ReusableFunctions.GetEnemiesKilledIds(st.PrevHp, cur);
                 if (killed.Count > 0 && random.Next(100) < StarBreakerProcPercent &&
-                    Player.Inventory.GetBagAttachmentsFirstAvailableSlot() >= 0)
+                    Inventory.GetBagAttachmentsFirstAvailableSlot() >= 0)
                 {
-                    Player.Inventory.SetBagAttachments(Items.synthsphere);
+                    Inventory.SetBagAttachments(Items.synthsphere);
                     DungeonMessages.DisplayMessage("The Star Breaker sent\nyou a shooting star!", 2, 21);
                 }
             }

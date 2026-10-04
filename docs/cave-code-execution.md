@@ -129,7 +129,7 @@ per-slot helper.
   room and a clean function.
 
 Reference implementation: `Mirage.ArmFuncCave()` (Mirage.cs) — one generalized helper that
-hosts *both* `_GET_POSITION` and `_GET_DISTANCE` this way (called from `Mirage.ArmColdPatch`),
+hosts *both* `_GET_POSITION` and `_GET_DISTANCE` this way (called from `TargetRedirectCaves.ArmColdPatch`),
 parameterized by the vanilla function, cave address, dispatch slot, and detour/jal offsets — plus
 the STB dispatch addresses (`MirageDecoy.PosDispatch`/`DistDispatch`) in `DungeonAddresses.cs`. It
 verifies the function is pristine vanilla (prologue `0x27BDFFB0` + detour word `0x3C0201EA`) before

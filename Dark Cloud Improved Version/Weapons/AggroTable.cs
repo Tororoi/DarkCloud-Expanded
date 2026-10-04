@@ -2,8 +2,9 @@ using System;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>The one writer of the enemies' TARGET POINTER table (CodeCaves.PtrTable: per slot, the address the Mirage caves make
-    /// `_GET_POSITION`/`_GET_DISTANCE` read as "the player"). Weapon targeting effects — Mirage's decoy, the Angel Gear's shield
+    /// <summary>The one writer of the enemies' TARGET POINTER table (CodeCaves.PtrTable: per slot, the address the redirect caves
+    /// (<see cref="TargetRedirectCaves"/>) make `_GET_POSITION`/`_GET_DISTANCE` read as "the player"; every write here is gated on
+    /// <see cref="TargetRedirectCaves.Armed"/>). Weapon targeting effects — Mirage's decoy, the Angel Gear's shield
     /// ring, the judgement blade's redirect — take the table whole (<see cref="Claim"/>, <see cref="Write"/>) and hand it back
     /// with every slot on the live player (<see cref="Release"/>). Only one weapon is ever active, so only one holds it at a
     /// time; a second claim displaces the first and is logged. Confusion is the exception: it points single slots
@@ -34,7 +35,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The whole table, by its holder; a writer that does not hold it writes nothing.</summary>
         internal static void Write(Holder who, byte[] ptrs)
         {
-            if (!Mirage.Armed) return;
+            if (!TargetRedirectCaves.Armed) return;
             lock (_lock) { if (Held == who) Memory.WriteBytesBatch(CodeCaves.PtrTable, ptrs); }
         }
 
@@ -49,10 +50,10 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>Every slot on the live player (the table's rest state; also the cold-arm fill before any enemy reads it).</summary>
+        /// <summary>Every slot on the live player (the table's rest state; also the cold-arm fill before any enemy reads it — written
+        /// whether or not the caves are armed yet, since TargetRedirectCaves fills it while arming).</summary>
         internal static void ResetAll()
         {
-            if (!Mirage.Armed) return;
             var buf = new byte[CodeCaves.TableSlots * CodeCaves.PtrStride];
             for (int s = 0; s < CodeCaves.TableSlots; s++) BitConverter.GetBytes(StbExternCmd.PlayerPosGuest).CopyTo(buf, s * CodeCaves.PtrStride);
             Memory.WriteBytesBatch(CodeCaves.PtrTable, buf);
@@ -62,7 +63,7 @@ namespace Dark_Cloud_Improved_Version
         /// when a weapon effect does.</summary>
         internal static bool PointConfused(int slot, uint ptr)
         {
-            if (!Mirage.Armed) return false;
+            if (!TargetRedirectCaves.Armed) return false;
             lock (_lock)
             {
                 if (Held != Holder.None) return false;

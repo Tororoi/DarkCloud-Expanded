@@ -75,6 +75,11 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>…and dangerous again when it is not. ⚠ Never leave this on: the configs are shared ELF data.</summary>
+        /// <summary>The item-bomb reaction word at the vanilla knockdown reaction (the ISO patch, ElfDamagePatches.PatchBombReaction,
+        /// made it data): seeded at startup (MainMenuThread.ApplyNewChanges), and put back by <see cref="RestoreImmunity"/>.</summary>
+        internal static void SeedBombReaction() =>
+            Memory.WriteInt(CodeCaves.BombReaction, CodeCaves.BombReactionVanilla);
+
         internal static void RestoreImmunity()
         {
             if (!_immune) return;
@@ -83,7 +88,7 @@ namespace Dark_Cloud_Improved_Version
                 long a = ReactionAddr(ExplosionCfgs[i]);
                 if (a != 0) Memory.WriteInt(a, _cfgReaction[i]);
             }
-            Weapons.SeedBombReaction();
+            SeedBombReaction();
             _immune = false;
         }
     }

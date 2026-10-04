@@ -139,7 +139,7 @@ namespace Dark_Cloud_Improved_Version
             CopyPlace(_sx, RootHeight(0f), _sy);                                               // buried, still: the caves move it from here
             CopyAlpha(1f);
             _up = true; _summoned = GameClock.Now; _confusionEnd = _summoned.AddSeconds(SpearSeconds + VanishSeconds);   // the confusion outlasts the spear by the vanish: gone when it has fully faded
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the {F.Name} rises at ({_sx:F0},{_sy:F0}) ground {_ground:F0}" + (target >= 0 ? $" under enemy slot {target}" : " ahead of the wielder") + $"; target redirect {(Mirage.Armed ? "armed" : "NOT ARMED — confusion cannot steer")}");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the {F.Name} rises at ({_sx:F0},{_sy:F0}) ground {_ground:F0}" + (target >= 0 ? $" under enemy slot {target}" : " ahead of the wielder") + $"; target redirect {(TargetRedirectCaves.Armed ? "armed" : "NOT ARMED — confusion cannot steer")}");
             Confusion.Configure(null, new[] { TintR, TintG, TintB }, provokes: true, Tag);   // the whole floor: no area; the hit turn on their attacker
             if (target >= 0) Confuse(target);                                                  // the strike waits for the tip to reach it (TipStrike)
             ConfuseAll();

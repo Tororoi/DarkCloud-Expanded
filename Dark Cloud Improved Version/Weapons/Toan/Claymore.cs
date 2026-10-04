@@ -58,9 +58,9 @@ namespace Dark_Cloud_Improved_Version
         /// holding, 0 when the model is not located yet, −1 when the frame holds neither (left alone).</summary>
         private static int ScaleBlade()
         {
-            uint name = Weapons.ResolveBladeFrame(ModelCode);
+            uint name = WeaponModelFrames.ResolveBladeFrame(ModelCode);
             if (name == 0) return 0;
-            long frame = Weapons.LocateModelFrame(name, null);
+            long frame = WeaponModelFrames.Locate(name, null);
             if (frame == 0) return 0;
             long m = frame + WeaponModel.Vu1LocalMatrixDiag0;
             bool identity = true, scaled = true;

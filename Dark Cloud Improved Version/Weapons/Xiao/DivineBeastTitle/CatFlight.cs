@@ -500,7 +500,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void WriteHitStamps()
         {
             int attack = Memory.ReadShort(BattleWeaponAttack);
-            uint elem = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
+            uint elem = (uint)WeaponModelFrames.SelectedElementBits(WeaponModelFrames.EquippedRecord()) & 0x1F;
             uint attr = (elem != 0 && (elem & (elem - 1)) == 0) ? elem : 0u;      // one pure element bit or none
             Memory.WriteInt(CatBlock.CatHitDamage, Math.Max(1, _pelletDamage + attack));
             Memory.WriteInt(CatBlock.CatHitAttr, (int)attr);

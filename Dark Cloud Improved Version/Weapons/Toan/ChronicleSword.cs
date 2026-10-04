@@ -22,10 +22,10 @@ namespace Dark_Cloud_Improved_Version
         {
             acquired = false;
 
-            if (Memory.ReadUShort(Player.Toan.WeaponSlot0.id) == 298 || Memory.ReadUShort(Player.Toan.WeaponSlot1.id) == 298 || Memory.ReadUShort(Player.Toan.WeaponSlot2.id) == 298
-                || Memory.ReadUShort(Player.Toan.WeaponSlot3.id) == 298 || Memory.ReadUShort(Player.Toan.WeaponSlot4.id) == 298 || Memory.ReadUShort(Player.Toan.WeaponSlot5.id) == 298
-                || Memory.ReadUShort(Player.Toan.WeaponSlot6.id) == 298 || Memory.ReadUShort(Player.Toan.WeaponSlot7.id) == 298 || Memory.ReadUShort(Player.Toan.WeaponSlot8.id) == 298
-                || Memory.ReadUShort(Player.Toan.WeaponSlot9.id) == 298)
+            if (Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 0, WeaponRecord.Id)) == 298 || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 1, WeaponRecord.Id)) == 298 || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 2, WeaponRecord.Id)) == 298
+                || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 3, WeaponRecord.Id)) == 298 || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 4, WeaponRecord.Id)) == 298 || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 5, WeaponRecord.Id)) == 298
+                || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 6, WeaponRecord.Id)) == 298 || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 7, WeaponRecord.Id)) == 298 || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 8, WeaponRecord.Id)) == 298
+                || Memory.ReadUShort(WeaponRecord.Address(Player.ToanId, 9, WeaponRecord.Id)) == 298)
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has Chronicle 2");
                 acquired = true;

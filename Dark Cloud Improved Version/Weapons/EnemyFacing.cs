@@ -6,13 +6,13 @@ namespace Dark_Cloud_Improved_Version
     /// it there for a few ticks (<see cref="FaceTick"/>), the yaw written in whichever of the engine's four conventions
     /// the floor's own enemies reveal (<see cref="YawConvention"/>). The REDIRECT (<see cref="BeginRedirect"/> …
     /// <see cref="ReleaseRedirect"/>) points every slot's "where is the player" at CodeCaves.JudgementPos through the
-    /// Mirage pointer table while a judgement blade falls, so their own AI turns them to it. <see cref="PlayerFacing"/>
+    /// per-slot target table (<see cref="TargetRedirectCaves"/>) while a judgement blade falls, so their own AI turns them to it. <see cref="PlayerFacing"/>
     /// is the player's own yaw, for the things placed square to him. Big Bang, the Big Bang shot and JudgementBlade
     /// drive it (docs/big-bang.md).</summary>
     internal static class EnemyFacing
     {
         // ── every enemy's eyes on the blade ──────────────────────────────────────────────────
-        // Mirage's decoy redirect, borrowed: each enemy's `_GET_POSITION(-2)` ("where is the player") reads through
+        // The target redirect (TargetRedirectCaves): each enemy's `_GET_POSITION(-2)` ("where is the player") reads through
         // the per-slot pointer table (CodeCaves.PtrTable), so while the blade falls every live slot is pointed at
         // CodeCaves.JudgementPos — the blade, then the blast — and their own AI turns them to it before the flash
         // lands and holds them; the pointers go back to the live player just before the blinding ends, so they
@@ -24,7 +24,7 @@ namespace Dark_Cloud_Improved_Version
         internal static bool _redirecting; private static bool _redirectBlindSeen; private static DateTime _redirectSince;
         internal static void BeginRedirect(float x, float h, float y)
         {
-            if (!Mirage.Armed) return;                                           // the caves are armed at the main menu; without them, nothing to point
+            if (!TargetRedirectCaves.Armed) return;                              // the caves are armed at the main menu; without them, nothing to point
             Memory.WriteVec3(CodeCaves.JudgementPos, x, h, y);
             Memory.WriteFloat(CodeCaves.JudgementPos + 12, 1f);
             var ptrs = new byte[RedirectSlots * CodeCaves.PtrStride];

@@ -6,7 +6,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>Confused enemies, shared by Babel's Spear, Super Steve's Terra Sword sphere and the Confuse ability's procs: each user
     /// <see cref="Configure"/>s it (an area, a tint, whether a hit provokes), <see cref="Confuse"/>s slots, <see cref="Tick"/>s it
-    /// from its loop and <see cref="End"/>s it. A confused slot's entry in the Mirage's target-pointer table follows the nearest live
+    /// from its loop and <see cref="End"/>s it. A confused slot's entry in the per-slot target table (<see cref="TargetRedirectCaves"/>) follows the nearest live
     /// enemy or the player, else its own wander spot; an enemy a confused one hits is PROVOKED and goes after it; the tint is the
     /// unit's ambient add. Its swings' and shots' friendly fire is <see cref="ConfusionFriendlyFire"/>, which shares this class's
     /// members through using static (docs/confuse-ability.md; the friendly fire in docs/babels-spear.md).</summary>
@@ -128,7 +128,7 @@ namespace Dark_Cloud_Improved_Version
             }
             RetireShells();
             if (any) { ContactHits(); ShotHits(); } else _shotLast.Clear();
-            AggroTable.ConfusionActive = any && Mirage.Armed;
+            AggroTable.ConfusionActive = any && TargetRedirectCaves.Armed;
             if (DebugDiagnostics.Enabled && any && (GameClock.Now - _lastReport).TotalSeconds >= 1) { _lastReport = GameClock.Now; Report(); }
         }
 
@@ -258,7 +258,7 @@ namespace Dark_Cloud_Improved_Version
                 else if (_victim[s] == -2) { long q = CodeCaves.BabelWander + (long)s * CodeCaves.BabelWanderStride; vx = Memory.ReadFloat(q); vy = Memory.ReadFloat(q + 8); }
                 float dist = (float)Math.Sqrt((vx - mx) * (vx - mx) + (vy - my) * (vy - my));
                 int motion = Memory.ReadInt(EnemyAddresses.CharObjects.CharAddr(s) + CCharacter.MotionId);
-                uint ptr = Mirage.Armed ? Memory.ReadUInt(CodeCaves.PtrAddr(s)) : 0;
+                uint ptr = TargetRedirectCaves.Armed ? Memory.ReadUInt(CodeCaves.PtrAddr(s)) : 0;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"slot {s} at ({mx:F0},{my:F0}) after {Whom(_victim[s])} at ({vx:F0},{vy:F0}) dist {dist:F0}, motion {motion}, table → 0x{ptr:X8}");
             }
         }

@@ -59,7 +59,7 @@ namespace Dark_Cloud_Improved_Version
 
                         if (CheckSequence(cheatGodmode))
                         {
-                            if (Memory.ReadByte(Player.Ultraman) == 0)
+                            if (Memory.ReadByte(PlayerAddresses.GodMode) == 0)
                             {
                                 toggleGodMode(true);
                             }
@@ -179,13 +179,13 @@ namespace Dark_Cloud_Improved_Version
                 {
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "God mode activated");
                     DungeonMessages.DisplayMessage("^BCheater!!\n God Mode activated!^W", 2, 30, 3000);
-                    Memory.WriteByte(Player.Ultraman, 2);
+                    Memory.WriteByte(PlayerAddresses.GodMode, 2);
                 }
                 else
                 {
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "God mode de-activated");
                     DungeonMessages.DisplayMessage("^RCheat de-activated - God Mode^W", 1, 30, 3000);
-                    Memory.WriteByte(Player.Ultraman, 0);
+                    Memory.WriteByte(PlayerAddresses.GodMode, 0);
                 }
             }
 
@@ -193,7 +193,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Cheat: Broken Dagger");
                 DungeonMessages.DisplayMessage("^BCheater!!\n Broken Dagger acquired!^W", 2, 30, 3000);
-                if (Player.Inventory.GetBagAttachmentsFirstAvailableSlot() != -1) Memory.WriteByteArray(Addresses.firstBagAttachment + (0x20 * Player.Inventory.GetBagAttachmentsFirstAvailableSlot()), attachmentValues);
+                if (Inventory.GetBagAttachmentsFirstAvailableSlot() != -1) Memory.WriteByteArray(Addresses.firstBagAttachment + (0x20 * Inventory.GetBagAttachmentsFirstAvailableSlot()), attachmentValues);
             }
 
             /// <summary>Max-stat broken dagger with ZERO ability flags — same record as SpawnBrokenDagger
@@ -203,7 +203,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Cheat: Clean Broken Dagger (no abilities)");
                 DungeonMessages.DisplayMessage("^BCheater!!\n Clean Broken Dagger\n (no abilities) acquired!^W", 2, 30, 3000);
-                int slot = Player.Inventory.GetBagAttachmentsFirstAvailableSlot();
+                int slot = Inventory.GetBagAttachmentsFirstAvailableSlot();
                 if (slot == -1) return;
                 var clean = (byte[])attachmentValues.Clone();
                 clean[4] = 0; clean[5] = 0;                 // ability flags halfword -> none
@@ -216,7 +216,7 @@ namespace Dark_Cloud_Improved_Version
                 DungeonMessages.DisplayMessage("^BCheater!!\n Acquired 10 Powerup Powders!!^W", 2, 30, 3000);
                 for (int i = 0; i < 10; i++)
                 {
-                    if(Player.Inventory.GetBagItemsFirstAvailableSlot() != -1) Memory.WriteUShort(Addresses.firstBagItem + (0x2 * Player.Inventory.GetBagItemsFirstAvailableSlot()), 178);
+                    if(Inventory.GetBagItemsFirstAvailableSlot() != -1) Memory.WriteUShort(Addresses.firstBagItem + (0x2 * Inventory.GetBagItemsFirstAvailableSlot()), 178);
                 }
             }
 

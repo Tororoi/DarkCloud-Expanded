@@ -374,15 +374,15 @@ namespace Dark_Cloud_Improved_Version
                             if (!anyChanges)
                             {
                                 anyChanges = true;
-                                float px = Memory.ReadFloat(Player.dunPositionX);
-                                float py = Memory.ReadFloat(Player.dunPositionY);
-                                float pz = Memory.ReadFloat(Player.dunPositionZ);
-                                int charId = Memory.ReadByte(Player.currentCharacter);
+                                float px = Memory.ReadFloat(PlayerAddresses.DunPositionX);
+                                float py = Memory.ReadFloat(PlayerAddresses.DunPositionY);
+                                float pz = Memory.ReadFloat(PlayerAddresses.DunPositionZ);
+                                int charId = Memory.ReadByte(PlayerAddresses.CurrentCharacter);
                                 string charName = Player.GetCharacterName(charId) ?? "Unknown";
                                 ushort charHp = Player.Toan.GetHp();
-                                int lastDmg = Memory.ReadInt(Player.mostRecentDamage);
-                                int dmgSrc = Memory.ReadInt(Player.damageSource);
-                                int animId = Memory.ReadInt(Player.animationId);
+                                int lastDmg = Memory.ReadInt(PlayerAddresses.MostRecentDamage);
+                                int dmgSrc = Memory.ReadInt(PlayerAddresses.DamageSource);
+                                int animId = Memory.ReadInt(PlayerAddresses.AnimationId);
                                 Console.WriteLine($"[PlayerState] {charName} hp={charHp} pos=({px:F1},{py:F1},{pz:F1}) anim={animId} lastDmg={lastDmg} dmgSrc={dmgSrc}");
                             }
                             int off = w * 4;
@@ -613,7 +613,7 @@ namespace Dark_Cloud_Improved_Version
                 sumZ += Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationZ);
                 zCount++;
             }
-            float playerZ = Memory.ReadFloat(Player.dunPositionZ);
+            float playerZ = Memory.ReadFloat(PlayerAddresses.DunPositionZ);
             float avgZ    = zCount > 0 ? sumZ / zCount : 0f;
             // At floor entry all peers may have Z=0 (not yet placed by engine), so fall back to
             // player Z — player is at stable floor height by the time this correction runs.
@@ -640,8 +640,8 @@ namespace Dark_Cloud_Improved_Version
                 }
                 else
                 {
-                    targetX = Memory.ReadFloat(Player.dunPositionX);
-                    targetY = Memory.ReadFloat(Player.dunPositionY);
+                    targetX = Memory.ReadFloat(PlayerAddresses.DunPositionX);
+                    targetY = Memory.ReadFloat(PlayerAddresses.DunPositionY);
                 }
 
                 float dx = x - targetX, dy = y - targetY;

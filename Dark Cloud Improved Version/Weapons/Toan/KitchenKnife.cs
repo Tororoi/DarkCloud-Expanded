@@ -71,7 +71,7 @@ namespace Dark_Cloud_Improved_Version
                         ushort cur = Memory.ReadUShort(atkAddr);
                         if (cur == (ushort)Math.Min(baseAtk * KkAttackMult, ushort.MaxValue))
                             Memory.WriteUShort(atkAddr, baseAtk);            // untouched by reloads → restore
-                        Weapons.ScaleWeaponBlade(kkCode, 1f);
+                        WeaponModelFrames.ScaleBlade(kkCode, 1f);
                         boosted = false;
                         DungeonMessages.DisplayMessage("The spring's blessing fades\nfrom the Kitchen Knife...", 2, 30, 4000);
                     }
@@ -79,12 +79,12 @@ namespace Dark_Cloud_Improved_Version
                     {
                         // Same mechanism Heaven's Cloud uses; the blade frame is derived from the weapon's own
                         // model code (c01w08 -> "w08"), so the visible blade and its dcol hit point grow together.
-                        if (!Weapons.ScaleWeaponBlade(kkCode, factor) && !warnedNoBlade)
+                        if (!WeaponModelFrames.ScaleBlade(kkCode, factor) && !warnedNoBlade)
                         {
                             warnedNoBlade = true;
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                                 $"[KitchenKnife] blade mesh for code '{kkCode}' not located — dumping the model's frame tree:");
-                            Weapons.DumpWeaponFrameTree();
+                            WeaponModelFrames.DumpTree();
                         }
                         ushort cur = Memory.ReadUShort(atkAddr);
                         if (cur == baseAtk)                                  // battle record was refreshed → re-apply
@@ -100,7 +100,7 @@ namespace Dark_Cloud_Improved_Version
                 long atkAddr = WeaponHave.BattleWeaponRecord + WeaponHave.EffAttackOffset;
                 if (Memory.ReadUShort(atkAddr) == (ushort)Math.Min(baseAtk * KkAttackMult, ushort.MaxValue))
                     Memory.WriteUShort(atkAddr, baseAtk);
-                Weapons.ScaleWeaponBlade(kkCode, 1f);
+                WeaponModelFrames.ScaleBlade(kkCode, 1f);
             }
         }
 

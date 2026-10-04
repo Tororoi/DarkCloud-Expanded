@@ -33,7 +33,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  ExplosionScale    = 1.0f;  // the size it was authored at
         // Its root frame, as CFrameVu1.Name reads it: "null" then "3". The fuusya path keys on "kiru" and checks the
         // NEXT frame for "fkiri", so it cannot validate this model — hence the separate scale pass below, and
-        // Weapons.WhirlScaleStandDown while this is the model in the instance.
+        // WhirlwindScale.Tick stands down while this is the model in the instance.
         private const uint   ExplosionRootWord = 0x6C6C756E, ExplosionRootTail = 0x00000033;
         private static BorrowedEffect _explosion;
         private static readonly float[] _burstBind = new float[9];
@@ -228,14 +228,14 @@ namespace Dark_Cloud_Improved_Version
         private static void ArmSwing(BlastState st)
         {
             st.swingArmed = true;
-            Weapons.SetChargeHitRadii(CodeCaves.LungeRadiusVanilla, WhirlNoHit);
+            ChargeHitRadii.Set(CodeCaves.LungeRadiusVanilla, WhirlNoHit);
         }
 
         /// <summary>The stock 6 / 12 back. The words are global and every weapon's charge reads them.</summary>
         private static void RestoreSwing(BlastState st)
         {
             if (!st.swingArmed) return;
-            Weapons.SeedChargeHitRadii();
+            ChargeHitRadii.Seed();
             st.swingArmed = false;
         }
 

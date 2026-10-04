@@ -18,7 +18,7 @@ namespace Dark_Cloud_Improved_Version
         /// light — from where her bomb lands; no dim while she primes (the room darkens only along the fall, or the four frames
         /// before a shot's flash); no disc on her (the bomb carries its own).</summary>
         internal static readonly SunSword.SolarProfile FlashProfile = new SunSword.SolarProfile(
-            Items.supersteve, 0.50f, null, SuperSteveRig.WeaponModel, 0, 0, "BigBangShot", fog: 0.8f,
+            Items.supersteve, 0.50f, null, SuperSteve.WeaponModel, 0, 0, "BigBangShot", fog: 0.8f,
             light: new[] { 236f, 226f, 255f }, fogRgb: new[] { 242f, 236f, 255f },
             primeDim: 0f, bladeGlowOnly: true);                                     // no dim while it primes: the darkening is the fall's, or the four frames before a shot's flash
         private const string Tag = "[BigBangShot] ";

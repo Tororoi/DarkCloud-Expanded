@@ -21,7 +21,7 @@ namespace Dark_Cloud_Improved_Version
         /// and blinding, the room darkening as she charges; her disc is the cat's (the only one resident for her), painted
         /// the Angel Gear cat's gold; the weapon brightened is the slingshot's mesh.</summary>
         internal static readonly SunSword.SolarProfile FlashProfile = new SunSword.SolarProfile(
-            Items.supersteve, 0.25f, SuperSteveRig.GlowDisc, SuperSteveRig.WeaponModel, 0, 0, "SolarShot",
+            Items.supersteve, 0.25f, SuperSteve.GlowDisc, SuperSteve.WeaponModel, 0, 0, "SolarShot",
             primeDim: 0.35f);                                                        // its WHP is the shot's, taken as the pellet leaves (ChargedShotWhp)
         private const string Tag = "[SolarShot] ";
         private const double  ChargeSeconds = 2.0;        // guard held this long primes the shot
@@ -151,7 +151,7 @@ namespace Dark_Cloud_Improved_Version
             if (!Memory.IsValidGuest(wpn)) return;
             uint root = Memory.ReadGuestPtr(Memory.ToMmu(wpn) + 0xBC);
             if (!Memory.IsValidGuest(root)) return;
-            SolarGlow.Show(SuperSteveRig.GlowDisc, anchor: root + (uint)(PouchNode * CFrameVu1.NodeStride), lift: 0f, palRow: SuperSteveRig.GlowGoldRow, scale: SuperSteveRig.GlowSize);
+            SolarGlow.Show(SuperSteve.GlowDisc, anchor: root + (uint)(PouchNode * CFrameVu1.NodeStride), lift: 0f, palRow: SuperSteve.GlowGoldRow, scale: SuperSteve.GlowSize);
         }
 
         /// <summary>The charged pellet: its sprite at <see cref="PelletScale"/>, the disc moved from her pouch onto the pellet itself
@@ -165,7 +165,7 @@ namespace Dark_Cloud_Improved_Version
             _slot = slot; _firedAt = GameClock.Now; _phase = Phase.Flying;
             PelletContacts.Sync(ref _contactSeen);                                 // only contacts from here on are this pellet's
             ChargeTint.Clear();
-            SolarGlow.Show(SuperSteveRig.GlowDisc, lift: 0f, palRow: SuperSteveRig.GlowGoldRow, scale: SuperSteveRig.GlowSize, pelletSlot: slot, pull: GlowPull);   // re-hung onto the pellet
+            SolarGlow.Show(SuperSteve.GlowDisc, lift: 0f, palRow: SuperSteve.GlowGoldRow, scale: SuperSteve.GlowSize, pelletSlot: slot, pull: GlowPull);   // re-hung onto the pellet
             if (!PelletContacts.Native && !_contactWarned) { _contactWarned = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the pellet-contact cave is not in this ISO — the landing is read from where the pellet died (re-patch the ISO)"); }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"charged pellet: slot {slot}, ×{PelletScale:0} sprite, the disc on it");
         }

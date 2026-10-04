@@ -134,7 +134,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  DamageMult    = 1.5f;     // × the weapon's attack (a charged pellet's worth)
         internal const int    PlantedLifeTicks = 4;   // ~4 frames for the enemy's CheckDmg to find the entry
 
-        // Hit-entry plumbing (CCollisionData pool, as AngelGear.PlantReflectedHit).
+        // Hit-entry plumbing (CCollisionData pool, as ReflectedHits.PlantReflectedHit).
         internal const long BattleWeaponAttack = WeaponHave.BattleWeaponRecord + 0x04;
 
         internal enum Phase { Resident, Flying, Falling, Landing, Running, TakeOff, Leaping, LandEnd, Fading }   // Resident = built, hidden, waiting
@@ -389,9 +389,9 @@ namespace Dark_Cloud_Improved_Version
         // The colours are authored in ElementLooks, beside the per-weapon looks; what follows is the plumbing
         // that reads the element and the live slots it fills.
         private const byte CapeAlpha = 0x80;             // PS2 convention: 0x80 = fully opaque, as build_cat_pack bakes it
-        /// <summary>Xiao's weapon-slot 0 element byte, + 0xF8 per bag slot (Player.Xiao.WeaponSlot0.elementHUD). It lives in
+        /// <summary>Xiao's weapon-slot 0 element byte (<see cref="WeaponRecord.ElementHud"/>), + 0xF8 per bag slot. It lives in
         /// the status block, well clear of the dungeon pools, so it needs no DungeonPools resolution.</summary>
-        private static readonly long XiaoElementHud = Player.Xiao.WeaponSlot0.elementHUD;
+        private static readonly long XiaoElementHud = WeaponRecord.Address(Player.XiaoId, 0, WeaponRecord.ElementHud);
         private const int WeaponSlotStride = 0xF8;
 
         /// <summary>The cat's OWN ambient as drawn — <see cref="WeaponLook.Tint"/> for every other look, the element's for
@@ -635,7 +635,7 @@ namespace Dark_Cloud_Improved_Version
                 _hitElemTick = 0;
                 if (Memory.ReadInt(CatBlock.CatHitDamage) != 0)
                 {
-                    uint live = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
+                    uint live = (uint)WeaponModelFrames.SelectedElementBits(WeaponModelFrames.EquippedRecord()) & 0x1F;
                     uint want = (live != 0 && (live & (live - 1)) == 0) ? live : 0u;      // one pure element bit or none
                     if (Memory.ReadInt(CatBlock.CatHitAttr) != (int)want) WriteHitStamps();
                 }
@@ -695,7 +695,7 @@ namespace Dark_Cloud_Improved_Version
 
         // ─────────────────────────────────────────── the hit ───────────────────────────────────────────────
 
-        /// <summary>One pellet-style CollisionData entry at the pounce (AngelGear.PlantReflectedHit's
+        /// <summary>One pellet-style CollisionData entry at the pounce (ReflectedHits.PlantReflectedHit's
         /// recipe): base = the weapon's attack × <see cref="DamageMult"/>, the weapon's selected element as a pure
         /// bit (or none), her anti-category bytes and ability flags — CheckDmg does the rest.</summary>
         /// <param name="ox">…the kick's origin (the cat): CheckDmg pushes the enemy along enemy − origin with strength/decay
@@ -707,7 +707,7 @@ namespace Dark_Cloud_Improved_Version
             if (pool == 0) return;
             int slot = CollisionPool.TakeFreeSlot(pool);
             if (slot < 0) { Log("no free collision entry — pounce lost"); return; }
-            uint elem = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
+            uint elem = (uint)WeaponModelFrames.SelectedElementBits(WeaponModelFrames.EquippedRecord()) & 0x1F;
             uint attr = (elem != 0 && (elem & (elem - 1)) == 0) ? elem : 0u;      // one pure element bit or none
             byte[] e = CollisionPool.PlayerHitEntry(x, h, y, radius, baseDmg, attr);
             CollisionPool.SetKick(e, ox, oh, oy, KickStrength, KickDecay, CatKickType);   // thrown from the cat, the melee-style reaction

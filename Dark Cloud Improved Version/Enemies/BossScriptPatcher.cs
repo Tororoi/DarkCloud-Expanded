@@ -1187,7 +1187,7 @@ namespace Dark_Cloud_Improved_Version
         private const long GlobalIntBase  = GlobalInt.Base; // global[i] = base + i*4 (see GlobalInt in DungeonAddresses.cs)
         private const int  GlobalIntCount = 64;
         // The ice arrow (korinoya) homes to the PLAYER — _GET_POSITION(-2) copies the player vector from here.
-        private const long PlayerPosVec = Player.dunPositionX;   // (X @+0, height @+4, Y @+8)
+        private const long PlayerPosVec = PlayerAddresses.DunPositionX;   // (X @+0, height @+4, Y @+8)
         private static System.DateTime _lastHomeLog = System.DateTime.MinValue;
         private static readonly int[] _lastHp = InitLastHp();   // per-slot HP-change watch
         private static int[] InitLastHp() { var a = new int[32]; for (int i = 0; i < a.Length; i++) a[i] = int.MinValue; return a; }
@@ -1356,8 +1356,8 @@ namespace Dark_Cloud_Improved_Version
                         int mhp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(iq, EnemySlotOffsets.MaxHp));
                         float ix = F(EnemyAddresses.FloorSlots.SlotAddr(iq, EnemySlotOffsets.LocationX));
                         float iy = F(EnemyAddresses.FloorSlots.SlotAddr(iq, EnemySlotOffsets.LocationY));
-                        float px = Memory.ReadFloat(Player.dunPositionX);
-                        float py = Memory.ReadFloat(Player.dunPositionY);
+                        float px = Memory.ReadFloat(PlayerAddresses.DunPositionX);
+                        float py = Memory.ReadFloat(PlayerAddresses.DunPositionY);
                         float dist = (float)System.Math.Sqrt((ix - px) * (ix - px) + (iy - py) * (iy - py));
                         int pct = mhp > 0 ? hp * 100 / mhp : 0;
                         // Movement diagnostics: commanded speed (+0x80 MovementBlend) + facing vector (+0x60/64/68)

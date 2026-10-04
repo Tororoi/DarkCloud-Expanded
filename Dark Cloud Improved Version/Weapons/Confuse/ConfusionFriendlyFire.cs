@@ -108,9 +108,9 @@ namespace Dark_Cloud_Improved_Version
                         // Its element as the Angel Gear's reflected shots carry it: +0x50 a PURE element bit (a status bit there sends CheckDmg's
                         // element branch through the wrong column), the statuses applied as data with CheckDmg's own rules.
                         uint flags = Memory.ReadUInt(cfg + ShotEffectPack.CfgFlags);
-                        uint elem = flags & AngelGear.ShotElementMask, stat = flags & AngelGear.ShotEnemyStatusMask;
+                        uint elem = flags & EnemyStatus.ShotElementMask, stat = flags & EnemyStatus.ShotEnemyStatusMask;
                         I(CollisionPool.Element, (int)(elem != 0 && (flags & 0xFF00) == 0 ? elem : 0u));
-                        string statusNote = stat != 0 ? AngelGear.ApplyReflectedStatus(v, stat) : "";
+                        string statusNote = stat != 0 ? EnemyStatus.ApplyShotStatus(v, stat) : "";
                         CollisionPool.Plant(pool, idx, hit);
                         _shells.Add((idx, GameClock.Now.AddSeconds(ShellLifeSeconds)));
                         long obj = fx + ShotEffectPack.OffObj + (long)i * ShotEffectPack.ObjStride;

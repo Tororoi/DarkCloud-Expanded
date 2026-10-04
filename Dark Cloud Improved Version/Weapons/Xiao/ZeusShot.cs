@@ -14,7 +14,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Super Steve with a Sword of Zeus sphere (ZeusShot): the Sword of Zeus's look on her slingshot — its dim, its
         /// electric light, the two-second ease, no white on her while primed, no disc, no hit of its own (the bolts' blasts do).</summary>
         internal static readonly SunSword.SolarProfile FlashProfile = new SunSword.SolarProfile(
-            Items.supersteve, 0f, null, SuperSteveRig.WeaponModel, 0, 0, "ZeusShot", fog: 0.8f,
+            Items.supersteve, 0f, null, SuperSteve.WeaponModel, 0, 0, "ZeusShot", fog: 0.8f,
             light: new[] { 228f, 240f, 255f }, fogRgb: new[] { 238f, 246f, 255f },
             primeDim: 0.5f, easeSeconds: 2.0, holdsPrimedTint: false);
         private const string Tag = "[ZeusShot] ";

@@ -113,7 +113,65 @@ namespace Dark_Cloud_Improved_Version
         // ---- Per-tick entry point ----
 
         /// <summary>
-        /// Called from TownCharacter on every fishing tick. Delegates to per-tick catch scanning
+        /// The mod's own session latch: TRUE from the town tick that sees <see cref="FishingAddresses.Active"/> read 1
+        /// until the tick it reads 0 again. TownLoop holds its landing-animation cancel off while this is set.
+        /// </summary>
+        internal static bool SessionActive = false;
+
+        /// <summary>
+        /// Fishing sub-state probe — the last-seen values of five addresses, logged whenever any changes.
+        /// Also read by ModWindow for the live status panel.
+        /// </summary>
+        internal static readonly int[] FishProbe = new int[5];
+
+        /// <summary>
+        /// The town loop's fishing block, once per 50 ms town tick: the one-time Arise-bonus catch-up, then the
+        /// session latch — <see cref="OnSessionStart"/> on the 0→1 edge of the fishing-active byte, per-tick
+        /// <see cref="OnFishingTick"/> plus the sub-state probe while latched, <see cref="ResetSession"/> when the
+        /// byte reads 0 again.
+        /// </summary>
+        internal static void Tick(int currentArea)
+        {
+            // One-time (per process) catch-up: dedupe the fishing records list and apply the
+            // Arise Mardan max-magic bonus as soon as a save is loaded. No-op afterwards.
+            EnsureAriseBonusInitialized();
+
+            int checkFishing = Memory.ReadByte(FishingAddresses.Active);
+            if (SessionActive == false && checkFishing == 1)
+            {
+                SessionActive = true;
+                OnSessionStart(currentArea);
+            }
+
+            if (SessionActive == true)
+            {
+                OnFishingTick();
+
+                // Probe fishing sub-state addresses. Logs only when any value changes so output stays manageable.
+                int p0 = Memory.ReadInt(FishingAddresses.OverworldState);
+                int p1 = Memory.ReadInt(FishingAddresses.Active);
+                int p2 = Memory.ReadInt(FishingAddresses.WalkSpeed);
+                int p3 = Memory.ReadInt(FishingAddresses.CastAnimGate);
+                int p4 = Memory.ReadInt(FishingAddresses.Phase);
+                if (p0 != FishProbe[0] || p1 != FishProbe[1] || p2 != FishProbe[2] ||
+                    p3 != FishProbe[3] || p4 != FishProbe[4])
+                {
+                    FishProbe[0] = p0; FishProbe[1] = p1; FishProbe[2] = p2;
+                    FishProbe[3] = p3; FishProbe[4] = p4;
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"[FishProbe] 708={p0:X8} 714={p1:X8} 3E20={p2:X8} 3E24={p3:X8} 3E28={p4:X8}");
+                }
+
+                if (checkFishing == 0)
+                {
+                    SessionActive = false;
+                    ResetSession();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Called from <see cref="Tick"/> on every fishing tick. Delegates to per-tick catch scanning
         /// and fish steering. All session initialization is done in <see cref="OnSessionStart"/>.
         /// </summary>
         internal static void OnFishingTick()

@@ -22,7 +22,7 @@ namespace Dark_Cloud_Improved_Version
         // blade frame whenever it changes, so switching weapons cannot leave the previous blade's visual armed.
         internal const string SunSwordModel = "c01w10", BigBangModel = "c01w18";
         /// <summary>Big Bang's lit blade mesh, named explicitly because its model does NOT follow the usual
-        /// root "NN_1_1" → mesh "wNN" shape that <see cref="Weapons.ResolveBladeFrame"/> derives. Its tree is
+        /// root "NN_1_1" → mesh "wNN" shape that <see cref="WeaponModelFrames.ResolveBladeFrame"/> derives. Its tree is
         /// root `18_1_1` → `w18a` (lit; the parent of all four dcol frames) → `w18b__c`. Neither the derived
         /// "w18" nor the "c01w" fallback matches anything there, so deriving silently found no frame and the
         /// tint never wrote. ⚠ `w18b__c` is deliberately NOT tinted: its `__c` suffix is SetFrameAttr's
@@ -100,12 +100,12 @@ namespace Dark_Cloud_Improved_Version
             // An explicitly named frame wins; otherwise derive it from the model code, which only works for a model
             // whose mesh frame is its root or a plain "wNN" child. A failure dumps the tree rather than going quiet:
             // the frame names are NOT guessable per weapon, which is exactly how the Big Bang tint failed silently.
-            uint nameWord = FrameWord != 0 ? FrameWord : Weapons.ResolveBladeFrame(ModelCode);
+            uint nameWord = FrameWord != 0 ? FrameWord : WeaponModelFrames.ResolveBladeFrame(ModelCode);
             if (nameWord == 0)
-            { WarnOnce($"no blade frame derived for '{ModelCode}' — dumping the model's frame tree:"); Weapons.DumpWeaponFrameTree(); return false; }
-            long nameAddr = Weapons.LocateModelFrame(nameWord, null);
+            { WarnOnce($"no blade frame derived for '{ModelCode}' — dumping the model's frame tree:"); WeaponModelFrames.DumpTree(); return false; }
+            long nameAddr = WeaponModelFrames.Locate(nameWord, null);
             if (nameAddr == 0)
-            { WarnOnce($"blade frame 0x{nameWord:X8} of '{ModelCode}' not in the model — dumping the model's frame tree:"); Weapons.DumpWeaponFrameTree(); return false; }
+            { WarnOnce($"blade frame 0x{nameWord:X8} of '{ModelCode}' not in the model — dumping the model's frame tree:"); WeaponModelFrames.DumpTree(); return false; }
             long node = nameAddr - CFrameVu1.Name;                               // the template name sits at node + 0x118
             uint vis = Memory.ReadGuestPtr(node + CFrameVu1.GeomPtr);
             if (!Memory.IsValidGuest(vis)) { WarnOnce("the blade frame has no visual"); return false; }
@@ -140,7 +140,7 @@ namespace Dark_Cloud_Improved_Version
             int wid = Player.Weapon.GetCurrentWeaponId();
             if (!_unlitArmed || wid != _unlitWeaponId)
             {
-                long nameAddr = Weapons.LocateModelFrame(UnlitWord, null);
+                long nameAddr = WeaponModelFrames.Locate(UnlitWord, null);
                 if (nameAddr == 0) { WarnOnce($"unlit mesh 0x{UnlitWord:X8} of '{ModelCode}' not in the model — the blade keeps its own colour"); return; }
                 _unlitNode = nameAddr - CFrameVu1.Name;
                 for (int i = 0; i < 3; i++) _unlitOrig[i] = Memory.ReadFloat(_unlitNode + CFrameVu1.UnlitColourR + i * 4);

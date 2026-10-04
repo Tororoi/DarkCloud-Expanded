@@ -19,19 +19,19 @@ namespace Dark_Cloud_Improved_Version
         public static Thread townThread = new Thread(new ThreadStart(TownCharacter.MainScript));
         public static Thread changesThread = new Thread(new ThreadStart(ApplyNewChanges));
         public static Thread dungeonthread = new Thread(new ThreadStart(Dungeon.InsideDungeonThread));
-        public static Thread weaponspecialeffectThread = new Thread(new ThreadStart(Weapons.RerollWeaponSpecialAttributes));
+        public static Thread weaponspecialeffectThread = new Thread(new ThreadStart(WeaponSpecialReroll.Run));
         public static Thread codeCaveScannerThread = new Thread(new ThreadStart(CodeCaveScanner.Run));
 
         internal static void ApplyNewChanges()
         {
-            Weapons.WeaponsBalanceChanges();
+            WeaponBalance.Apply();
             Shop.UpdateShopPrices();
             Enemies.EnableEnemyDrops();   // let the "can't drop" species (flyers, Gol/Sil) drop on death (static species-table patch)
             WeaponDescriptions.StartDescriptionPatcher();   // keep weapon menu descriptions = WeaponData.ModDescription
             MachoSword.ApplyAbsCodePatches();   // ABS rollover display patches (EE code; menu/HUD code is still cold here)
             Mirage.ArmColdPatch();   // Ungaga's Mirage: host clean _GET_POSITION + _GET_DISTANCE in cold-PINE caves (per-slot target)
-            AngelGear.ArmBlockPatch();   // Angel Gear shield: MoveCheck2's enemy-block addend becomes a data word (cold; enemy code never ran yet)
-            AngelGear.ArmShotPatch();    // Angel Gear shield: checkCollision's player position becomes a pointer (cold) — shots can collide with the pouch
+            ShieldPatches.ArmBlockPatch();   // Angel Gear shield: MoveCheck2's enemy-block addend becomes a data word (cold; enemy code never ran yet)
+            ShieldPatches.ArmShotPatch();    // Angel Gear shield: checkCollision's player position becomes a pointer (cold) — shots can collide with the pouch
             HarderEnemyAI.StartThread();   // "Harder enemy AI" toggle: enemies with a get-up motion can revive
             GameClock.Start();           // the play clock every dungeon feature times against
             Mirage.Start();   // Ungaga's Mirage: watches for charge-release, drives the decoy via data writes
@@ -40,11 +40,11 @@ namespace Dark_Cloud_Improved_Version
             ConfuseAbility.Start();   // the Confuse ability's procs, the confusion's ticks and the stars over the confused, on every floor
             //   ↑ shot effects borrowed for Xiao's abilities, entered on every floor; each ability names the one it wants
             SharedShots.Start();         // the monster shot pack's five slots shared among every config a floor needs (the cave does it; the mod arms and reports)
-            AngelGear.Start();   // Xiao's Angel Gear projectile reflect, Stage A (roadmap PR 7)
+            AngelGear.Start();   // Xiao's Angel Gear "Guardian Reflector": the reflector loop + melee hit watch for the life of the app (idle until the weapon or its sphere is live on a floor; the loop also retries the two cold patches above while not on one)
             CustomFishingSpot.InstallShallowLinePatch();   // COLD: rewrite FishLineStep's bobber anchor to read a data global (before any fishing JITs it)
             CustomFishingSpot.SeedFishCamHeight();   // the ISO-patched fishing SetHeight reads a data word EVERY town — seed it to vanilla 40 before any session
-            Weapons.SeedBombReaction();              // …and the item-bomb reaction word, read by every bomb blast
-            Weapons.SeedChargeHitRadii();            // …and the ISO-patched charge-attack radii, read on every charge swing
+            ExplosionImmunity.SeedBombReaction();              // …and the item-bomb reaction word, read by every bomb blast
+            ChargeHitRadii.Seed();            // …and the ISO-patched charge-attack radii, read on every charge swing
         }
 
         public static void CheckEmulatorAndGame()
@@ -225,16 +225,15 @@ namespace Dark_Cloud_Improved_Version
                                         changesThread = new Thread(() => ApplyNewChanges());
                                         townThread = new Thread(() => TownCharacter.MainScript());
                                         dungeonthread = new Thread(() => Dungeon.InsideDungeonThread());
-                                        weaponspecialeffectThread = new Thread(() => Weapons.RerollWeaponSpecialAttributes());
+                                        weaponspecialeffectThread = new Thread(() => WeaponSpecialReroll.Run());
                                         if (!changesThread.IsAlive) changesThread.Start();
                                         if (!townThread.IsAlive) townThread.Start();
                                         if (!dungeonthread.IsAlive) dungeonthread.Start();
                                         if (!weaponspecialeffectThread.IsAlive) weaponspecialeffectThread.Start();
                                         if (!codeCaveScannerThread.IsAlive) codeCaveScannerThread.Start(); //passive code-cave sweep, findings -> CodeCaveFindings.txt
 
-                                        // TEST hook: uncomment to hand a character a weapon on save load
-                                        // (Weapons.GiveWeaponIfMissing writes an empty slot at base stats).
-                                        // Weapons.GiveWeaponIfMissing(Player.RubyId, Items.mobiusring)
+                                        // TEST weapon grants: Dungeon/TestWeaponGrant.cs (behind DebugDiagnostics) hands a character a weapon
+                                        // through the game's own CDngStatusData::GetItem once a floor is walkable.
 
                                         CheckModWindowOptions(currentMode);
                                         ingameFlag = true;

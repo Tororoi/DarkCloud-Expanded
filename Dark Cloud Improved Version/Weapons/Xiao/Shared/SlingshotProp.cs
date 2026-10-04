@@ -666,10 +666,7 @@ namespace Dark_Cloud_Improved_Version
         private static uint TrackCaveGuest => (uint)(CodeCaves.MeshCaveGuest + CodeCaves.MeshCaveSize - TrackCaveSize);
         private static long KeyTableCave      => TrackCave + 0x800;          // top half of the TrackCave (tracks use < 0x800)
         private static uint KeyTableCaveGuest => TrackCaveGuest + 0x800;
-        /// <summary>20 × vec4 (x, height, y, w) — the shield ring's per-enemy "where the player is" positions,
-        /// referenced by the AI redirect pointer table (16-byte aligned: sceVu0CopyVector copies a quadword).</summary>
-        internal static long RingTable      => TrackCave + 0xC00;
-        internal static uint RingTableGuest => TrackCaveGuest + 0xC00;
+        // TrackCave + 0xC00 .. + 0xD40 is the Angel Gear's shield-ring position table (CodeCaves.ShieldRingTable): not free.
 
         /// <summary>Clone the weapon's track list into the TrackCave with every translate track's
         /// draw window rescaled to <see cref="_pull"/> units of travel. Returns the new head (guest) or 0.</summary>
