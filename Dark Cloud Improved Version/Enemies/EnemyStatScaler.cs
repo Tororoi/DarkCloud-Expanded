@@ -10,6 +10,7 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// SCOPE of each stat (important — some are per-slot, some are shared per species):
     ///   • <see cref="ScaleHp"/>       — per-SLOT (FloorSlot MaxHp/Hp). Affects only this enemy.
+    ///   • <see cref="ScaleAbs"/>      — per-SLOT (FloorSlot Abs, the kill reward).
     ///   • <see cref="ScaleDefense"/>  — per-SLOT (packed DefenseStats: DamageReduction + WeaponDefense).
     ///   • <see cref="ScaleMelee"/>    — per-SLOT (the cached _SET_DMG_PARA array latched at the enemy's init).
     ///   • <see cref="ScaleProjectile"/> — per-SPECIES (the shared loaded STB shot literal / BehaviorScriptTable
@@ -86,6 +87,19 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(b + EnemySlotOffsets.MaxHp, newMax);
             Memory.WriteInt(b + EnemySlotOffsets.Hp, newHp);
             if (Verbose) Console.WriteLine($"[StatScale]   slot {slot} HP: {curMax} -> {newMax} (×{factor:F2}); curHP {curHp} -> {newHp}");
+        }
+
+        // ── ABS (per-slot) ──────────────────────────────────────────────────────────────────────────────
+        /// <summary>Scale a slot's ABS reward (the slot's Abs int, granted on the kill).</summary>
+        internal static void ScaleAbs(int slot, float factor)
+        {
+            if (factor == 1f) return;
+            long b = EnemyAddresses.FloorSlots.SlotAddr(slot, 0);
+            int cur = Memory.ReadInt(b + EnemySlotOffsets.Abs);
+            if (cur <= 0) return;
+            int nv = ScaleRound(cur, factor);
+            Memory.WriteInt(b + EnemySlotOffsets.Abs, nv);
+            if (Verbose) Console.WriteLine($"[StatScale]   slot {slot} ABS: {cur} -> {nv} (×{factor:F2})");
         }
 
         // ── Defense (per-slot) ──────────────────────────────────────────────────────────────────────────
