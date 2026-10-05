@@ -37,7 +37,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The element (0..4, <see cref="None"/>) on the current character's equipped weapon: its record's HUD byte, the live
-        /// battle copy, the HUD tint, and Ruby's armlet texture (the Mailbox flag her weapon thread watches).</summary>
+        /// battle copy and the HUD tint.</summary>
         internal static void Apply(int element)
         {
             int character = Player.CurrentCharacterNum();
@@ -45,7 +45,6 @@ namespace Dark_Cloud_Improved_Version
             byte slot = Memory.ReadByte(WeaponHave.InventoryEquipSlotAddr + character);
             Memory.WriteByte(WeaponRecord.Address(owner, slot, WeaponRecord.ElementHud), (byte)element);
             Memory.WriteByte(WeaponHave.BattleWeaponRecord + WeaponRecord.ElementHud, (byte)element);
-            if (character == Player.RubyId) Memory.WriteByte(Mailbox.Element, 1);
             Memory.WriteByteArray(HudTint, HudTints[element]);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"element set to {Names[element]} (character {character}, slot {slot})");
         }

@@ -248,10 +248,23 @@ pre_skip:
     jr    $ra
     nop
 
-# ── close: CharaChangeLoop's first `jal MenuTextureReload` on the way out (0x228DD4): the picker flag drops with the menu. ──
+# ── close: CharaChangeLoop's first `jal MenuTextureReload` on the way out (0x228DD4): the picker flag drops with the menu; when the
+#    picker closes on Ruby, element_menu_ruby.s reloads her shot effect first (0x27D270, SmoothRestCave.ElementMenuRuby). ──
 close:
     lui   $t0, 0x01FB
+    lw    $t1, -0x0B20($t0)
     sw    $zero, -0x0B20($t0)
+    beq   $t1, $zero, close_plain
+    nop
+    lui   $t2, 0x002A
+    lw    $t2, 0x2F80($t2)         # ChangeStatusDataPt
+    lb    $t2, 4($t2)              # cur_chara
+    addiu $t3, $zero, 3
+    beq   $t2, $t3, close_ruby
+    nop
+close_plain:
     j     0x0022D0E0
     nop
-
+close_ruby:
+    j     0x0027D270
+    nop

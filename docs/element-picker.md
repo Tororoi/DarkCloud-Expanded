@@ -14,7 +14,8 @@ alone. **X** applies the highlighted element and closes the menu; **Circle** lea
 | `ElfElementMenuPatches` | five main-ELF sites, one word each | `jal` into the caves |
 | `DunPatches` | overlay `MoveChara` 0x1DB14A8 / 0x1DB14C0 | the SELECT read → the trigger cave; `slti …,2` → `slti …,1` on the party size |
 | `ElementMenuIconBake` (post-bake `element-menu-icon`) | `commenu\a_usa\quickchr.pac` → `quickchr.img` → `wepicon` | the None cell: cell 125 (dummy item 86) ← a grey copy of the synth sphere's cell 129 |
-| `Dungeon/ElementMenu.cs` | mod, once a dungeon tick | applies a confirmed pick: the weapon record's HUD element byte, the HUD tint, Ruby's armlet refresh |
+| `Dungeon/ElementMenu.cs` | mod, once a dungeon tick | applies a confirmed pick: the weapon record's HUD element byte and the HUD tint |
+| `tools/stubs/element_menu_ruby.s` | main ELF, the SmoothRest body (0x27D270) | Ruby's shot effect reloaded for the new element when the picker closes on her (the close cave jumps here) |
 
 Runtime words (`CodeCaves`, the runtime-data span): `ElementMenuMode` 0x01FAF4E0 (1 from an Up opening until the menu closes),
 `ElementMenuPick` 0x01FAF4E4 (confirmed element + 1; the mod zeroes it), `ElementMenuTex` 0x01FAF4E8 (the `wepicon` CTexture, looked
@@ -41,7 +42,12 @@ overlay). `ChangeMenu` is at 0x01DA8D30: +0 `selected`, +2 `party_size`, +3 `ste
   pack holds `quickchara` and `wepicon`; the attachment icons sit from cell 120 = `ComItemInfo.icon_index` + 87), the source
   rect is cell 120 + `ElementMenuMap[s2]` (`u = element*32, v = 480`, 32×32 — the stones of items 81..85, then the baked None
   at cell 125), the destination the 48 px cell's centre, full shade.
-- **close** (`CharaChangeLoop`'s first `jal MenuTextureReload` on the way out): clears `ElementMenuMode`.
+- **close** (`CharaChangeLoop`'s first `jal MenuTextureReload` on the way out): clears `ElementMenuMode`; when the picker closes on
+  Ruby it jumps to `element_menu_ruby.s`, which does what the dungeon's character load does for her shot — `Get_Main_EffectPtr(3,
+  element)` (overlay 0x1DBA060), the path through `sprintf`, a synchronous `LoadFile` into `read_buffer`, `wait_now_loading_vsync`,
+  `MainChara_Effect` (overlay 0x1DBA230) — then `MenuTextureReload`. Her armlet's shot is a different effect model per element;
+  the PNACH's reload (`Mailbox.Element` → `DngWepEffectReadStart` + `MenuWeaponEffectSet` in the vsync wait) left the shot
+  invisible from this context even when sent after play resumed.
 - **valid** (the element test, run by start): a stone needs a non-zero amount at 0x01EA75A7+element; None is barred when
   `ChangeStatusDataPt->cur_chara` is 3 (Ruby) or 5 with the machine-gun word 0x01DC4520 set.
 

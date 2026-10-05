@@ -181,5 +181,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/bait_keep.s (ElfFishingPatches.PatchBaitKeep): EdMoveChara's two bait-loss rolls call <c>rand()</c>
         /// through here; 99 comes back while CodeCaves.BaitKeep is non-zero, so neither roll passes and the bait stays.</summary>
         internal const uint BaitKeep     = 0x0027D230;   // 60 B → 0x27D26C
+        /// <summary>tools/stubs/element_menu_ruby.s (ElfElementMenuPatches): the element picker's close cave jumps here when the leader
+        /// is Ruby — her shot effect reloaded for the new element, then MenuTextureReload as the hooked call would have been.</summary>
+        internal const uint ElementMenuRuby = 0x0027D270;   // 136 B → 0x27D2F8
+        internal const uint End          = 0x0027D49C;
     }
 }

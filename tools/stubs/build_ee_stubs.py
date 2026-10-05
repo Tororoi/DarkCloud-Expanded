@@ -69,7 +69,8 @@ STUBS = [
     ('confuse_proc.s',           'confuseProc.bin',          0x22B248),    # main ELF: dead DebugItemGetKey's body — the Confuse ability's on-hit roll (ElfWeaponPatches.PatchConfuseProc)
     ('follow.s',                 'follow.bin',               0x1B4690),    # main ELF: DebugInfomationDraw's free tail (ElfWeaponPatches.PatchFollow): a point carried with a unit
     ('bait_keep.s',              'baitKeep.bin',             0x27D230),
-    ('element_menu.s',           'elementMenu.bin',          0x22B410, 'elementMenuTail.bin', 0x22B5B8),   # main ELF: dead DebugItemGetKey tail (hooks) + DebugItemGetDraw body (sheet name, draw, cell test) — the quick-change menu as element picker (ElfElementMenuPatches)    # main ELF: dead SmoothRest body after the camera-height cave (ElfFishingPatches.PatchBaitKeep): the Poisonous Apple stays on the hook
+    ('element_menu.s',           'elementMenu.bin',          0x22B410, 'elementMenuTail.bin', 0x22B5B8),
+    ('element_menu_ruby.s',      'elementMenuRuby.bin',      0x27D270),    # main ELF: dead SmoothRest body after the bait keep (ElfElementMenuPatches): Ruby's shot effect reloaded when the picker closes on her   # main ELF: dead DebugItemGetKey tail (hooks) + DebugItemGetDraw body (sheet name, draw, cell test) — the quick-change menu as element picker (ElfElementMenuPatches)    # main ELF: dead SmoothRest body after the camera-height cave (ElfFishingPatches.PatchBaitKeep): the Poisonous Apple stays on the hook
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]
