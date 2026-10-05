@@ -297,11 +297,12 @@ namespace Dark_Cloud_Improved_Version
         internal const long BaitKeep      = 0x21FAF4D0;
         internal const uint BaitKeepGuest = 0x01FAF4D0;
         /// <summary>The dungeon quick-change menu as the weapon's element picker (tools/stubs/element_menu.s, ElfElementMenuPatches):
-        /// Mode is 1 from a D-pad UP opening until the menu closes; Pick is the confirmed cell + 1 (1..5 the stones, 6 None),
-        /// which <see cref="ElementMenu"/> applies and zeroes; Tex caches the wepicon sheet for one opening.</summary>
-        internal const long ElementMenuMode = 0x21FAF4E0, ElementMenuPick = 0x21FAF4E4, ElementMenuTex = 0x21FAF4E8;
+        /// Mode is 1 from a D-pad UP opening until the menu closes; Pick is the confirmed element + 1 (1..5 the stones, 6 None),
+        /// which <see cref="ElementMenu"/> applies and zeroes; Tex caches the wepicon sheet for one opening; Map (up to six bytes) is
+        /// the elements the ring offers, in ring order.</summary>
+        internal const long ElementMenuMode = 0x21FAF4E0, ElementMenuPick = 0x21FAF4E4, ElementMenuTex = 0x21FAF4E8, ElementMenuMap = 0x21FAF4EC;
         internal const uint ElementMenuModeGuest = 0x01FAF4E0;
-        // 0x21FAF4F0..0x21FAF830 FREE
+        // 0x21FAF500..0x21FAF830 FREE
 
         /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
         /// <c>ElfToanMeleePatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's

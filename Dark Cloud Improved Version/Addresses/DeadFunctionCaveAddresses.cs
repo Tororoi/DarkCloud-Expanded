@@ -162,15 +162,13 @@ namespace Dark_Cloud_Improved_Version
         internal const uint StarsStep = Host + 0xC0;      // 0x22B300, 144 B → 0x22B390 (the construct check + the gate)
         internal const uint StarsDraw = Host + 0x160;     // 0x22B3A0, 112 B → 0x22B410 (the Key host ends at 0x22B5B0)
         /// <summary>tools/stubs/element_menu.s (ElfElementMenuPatches): the dungeon quick-change menu as the weapon's element picker.
-        /// The HEAD holds the hook caves — trig (the overlay's SELECT read, +0), xkey (+0x58), pre (+0xF8), start (+0x118), close (+0x160).</summary>
-        internal const uint ElementMenuHead  = Host + 0x1D0;      // 0x22B410, 368 B → 0x22B580 (the Key host ends at 0x22B5B0)
-        internal const uint ElementMenuTrig  = ElementMenuHead,          ElementMenuXKey  = ElementMenuHead + 0x58,
-                            ElementMenuPre   = ElementMenuHead + 0xF8,   ElementMenuStart = ElementMenuHead + 0x118,
-                            ElementMenuClose = ElementMenuHead + 0x160;
-        /// <summary>…and its TAIL in the Draw host after the claimed `jr ra; nop`: the "wepicon" name (+0), the draw cave (+0xC) and
-        /// the cell test.</summary>
-        internal const uint ElementMenuSheetName = DrawHost + 0x8;    // 0x22B5B8, 348 B → 0x22B714 (the Draw host ends at 0x22B7B4)
-        internal const uint ElementMenuDraw      = DrawHost + 0x14;   // 0x22B5C4
+        /// The HEAD holds trig (the overlay's SELECT read, +0), xkey (+0x58) and start (+0xD4).</summary>
+        internal const uint ElementMenuHead  = Host + 0x1D0;      // 0x22B410, 400 B → 0x22B5A0 (the Key host ends at 0x22B5B0)
+        internal const uint ElementMenuTrig  = ElementMenuHead, ElementMenuXKey = ElementMenuHead + 0x58, ElementMenuStart = ElementMenuHead + 0xD4;
+        /// <summary>…and its TAIL in the Draw host after the claimed `jr ra; nop`: the "wepicon" name (+0), the draw cave (+0xC), the
+        /// element test, pre (+0x14C) and close (+0x16C).</summary>
+        internal const uint ElementMenuSheetName = DrawHost + 0x8;    // 0x22B5B8, 380 B → 0x22B734 (the Draw host ends at 0x22B7B4)
+        internal const uint ElementMenuDraw  = DrawHost + 0x14, ElementMenuPre = ElementMenuSheetName + 0x14C, ElementMenuClose = ElementMenuSheetName + 0x16C;
         internal const uint DrawHostEnd          = DrawHost + 516;
     }
 

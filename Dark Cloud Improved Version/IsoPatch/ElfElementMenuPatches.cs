@@ -8,9 +8,9 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// The dungeon quick-change menu (SELECT) doubling as the weapon's element picker when opened with D-pad UP: the same ring, six
-    /// cells — the five element stones and None — read from the `wepicon` sheet the menu's own pack loads; X on a cell sets the live weapon's
-    /// element, records the pick for <see cref="ElementMenu"/> and closes the menu the way a character change does; Circle leaves.
-    /// Cells the weapon has no amount of (and None for Ruby and Osmond's machine gun) draw dim and refuse.
+    /// cells for the elements the weapon carries (and None, except for Ruby and Osmond's machine gun) — read from the `wepicon` sheet
+    /// the menu's own pack loads, as the character ring shows only the party; X on a cell sets the live weapon's element, records the
+    /// pick for <see cref="ElementMenu"/> and closes the menu the way a character change does; Circle leaves.
     ///
     /// The code is tools/stubs/element_menu.s in the two dead DebugItemGet bodies (<see cref="DebugItemCave"/>); the five main-ELF
     /// sites below each lose one `jal`/`lb` to it, and DunPatches points the overlay's SELECT read at the trigger cave and relaxes its
@@ -28,11 +28,13 @@ namespace Dark_Cloud_Improved_Version
         internal static void PatchElementMenu(FileStream fs, Func<uint, long> ElfOff)
         {
             byte[] head = Embedded("elementMenu.bin"), tail = Embedded("elementMenuTail.bin");
-            if (head.Length == 0 || (head.Length & 3) != 0 || U32(head, 0) != 0x27BDFFF0 || U32(head, 0x58) != 0x27BDFFF0
-                || U32(head, 0xF8) != 0x3C0801FB || U32(head, 0x118) != 0x80420005 || U32(head, 0x160) != 0x3C0801FB)
+            uint H = DebugItemCave.ElementMenuHead, T = DebugItemCave.ElementMenuSheetName;
+            if (head.Length == 0 || (head.Length & 3) != 0 || U32(head, 0) != 0x27BDFFF0 || U32(head, (int)(DebugItemCave.ElementMenuXKey - H)) != 0x27BDFFF0
+                || U32(head, (int)(DebugItemCave.ElementMenuStart - H)) != 0x80420005)
                 throw new IOException($"elementMenu.bin malformed ({head.Length} B) or its caves moved — reassemble element_menu.s and check DebugItemCave.ElementMenu*.");
-            if (tail.Length == 0 || (tail.Length & 3) != 0 || U32(tail, 0) != 0x69706577 || U32(tail, 0xC) != 0x3C0B01FB)
-                throw new IOException($"elementMenuTail.bin malformed ({tail.Length} B) — reassemble element_menu.s.");
+            if (tail.Length == 0 || (tail.Length & 3) != 0 || U32(tail, 0) != 0x69706577 || U32(tail, (int)(DebugItemCave.ElementMenuDraw - T)) != 0x3C0B01FB
+                || U32(tail, (int)(DebugItemCave.ElementMenuPre - T)) != 0x3C0801FB || U32(tail, (int)(DebugItemCave.ElementMenuClose - T)) != 0x3C0801FB)
+                throw new IOException($"elementMenuTail.bin malformed ({tail.Length} B) or its caves moved — reassemble element_menu.s and check DebugItemCave.ElementMenu*.");
             WriteBytes(fs, ElfOff, DebugItemCave.ElementMenuHead, head, DebugItemCave.DrawHost, "elementMenu.bin overruns the DebugItemGetKey body");
             WriteBytes(fs, ElfOff, DebugItemCave.ElementMenuSheetName, tail, DebugItemCave.DrawHostEnd, "elementMenuTail.bin overruns the DebugItemGetDraw body");
             ReplaceWord(fs, ElfOff, KeyXSite,   KeyXVanilla,   Jal(DebugItemCave.ElementMenuXKey),  "the quick-change menu's X read");
