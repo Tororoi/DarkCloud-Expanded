@@ -28,6 +28,12 @@
     <EmbeddedResource Include="Resources\isoPatch\baitKeep.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.baitKeep.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\elementMenu.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.elementMenu.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\elementMenuTail.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.elementMenuTail.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\stiltsHeal.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.stiltsHeal.bin</LogicalName>
     </EmbeddedResource>

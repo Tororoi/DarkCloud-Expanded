@@ -105,6 +105,7 @@ namespace Dark_Cloud_Improved_Version
             PatchFishLineSplit(fs, ElfOff);               // fishing rope: per-segment rest length (distpAbove/distpBelow) split at anchor 18
             PatchStiltsHeal(fs, ElfOff);
             PatchBaitKeep(fs, ElfOff);                    // Blessed Bait: the two bait-loss rolls fail while CodeCaves.BaitKeep is set (a Blessing Gun owned)
+            ElfElementMenuPatches.PatchElementMenu(fs, ElfOff);   // the dungeon quick-change menu as the weapon's element picker on D-pad UP (the overlay hooks are in DunPatches)
                   // Brownboo stilts: re-upload scene bank 1 after FishLineDraw, before the waterside redraw (v4; chains the water-redraw jal)
             PatchCatPelletFollow(fs, ElfOff);             // Divine Beast cat: native pellet follower cave (the dun.bin hook is in DunPatches)
             PatchXiaoMeleeFlinch(fs, ElfOff);             // Divine Beast cat: its melee-type hits may stagger (dun.bin hook in DunPatches)
