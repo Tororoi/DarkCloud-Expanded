@@ -37,6 +37,11 @@ namespace Dark_Cloud_Improved_Version
             // `jal cave; li a0,0x40` — the cave scales the move vector for motion 33 and tail-jumps into the check.
             new(0x01DB0F68, 0x24040040, MipsAsm.Jal(DebugInfoCave.StrideScale), "stride: move-vector hook (jal cave)"),
             new(0x01DB0F6C, 0x0C06C64C, 0x24040040, "stride: the displaced li a0,0x40 in the delay slot"),
+            // The quick-change menu's opening (ElfElementMenuPatches): MoveChara's `jal Down(SELECT)` → the trigger cave, which also
+            // answers to D-pad UP and raises CodeCaves.ElementMenuMode for it; and its `slti v0,v0,2` on the party size becomes
+            // `slti v0,v0,1`, so the picker opens for a lone Toan (the character menu then shows him alone).
+            new(0x01DB14A8, 0x0C04AE1C, MipsAsm.Jal(DebugItemCave.ElementMenuTrig), "element picker: the SELECT read → the trigger cave (jal)"),
+            new(0x01DB14C0, 0x28420002, 0x28420001, "element picker: the quick-change menu opens with a party of one"),
             // Passive HEAL ability (weapon flag 0x800) cadence: heal tick compares its frame counter with
             // `slti v0,v0,0xF0` (240 f = 4 s, dun 0x1DB8234); 0xB4 = 180 f = 3 s for every HEAL weapon.
             // Guardian Grace reads the threshold from this word and floors the counter while Xiao guards.

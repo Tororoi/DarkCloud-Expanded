@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using static Dark_Cloud_Improved_Version.IsoBytes;
 
@@ -42,6 +43,17 @@ namespace Dark_Cloud_Improved_Version
 
         private long Slot(int i) => _hd2Base + (long)i * 32;
         private long SlotOf(string name) => Slot(ArchiveFind(_hed, name));
+
+        /// <summary>Every file name in DATA.HED, in slot order (backslash paths as the index spells them).</summary>
+        internal IEnumerable<string> Names()
+        {
+            for (int i = 0; i < _hed.Length / 80; i++)
+            {
+                int end = Array.IndexOf(_hed, (byte)0, i * 80, 80);
+                if (end < 0) end = i * 80 + 80;
+                if (end > i * 80) yield return System.Text.Encoding.Latin1.GetString(_hed, i * 80, end - i * 80);
+            }
+        }
 
         internal byte[] Read(string name)
         {

@@ -17,8 +17,7 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// Owning them (Xiao's bag or the storage) is a passive for fishing: every bait's notice radius — the distance at which a
     /// fish turns toward the hook, copied from <see cref="BaitDetectionRadiusTable"/> into each fish every frame — is
-    /// <see cref="BaitNoticeBonus"/> units more per Flamingo owned, up to <see cref="BaitNoticeMaxOwned"/> of them, the bare
-    /// hook's too. The table is written at each fishing session's start (<see cref="Fishing.OnSessionStart"/>): the game's
+    /// <see cref="BaitNoticeBonus"/> units more per Flamingo owned, up to <see cref="BaitNoticeMaxOwned"/> of them. The table is written at each fishing session's start (<see cref="Fishing.OnSessionStart"/>): the game's
     /// figures plus the bonus, or the game's figures alone when none is owned (the table keeps whatever was last written).
     /// </summary>
     internal static class Flamingo
@@ -65,13 +64,14 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The bait notice table for this fishing session: each entry's own figure, plus the bonus per Flamingo owned
         /// (up to <see cref="BaitNoticeMaxOwned"/>).</summary>
-        internal static void ApplyBaitBonus()
+        internal static float ApplyBaitBonus()
         {
             int owned = Math.Min(Owned(), BaitNoticeMaxOwned);
             float bonus = owned * BaitNoticeBonus;
             foreach (var bait in BaitDetectionRadiusTable.All)
                 Memory.WriteFloat(bait.Radius, bait.DefaultRadius + bonus);
             if (owned > 0) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{owned} owned: every bait notices from {bonus:F0} units further this session");
+            return bonus;
         }
 
         /// <summary>The weapon or the floor went: Xiao's vanilla factor back.</summary>

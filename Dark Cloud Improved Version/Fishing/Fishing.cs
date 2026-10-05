@@ -62,7 +62,8 @@ namespace Dark_Cloud_Improved_Version
             questActive.Clear();
             TakeBagSnapshot();
             CheckMardanSword();
-            Flamingo.ApplyBaitBonus();   // the bait notice table: +10 units on every bait per Flamingo owned, up to three
+            float baitBonus = Flamingo.ApplyBaitBonus();   // the bait notice table: +10 units on every bait per Flamingo owned, up to three
+            Scorpion.ApplyBaitPassive(baitBonus);         // Venom Lure: the Poisonous Apple's radius doubled on top
             if (FishingAreas.TryGetValue(_fishingAreaId, out AreaFishData areaData) && ResolveLiveSlotBase(ref areaData))
             {
                 InitSlots(areaData);
@@ -108,6 +109,7 @@ namespace Dark_Cloud_Improved_Version
             UpdateFishRecordsAndAriseBonus("session-end");
             FishDataFarmer.OnSessionEnded();
             FishPhaseLogger.OnSessionEnd();
+            BlessingGun.FishingReset();
         }
 
         // ---- Per-tick entry point ----
@@ -177,6 +179,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void OnFishingTick()
         {
             ProcessPendingRecordUpdate();
+            BlessingGun.FishingTick();
             if (_fishingAreaId == -1) return;
             if (!FishingAreas.TryGetValue(_fishingAreaId, out AreaFishData areaData)) return;
             if (!ResolveLiveSlotBase(ref areaData)) return;   // custom area: CFish not ready yet this tick

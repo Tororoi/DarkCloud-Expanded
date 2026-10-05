@@ -67,6 +67,9 @@ namespace Dark_Cloud_Improved_Version
         static int currentArea;
         static int buildingCheck;
         static int currentInGameDay = 0;
+        /// <summary>The villager the player stands next to and what it offers (QuestOffers); the talk menu is written for it.</summary>
+        static int nearNpcId = 0;
+        static QuestOffer nearOffer = QuestOffer.None;
         static Thread characterNamesFixThread = new Thread(() => Dialogues.FixCharacterNamesInDialogues());
 
         //The following comments are for various flags that we utilize within unused game memory
@@ -92,7 +95,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteByte(0x21D33E30, 3);
             }
 
-            if (Memory.ReadInt(0x2029AA0E) != 1680945251)   //If not using Toan, force any house event to be cancelled
+            if (AllySwapPrototype.CurrentAlly != 0)   //an ally is the town character (the in-place swap tracks who): force any house event to be cancelled
             {
                 isUsingAlly = true;
                 currentHouseID = Memory.ReadByte(0x202A2820);
@@ -219,6 +222,7 @@ namespace Dark_Cloud_Improved_Version
                         if (nearNPC == false || onDialogueFlag == 1)
                         {
                             Dialogues.SetDialogue(i, true, false);
+                            NearNpc(i);
                             if (TownCharacter.talkableNPC != false) //check if NPC is not llama
                             {
                                 Memory.WriteByte(Mailbox.NearNpc, 1); //nearNPC flag for PNACH to use
@@ -235,6 +239,7 @@ namespace Dark_Cloud_Improved_Version
                     nearNPC = false;
                     Memory.WriteByte(Mailbox.NearNpc, 0); //nearNPC flag for PNACH to use
                     onDialogueFlag = 0;
+                    NearNobody();
                 }
                 }
 
@@ -378,25 +383,16 @@ namespace Dark_Cloud_Improved_Version
                     {
                         if (Memory.ReadByte(Mailbox.InsideMayor) == 1)
                         {
-                            Memory.WriteInt(0x21D3D438, TownCharacter.sidequestDialogueID);
+                            if (nearOffer.Phase == QuestPhase.Ongoing) Memory.WriteInt(0x21D3D438, TownCharacter.sidequestDialogueID);   // the quest line
                         }
                         else
                         {
-                            Memory.WriteInt(0x21D3D440, TownCharacter.sidequestDialogueID); //THIS IS USED FOR POSSIBLE 4TH DIALOGUE OPTION (sidequests)
+                            if (nearOffer.Phase == QuestPhase.Ongoing) Memory.WriteInt(0x21D3D440, TownCharacter.sidequestDialogueID);   // the quest line
                             Memory.WriteInt(0x21D3D43C, TownCharacter.itsfinishedDialogueID); //its finished dialogue ID setup
                         }
                         SetSideQuestDialogue();
                         SetItsFinishedDialogue();
-
-                        if (Memory.ReadUShort(0x21D1CC0C) == TownCharacter.sidequestDialogueID && isSideQuestDialogueActive == false)
-                        {
-                            CheckSideQuestDialogue();
-                            isSideQuestDialogueActive = true;
-                        }
-                        else if (Memory.ReadUShort(0x21D1CC0C) != TownCharacter.sidequestDialogueID)
-                        {
-                            isSideQuestDialogueActive = false;
-                        }
+                        RouteQuestDialogue();
                     }
                     else
                     {
@@ -417,6 +413,13 @@ namespace Dark_Cloud_Improved_Version
                 currentArea = Memory.ReadByte(0x202A2518);
                 if (currentArea == 0 || currentArea == 1 || currentArea == 2 || currentArea == 3)
                 {
+                    if (!TownDialogueSuspended())
+                    {
+                        int near = -1;
+                        for (int i = 0; i < 6 && near < 0; i++)
+                            if (Memory.ReadByte(i * 0x14A0 + 0x21D26FF8) == 1) near = i;
+                        if (near >= 0) NearNpc(near); else NearNobody();
+                    }
                     if (sidequestOptionFlag == false && Memory.ReadByte(0x21D1CC0C) == 11)
                     {
                         sidequestOptionFlag = true;
@@ -427,25 +430,12 @@ namespace Dark_Cloud_Improved_Version
                     }
                     if (sidequestOptionFlag == true)
                     {
-                        if (Memory.ReadByte(Mailbox.InsideMayor) == 1)
-                        {
-                            Memory.WriteInt(0x21D3D438, TownCharacter.sidequestDialogueID);
-                        }
-                        else
-                        {
-                            Memory.WriteInt(0x21D3D440, TownCharacter.sidequestDialogueID); //THIS IS USED FOR POSSIBLE 4TH DIALOGUE OPTION (sidequests)
-                        }
+                        if (nearOffer.Phase == QuestPhase.Available)
+                            Memory.WriteInt(0x21D3D434, TownCharacter.sidequestDialogueID);   // "Hello" opens the quest on offer
+                        else if (nearOffer.Phase == QuestPhase.Ongoing)
+                            Memory.WriteInt(Memory.ReadByte(Mailbox.InsideMayor) == 1 ? 0x21D3D438 : 0x21D3D440, TownCharacter.sidequestDialogueID);   // the quest line
                         SetSideQuestDialogue();
-
-                        if (Memory.ReadUShort(0x21D1CC0C) == TownCharacter.sidequestDialogueID && isSideQuestDialogueActive == false)
-                        {
-                            CheckSideQuestDialogue();
-                            isSideQuestDialogueActive = true;
-                        }
-                        else if (Memory.ReadUShort(0x21D1CC0C) != TownCharacter.sidequestDialogueID)
-                        {
-                            isSideQuestDialogueActive = false;
-                        }
+                        RouteQuestDialogue();
                     }
                     else
                     {
@@ -605,7 +595,7 @@ namespace Dark_Cloud_Improved_Version
             if ((buildingCheck == 0 && checkBuildingFlag == true) || areaChanged == true) //check if player is not inside a house
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "Currently in outside area");
-                Dialogues.SetDialogueOptions(currentArea, false);
+                Dialogues.SetDialogueOptions(currentArea, false, nearOffer);
                 Dialogues.SetStorageDialogue(currentArea, false);
                 checkBuildingFlag = false;
                 CheckAllyFishing();
@@ -616,7 +606,7 @@ namespace Dark_Cloud_Improved_Version
                 if (currentArea != 23)
                 {
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "Currently inside building");
-                    Dialogues.SetDialogueOptions(currentArea, true);
+                    Dialogues.SetDialogueOptions(currentArea, true, nearOffer);
                     Dialogues.SetStorageDialogue(currentArea, true);
                     checkBuildingFlag = true;
 
@@ -633,7 +623,7 @@ namespace Dark_Cloud_Improved_Version
                     if (Memory.ReadByte(0x21D26FD4) == 0 || Memory.ReadByte(0x21D26FD4) == 1)
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "Currently inside building");
-                        Dialogues.SetDialogueOptions(currentArea, true);
+                        Dialogues.SetDialogueOptions(currentArea, true, nearOffer);
                         Dialogues.SetStorageDialogue(currentArea, true);
                         checkBuildingFlag = true;
                     }
@@ -730,9 +720,49 @@ namespace Dark_Cloud_Improved_Version
         }
 
 
+        /// <summary>Villager slot <paramref name="i"/> is the one the player is next to: note it and its quest offer, and give the
+        /// talk menu that NPC's lines (the quest line only while its quest is ongoing).</summary>
+        static void NearNpc(int i)
+        {
+            int id = Memory.ReadShort(i * 0x14A0 + 0x21D26FD9);
+            QuestOffer offer = QuestOffers.For(currentArea, id);
+            if (id == nearNpcId && offer.SameAs(nearOffer)) return;
+            nearNpcId = id; nearOffer = offer;
+            Dialogues.SetDialogueOptions(currentArea, Memory.ReadByte(0x202A281C) == 1, offer);
+        }
+
+        /// <summary>Nobody next to the player: the talk menu back to its plain lines.</summary>
+        static void NearNobody()
+        {
+            if (nearNpcId == 0) return;
+            nearNpcId = 0; nearOffer = QuestOffer.None;
+            Dialogues.SetDialogueOptions(currentArea, Memory.ReadByte(0x202A281C) == 1, QuestOffer.None);
+        }
+
+        /// <summary>The quest dialogue is on screen: the quest line's message, or — a quest on offer to an ally — the greeting.</summary>
+        static bool QuestDialogueShown()
+        {
+            int shown = Memory.ReadUShort(0x21D1CC0C);
+            if (shown == TownCharacter.sidequestDialogueID) return true;
+            return isUsingAlly && nearOffer.Phase == QuestPhase.Available && shown == townDialogueIDs[currentArea];
+        }
+
+        /// <summary>Runs the quest state step once per showing of the quest dialogue.</summary>
+        static void RouteQuestDialogue()
+        {
+            if (QuestDialogueShown())
+            {
+                if (isSideQuestDialogueActive) return;
+                CheckSideQuestDialogue();
+                isSideQuestDialogueActive = true;
+            }
+            else isSideQuestDialogueActive = false;
+        }
+
         public static void SetSideQuestDialogue()
         {
             if (TownDialogueSuspended()) return;    // villager buffer may be freed during a fishing session
+            if (isUsingAlly && nearOffer.Phase == QuestPhase.Available) { sidequestonDialogueFlag = 1; return; }   // the intro is the greeting's text already
             int checkNearNPC = 0;
             for (int i = 0; i < 6; i++)     //check if player is next to a character. If so, jumps to SetDialogue() and writes the dialogues
             {

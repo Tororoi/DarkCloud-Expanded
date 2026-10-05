@@ -51,6 +51,11 @@ namespace Dark_Cloud_Improved_Version
             // cfg record the pack's loader asks for by name appended; the sources untouched.
             new() { Name = "borrowed-shots",   Progress = "Baking borrowed shot effects …",                 Run = BorrowedShotBakes.Run },
             new() { Name = "confuse-ability",  Progress = "Baking the Confuse ability's name and icon …",   Run = ConfuseAbilityBakes.Run }, // the name (system banks) and icon (charaface)
+            // Spelling fixes to the English text, in place in every English bank — last, so it edits the banks as the steps above
+            // leave them (the system banks' appended Confuse name, the relocated item notices).
+            new() { Name = "text-fixes",       Progress = "Fixing the game's spelling …",                   Run = MesTextFixes.Run },
+            // The element picker's None cell (a grey synth sphere) in the quick-change menu's own icon sheet.
+            new() { Name = "element-menu-icon", Progress = "Baking the element picker's None cell …",        Run = ElementMenuIconBake.Run },
         };
 
         internal static Step Find(string name) => Steps.FirstOrDefault(s => s.Name == name);

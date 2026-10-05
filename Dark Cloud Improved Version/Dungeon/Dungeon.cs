@@ -52,7 +52,6 @@ namespace Dark_Cloud_Improved_Version
         public static Thread miniBossMessage;
 
         //Weapon threads, only 1 should run at a time
-        public static Thread elementSwapThread = new Thread(new ThreadStart(DayRandomizers.ElementSwapping)); //Create a new thread to run monitorElementSwapping()
         public static Thread dunEscapeConfirmThread;
 
         public static Thread cheatCodeThread = new Thread(new ThreadStart(CheatCodes.InputBuffer.Monitor));
@@ -81,8 +80,6 @@ namespace Dark_Cloud_Improved_Version
         public static void InsideDungeonThread()
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Dungeon Thread Activated");
-            elementSwapThread = new Thread(new ThreadStart(DayRandomizers.ElementSwapping));
-            elementSwapThread.Start();
             if (!cheatCodeThread.IsAlive)
             {
                 cheatCodeThread = new Thread(new ThreadStart(CheatCodes.InputBuffer.Monitor));
@@ -112,6 +109,8 @@ namespace Dark_Cloud_Improved_Version
                 if (Player.InDungeonFloor())
                 {
                     WeaponThreads.LaunchCurses();
+                    ElementMenu.Tick();                    // the quick-change menu's element pick (D-pad UP), applied to the weapon record and HUD
+                    EnemyPoisonDuration.Tick();            // enemy poison ends after status susceptibility × 2 s (the engine's never does)
 
                     // Enemies.PollEnemyDynamics();
                     // Enemies.MonitorFlashTimer();
@@ -170,6 +169,7 @@ namespace Dark_Cloud_Improved_Version
                             dunUsedActiveEscape = false;
                             dunUsedEscapeCheck = false;
                             hasClearMessageShown = false;
+                            EnemyPoisonDuration.Reset();
                             MiniBoss.miniBossRolled = false;
                             MiniBossLootTables.CancelPendingBoost();
                             normalFloorSnapshot = null;

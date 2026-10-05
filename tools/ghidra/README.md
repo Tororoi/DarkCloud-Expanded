@@ -26,3 +26,5 @@ the **ghidra-emotionengine-reloaded** extension (`r5900:LE:32:default`) fixes th
 - `ApplySymbols.java`  — Ghidra postScript: name+disassemble dun.bin funcs from symbols.txt
 - `DumpDecomp.java`    — Ghidra postScript: decompile a comma-separated name list to a file
 - `decompile.sh`       — wrapper around analyzeHeadless for both images
+- `listing.sh`         — instruction listing (addr, bytes, mnemonic) of one function, main or dun: `./listing.sh main "CharaChangeKey__Fv"` → /tmp/listing_<img>_<fn>.txt (needs the project decompile.sh built)
+- `DumpListing.java` / `DumpListingAt.java` — the postScripts behind it: by function name, or by address range (`"0x1db08a0" "0x1db7448" out.txt`) for overlay functions the symbol map sizes wrong

@@ -292,7 +292,17 @@ namespace Dark_Cloud_Improved_Version
         /// Xiao's cat are never live together, so the cave and its tint word are free for the blade.</summary>
         internal const long SolarBladeVtable      = 0x21FAF4B0;
         internal const uint SolarBladeVtableGuest = 0x01FAF4B0;
-        // 0x21FAF4D0..0x21FAF830 FREE
+        /// <summary>BLESSED BAIT (BlessingGun.FishingTick): non-zero through a fishing session while a Blessing Gun is owned —
+        /// SmoothRestCave.BaitKeep then fails EdMoveChara's two bait-loss rolls, so bait is only spent on a fight.</summary>
+        internal const long BaitKeep      = 0x21FAF4D0;
+        internal const uint BaitKeepGuest = 0x01FAF4D0;
+        /// <summary>The dungeon quick-change menu as the weapon's element picker (tools/stubs/element_menu.s, ElfElementMenuPatches):
+        /// Mode is 1 from a D-pad UP opening until the menu closes; Pick is the confirmed element + 1 (1..5 the stones, 6 None),
+        /// which <see cref="ElementMenu"/> applies and zeroes; Tex caches the wepicon sheet for one opening; Map (up to six bytes) is
+        /// the elements the ring offers, in ring order.</summary>
+        internal const long ElementMenuMode = 0x21FAF4E0, ElementMenuPick = 0x21FAF4E4, ElementMenuTex = 0x21FAF4E8, ElementMenuMap = 0x21FAF4EC;
+        internal const uint ElementMenuModeGuest = 0x01FAF4E0;
+        // 0x21FAF500..0x21FAF830 FREE
 
         /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
         /// <c>ElfToanMeleePatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's

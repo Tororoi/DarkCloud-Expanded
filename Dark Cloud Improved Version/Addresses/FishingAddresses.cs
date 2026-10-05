@@ -29,6 +29,10 @@ namespace Dark_Cloud_Improved_Version
         internal const int WalkSpeed         = 0x21D33E20; // Toan walking speed while fishing
         internal const int CastAnimGate      = 0x21D33E24; // 2 during cast/uncast animations; may gate player inputs
         internal const int Phase             = 0x21D33E28; // fishing phase state machine
+        /// <summary>The engine's <c>esa_type</c>: index of the bait on the hook into the bait table (<see cref="BaitDetectionRadiusTable"/>
+        /// order), −1 none. Set by the bait screen, −1 when a cast's bait is lost or a fight begins, −1 again at session end.</summary>
+        internal const int EsaType           = 0x202A2B40;
+        internal const int EsaPoisonousApple = 6;          // the Poisonous Apple's entry in that table
         internal const int AcquiredFlagsBase = 0x21CE4439; // 18 bytes, one per fish species ID (0–17)
     }
 
@@ -37,6 +41,12 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class FishingState
     {
+        // FishingAddresses.FishCatchConfirm IS the engine's chara_fishing state (ebattle.hpp ED_FISHING_*): 1 standing with the rod,
+        // 4 watching the float, 5 reeling in, 7 hooked, 8 landed, 9 float sunk / bait lost, 10 fighting, 11 showing the catch, 12 finishing.
+        internal const int Fishing_Stand    = 1;
+        internal const int Fishing_WaitBite = 4;
+        internal const int Fishing_ReelIn   = 5;
+        internal const int Fishing_Battle   = 10;
         // FishingAddresses.FishCatchConfirm values — read by game after rod pull to confirm catch and trigger success dialog; not a general-purpose state machine
         internal const int FishCatchConfirm_Active = 12;
 
@@ -63,52 +73,49 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
-    /// One entry in <see cref="BaitDetectionRadiusTable"/>. Fields are EE RAM addresses.
+    /// One entry of the engine's bait table (<see cref="BaitDetectionRadiusTable"/>): <c>EsaInfo { int item_no; float radius; }</c>.
+    /// Fields are EE RAM addresses.
     /// </summary>
     internal readonly struct BaitTableEntry
     {
-        /// <summary>EE RAM address of the float notice-radius field.</summary>
-        internal readonly int   Radius;
-        /// <summary>EE RAM address of the uint32 item-ID field (always Radius + 4).</summary>
+        /// <summary>EE RAM address of the int item-id field (the entry's first word).</summary>
         internal readonly int   Id;
-        /// <summary>Original game value. Stored here because writes to EE RAM persist and the
-        /// table is not restored on re-entry, so we can't read back the default.</summary>
+        /// <summary>EE RAM address of the float notice-radius field (always Id + 4).</summary>
+        internal readonly int   Radius;
+        /// <summary>The game's value. Writes to EE RAM persist and the table is not restored on re-entry, so it cannot be read back.</summary>
         internal readonly float DefaultRadius;
-        internal BaitTableEntry(int radiusAddr, float defaultRadius) { Radius = radiusAddr; Id = radiusAddr + 4; DefaultRadius = defaultRadius; }
+        internal BaitTableEntry(int idAddr, float defaultRadius) { Id = idAddr; Radius = idAddr + 4; DefaultRadius = defaultRadius; }
     }
 
     /// <summary>
-    /// Bait notice-radius table in EE RAM. Each entry is (float radius, uint32 itemId) at stride 8,
-    /// in the same order as the bait affinity fields in <see cref="FishSlotOffsets"/>.
-    /// The game copies entry.Radius into each fish slot's <see cref="FishSlotOffsets.NoticeRadius"/>
-    /// every frame, keyed by the equipped bait's item ID.
-    /// Confirmed via ScanFor25f cluster dump. Bait validity is enforced elsewhere —
-    /// writing a non-bait item ID into an entry's Id address has no effect on the bait screen.
+    /// The engine's bait table <c>esa_info[13]</c> (fishing.cpp): per bait <c>{ item_no, radius }</c>, 8 bytes, indexed by
+    /// <c>esa_type</c> (<see cref="FishingAddresses.EsaType"/>). Every frame the hook has bait, <c>FishingStepFish</c> hands
+    /// <c>esa_info[esa_type].radius</c> to each fish as the distance it notices the bait from (<see cref="FishSlotOffsets.NoticeRadius"/>),
+    /// so a write here takes effect at once. The word before the table (0x2026AE8C, 128.0) is not part of it.
     /// </summary>
     internal static class BaitDetectionRadiusTable
     {
-        internal const int TableBase = 0x2026AE8C;
+        internal const int TableBase = 0x2026AE90;
         internal const int Stride    = 8;
 
-        internal static readonly BaitTableEntry Evy             = new BaitTableEntry(0x2026AE8C, 128.0f); // id=193
-        internal static readonly BaitTableEntry Mimi            = new BaitTableEntry(0x2026AE94,  50.0f); // id=197
-        internal static readonly BaitTableEntry Prickly         = new BaitTableEntry(0x2026AE9C,  25.0f); // id=199
-        internal static readonly BaitTableEntry ThrobbingCherry = new BaitTableEntry(0x2026AEA4,  25.0f); // id=166
-        internal static readonly BaitTableEntry GooeyPeach      = new BaitTableEntry(0x2026AEAC,  25.0f); // id=167
-        internal static readonly BaitTableEntry Bombnuts        = new BaitTableEntry(0x2026AEB4,  25.0f); // id=168
-        internal static readonly BaitTableEntry PoisonousApple  = new BaitTableEntry(0x2026AEBC,  25.0f); // id=169
-        internal static readonly BaitTableEntry MellowBanana    = new BaitTableEntry(0x2026AEC4,  25.0f); // id=170
-        internal static readonly BaitTableEntry Carrot          = new BaitTableEntry(0x2026AECC,  25.0f); // id=186
-        internal static readonly BaitTableEntry PotatoCake      = new BaitTableEntry(0x2026AED4,  25.0f); // id=187
-        internal static readonly BaitTableEntry Minon           = new BaitTableEntry(0x2026AEDC,  25.0f); // id=188
-        internal static readonly BaitTableEntry Battan          = new BaitTableEntry(0x2026AEE4,  25.0f); // id=189
-        internal static readonly BaitTableEntry Petitefish      = new BaitTableEntry(0x2026AEEC,  25.0f); // id=190
-        internal static readonly BaitTableEntry BareHook        = new BaitTableEntry(0x2026AEF4,  40.0f); // id=0 — no bait on the hook
-        /// <summary>Every entry, the bare hook included (the Flamingo's passive raises them all).</summary>
+        internal static readonly BaitTableEntry Evy             = new BaitTableEntry(0x2026AE90, 50.0f); // id=193
+        internal static readonly BaitTableEntry Mimi            = new BaitTableEntry(0x2026AE98, 25.0f); // id=197
+        internal static readonly BaitTableEntry Prickly         = new BaitTableEntry(0x2026AEA0, 25.0f); // id=199
+        internal static readonly BaitTableEntry ThrobbingCherry = new BaitTableEntry(0x2026AEA8, 25.0f); // id=166
+        internal static readonly BaitTableEntry GooeyPeach      = new BaitTableEntry(0x2026AEB0, 25.0f); // id=167
+        internal static readonly BaitTableEntry Bombnuts        = new BaitTableEntry(0x2026AEB8, 25.0f); // id=168
+        internal static readonly BaitTableEntry PoisonousApple  = new BaitTableEntry(0x2026AEC0, 25.0f); // id=169 (esa_type 6)
+        internal static readonly BaitTableEntry MellowBanana    = new BaitTableEntry(0x2026AEC8, 25.0f); // id=170
+        internal static readonly BaitTableEntry Carrot          = new BaitTableEntry(0x2026AED0, 25.0f); // id=186
+        internal static readonly BaitTableEntry PotatoCake      = new BaitTableEntry(0x2026AED8, 25.0f); // id=187
+        internal static readonly BaitTableEntry Minon           = new BaitTableEntry(0x2026AEE0, 25.0f); // id=188
+        internal static readonly BaitTableEntry Battan          = new BaitTableEntry(0x2026AEE8, 25.0f); // id=189
+        internal static readonly BaitTableEntry Petitefish      = new BaitTableEntry(0x2026AEF0, 40.0f); // id=190
+        /// <summary>Every entry (the Flamingo's passive raises them all).</summary>
         internal static readonly BaitTableEntry[] All =
         {
             Evy, Mimi, Prickly, ThrobbingCherry, GooeyPeach, Bombnuts, PoisonousApple, MellowBanana, Carrot, PotatoCake, Minon,
-            Battan, Petitefish, BareHook,
+            Battan, Petitefish,
         };
     }
 
