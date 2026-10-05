@@ -8,14 +8,15 @@ namespace Dark_Cloud_Improved_Version
     /// of max HP, tick again) and never ends on its own; the species' status susceptibility (slot +0xDE, the ItemStatusRes copy:
     /// 0 immune, regulars 50–90) only decides whether a hit lands it. Here a poisoned enemy is cured after susceptibility × 2
     /// seconds — the more a species gives in to status hits, the longer the poison holds — counted from the tick the poison was
-    /// first seen on the slot; a hit that re-poisons an already poisoned enemy does not extend it. Freeze or death ending the
+    /// first seen on the slot (half that under the "Harder Enemy AI" option); a hit that re-poisons an already poisoned enemy does
+    /// not extend it. Freeze or death ending the
     /// poison early clears the count, so the next poisoning starts a fresh window. Mod-planted poison (EnemyStatus) is the same
     /// slot word and is timed the same way.
     /// </summary>
     internal static class EnemyPoisonDuration
     {
         private const string Tag = "[PoisonDuration] ";
-        internal const float SecondsPerSusceptibility = 2f;
+        internal const float SecondsPerSusceptibility = 2f, HarderAiFactor = 0.5f;
         private static readonly Stopwatch[] since = new Stopwatch[EnemyAddresses.FloorSlots.Count];
 
         /// <summary>Once a dungeon tick.</summary>
@@ -28,7 +29,7 @@ namespace Dark_Cloud_Improved_Version
                 if (!poisoned) { since[slot] = null; continue; }
                 if (since[slot] == null) { since[slot] = Stopwatch.StartNew(); continue; }
                 int susceptibility = Memory.ReadShort(a + EnemySlotOffsets.StatusSusceptibility);
-                float limit = Math.Max(1, susceptibility) * SecondsPerSusceptibility;
+                float limit = Math.Max(1, susceptibility) * SecondsPerSusceptibility * (HarderEnemyAI.Enabled ? HarderAiFactor : 1f);
                 if (since[slot].Elapsed.TotalSeconds < limit) continue;
                 Memory.WriteInt(a + EnemySlotOffsets.PoisonPeriod, 0);
                 since[slot] = null;
