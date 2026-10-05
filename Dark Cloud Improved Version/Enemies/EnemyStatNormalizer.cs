@@ -6,91 +6,79 @@ using System.Reflection;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// Gradient-based enemy stat normalization for the randomizer.
+    /// Pool-bounds enemy stat normalization for the randomizer.
     ///
-    /// When the randomizer injects a species into a dungeon that is not its native one, its stats are
-    /// either trivially weak (early enemy in a late dungeon) or a brick wall (late enemy in an early
-    /// dungeon). This rescales HP, defense and attack damage toward the CURRENT dungeon's power level
-    /// along a per-dungeon gradient with a single tunable knob. Two tier systems (see below): ATTACK uses the
-    /// 7 dungeons (Demon Shaft = one tier); HP/DEFENSE uses 11 (Demon Shaft split into its 5 floor bands).
+    /// When the randomizer places a species outside its home region, its stats are either trivial (an early enemy
+    /// deep in) or a wall (a late enemy early on). Each stat is bounded by the region's own spawns, per stat:
+    ///   • from a LOWER region:  value = max(native, poolAverage)  — lifted to the pool's mean, never lowered;
+    ///   • from a HIGHER region: value = min(native, cap)          — cap = the highest pool max of this region and
+    ///                                                              every region before it, never raised.
+    /// The pool is the vanilla stats of the region's regular spawns and mimics (bosses and boss support entities
+    /// are neither in it nor normalized). A species in the region's own vanilla pool is left alone. Then the
+    /// similar-enemy order (<see cref="EnemySpecies.SimilarEnemies"/>) is enforced: walking a chain from its
+    /// strongest member down, each member is capped at the next one's value, so a Cave Bat never out-stats an Evil
+    /// Bat on the same floor. Stats: HP, ABS, damage reduction, weapon defense, melee and projectile damage; a
+    /// 0 melee or projectile means the species has none and stays 0.
     ///
-    /// Native tier `n` (the dungeon a species belongs to), current dungeon `c`, knob `k` = <see cref="NormalizationStrength"/>:
-    ///     effectiveTier e = max(c, n − (n − c)·k)          // "floor weak, tame strong"
-    ///     factor_S        = lerp(Baseline_S, e) / Baseline_S[n]
-    ///     newValue_S      = round(nativeValue_S · factor_S)
-    /// Behavior:
-    ///   • weak (n &lt; c): e clamps to c for any k ⇒ always buffed up to the current dungeon's level.
-    ///   • native (n == c): factor 1 ⇒ untouched.
-    ///   • strong (n &gt; c): k=0 full native power, k=1 flattened to current; in between, still above
-    ///     current but tamed. The factor depends only on (n, c, k), so two same-tier species keep their
-    ///     relative ordering (Holy Gemron stays above Fire Gemron — only the gap to the current dungeon closes).
+    /// Regions: the six dungeons and the five Demon Shaft floor bands (1-20 … 81-100); a species' home region is the
+    /// lowest one it appears in. "Stronger enemies" takes every species' value under the rule and scales it by the next
+    /// region's pool average over this region's, so natives move up a region keeping their standing in the pool; past
+    /// the last band the next average continues the last two bands' trend; the ratio is never below 1, so Stronger
+    /// never lowers a stat. Mimics are one enemy whose variants are vanilla's own normalization, so they keep their
+    /// variant's stats wherever they are placed, and with Stronger on are scaled like everything else but at least
+    /// the next variant's (the last variants use <see cref="EnemySpecies.MimicBeyond"/> / <see cref="EnemySpecies.KingMimicBeyond"/>). ABS is
+    /// exempt: the reward follows the current region whatever the toggle.
     ///
-    /// All writes target LIVE per-slot fields in one sweep per floor (enemies all spawn at load, no respawns) —
-    /// no species-record patch:
-    ///   • HP/defense → the enemy slot (MaxHp/Hp, packed DefenseStats).
-    ///   • Melee damage → the cached _SET_DMG_PARA array (the value the engine latched at the enemy's init).
-    ///   • Projectile damage → the per-slot shot cache (explicit shots) or, for "default" shots, the static
-    ///     BehaviorScriptTable +0x3C entry.
-    /// Slot + per-floor caches self-revert on floor reload; the static BST table is snapshotted and restored on
-    /// dungeon exit (<see cref="EnemyStatScaler.RestoreBst"/>). Gated by <see cref="NormalizeEnemyStats"/> / <see cref="NormalizeDamage"/>.
+    /// All writes target LIVE per-slot fields in one sweep per floor (enemies all spawn at load, no respawns):
+    /// HP/ABS/defense → the enemy slot; melee → the cached _SET_DMG_PARA array; projectile → the per-species STB
+    /// shot literal or the static BehaviorScriptTable default (snapshotted, restored on dungeon exit by
+    /// <see cref="EnemyStatScaler.RestoreBst"/>). Gated by <see cref="NormalizeEnemyStats"/> / <see cref="NormalizeDamage"/>.
     /// </summary>
     internal static class EnemyStatNormalizer
     {
-        // ── Config (the single tuning surface) ───────────────────────────────────────────────────────
-        internal static bool  NormalizeEnemyStats   = true;  // master on/off  (TESTING: default on)
-        internal static float NormalizationStrength = 1.0f;  // k ∈ [0,1]: 0 = strong enemies run wild (weak still buffed), 1 = flatten all to current
-        internal static bool  NormalizeDamage       = true;  // also rescale attack damage (melee + projectile)
-        internal static bool  LogNormalize          = true;  // verbose per-enemy logging (TESTING)
-        // "Stronger enemies" difficulty (Options → Harder Enemies → Stronger enemies). When on, normalize EVERY
-        // enemy (native included) to the tier ONE ABOVE the current — HP/defense to the next HP/def tier (Demon
-        // Shaft band), attack to the next dungeon — extrapolating a hypothetical band past the top when already at
-        // the highest. Overrides the gradient knob while active. Scales HP, defense AND attack.
+        // ── Config ───────────────────────────────────────────────────────────────────────────────────
+        internal static bool  NormalizeEnemyStats   = true;  // master on/off
+        internal static bool  NormalizeDamage       = true;  // also bound attack damage (melee + projectile)
+        internal static bool  LogNormalize          = true;  // verbose per-enemy logging
+        // "Stronger enemies" difficulty (Options → Harder Enemies → Stronger enemies): every enemy, native included,
+        // is scaled by the next region's pool average over the current one's (a virtual region past the top band).
         internal static bool  StrongerEnemies       = false;
 
         private const int DungeonCount = 7;
+        private const int RegionCount  = 11;   // 0..5 = the first six dungeons, 6..10 = Demon Shaft bands
+        private const int Beyond       = 11;   // the virtual region above the last band (Stronger enemies), its average extrapolated
+        private const int DemonShaft   = 6;    // dungeon id
+        private const int DsBandCount  = 5;
+        private const int DsBandFloors = 20;
 
-        // Two tier systems:
-        //  • ATTACK uses the 7 dungeons as-is (Demon Shaft = one tier 6). Melee/projectile damage is fairly flat
-        //    within Demon Shaft, so one tier is representative.
-        //  • HP/DEFENSE splits Demon Shaft into its 5 floor bands (its enemies' durability spans a huge range —
-        //    ~1900 HP early to ~11500 deep — so a single DS median is unrepresentative). Tiers: 0..5 = the first
-        //    six dungeons, 6..10 = Demon Shaft bands (floors 1-20, 21-40, 41-60, 61-80, 81-100).
-        private const int AtkTierCount   = 7;
-        private const int HpDefTierCount = 11;
-        private const int DemonShaft     = 6;   // dungeon id
-        private const int DsBandCount    = 5;
-        private const int DsBandFloors   = 20;  // floors per Demon Shaft band
+        internal enum Stat { Hp, Abs, Dr, Wd, Melee, Proj }
+        private static readonly Stat[] Stats = (Stat[])Enum.GetValues(typeof(Stat));
 
-        // ── Lazily-built reference data (from the C# data model, once) ───────────────────────────────
+        // ── Reference data, built once from the C# data model ────────────────────────────────────────
         private static bool _init;
         private static readonly Dictionary<int, EnemyDefaults> _byTableIndex = new();   // every species, keyed by TableIndex
-        private static readonly Dictionary<int, List<int>>     _byId         = new();   // enemy Id -> TableIndices (usually 1; >1 = base/enhanced variants)
-        private static readonly Dictionary<int, int>           _atkTier      = new();   // TableIndex -> native ATTACK tier (0..6)
-        private static readonly Dictionary<int, int>           _hpdefTier    = new();   // TableIndex -> native HP/DEF tier (0..10)
-        // Baselines; 0 = no native sample for that stat in that tier (Factor falls back to 1).
-        private static readonly float[] _bHp    = new float[HpDefTierCount];
-        private static readonly float[] _bDr    = new float[HpDefTierCount];
-        private static readonly float[] _bWd    = new float[HpDefTierCount];
-        private static readonly float[] _bMelee = new float[AtkTierCount];
-        private static readonly float[] _bProj  = new float[AtkTierCount];
+        private static readonly Dictionary<int, List<int>>     _byId         = new();   // enemy Id -> TableIndices (>1 = base/enhanced variants)
+        private static readonly Dictionary<int, int>           _homeRegion   = new();   // TableIndex -> lowest region it spawns in
+        private static readonly HashSet<int>[]                 _poolMembers  = new HashSet<int>[RegionCount];
+        private static readonly float[][]                      _poolAvg      = new float[RegionCount + 1][];   // [region][stat]; 0 = no sample; [Beyond] extrapolated
+        private static readonly float[][]                      _poolCap      = new float[RegionCount][];       // running max over regions 0..r
+        private static readonly Dictionary<int, EnemyDefaults[]> _chainOf    = new();   // TableIndex -> its similar-enemy chain
+        private static readonly Dictionary<int, (EnemyDefaults[] line, int index)> _mimicLine = new();   // TableIndex -> its mimic line and position
 
         // ── Per-floor state ───────────────────────────────────────────────────────────────────────────
         private static int _normalizedKey = -1;   // packed (dungeon<<16 | floor<<8 | backfloorBit) of the current floor context
-        private static int _curHpDef, _curAtk;    // current-floor tiers
+        private static int _curRegion;
         private static readonly Dictionary<int, int> _swept = new(); // slot -> species already normalized (patch once on spawn)
-        // Slots whose HP/def/melee was normalized but whose projectile scaling hasn't landed yet, because the STB
-        // script pointer (CRunScript+0x3C) attaches a few ticks AFTER the CCharacter slot goes live. Retried each
-        // sweep pass until ScaleProjectile reports the STB is ready. Without this, a slot marked _swept on the tick
-        // its STB was still 0 never gets its projectile scaled — full-damage shots (esp. melee-less casters like
-        // Gemron, whose projectile is their whole offense). slot -> (tableIndex, factor).
+        // Slots whose projectile scaling hasn't landed yet: the STB script pointer (CRunScript+0x3C) attaches a few
+        // ticks AFTER the CCharacter slot goes live, so the write is retried each sweep pass until the STB is ready.
         private static readonly Dictionary<int, (int tableIndex, float factor)> _projPending = new();
         private static bool _sweepDone;     // set once the floor's enemies are loaded + normalized; stops the per-tick sweep
         private static int  _sweepIdle;     // consecutive sweep passes with nothing new to patch
-        // The actual per-stat RAM writes (HP/defense/melee/projectile + the shared per-floor STB dedup and the static
-        // BST default-shot snapshot/restore) live in EnemyStatScaler; this class only computes the gradient factors.
 
-        private static bool IsBoss(in EnemyDefaults enemyDefaults) =>
-            !string.IsNullOrEmpty(enemyDefaults.ModelCode) && enemyDefaults.ModelCode[0] == 'c';
+        /// <summary>A regular floor enemy or a mimic: in the pools and normalizable. Bosses and their support entities are neither.</summary>
+        private static bool IsFloorEnemy(int tableIndex) =>
+            EnemySpecies.RandomizerValid.ContainsKey(tableIndex)
+            || (_byTableIndex.TryGetValue(tableIndex, out EnemyDefaults d) && d.Name != null && d.Name.Contains("Mimic") && d.ModelCode != null && d.ModelCode[0] == 'e');
 
         // ════════════════════════════════════════════════════════════════════════════════════════════
         // Init
@@ -99,26 +87,33 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_init) return;
             BuildTableIndexMap();
-            BuildNativeTierMap();
-            BuildBaselines();
+            BuildRegions();
+            BuildPools();
+            foreach (EnemyDefaults[] chain in EnemySpecies.SimilarEnemies)
+                foreach (EnemyDefaults member in chain)
+                    if (member.TableIndex.HasValue) _chainOf[member.TableIndex.Value] = chain;
+            foreach (EnemyDefaults[] line in new[] { EnemySpecies.MimicLine, EnemySpecies.KingMimicLine })
+                for (int i = 0; i < line.Length; i++)
+                    if (line[i].TableIndex.HasValue) _mimicLine[line[i].TableIndex.Value] = (line, i);
             _init = true;
-            Console.WriteLine($"[Normalize] init: {_byTableIndex.Count} species, {_atkTier.Count} placed in pools.");
-            for (int t = 0; t < HpDefTierCount; t++)
-            {
-                string atk = t < AtkTierCount ? $" melee={_bMelee[t]:F0} proj={_bProj[t]:F0}" : "";
-                string lbl = t < DemonShaft ? $"dungeon {t}" : $"DS band {t - DemonShaft} (fl {(t-DemonShaft)*DsBandFloors+1}-{(t-DemonShaft+1)*DsBandFloors})";
-                Console.WriteLine($"[Normalize] HP/def tier {t} ({lbl}): HP={_bHp[t]:F0} DR={_bDr[t]:F0} WD={_bWd[t]:F0}{atk}");
-            }
+            Console.WriteLine($"[Normalize] init: {_byTableIndex.Count} species, {_homeRegion.Count} in pools, {EnemySpecies.SimilarEnemies.Length} similar-enemy chains.");
+            for (int r = 0; r <= RegionCount; r++)
+                Console.WriteLine($"[Normalize] {RegionName(r)}: {(r < RegionCount ? _poolMembers[r].Count : 0)} spawns; avg/cap " +
+                                  string.Join(" ", Stats.Select(s => $"{s}={_poolAvg[r][(int)s]:F0}/{(r < RegionCount ? _poolCap[r][(int)s] : 0):F0}")));
         }
+
+        internal static string RegionName(int region) =>
+            region < DemonShaft ? (Dungeons.TryGetValue((byte)region, out DungeonData d) ? d.Name : $"dungeon {region}")
+            : region < RegionCount ? $"Demon Shaft {(region - DemonShaft) * DsBandFloors + 1}-{(region - DemonShaft + 1) * DsBandFloors}"
+            : "beyond Demon Shaft (virtual)";
 
         // Demon Shaft floor (1..100) -> band 0..4. Floor 0/descriptor -> band 0.
         private static int DsBand(int floor) => Math.Max(0, Math.Min(DsBandCount - 1, (floor - 1) / DsBandFloors));
 
-        // HP/DEF tier for a (dungeon, floor): dungeons 0..5 map straight through; Demon Shaft expands to 6 + band.
-        private static int HpDefTierOf(int dungeon, int floor) =>
-            dungeon < DemonShaft ? dungeon : DemonShaft + DsBand(floor);
+        /// <summary>The region of a (dungeon, floor): dungeons 0..5 map straight through; Demon Shaft expands to 6 + band.</summary>
+        internal static int RegionOf(int dungeon, int floor) => dungeon < DemonShaft ? dungeon : DemonShaft + DsBand(floor);
 
-        // Reflect over every `static EnemyDefaults` field on EnemySpecies so we capture all 162 entries (incl.
+        // Reflect over every `static EnemyDefaults` field on EnemySpecies so all 162 entries are captured (incl.
         // enhanced variants that share an Id and so collide in EnemySpecies.Defaults). Keyed by unique TableIndex.
         private static void BuildTableIndexMap()
         {
@@ -132,72 +127,78 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        // Native tiers from the vanilla pools: ATTACK = lowest dungeon (0..6); HP/DEF = lowest tier where the
-        // lowest takes Demon Shaft floor bands into account (so a deep-DS enemy gets a higher HP/def tier than a
-        // shallow-DS one, even though both are attack tier 6).
-        private static void BuildNativeTierMap()
+        // Region membership and home regions from the vanilla pools. Front[0] is a descriptor (Front[N] = floor N);
+        // Back has none (Back[k] = the back side of floor k+1).
+        private static void BuildRegions()
         {
-            for (int d = 0; d < DungeonCount; d++) // ascending, so the first (lowest) wins
+            for (int r = 0; r < RegionCount; r++) _poolMembers[r] = new HashSet<int>();
+            for (int d = 0; d < DungeonCount; d++) // ascending, so the first (lowest) region wins
             {
                 if (!Dungeons.TryGetValue((byte)d, out DungeonData dd)) continue;
                 foreach (FloorSpawnPool[] pools in new[] { dd.Front, dd.Back })
                 {
                     if (pools == null) continue;
-                    for (int floor = 0; floor < pools.Length; floor++)
+                    bool back = ReferenceEquals(pools, dd.Back);
+                    for (int i = 0; i < pools.Length; i++)
                     {
-                        int[] tableIndices = pools[floor].TableIndices;
+                        int[] tableIndices = pools[i].TableIndices;
                         if (tableIndices == null) continue;
-                        int hpdef = HpDefTierOf(d, floor); // for DS this varies by floor band
+                        int region = RegionOf(d, back ? i + 1 : i);
                         foreach (int tableIndex in tableIndices)
                         {
-                            if (!_atkTier.TryGetValue(tableIndex, out int prevAtkTier) || d < prevAtkTier)         _atkTier[tableIndex]   = d;
-                            if (!_hpdefTier.TryGetValue(tableIndex, out int prevHpDefTier) || hpdef < prevHpDefTier)    _hpdefTier[tableIndex] = hpdef;
+                            _poolMembers[region].Add(tableIndex);
+                            if (!_homeRegion.TryGetValue(tableIndex, out int prev) || region < prev) _homeRegion[tableIndex] = region;
                         }
                     }
                 }
             }
         }
 
-        // Baselines = median of the stat over each tier's native, non-boss species. HP/DR/WD use the 11 HP/def
-        // tiers; melee/proj use the 7 attack tiers.
-        private static void BuildBaselines()
+        // Per region and stat: the mean over the region's floor enemies, and the running maximum over this region and
+        // every earlier one. A 0 melee/projectile means "none" and is left out of both.
+        private static void BuildPools()
         {
-            for (int t = 0; t < HpDefTierCount; t++)
+            for (int r = 0; r < RegionCount; r++)
             {
-                var hpSamples = new List<double>(); var drSamples = new List<double>(); var wdSamples = new List<double>();
-                foreach (var kv in _hpdefTier)
+                _poolAvg[r] = new float[Stats.Length]; _poolCap[r] = new float[Stats.Length];
+                foreach (Stat stat in Stats)
                 {
-                    if (kv.Value != t || !_byTableIndex.TryGetValue(kv.Key, out EnemyDefaults enemyDefaults) || IsBoss(enemyDefaults)) continue;
-                    if (enemyDefaults.MaxHp.HasValue)           hpSamples.Add(enemyDefaults.MaxHp.Value);
-                    if (enemyDefaults.DamageReduction.HasValue) drSamples.Add(enemyDefaults.DamageReduction.Value);
-                    if (enemyDefaults.WeaponDefense.HasValue)   wdSamples.Add(enemyDefaults.WeaponDefense.Value);
+                    var samples = new List<int>();
+                    foreach (int ti in _poolMembers[r])
+                    {
+                        if (!IsFloorEnemy(ti) || !_byTableIndex.TryGetValue(ti, out EnemyDefaults d)) continue;
+                        int? v = NativeValue(d, stat);
+                        if (v == null || (IsAttack(stat) && v <= 0)) continue;
+                        samples.Add(v.Value);
+                    }
+                    float avg = samples.Count > 0 ? (float)samples.Average() : 0;
+                    float max = samples.Count > 0 ? samples.Max() : 0;
+                    _poolAvg[r][(int)stat] = avg;
+                    _poolCap[r][(int)stat] = Math.Max(max, r > 0 ? _poolCap[r - 1][(int)stat] : 0);
                 }
-                _bHp[t] = (float)Median(hpSamples); _bDr[t] = (float)Median(drSamples); _bWd[t] = (float)Median(wdSamples);
             }
-            for (int t = 0; t < AtkTierCount; t++)
+            // The virtual region above the last band: its average continues the last two bands' trend (never below the last band).
+            _poolAvg[Beyond] = new float[Stats.Length];
+            foreach (Stat stat in Stats)
             {
-                var meleeSamples = new List<double>(); var projSamples = new List<double>();
-                foreach (var kv in _atkTier)
-                {
-                    if (kv.Value != t || !_byTableIndex.TryGetValue(kv.Key, out EnemyDefaults enemyDefaults) || IsBoss(enemyDefaults)) continue;
-                    int meleeRep = Representative(enemyDefaults.MeleeDamage);      if (meleeRep > 0) meleeSamples.Add(meleeRep);
-                    int projRep  = Representative(enemyDefaults.ProjectileDamage); if (projRep  > 0) projSamples.Add(projRep);
-                }
-                _bMelee[t] = (float)Median(meleeSamples); _bProj[t] = (float)Median(projSamples);
+                int last = RegionCount - 1, i = (int)stat;
+                _poolAvg[Beyond][i] = Math.Max(_poolAvg[last][i], 2 * _poolAvg[last][i] - _poolAvg[last - 1][i]);
             }
-            // The tiers are a difficulty ramp, so each baseline should be a rising trend. Sparse stats produce
-            // noisy dips/gaps from tiny sample sizes — enforce non-decreasing (fill empty tiers, then cumulative-max).
-            foreach (float[] baseline in new[] { _bHp, _bDr, _bWd, _bMelee, _bProj }) MakeMonotonic(baseline);
         }
 
-        // Back-fill leading empty tiers from the first sampled value, then make the series non-decreasing.
-        private static void MakeMonotonic(float[] baseline)
+        private static bool IsAttack(Stat stat) => stat == Stat.Melee || stat == Stat.Proj;
+
+        /// <summary>The species' vanilla value of a stat (melee/projectile = its strongest hit), or null when the record lacks it.</summary>
+        internal static int? NativeValue(in EnemyDefaults d, Stat stat) => stat switch
         {
-            int first = Array.FindIndex(baseline, v => v > 0);
-            if (first < 0) return;               // stat never sampled — leave all zero (Factor falls back to 1)
-            for (int tier = 0; tier < first; tier++) baseline[tier] = baseline[first];
-            for (int tier = 1; tier < baseline.Length; tier++) if (baseline[tier] < baseline[tier - 1]) baseline[tier] = baseline[tier - 1];
-        }
+            Stat.Hp    => d.MaxHp,
+            Stat.Abs   => d.Abs,
+            Stat.Dr    => d.DamageReduction,
+            Stat.Wd    => d.WeaponDefense,
+            Stat.Melee => Representative(d.MeleeDamage),
+            Stat.Proj  => Representative(d.ProjectileDamage),
+            _ => null,
+        };
 
         // A species' representative attack = its strongest hit (ignores the -1 "engine default" projectile marker).
         private static int Representative(int[] a)
@@ -208,64 +209,80 @@ namespace Dark_Cloud_Improved_Version
             return best;
         }
 
-        private static double Median(List<double> xs)
-        {
-            if (xs.Count == 0) return 0;
-            xs.Sort();
-            int n = xs.Count;
-            return n % 2 == 1 ? xs[n / 2] : 0.5 * (xs[n / 2 - 1] + xs[n / 2]);
-        }
-
         // ════════════════════════════════════════════════════════════════════════════════════════════
-        // Gradient math
+        // The rule
         // ════════════════════════════════════════════════════════════════════════════════════════════
-        private static float EffectiveTier(int nativeTier, int currentDungeon)
+        // The pool rule alone: the species' stat in `region` before the similar-enemy order is applied. With Stronger
+        // enemies the result is scaled by the next region's average over this one's (ABS exempt).
+        private static int? PoolValue(int tableIndex, Stat stat, int region, bool stronger)
         {
-            // "Stronger enemies": every enemy targets the tier ABOVE the current floor's, regardless of its native
-            // tier or the knob. currentDungeon+1 can exceed the top tier (Demon Shaft) — Lerp extrapolates it.
-            if (StrongerEnemies) return currentDungeon + 1;
-            float k = Math.Max(0f, Math.Min(1f, NormalizationStrength));
-            return Math.Max(currentDungeon, nativeTier - (nativeTier - currentDungeon) * k);
-        }
-
-        private static float Lerp(float[] baseline, float effectiveTier)
-        {
-            if (effectiveTier <= 0) return baseline[0];
-            int last = baseline.Length - 1;
-            if (effectiveTier >= last)
+            if (!_byTableIndex.TryGetValue(tableIndex, out EnemyDefaults d)) return null;
+            int? native = NativeValue(d, stat);
+            if (native == null) return null;
+            if (!_homeRegion.TryGetValue(tableIndex, out int home) || !IsFloorEnemy(tableIndex)) return native;
+            int value = native.Value;
+            bool mimic = _mimicLine.TryGetValue(tableIndex, out var at);   // a mimic keeps its variant's stats wherever it is placed
+            if (!mimic && !_poolMembers[region].Contains(tableIndex) && !(IsAttack(stat) && native <= 0))   // not one of the region's own spawns
             {
-                // At/above the top tier: extrapolate along the last segment's slope (the hypothetical dungeon/region
-                // a "Stronger" target asks for past Demon Shaft / its highest band). effectiveTier == last → baseline[last].
-                float vLast = baseline[last], vPrev = baseline[last - 1];
-                if (vLast <= 0) return vPrev;
-                if (vPrev <= 0) return vLast;
-                return vLast + (effectiveTier - last) * (vLast - vPrev);
+                float avg = _poolAvg[region][(int)stat], cap = _poolCap[region][(int)stat];
+                if (home < region && avg > 0) value = Math.Max(value, (int)Math.Round(avg, MidpointRounding.AwayFromZero));
+                if (home > region && cap > 0) value = Math.Min(value, (int)Math.Round(cap, MidpointRounding.AwayFromZero));
             }
-            int i = (int)Math.Floor(effectiveTier);
-            float frac = effectiveTier - i;
-            float v0 = baseline[i], v1 = baseline[i + 1];
-            if (v0 <= 0) return v1;           // no native sample in tier i — fall back to the neighbour
-            if (v1 <= 0) return v0;
-            return v0 * (1 - frac) + v1 * frac;
+            if (!stronger || stat == Stat.Abs || value <= 0) return value;
+            int ratio = StrongerRatio(stat, region);   // in ten-thousandths, so the product is exact in a double
+            if (ratio != 10000) value = Math.Max(1, (int)Math.Round(value * ratio / 10000.0, MidpointRounding.AwayFromZero));
+            if (mimic) { int? next = NextMimicStat(at.line, at.index, stat); if (next.HasValue) value = Math.Max(value, next.Value); }   // at least the next variant
+            return value;
         }
 
-        // Scale factor for a stat given its per-dungeon baseline series. 1.0 = leave unchanged.
-        private static float Factor(float[] baseline, int nativeTier, int currentDungeon)
+        /// <summary>Stronger enemies: the next region's pool average over this region's in ten-thousandths, never below
+        /// 10000 (10000 when either is unsampled). Four decimals keep the ratio identical on every runtime.</summary>
+        private static int StrongerRatio(Stat stat, int region)
         {
-            float baselineNative = baseline[nativeTier];
-            if (baselineNative <= 0) return 1f;
-            float baselineEffective = Lerp(baseline, EffectiveTier(nativeTier, currentDungeon));
-            if (baselineEffective <= 0) return 1f;
-            return baselineEffective / baselineNative;
+            float cur = _poolAvg[region][(int)stat], next = _poolAvg[region + 1][(int)stat];
+            return cur > 0 && next > 0 ? Math.Max(10000, (int)Math.Round((double)next / cur * 10000)) : 10000;
+        }
+
+        // The vanilla stat of the mimic line's next variant, or the extrapolated stats past its last one.
+        private static int? NextMimicStat(EnemyDefaults[] line, int index, Stat stat)
+        {
+            if (index + 1 < line.Length) return NativeValue(line[index + 1], stat);
+            var beyond = ReferenceEquals(line, EnemySpecies.KingMimicLine) ? EnemySpecies.KingMimicBeyond : EnemySpecies.MimicBeyond;
+            return stat switch { Stat.Hp => beyond.hp, Stat.Dr => beyond.dr, Stat.Wd => beyond.wd, Stat.Melee => beyond.melee, _ => null };
+        }
+
+        /// <summary>The species' stat as it should be in <paramref name="region"/>: the pool rule, then the similar-enemy
+        /// order (each chain member capped at the next stronger member's value). Null when the record lacks the stat.</summary>
+        internal static int? TargetValue(int tableIndex, Stat stat, int region, bool stronger)
+        {
+            if (!_chainOf.TryGetValue(tableIndex, out EnemyDefaults[] chain)) return PoolValue(tableIndex, stat, region, stronger);
+            int cap = int.MaxValue; int? result = null;
+            for (int i = chain.Length - 1; i >= 0; i--)
+            {
+                if (!chain[i].TableIndex.HasValue) continue;
+                int memberTi = chain[i].TableIndex.Value;
+                int? v = PoolValue(memberTi, stat, region, stronger);
+                if (v != null && (!IsAttack(stat) || v > 0)) { v = Math.Min(v.Value, cap); cap = v.Value; }
+                if (memberTi == tableIndex) { result = v; break; }
+            }
+            return result;
+        }
+
+        private static float Factor(int tableIndex, Stat stat, int region, bool stronger)
+        {
+            int? native = _byTableIndex.TryGetValue(tableIndex, out EnemyDefaults d) ? NativeValue(d, stat) : null;
+            int? target = TargetValue(tableIndex, stat, region, stronger);
+            if (native == null || target == null || native <= 0 || target == native) return 1f;
+            return target.Value / (float)native.Value;
         }
 
         // ════════════════════════════════════════════════════════════════════════════════════════════
         // Per-floor entry point
         // ════════════════════════════════════════════════════════════════════════════════════════════
         /// <summary>
-        /// Call each dungeon-thread tick. Sweeps live slots and normalizes each non-native enemy once when it
-        /// first appears (the floor's enemies all spawn at load), then self-terminates for the floor. No-op when
-        /// disabled or in town; native species (factor 1) are left untouched, so it's harmless on vanilla floors.
+        /// Call each dungeon-thread tick. Sweeps live slots and normalizes each enemy once when it first appears (the
+        /// floor's enemies all spawn at load), then self-terminates for the floor. No-op when disabled or in town;
+        /// a region's own spawns are left untouched, so it is harmless on vanilla floors.
         /// </summary>
         internal static void NormalizeStatsForFloor()
         {
@@ -289,38 +306,34 @@ namespace Dark_Cloud_Improved_Version
             if (key != _normalizedKey)
             {
                 _normalizedKey = key;
-                _curHpDef = HpDefTierOf(dungeon, floor); // 0..10
-                _curAtk   = dungeon;                     // 0..6
+                _curRegion = RegionOf(dungeon, floor);
                 _swept.Clear(); _projPending.Clear(); EnemyStatScaler.ResetFloor(); _sweepDone = false; _sweepIdle = 0; // new floor: sweep until its enemies are loaded
                 EnemyStatScaler.Verbose = LogNormalize;
                 if (LogNormalize)
-                    Console.WriteLine($"[Normalize] enter dungeon {dungeon} floor {floor}{(back != 0 ? " BACKFLOOR" : "")} (HP/def tier {_curHpDef}, atk tier {_curAtk}); k={NormalizationStrength:F2}, dmg={(NormalizeDamage ? "on" : "off")}.");
+                    Console.WriteLine($"[Normalize] enter dungeon {dungeon} floor {floor}{(back != 0 ? " BACKFLOOR" : "")} ({RegionName(_curRegion)}); dmg={(NormalizeDamage ? "on" : "off")}{(StrongerEnemies ? ", stronger" : "")}.");
             }
 
-            // All of a floor's enemies spawn at load (no respawns), so we just sweep the live slots — patching each
-            // enemy's slot HP/defense and cached melee damage directly — until they've all appeared, then stop.
-            // No species-record patch is needed (nothing spawns late to inherit it). The enemies often spawn a few
+            // All of a floor's enemies spawn at load (no respawns), so the live slots are swept — patching each enemy's
+            // slot fields directly — until they've all appeared, then the sweep stops. The enemies often spawn a few
             // ticks AFTER the floor-enter event (the floor key updates before BtLoadMonstor populates the slots), so
-            // we must NOT give up before any enemy is seen — only settle once enemies have appeared and no new ones
-            // show for several passes. The no-enemy-yet cap must comfortably exceed worst-case spawn latency: a
+            // the sweep must NOT give up before any enemy is seen — only settle once enemies have appeared and no new
+            // ones show for several passes. The no-enemy-yet cap must comfortably exceed worst-case spawn latency: a
             // RANDOMIZED floor loads up to 9 distinct enemy models, which can take several seconds (well past 200
-            // ticks) — bailing at 200 made the randomizer's late-spawning enemies miss normalization entirely. A
-            // large cap still bails out on genuinely enemy-less floors (event floors), just later.
+            // ticks). A large cap still bails out on genuinely enemy-less floors (event floors), just later.
             if (!_sweepDone)
             {
-                int normalized = SweepLiveSlots(_curHpDef, _curAtk);
+                int normalized = SweepLiveSlots(_curRegion);
                 if (normalized > 0) _sweepIdle = 0; else _sweepIdle++;
                 // Don't settle while any slot still owes a projectile patch (its STB hasn't attached yet); the 1500
-                // hard cap still bails out if an STB never loads, so we can't hang.
+                // hard cap still bails out if an STB never loads, so this can't hang.
                 if ((_swept.Count > 0 && _projPending.Count == 0 && _sweepIdle >= 8) || _sweepIdle >= 1500) _sweepDone = true;
             }
         }
 
-
-        // Normalize each newly-seen live enemy once (HP/defense slot fields + cached melee damage). Maps the
-        // slot's species Id to a TableIndex via the global _byId map (disambiguating shared base/enhanced Ids by
-        // the slot's spawn MaxHp). Returns the number of enemies newly normalized this pass.
-        private static int SweepLiveSlots(int curHpDef, int curAtk)
+        // Normalize each newly-seen live enemy once. Maps the slot's species Id to a TableIndex via the global _byId
+        // map (disambiguating shared base/enhanced Ids by the slot's spawn MaxHp). Returns the number of enemies newly
+        // normalized this pass.
+        private static int SweepLiveSlots(int region)
         {
             int normalized = 0;
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
@@ -330,8 +343,8 @@ namespace Dark_Cloud_Improved_Version
                 int id = Memory.ReadUShort(slotBase + EnemySlotOffsets.EnemySpeciesId);
                 if (_swept.TryGetValue(s, out int prevSpeciesId) && prevSpeciesId == id)
                 {
-                    // Already normalized (HP/def/melee are one-shot). Only the projectile may still be owed, if its
-                    // STB script pointer wasn't attached when we first swept this slot — retry until it lands.
+                    // Already normalized (the slot writes are one-shot). Only the projectile may still be owed, if its
+                    // STB script pointer wasn't attached when this slot was first swept — retry until it lands.
                     if (_projPending.TryGetValue(s, out var pending)
                         && EnemyStatScaler.ScaleProjectile(s, pending.tableIndex, pending.factor))
                     {
@@ -346,29 +359,26 @@ namespace Dark_Cloud_Improved_Version
                 int tableIndex = tableIndices.Count == 1 ? tableIndices[0]
                                         : tableIndices.OrderBy(candidate => Math.Abs((_byTableIndex[candidate].MaxHp ?? 0) - slotMaxHp)).First();
                 EnemyDefaults enemyDefaults = _byTableIndex[tableIndex];
-                bool hasHp  = _hpdefTier.TryGetValue(tableIndex, out int nativeHpTier);
-                bool hasAtk = _atkTier.TryGetValue(tableIndex, out int nativeAtkTier);
-                // "Stronger" targets one tier ABOVE current, so it must scale NATIVE enemies too (the gradient
-                // randomizer mode only ever touches non-native ones, where native factor = 1).
-                bool native = (!hasHp || nativeHpTier == curHpDef) && (!hasAtk || nativeAtkTier == curAtk);
+                bool floorEnemy = IsFloorEnemy(tableIndex) && _homeRegion.ContainsKey(tableIndex);
+                bool inPool = floorEnemy && _poolMembers[region].Contains(tableIndex);
+                bool native = inPool && !StrongerEnemies;   // Stronger scales the region's own spawns too
                 if (LogNormalize)
-                    Console.WriteLine($"[Normalize] slot {s} {enemyDefaults.Name} (id {id}, ti {tableIndex}): nativeTier(HpDef={(hasHp ? nativeHpTier : -1)},Atk={(hasAtk ? nativeAtkTier : -1)}) curTier(HpDef={curHpDef},Atk={curAtk}){(native && !StrongerEnemies ? " — native, skip" : "")}");
-                if (native && !StrongerEnemies) continue;
+                    Console.WriteLine($"[Normalize] slot {s} {enemyDefaults.Name} (id {id}, ti {tableIndex}): home {(_homeRegion.TryGetValue(tableIndex, out int home) ? RegionName(home) : "none")}" +
+                                      (!floorEnemy ? " — boss/support, skip" : native ? " — native, skip" : ""));
+                if (!floorEnemy || native) continue;
 
-                // HP / defense (HP/def tier) — per-slot scaling via the shared EnemyStatScaler pipeline.
-                if (hasHp && (StrongerEnemies || nativeHpTier != curHpDef))
-                {
-                    if (enemyDefaults.MaxHp.HasValue)
-                        EnemyStatScaler.ScaleHp(s, Factor(_bHp, nativeHpTier, curHpDef));
-                    if (enemyDefaults.DamageReduction.HasValue || enemyDefaults.WeaponDefense.HasValue)
-                        EnemyStatScaler.ScaleDefense(s, Factor(_bDr, nativeHpTier, curHpDef), Factor(_bWd, nativeHpTier, curHpDef));
-                }
+                // HP / ABS / defense (per-slot).
+                if (enemyDefaults.MaxHp.HasValue) EnemyStatScaler.ScaleHp(s, Factor(tableIndex, Stat.Hp, region, StrongerEnemies));
+                if (enemyDefaults.Abs.HasValue && !inPool) EnemyStatScaler.ScaleAbs(s, Factor(tableIndex, Stat.Abs, region, false));
+                if (enemyDefaults.DamageReduction.HasValue || enemyDefaults.WeaponDefense.HasValue)
+                    EnemyStatScaler.ScaleDefense(s, Factor(tableIndex, Stat.Dr, region, StrongerEnemies),
+                                                    Factor(tableIndex, Stat.Wd, region, StrongerEnemies));
 
-                // Damage — melee (per-slot cache) + projectile (per-species STB / BST), via the shared pipeline.
-                if ((NormalizeDamage || StrongerEnemies) && hasAtk && (StrongerEnemies || nativeAtkTier != curAtk))
+                // Damage — melee (per-slot cache) + projectile (per-species STB / BST).
+                if (NormalizeDamage || StrongerEnemies)
                 {
-                    EnemyStatScaler.ScaleMelee(s, enemyDefaults.MeleeDamage, Factor(_bMelee, nativeAtkTier, curAtk));
-                    float projFactor = Factor(_bProj, nativeAtkTier, curAtk);
+                    EnemyStatScaler.ScaleMelee(s, enemyDefaults.MeleeDamage, Factor(tableIndex, Stat.Melee, region, StrongerEnemies));
+                    float projFactor = Factor(tableIndex, Stat.Proj, region, StrongerEnemies);
                     if (!EnemyStatScaler.ScaleProjectile(s, tableIndex, projFactor))
                         _projPending[s] = (tableIndex, projFactor);   // STB not attached yet — retry next sweep pass
                 }

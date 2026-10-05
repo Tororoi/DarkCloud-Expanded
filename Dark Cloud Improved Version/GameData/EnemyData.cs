@@ -97,7 +97,7 @@ namespace Dark_Cloud_Improved_Version
         // Per-attack hit damage decoded from this species' behavior script (dun/monstor/<ModelCode>.stb),
         // mirrored from enemy-attack-damage-table.md. ACTUAL hit damage = baseDamage − playerDefense; baseDamage
         // is these script constants (no static-table field holds hit damage — the old "AttackPower" at +0x88 is
-        // actually RareDropItemId; see EnemyAddresses.cs / memory enemy-attack-damage-system). Used by the stat-normalization gradient.
+        // actually RareDropItemId; see EnemyAddresses.cs / memory enemy-attack-damage-system). Used by the stat normalizer.
         //   MeleeDamage:      arg0 of each _SET_DMG_PARA (STB cmd 0x84), in STB-walk order.
         //   ProjectileDamage: 5th arg of each _SET_SHOT/_SET_SHOT2 (cmd 0x85/0xE5), in STB-walk order;
         //                     -1 = omitted (engine default, do not rescale).
@@ -2280,6 +2280,60 @@ namespace Dark_Cloud_Improved_Version
         // Indexed 0..6 = DBC, WOF, SW, SMT, MS, GoT, DS (matches checkDungeon / BtEnemyLayout order).
         internal static readonly Dictionary<int, EnemyDefaults>[] NativeByDungeon =
             { NativeDBC, NativeWOF, NativeSW, NativeSMT, NativeMS, NativeGoT, NativeDS };
+
+        // ── Similar enemies ────────────────────────────────────────────────────────────────────────────────
+        // Chains of look-alike species (the same rig or a reskin of it, per the motion tables in
+        // docs/enemy-motion-table.md), ordered weakest → strongest by home region, then HP. The stat normalizer keeps
+        // that order on every floor: in a region, a member's normalized stat never exceeds the next member's (a Cave
+        // Bat dropped into the Gallery is capped at Evil Bat's stats there). Ties (the cards, the days) are allowed.
+        // Membership and order are the tuning surface; mimics are left out because they never leave their dungeon.
+        internal static readonly EnemyDefaults[][] SimilarEnemies =
+        {
+            new[] { CaveBat, EvilBat, CaveBatEnhanced, EvilBatEnhanced },
+            new[] { CrescentBaron, CrescentBaronEnhanced },
+            new[] { SkeletonSoldier, MasterJacket, MasterJacketEnhanced, HornHead, SilverGear, GaciousEnhanced },
+            new[] { Dasher, RashDasher, RashDasherEnhanced },
+            new[] { Hornet, Phantom },
+            new[] { Halloween, HalloweenEnhanced },
+            new[] { CannibalPlant, CursedRose, DarkFlower, CursedRoseEnhanced },
+            new[] { EarthDigger, MoonDigger },
+            new[] { Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, HellPockle },
+            new[] { WitchIllza, WitchHellza, WitchHellzaEnhanced },
+            new[] { Gyon, SpaceGyon, GyonEnhanced, SpaceGyonEnhanced },
+            new[] { PiratesChariot, PiratesChariotEnhanced },
+            new[] { AuntieMedu, AuntieMeduEnhanced },
+            new[] { Captain, CaptainEnhanced },
+            new[] { Corcea, CorceaEnhanced },
+            new[] { Golem, Sil, Gol, SteelGiant, Titan, Blizzard, SilEnhanced, SteelGiantEnhanced, GolEnhanced, TitanEnhanced },
+            new[] { Dune, Vulcan, VulcanEnhanced },
+            new[] { Arthur, ArthurEnhanced },
+            new[] { Ghost, Lich, LichEnhanced },
+            new[] { Alexander, AlexanderEnhanced },
+            new[] { Heart, Club, Diamond, Spade, Joker, DiamondEnhanced, ClubEnhanced, SpadeEnhanced, HeartEnhanced, JokerEnhanced },
+            new[] { BomberHead, BomberHeadEnhanced },
+            new[] { Mummy, MummyEnhanced },
+            new[] { Statue, LivingArmor, LivingArmorEnhanced },
+            new[] { Werewolf, WhiteFang, WhiteFangEnhanced },
+            new[] { Sam, MrBlare, Billy },
+            new[] { CrabbyHermit, CrabbyHermitEnhanced },
+            new[] { Dragon, BlueDragon, BlackDragon },
+            new[] { GemronFire, GemronIce, GemronThunder, GemronWind, GemronHoly },
+            new[] { MaskOfPrajna, MaskOfPrajnaEnhanced },
+            new[] { Rockanoff, RockanoffEnhanced },
+            new[] { Yammich, YammichEnhanced },
+            new[] { StatueDog, StatueDogEnhanced },
+        };
+
+        // ── Mimic lines ────────────────────────────────────────────────────────────────────────────────────
+        // The one mimic and the one king mimic, dungeon by dungeon: each entry is the previous one re-tuned for its
+        // region. With Stronger enemies on, a mimic in its own region is at least the next entry's vanilla stats; the
+        // last entries use the extrapolated stats below (HP, damage reduction, weapon defense, melee).
+        internal static readonly EnemyDefaults[] MimicLine =
+            { MimicDBC, MimicWOF, MimicSW, MimicSMT, MimicMS, MimicGoT, MimicDS, MimicDSEnhanced, MimicDSEnhancedTwice, MimicDSEnhancedThrice };
+        internal static readonly EnemyDefaults[] KingMimicLine =
+            { KingMimicDBC, KingMimicWOF, KingMimicSW, KingMimicSMT, KingMimicMS, KingMimicGoT, KingMimicDS, KingMimicDSEnhanced, KingMimicDSEnhancedTwice, KingMimicDSEnhancedThrice };
+        internal static readonly (int hp, int dr, int wd, int melee) MimicBeyond     = (12000, 40, 15, 140);
+        internal static readonly (int hp, int dr, int wd, int melee) KingMimicBeyond = (30000, 40, 60, 180);
 
         // ── Themed groups ──────────────────────────────────────────────────────────────────────────────────
         // The trailing "Σ footprint" is the sum of the members' ModelFootprint (bytes) — the worst-case model-buffer
