@@ -21,7 +21,7 @@ namespace Dark_Cloud_Improved_Version
     internal static class QuestOffers
     {
         /// <summary>The menu line of an ongoing quest.</summary>
-        internal const string OngoingLabel = "About the sidequest.";
+        internal const string OngoingLabel = "About the quest.";
 
         // (area, npc id, availability flag, status byte) — availability 0 = intro not heard yet, status 0 = no quest running,
         // 1 = running, 2 = finished and waiting for its reward.

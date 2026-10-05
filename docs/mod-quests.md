@@ -120,7 +120,7 @@ How the mod puts quests on an NPC's talk menu (`Quests/QuestOffers.cs`, `Town/To
     line** and **"Hello" opens the quest dialogue** — an ally's greeting text is the intro (`Dialogues.SetDialogue`
     writes it to the greeting message); for Toan slot `0x434` is pointed at the quest message.
   - **Ongoing** (running or finished-and-unrewarded; rumour heard; mayor past stage 0): "Hello" stays the greeting
-    and the menu gains the quest line (**"About the sidequest."**) routed to the
+    and the menu gains the quest line (**"About the quest."**) routed to the
     quest message.
   - **None**: a three-line menu. Non-quest NPCs no longer carry "Do you have any sidequests?".
 - The menu is rewritten whenever the villager next to the player changes or that NPC's phase changes
