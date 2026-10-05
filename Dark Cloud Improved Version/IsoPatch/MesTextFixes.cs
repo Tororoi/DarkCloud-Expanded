@@ -39,6 +39,17 @@ namespace Dark_Cloud_Improved_Version
             ("Mr.Moustache", "Mr. Mustache"), ("Moustache", "Mustache"), ("Stew", "Stu"), ("Marnia", "Mahnia"), ("Suger", "Sugar"),
             ("Yellow Drop", "Yellow Drops"), ("Sun & Moon temple", "Sun & Moon Temple"), ("Muska desert", "Muska Desert"),
             ("No! that's", "No! That's"),
+            // NPC and place names: the Georama name plate / menu spelling is the reference.
+            ("Nemu", "Nem"), ("AncientBaron", "Ancient Baron"), ("Jibubu's Hose", "Jibubu's House"), ("3sisters' House", "3 Sisters' House"),
+            ("LeaningTower", "Leaning Tower"), ("Kye&Momo's", "Kye & Momo's"),
+            // The plate bank the USA build loads (gedit\system\editsys.bin) differs from its editsys_1.mes twin in a few resident names.
+            ("Dike", "Pike"), ("Xena", "Gina"), ("Strage Guard", "Storage Guard"),
+            // The weapon list the USA build loads (systeme.bin) still has the old spelling of Halberd.
+            ("Halbert", "Halberd"),
+            // Suzy's Queens shop is a "Watery" in every line of dialogue; the Georama menu called the three names "Washery" and gave two
+            // of them different adjectives. The menu's adjectives stay, the dialogue's noun wins: Freshen Up / Miracle / Warrior's Watery.
+            ("Freshen Up Washery", "Freshen Up Watery"), ("Miracle Washery", "Miracle Watery"), ("Warrior'sWashery", "Warrior's Watery"),
+            ("FreshenUp Watery", "Freshen Up Watery"), ("Magical Watery", "Miracle Watery"), ("Fighting Watery", "Warrior's Watery"),
         };
 
         /// <summary>The English `.bin` banks beside the `_1.mes` files (the system, item-notice and editor banks the engine loads by these names).</summary>

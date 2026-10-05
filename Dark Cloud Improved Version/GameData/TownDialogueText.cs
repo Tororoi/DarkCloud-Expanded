@@ -171,7 +171,7 @@ namespace Dark_Cloud_Improved_Version
             NoruneGoro[12] = "I´ve heard you can find a monster named^King Prickly around Matataki Village,¤I´ve been having an issue with Pricklies^coming in my home so I can´t imagine^a King Prickly!";
 
             NoruneGoro2[0] = "You´re all pudgy just like Claude^but they say you´re a powerful hunter,^we should go down to the^cave and train together.";
-            NoruneGoro2[1] = "I´ve heard of a very frugal shopkeeper^by the name of Mr.Mustache in Matataki,^I hope you find my prices more fair.";
+            NoruneGoro2[1] = "I´ve heard of a very frugal shopkeeper^by the name of Mr. Mustache in Matataki,^I hope you find my prices more fair.";
             NoruneGoro2[2] = "I think carrying that big heavy hammer^around made you short haha!";
             NoruneGoro2[3] = "Haha, finally there´s someone in the^village who is the same height as my^little Gina!";
             NoruneGoro2[4] = "You look a little taller than Carl,^is everyone from Matataki Village^so short?";
@@ -196,7 +196,7 @@ namespace Dark_Cloud_Improved_Version
             NoruneRuby[5] = "I´ve heard about you Ʀ,^they say that you are trying to be^the best genie in the world!¤Do you know of any spells to make the^legendary Mardan Garayan appear?";
             NoruneRuby[6] = "The other villagers say that you are a^genie. I hope you haven´t come back to^put us into those weird bubbles again.";
             NoruneRuby[7] = "I heard Uncle Pike saying that he wants^to go on a fishing trip to Queens.^I hope he takes me!";
-            NoruneRuby[8] = "Wow I love your clothes!^Before the Dark Genie attacked our^village I was celebrating the¤Star festival, it was really scary!";
+            NoruneRuby[8] = "Wow I love your clothes!^Before the Dark Genie attacked our^village I was celebrating the¤star festival, it was really scary!";
             NoruneRuby[9] = "Hello, you met Ť in Queens?^It´s nice that you are lending your^magical abilities to Ť and^the rest of his allies!";
             NoruneRuby[10] = "It´s cool that you are a genie, can you^do spells? Can you make 100 plates of^premium chicken appear out of thin^air through magic?";
             NoruneRuby[11] = "Oh-ho-ho-ho I may look like an old^fossil but there was once a time where^I was just as beautiful as^you Ʀ.";
@@ -231,7 +231,7 @@ namespace Dark_Cloud_Improved_Version
             NoruneUngaga[8] = "I bet with that staff you could^be an excellent shepherd, we have^plenty of llamas here in Norune!";
             NoruneUngaga[9] = "Thank you for helping my son on his^journey, there is a saying that it^takes a village to raise a child.¤He will learn a lot from^all of his new allies!";
             NoruneUngaga[10] = "What, your favorite food is^scorpion jerky?! Say it isn´t so!";
-            NoruneUngaga[11] = "Oh, a sand warrior from the far^off village of Muska Lacka has come^to visit?¤The Sun and Moon Temple is a source^of magic power for your village much^like Dran´s Windmill is for Norune.";
+            NoruneUngaga[11] = "Oh, a sand warrior from the far^off village of Muska Lacka has come^to visit?¤The Sun & Moon Temple is a source^of magic power for your village much^like Dran´s Windmill is for Norune.";
             NoruneUngaga[12] = "I am glad strong warriors like you^are helping Ť on his quest,^we will defeat the genie!";
 
             NoruneUngaga2[0] = "I´m glad someone strong like you^is helping Ť on his journey,^he needs all the muscle he can get!";
@@ -258,7 +258,7 @@ namespace Dark_Cloud_Improved_Version
             NoruneOsmond[3] = "I´ve never seen someone who looks^like you before, you kind of^look like a bunny.";
             NoruneOsmond[4] = "Aren´t you a small little guy,^I wonder how you can float like that!";
             NoruneOsmond[5] = "I heard from other villagers that^you are from the moon, is it true^that there is a moon sea?";
-            NoruneOsmond[6] = "I´m happy that even the moon knows^about Norune village, let them know^that we are the strongest on Terra.";
+            NoruneOsmond[6] = "I´m happy that even the moon knows^about Norune Village, let them know^that we are the strongest on Terra.";
             NoruneOsmond[7] = "Is it true that you are from the Moon?^I heard from the other villagers^but I didn´t believe it!";
             NoruneOsmond[8] = "Wow I heard you are from the moon,^is that true?";
             NoruneOsmond[9] = "Thank you for helping Ť on^his journey, you have come from so^far away! It just goes to show that^if we are near or far, hard times¤bring people together. If we all^work together as allies,^anything is possible.";
@@ -514,7 +514,7 @@ namespace Dark_Cloud_Improved_Version
             QueensRuby[11] = "(Humph) Everyone in Queens is talking^about the magical powers of the great^genie Ʀ as well as her good^looks.¤How come no one compliments me,^the great fortune teller Yaya, for my^beauty?";
             QueensRuby[12] = "Hey you´re not here to take more^merchandise are you?¤Come on Ʀ I can´t keep giving^you discounts like this.¤One of these days you´ll send me to the^poor house!";
 
-            QueensRuby2[0] = "Remember that one time when Stu tried^teasing me by calling me King Ploogal?¤I made sure to punch him right in the^face.";
+            QueensRuby2[0] = "Remember that one time when Stu tried^teasing me by calling me King Plugal?¤I made sure to punch him right in the^face.";
             QueensRuby2[1] = "That King is always up to no good!";
             QueensRuby2[2] = "The fish were barely biting, it doesn´t^help that the sea is so blue that you^can´t see them either!¤Say, you´re trying to prove that you´re^the most powerful genie, do you know of^any spells that can help?"; //POTENTIAL EASTER EGG
             QueensRuby2[3] = "Even a genie like you needs to stay^hydrated, feel free to come by if you^ever need something healthy to drink!";
@@ -603,7 +603,7 @@ namespace Dark_Cloud_Improved_Version
             MuskarackaXiao[3] = "You´re a small cat aren´t you, I know a^thing or two about being the smallest...¤Living out in the desert can be^dangerous, the other day my friend was^stung by a scorpion and almost died!¤If you need anything at all or even a^house to take shelter, feel free to find^me.";
             MuskarackaXiao[4] = "A stray cat like you has no business^being in or around my home!¤There´s plenty of room in the wide open^desert for you to roam around in.";
             MuskarackaXiao[5] = "Gosuke and Toto would always pretend to^be warriors and have adventures^together!¤Maybe you could join them and be an^adventurer too!¤You´re a small cat now I´m sure you´ll^change the world one day! Tehehe Ȟ"; // <3 AT THE END
-            MuskarackaXiao[6] = "The Sun and Moon Temple is a sacred^place as it´s not only the home of the^Moon Ship but also the final resting¤place of our noble king who passed away^generations ago.¤Since his passing his kingdom broke up^into many warring tribes.¤Since then blood has been split and^people have been killed, perhaps it is¤too late to unify...¤It´s up to our generation to unify after^years of conflict.";
+            MuskarackaXiao[6] = "The Sun & Moon Temple is a sacred^place as it´s not only the home of the^Moon Ship but also the final resting¤place of our noble king who passed away^generations ago.¤Since his passing his kingdom broke up^into many warring tribes.¤Since then blood has been split and^people have been killed, perhaps it is¤too late to unify...¤It´s up to our generation to unify after^years of conflict.";
             MuskarackaXiao[7] = "No one should ever under estimate the^killer instinct of an animal.¤You may be small but you´re a worthy^hunter in your own right.";
             MuskarackaXiao[8] = "Hey cat, how about you bust me out of^here!";
             MuskarackaXiao[9] = "Wow, a cat in our village!^Would you like to play with me?";
@@ -627,7 +627,7 @@ namespace Dark_Cloud_Improved_Version
             // ^ = Next Line, ¤ = Next Dialogue Bubble. 40 symbols max per line, more than that can clip dialogue
             MuskarackaGoro[0] = "You are so out of shape, have you ever^thought of laying off the grass cakes?";
             MuskarackaGoro[1] = "Ah so your from the village of Matataki,^I can tell by your distinct warrior^garb.¤The Moon People used to maintain the^shrine but they´ve gotten lazy over^time, now they relax in the woods not^too far from Matataki.¤Make sure your people don´t hunt them^by accident!";
-            MuskarackaGoro[2] = "The Sun and Moon Temple is a sacred^place, no one outside of the village has^ever stepped foot inside of it.¤It´s a shame that it has been riddled^with monsters, please help Ť^and Ų rid us of this^infestation.";
+            MuskarackaGoro[2] = "The Sun & Moon Temple is a sacred^place, no one outside of the village has^ever stepped foot inside of it.¤It´s a shame that it has been riddled^with monsters, please help Ť^and Ų rid us of this^infestation.";
             MuskarackaGoro[3] = "It´s hard to believe that we were almost^destroyed had not been for Ť^and his friends rescuing us.¤We are all in your debt.";
             MuskarackaGoro[4] = "Why are you wearing that, you must^be hot!";
             MuskarackaGoro[5] = "You´re so heroic, seeing you fight side^by side with Ų makes me inspired^to become a warrior myself!";
@@ -702,7 +702,7 @@ namespace Dark_Cloud_Improved_Version
             MuskarackaUngaga2[6] = "They say a Moon person helped snap you^out of that depression you fell into.¤They are quite the wise ones those Moon^people!";
             MuskarackaUngaga2[7] = "I´ve watched over you since you were^young, it takes a village to raise a^child!¤I´m very proud of all of the progress^you have made, not only as a warrior but^also as a person.¤Ų our warring tribes are no^strangers to conflict and there will be^times where you will have to put your¤values to the test on the battlefield.^That is how I lost my eye.¤That´s the price we have to pay for^holding true to our ideals.¤It´s important that when faced with^difficulty, you don´t lose sight of who^you are.";
             MuskarackaUngaga2[8] = "I wonder, once you fail and meet your^end what will become of your legacy?¤Will your pitiful tribe still hold you^to high regard, or will be known as the^failure that doomed them?";
-            MuskarackaUngaga2[9] = "Don´t tell Chief Bonka or Enga but I was^once exploring the Sun and Moon Temple^the other day and I saw some gold and^silver golems.¤Do you think they´re related to Gosuke?";
+            MuskarackaUngaga2[9] = "Don´t tell Chief Bonka or Enga but I was^once exploring the Sun & Moon Temple^the other day and I saw some gold and^silver golems.¤Do you think they´re related to Gosuke?";
             MuskarackaUngaga2[10] = "Don´t be sad Ų...^Gosuke proud of you...";
 
 
@@ -710,8 +710,8 @@ namespace Dark_Cloud_Improved_Version
             //Ť = Toan, Ӿ = Xiao, Ʊ = Goro, Ʀ = Ruby, Ų = Ungaga, Ō = Osmond
             // ^ = Next Line, ¤ = Next Dialogue Bubble. 40 symbols max per line, more than that can clip dialogue
             MuskarackaOsmond[0] = "You cover your face with goggles and a^scarf, why not show your beauty for all^to see?";
-            MuskarackaOsmond[1] = "Ah hah, finally a Moon person comes to^our village!¤I´ll have you know that the people of^Muska Lacka have been staying on top of^the defending the Sun and Moon Temple as^well as the Signets.¤We´re not lazy like those bunnies who^chose to live the easy life in the^forest...";
-            MuskarackaOsmond[2] = "Ah a Moon person, have you come to visit^the Sun and Moon Temple?¤Take caution as it is infested with^monsters!";
+            MuskarackaOsmond[1] = "Ah hah, finally a Moon person comes to^our village!¤I´ll have you know that the people of^Muska Lacka have been staying on top of^the defending the Sun & Moon Temple as^well as the Signets.¤We´re not lazy like those bunnies who^chose to live the easy life in the^forest...";
+            MuskarackaOsmond[2] = "Ah a Moon person, have you come to visit^the Sun & Moon Temple?¤Take caution as it is infested with^monsters!";
             MuskarackaOsmond[3] = "So if you´re here that must^mean that Ų and his friends^made his way to the moons!";
             MuskarackaOsmond[4] = "Old Enga would tell us that the moons^are home to the Moon tribe but I never^thought they would be bunnies!";
             MuskarackaOsmond[5] = "You may be small and cuddly, but I bet^you´re quite the warrior! Ȟ"; // <3 AT THE END
@@ -888,7 +888,7 @@ namespace Dark_Cloud_Improved_Version
             YellowdropsOsmond[3] = "You´re such a strong leader, once you^retire from the Moon Factory you could^start a new career as a coliseum fighter^like Minotaur Joe!";
             YellowdropsOsmond[4] = "Thank you for all the hard work you^do Boss!";
             YellowdropsOsmond[5] = "I saw that Ť has a fishing rod,^it´s a shame we have no fishing spots^here!";
-            YellowdropsOsmond[6] = "Ų´s wisdom never ceases to amaze^me!¤We were talking about the Sun and Moon^Temple as well as the Signits.¤The Moon People and the Desert Tribe^share many similarities.";
+            YellowdropsOsmond[6] = "Ų´s wisdom never ceases to amaze^me!¤We were talking about the Sun and Moon^Temple as well as the Signets.¤The Moon People and the Desert Tribe^share many similarities.";
             YellowdropsOsmond[7] = "You´re so lucky, now you can travel to^Blue Terra! I heard that they think the^Moon is made of cheese!";
             YellowdropsOsmond[9] = "The Sun Giant has such a magnificent^design, truly the pride of Yellow Drops!";
             YellowdropsOsmond[10] = "Don´t tell the other allies I said this^but you´re definitely the star of the^show Boss!";
@@ -928,14 +928,14 @@ namespace Dark_Cloud_Improved_Version
             BrownbooGoro[6] = "You look like a strong hunter, if you^ever need to store anything come to me!";
             BrownbooGoro[7] = "We almost never get any visitors from^Matataki, I´m pleased to meet you!¤Welcome to Brownboo Village, make^yourself at home neighbor!¤Just make sure not to hunt any of our^villagers. Just because we look like^beasts doesn´t mean we should be hunted^like them.";
             BrownbooGoro[8] = "Over the years the Moon People of^Brownboo have forgotten how to use^magic.¤Since ancient times we were the^guardians of Terra but things have been^pretty easygoing!¤The carefree life was a good fit for us.^That is until the Dark Genie returned.^Now we´re rethinking our way of life...";
-            BrownbooGoro[10] = "We would often visit Matataki Village at^night when all the hunters were asleep!¤We´d tip toe all throughout the night!¤There was one villager who was pretty^friendly, a rather large fellow named^Cous Cous! We´d often visit their house^to get treats!";
+            BrownbooGoro[10] = "We would often visit Matataki Village at^night when all the hunters were asleep!¤We´d tip toe all throughout the night!¤There was one villager who was pretty^friendly, a rather large fellow named^Couscous! We´d often visit their house^to get treats!";
             BrownbooGoro[11] = "There was once a time where Sugar and^Mango went exploring into the Wise Owl^Forest but they were scared off by a^giant silver serpent.¤This beast´s scales were as pale as the^two moons and it´s fangs looked like^something from our worst nightmares.¤Poor Mango couldn´t go to bed for weeks!";
             BrownbooGoro[12] = "Once upon a time, long long ago the^Dark Genie ravaged all of Terra. That is^all except for Brownboo Village.¤This tiny village was the only surviving^bastion from the influence of the Dark^Genie.¤The remaining survivors from all over^Terra journeyed to this village as a^safe haven.¤Many years have since passed and the^Dark Clouds have once again begun to^stir.¤It´s time to make a stand brave Hunter,^like all of those who came before you,^and for the sake of those who will come^after you.¤For the sake of all the life on Terra.";
 
             BrownbooGoro2[6] = "Keep an eye on that Ӿ she´s^quite the mischievous little cat but I^get an odd vibe from her.¤I can´t quite put my paw on it but^something tells me she is not like other^cats...";
             BrownbooGoro2[7] = "Keep this between us but some of the^other villagers of Brownboo were afraid^of the hunters of Matataki.¤We believed that if you found our quiet^village you would hunt us all down^mercilessly.¤I´m glad that we were´re wrong about^that.";
             BrownbooGoro2[8] = "Unlike most of the other villagers of^Brownboo, I still remember how to use^some magic!¤Yes my friend, you are in the presence^of  the amazingly legendary Mango the^Magician!¤For the first trick I will make your^nose disappear!¤Wait, was your nose always that tiny or^did my magic actually work?";
-            BrownbooGoro2[10] = "Mr.Mustache´s shop was our go to spot^for late night snacks!¤I think we ever ran into a laughapockle^there once!";
+            BrownbooGoro2[10] = "Mr. Mustache´s shop was our go to spot^for late night snacks!¤I think we ever ran into a laughapockle^there once!";
             BrownbooGoro2[11] = "If you ever outgrow that boring old^wooden mallet can I have it?¤Picture this, the great hunter Natade of^Brownboo Village!¤That mean old genie better look out^because I´d give him a good bonk on the^head!";
             BrownbooGoro2[12] = "The culture of Matataki is fascinating,^it seems like you´re people have always^valued hunting and community.¤It seems like the hunt is what brings^you together as a community, both are^intertwined! That´s so interesting to^think about, the most we do here in¤Brownboo is pick Moon Fruit and share^jokes!";
 
@@ -1031,7 +1031,7 @@ namespace Dark_Cloud_Improved_Version
             // ^ = Next Line, ¤ = Next Dialogue Bubble. 40 symbols max per line, more than that can clip dialogue
             MatatakiFinishedDialogue[0] = "I lived long enough to know that^it´s not easy for people to put aside^their differences to solve a problem,^but here we are.¤The people of Matataki are^forever in your debt.";
             MatatakiFinishedDialogue[1] = "It brings a tear to my eye seeing^young people band together for a single^cause, to help save the world^from this cataclysm.¤Thank you for fixing our^home and our lives.";
-            MatatakiFinishedDialogue[2] = "Thanks for finishing our home,^do you think you can build^a few more stores?¤Mr.Mustache´s shop can be a little^expensive and I only have so much^Gilda in my wallet!";
+            MatatakiFinishedDialogue[2] = "Thanks for finishing our home,^do you think you can build^a few more stores?¤Mr. Mustache´s shop can be a little^expensive and I only have so much^Gilda in my wallet!";
             MatatakiFinishedDialogue[3] = "This village is full of the strongest^hunters, but you are by far the^best builders here.";
             MatatakiFinishedDialogue[4] = "I bet you would have finished^rebuilding my home if you had^a better diet.¤Haha, I´m only kidding.^Any time you feel hungry,^my cooking services are yours!";
             MatatakiFinishedDialogue[5] = "Just you wait, in the future we´ll^be building houses with giant flying^robots with huge eyes and hands, it´ll^even be piloted by dwarves!¤You´ll see, you´ll all see!";
