@@ -110,6 +110,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     WeaponThreads.LaunchCurses();
                     ElementMenu.Tick();                    // the quick-change menu's element pick (D-pad UP), applied to the weapon record and HUD
+                    EnemyPoisonDuration.Tick();            // enemy poison ends after status susceptibility × 2 s (the engine's never does)
 
                     // Enemies.PollEnemyDynamics();
                     // Enemies.MonitorFlashTimer();
@@ -168,6 +169,7 @@ namespace Dark_Cloud_Improved_Version
                             dunUsedActiveEscape = false;
                             dunUsedEscapeCheck = false;
                             hasClearMessageShown = false;
+                            EnemyPoisonDuration.Reset();
                             MiniBoss.miniBossRolled = false;
                             MiniBossLootTables.CancelPendingBoost();
                             normalFloorSnapshot = null;
