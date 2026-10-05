@@ -448,7 +448,7 @@ namespace Dark_Cloud_Improved_Version
                                 }
                                 else if (characterIdData == 12849)
                                 {
-                                    currentDialogue = "I needed your help earlier,^but I´m okay now.¤You see, I slipped on this^pink thing which made me all^slow and slimey.¤Well, I survived from that disaster.";
+                                    currentDialogue = "I needed your help earlier,^but I´m okay now.¤You see, I slipped on this^pink thing which made me all^slow and slimy.¤Well, I survived from that disaster.";
                                 }
                                 else if (characterIdData == 14640) 
                                 {
@@ -486,7 +486,7 @@ namespace Dark_Cloud_Improved_Version
                                 }
                                 else if (characterIdData == 12849)
                                 {
-                                    currentDialogue = "I needed your help earlier,^but I´m okay now.¤You see, I slipped on this^pink thing which made me all^slow and slimey.¤Well, I survived from that disaster.";
+                                    currentDialogue = "I needed your help earlier,^but I´m okay now.¤You see, I slipped on this^pink thing which made me all^slow and slimy.¤Well, I survived from that disaster.";
                                 }
                                 else if (characterIdData == 14640)
                                 {
@@ -545,7 +545,7 @@ namespace Dark_Cloud_Improved_Version
                                 }
                                 else if (characterIdData == 14386)
                                 {
-                                    currentDialogue = "I wish you happened to be there.¤One day I accidentally ventured^too deep into the forest and^was surronded by monsters.¤Luckily, I had this red pouch which^allowed me to get back to safety.";
+                                    currentDialogue = "I wish you happened to be there.¤One day I accidentally ventured^too deep into the forest and^was surrounded by monsters.¤Luckily, I had this red pouch which^allowed me to get back to safety.";
                                 }
                                 else if (characterIdData == 13106)
                                 {
@@ -576,7 +576,7 @@ namespace Dark_Cloud_Improved_Version
                                 }
                                 else if (characterIdData == 14386)
                                 {
-                                    currentDialogue = "I wish you happened to be there.¤One day I accidentally ventured^too deep into the forest and^was surronded by monsters.¤Luckily, I had this red pouch which^allowed me to get back to safety.";
+                                    currentDialogue = "I wish you happened to be there.¤One day I accidentally ventured^too deep into the forest and^was surrounded by monsters.¤Luckily, I had this red pouch which^allowed me to get back to safety.";
                                 }
                                 else if (characterIdData == 13106)
                                 {
@@ -1411,7 +1411,7 @@ namespace Dark_Cloud_Improved_Version
                 if (buildingCheck == false) //if player is not inside (storage) house
                 {
                     currentAddress = 0x20649288; //muska dialogueoptions after event finish
-                    dialogueOptions = "Hello.^  Any requests for building Muska Racka?^  It´s finished!" + QuestLine(offer);
+                    dialogueOptions = "Hello.^  Any requests for building Muska Lacka?^  It´s finished!" + QuestLine(offer);
                     dialogueSet = true;
                 }
                 else
@@ -1419,14 +1419,14 @@ namespace Dark_Cloud_Improved_Version
                     if (Memory.ReadByte(0x202A2820) == 5) //check for basker
                     {
                         currentAddress = 0x2064930C; //can I check for items? dialogue
-                        dialogueOptions = "  Can I check in some items?^  Hello.^  Any requests for building Muska Racka?^  It´s finished!";
+                        dialogueOptions = "  Can I check in some items?^  Hello.^  Any requests for building Muska Lacka?^  It´s finished!";
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "Entered Enga");
                         dialogueSet = true;
                     }
                     else
                     {
                         currentAddress = 0x20649288; //muska dialogueoptions after event finish
-                        dialogueOptions = "Hi.^  Any requests for building Muska Racka?^  It´s finished!" + QuestLine(offer);
+                        dialogueOptions = "Hi.^  Any requests for building Muska Lacka?^  It´s finished!" + QuestLine(offer);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "Entered building (not enga)");
                         dialogueSet = true;
                     }

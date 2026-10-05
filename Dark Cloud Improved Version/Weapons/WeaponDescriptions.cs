@@ -324,10 +324,10 @@ namespace Dark_Cloud_Improved_Version
                 if (ch == ' ')  { outw.Add(0xFF02); continue; }
                 int g = ch switch
                 {
-                    '\'' => 0x55, '"' => 0x57, '&' => 0x5B, '-' => 0x5D, '/' => 0x5F,
-                    '(' => 0x61, ')' => 0x62, ',' => 0x6C, '.' => 0x6D,
-                    // Verified from vanilla text (status-break hint, entry 47): NOT on the
-                    // linear '!'..'Z' plane despite falling in its ASCII range.
+                    '\'' => 0x55, '"' => 0x57, '!' => 0x58, '&' => 0x5B, '-' => 0x5D, '/' => 0x5F,
+                    '(' => 0x61, ')' => 0x62, ':' => 0x6B, ',' => 0x6C, '.' => 0x6D,
+                    // Verified from vanilla text (status-break hint, entry 47; the talk banks' "!" and ":"):
+                    // NOT on the linear '!'..'Z' plane despite falling in its ASCII range.
                     '%' => 0x60, '?' => 0x59,
                     >= '0' and <= '9' => ch - '0' + 0x6F,
                     >= '!' and <= 'Z' => ch - 0x20,

@@ -540,14 +540,14 @@ namespace Dark_Cloud_Improved_Version
 
                 if (Memory.ReadByte(0x21CE4453) == 0)
                 {
-                    currentDialogue = "There are some more details I^didn´t tell you about the Queen.¤It´s rumoured that when she sank^to the bottom of the Shipwreck,^her wedding ring got lost.¤The ring might still be somewhere^deep in the Shipwreck. Do you^think you can find it?";
+                    currentDialogue = "There are some more details I^didn´t tell you about the Queen.¤It´s rumored that when she sank^to the bottom of the Shipwreck,^her wedding ring got lost.¤The ring might still be somewhere^deep in the Shipwreck. Do you^think you can find it?";
                 }
                 else
                 {
                     bool hasItem = CheckItemQuestReward(243);
                     if (hasItem)
                     {
-                        currentDialogue = "You found the Queen´s wedding ring?^I see, so the rumours were true!^Interesting.¤You can keep the ring, who knows^where you might need it^in your adventure.";
+                        currentDialogue = "You found the Queen´s wedding ring?^I see, so the rumors were true!^Interesting.¤You can keep the ring, who knows^where you might need it^in your adventure.";
                     }
                     else
                     {
@@ -612,7 +612,7 @@ namespace Dark_Cloud_Improved_Version
                     Memory.WriteByte(0x2029397E, 250);
                     Memory.WriteByte(0x20293980, 250);
                     Memory.WriteByte(0x20293982, 250);                    
-                    currentDialogue = "After you left Norune, I happened^to collect a bunch of Fruit of Edens,^Gourds and Defence items.¤I´ll assign you some slightly^challenging Dungeon quests, and for^the reward you´ll get one of the^random boost items, as long as^you´re not maxed on them.¤All your party members´s maximum^health has increased to 250,^maximum thirst to 12 and^maximum defence to 99.¤Do you have what it takes^to max your abilities?";
+                    currentDialogue = "After you left Norune, I happened^to collect a bunch of Fruits of Eden,^Gourds and Defense items.¤I´ll assign you some slightly^challenging Dungeon quests, and for^the reward you´ll get one of the^random boost items, as long as^you´re not maxed on them.¤All your party members´s maximum^health has increased to 250,^maximum thirst to 12 and^maximum defense to 99.¤Do you have what it takes^to max your abilities?";
                 }
                 else if (Memory.ReadByte(0x21CE4464) == 2)
                 {
