@@ -54,8 +54,6 @@ namespace Dark_Cloud_Improved_Version
             // Spelling fixes to the English text, in place in every English bank — last, so it edits the banks as the steps above
             // leave them (the system banks' appended Confuse name, the relocated item notices).
             new() { Name = "text-fixes",       Progress = "Fixing the game's spelling …",                   Run = MesTextFixes.Run },
-            // The "MUSKA RACKA" loading card and menu name plates redrawn as LACKA from letters elsewhere on the disc.
-            new() { Name = "town-name-art",    Progress = "Redrawing the Muska Lacka name art …",            Run = TownNameArtBakes.Run },
         };
 
         internal static Step Find(string name) => Steps.FirstOrDefault(s => s.Name == name);
