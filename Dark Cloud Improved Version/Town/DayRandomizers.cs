@@ -9,9 +9,9 @@ namespace Dark_Cloud_Improved_Version
 {
     class DayRandomizers
     {
-        private static Thread cheatCodeThread = new Thread(new ThreadStart(CheatCodes.InputBuffer.Monitor)); //Create a new thread to run monitorElementSwapping()
-        //private static Thread dayEnemyThread = new Thread(new ThreadStart(EnemyDropRandomizer)); //Create a new thread to run monitorElementSwapping()
-        //private static Thread dayChestThread = new Thread(new ThreadStart(DayChestRandomizer)); //Create a new thread to run monitorElementSwapping()
+        private static Thread cheatCodeThread = new Thread(new ThreadStart(CheatCodes.InputBuffer.Monitor));
+        //private static Thread dayEnemyThread = new Thread(new ThreadStart(EnemyDropRandomizer));
+        //private static Thread dayChestThread = new Thread(new ThreadStart(DayChestRandomizer));
         //public static Thread messageThreadTimer;
 
         //private static byte[] originalDunMessage = Memory.ReadByteArray(Addresses.dunMessage10, 210); //Read 210 bytes of byte array that stores dungeon message 10
@@ -651,7 +651,6 @@ namespace Dark_Cloud_Improved_Version
 
             //printItemTableNames(ItemTbl6);
 
-            elementSwapThread.Start(); //Start thread
             cheatCodeThread.Start();
             //dayChestThread.Start();
             //dayEnemyThread.Start();
@@ -768,7 +767,6 @@ namespace Dark_Cloud_Improved_Version
                 //Console.Clear();
             }
             //Form1.dayThread.Abort();
-            //elementSwapThread.Abort();
             //stopWatch.Stop();
         } //UNUSED TEST CODE
         */

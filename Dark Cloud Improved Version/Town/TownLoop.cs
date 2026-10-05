@@ -95,7 +95,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteByte(0x21D33E30, 3);
             }
 
-            if (Memory.ReadInt(0x2029AA0E) != 1680945251)   //If not using Toan, force any house event to be cancelled
+            if (AllySwapPrototype.CurrentAlly != 0)   //an ally is the town character (the in-place swap tracks who): force any house event to be cancelled
             {
                 isUsingAlly = true;
                 currentHouseID = Memory.ReadByte(0x202A2820);

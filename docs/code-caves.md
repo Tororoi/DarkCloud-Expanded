@@ -110,8 +110,8 @@ holds five hosts:
   fall drive, confuse name.
 - `DebugInfoCave` — `DebugInfomationDraw` (0x1B3780, 3,952 B): shared shots, steel level-up, guard mask, auto-guard,
   stride scale, camera pin, lunge gravity, blade fall, WHP bill, guard crush, follow.
-- `DebugItemCave` — `DebugItemGetKey` / `DebugItemGetDraw` (0x22B240 / 0x22B5B0): confuse proc, stars step/draw.
-- `SmoothRestCave` — the dead `SmoothRest` body (0x27D084, 262 zero words): the camera-height cave, then the bait keep
+- `DebugItemCave` — `DebugItemGetKey` / `DebugItemGetDraw` (0x22B240 / 0x22B5B0): confuse proc, stars step/draw, then the element picker's caves (`ElementMenuHead` 0x22B410 trig/xkey/start in the Key tail; `ElementMenuSheetName` 0x22B5B8 name/draw/valid/pre/close in the Draw body — docs/element-picker.md).
+- `SmoothRestCave` — the dead `SmoothRest` body (0x27D084, 262 zero words): the camera-height cave, then the bait keep, then the element picker's Ruby effect reload (`ElementMenuRuby` 0x27D270, 136 B)
   (the Blessing Gun's Blessed Bait).
 
 Several of these form a once-a-frame **chain** hanging off the dungeon camera pass's epilogue (camera pin → blade fall

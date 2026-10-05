@@ -111,7 +111,6 @@ namespace Dark_Cloud_Improved_Version
         public static void SetDialogue(int offset, bool isAlly, bool isSidequest, bool finishedDialogue = false)
         {
             isUsingAlly = isAlly;
-            currentAddress = Addresses.chrFileLocation + 0x6;
             if (Memory.ReadByte(0x202A2518) != currentArea)     //DOESNT UPDATE when switching ally, fix later!!
             {
                 /*if (Memory.ReadByte(0x202A2518) == 0) currentArea = 0;
@@ -129,17 +128,16 @@ namespace Dark_Cloud_Improved_Version
                 currentChar = 0;
             }
 
-            currentAddress = Addresses.chrFileLocation + 0x6;
-
             if (finishedDialogue == true)
             {
                 GetCurrentAreaFinishedDialogues(currentArea);
             }
 
-            if (currentChar != Memory.ReadInt(currentAddress) && isAlly == true)  //if using different ally, switch dialogue data
+            int ally = AllySwapPrototype.CurrentAlly;   // who the town character is (0 Toan .. 5 Osmond), as the in-place swap tracks it
+            if (currentChar != ally && isAlly == true)  //if using different ally, switch dialogue data
             {              
 
-                if (Memory.ReadInt(currentAddress) == 791752805) //Xiao
+                if (ally == 1) //Xiao
                 {
                     if (currentArea == 0)
                     {
@@ -192,7 +190,7 @@ namespace Dark_Cloud_Improved_Version
                         customDialoguesCheck = sunmoonXiaoCheck;
                     }
                 }
-                else if (Memory.ReadInt(currentAddress) == 791752819)  //Goro
+                else if (ally == 2)  //Goro
                 {
                     if (currentArea == 0)
                     {
@@ -246,7 +244,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
 
-                else if (Memory.ReadInt(currentAddress) == 791883877)  //Ruby
+                else if (ally == 3)  //Ruby
                 {
                     if (currentArea == 0)
                     {
@@ -300,7 +298,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
 
-                else if (Memory.ReadInt(currentAddress) == 792278899)  //Ungaga
+                else if (ally == 4)  //Ungaga
                 {
                     if (currentArea == 0)
                     {
@@ -354,7 +352,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
 
-                else if (Memory.ReadInt(currentAddress) == 792014949)  //Osmond
+                else if (ally == 5)  //Osmond
                 {
                     if (currentArea == 0)
                     {
@@ -408,7 +406,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
 
-                currentChar = Memory.ReadInt(currentAddress);
+                currentChar = ally;
 
                 currentArea = Memory.ReadByte(0x202A2518);
                 SetDefaultDialogue(currentArea);
@@ -452,7 +450,7 @@ namespace Dark_Cloud_Improved_Version
                                 }
                                 else if (characterIdData == 14640) 
                                 {
-                                    if (Memory.ReadInt(0x2029AA0E) == 1680945251) //check toan
+                                    if (AllySwapPrototype.CurrentAlly == 0) //check toan
                                     {
                                         currentDialogue = "Did you buy bombs from Gaffer´s shop?^Please be careful Ť,^I just want you to come home safely.";    //dialogue requested by beta tester
                                     }
@@ -490,7 +488,7 @@ namespace Dark_Cloud_Improved_Version
                                 }
                                 else if (characterIdData == 14640)
                                 {
-                                    if (Memory.ReadInt(0x2029AA0E) == 1680945251) //check toan
+                                    if (AllySwapPrototype.CurrentAlly == 0) //check toan
                                     {
                                         currentDialogue = "Did you buy bombs from Gaffer´s shop?^Please be careful Ť,^I just want you to come home safely.";    //dialogue requested by beta tester
                                     }
@@ -1848,27 +1846,8 @@ namespace Dark_Cloud_Improved_Version
 
         public static void FixCharacterNamesInDialogues() //replaces all mentions of Toan with correct ally, in some cases it doesn't fit well
         {
-            byte charByte = 0;
-            if (Memory.ReadInt(Addresses.chrFileLocation + 0x6) == 791752805) //Xiao
-            {
-                charByte = 251;
-            }
-            else if (Memory.ReadInt(Addresses.chrFileLocation + 0x6) == 791752819) //Goro
-            {
-                charByte = 252;
-            }
-            else if (Memory.ReadInt(Addresses.chrFileLocation + 0x6) == 791883877) //Ruby
-            {
-                charByte = 253;
-            }
-            else if (Memory.ReadInt(Addresses.chrFileLocation + 0x6) == 792278899)  //Ungaga
-            {
-                charByte = 254;
-            }
-            else if (Memory.ReadInt(Addresses.chrFileLocation + 0x6) == 792014949)  //Osmond
-            {
-                charByte = 255;
-            }
+            int ally = AllySwapPrototype.CurrentAlly;                       // 0 Toan .. 5 Osmond
+            byte charByte = (byte)(ally > 0 ? 250 + ally : 0);               // the name token: 251 Xiao .. 255 Osmond
 
             if (charByte > 250)
             {            
@@ -1899,29 +1878,8 @@ namespace Dark_Cloud_Improved_Version
 
         public static void FixCharacterNamesInShopDialogues()
         {
-            
-            byte charByte = 0;
-
-            if (Memory.ReadInt(Addresses.chrFileLocation + 0x6) == 791752805) //Xiao
-            {
-                charByte = 251;
-            }
-            else if (Memory.ReadInt(Addresses.chrFileLocation + 0x6) == 791752819) //Goro
-            {
-                charByte = 252;
-            }
-            else if (Memory.ReadInt(Addresses.chrFileLocation + 0x6) == 791883877) //Ruby
-            {
-                charByte = 253;
-            }
-            else if (Memory.ReadInt(Addresses.chrFileLocation + 0x6) == 792278899)  //Ungaga
-            {
-                charByte = 254;
-            }
-            else if (Memory.ReadInt(Addresses.chrFileLocation + 0x6) == 792014949)  //Osmond
-            {
-                charByte = 255;
-            }
+            int ally = AllySwapPrototype.CurrentAlly;                       // 0 Toan .. 5 Osmond
+            byte charByte = (byte)(ally > 0 ? 250 + ally : 0);               // the name token: 251 Xiao .. 255 Osmond
 
             if (charByte > 250)
             {

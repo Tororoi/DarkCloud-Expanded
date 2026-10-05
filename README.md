@@ -143,7 +143,7 @@ Power/testing tools kept out of normal play:
 
 Not player-facing; listed so contributors know what exists.
 
-- **Ghidra EE decompiler toolchain** (`tools/ghidra/`) — one-command decompilation of the game's PS2 EE code (`decompile.sh main|dun "<function>"`), symbol export/apply scripts, and an xref finder. The game ELF ships a full demangled C++ symbol table (`symbols.txt`).
+- **Ghidra EE decompiler toolchain** (`tools/ghidra/`) — one-command decompilation of the game's PS2 EE code (`decompile.sh main|dun "<function>"`), instruction listings by function or address range (`listing.sh`), symbol export/apply scripts, and an xref finder. The game ELF ships a full demangled C++ symbol table (`symbols.txt`).
 - **Code cave scanner** (`Dev/CodeCaveScanner.cs` + `tools/find_code_caves.py`, runs only with `DebugDiagnostics.Enabled`) — background sweeps of EE RAM across sessions to find provably-unused regions for the mod's injected bytecode; findings accumulate in `CodeCaveFindings.txt`. Proven caves and mod cave layout live in `Addresses/CodeCaveAddresses.cs`.
 - **Georama probe** (`GeoramaProbe.cs`) — read-only dumper of town Georama parts, water surfaces, event points, and fishing-sign parameters, supporting the custom-fishing-spot research (`docs/custom-fishing-spot.md`).
 - **Asset tools** (`tools/`) — `.mes` menu-text decoder, TIM2/`.mds` surgery scripts, and generators for the motion/tile/model reference tables in `docs/`.
