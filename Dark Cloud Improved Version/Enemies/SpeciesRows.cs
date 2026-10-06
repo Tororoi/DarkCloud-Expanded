@@ -17,11 +17,11 @@ namespace Dark_Cloud_Improved_Version
         private const int ModelName = 0x000, ScriptName = 0x040, NameBytes = 16;
 
         /// <summary>The Bomb Gemron: Holy Gemron's record under the mod's model and script stems, both shot slots re-pointed —
-        /// <c>ringo_ex</c> (4) for its shot, <c>zibaku_f2</c> (16) for the death and self-destruct blasts (the outlaws' explosion),
-        /// every element resistance 0.</summary>
+        /// <c>ringo_ex</c> (4) for its shot, config 8 for the death and self-destruct blasts (the radius-50 zibaku fireball
+        /// ElfSpeciesPatches.PatchBlastConfig writes over the unused <c>g_wave2</c>), every element resistance 0.</summary>
         internal static readonly (EnemyDefaults species, int template, string stem, ushort shot0, ushort shot1)[] Rows =
         {
-            (EnemySpecies.BombGemron, EnemySpecies.GemronHoly.TableIndex.Value, ModSpeciesBakes.BombGemronStem, 4, 16),
+            (EnemySpecies.BombGemron, EnemySpecies.GemronHoly.TableIndex.Value, ModSpeciesBakes.BombGemronStem, 4, 8),
         };
 
         /// <summary>Every reserved row's bytes, the unused rows zero; <paramref name="template"/> reads a vanilla record by index.</summary>

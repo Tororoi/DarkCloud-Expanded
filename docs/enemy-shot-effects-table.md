@@ -36,6 +36,7 @@ disagrees) — check in-game by reflecting the shot at a same-element Gemron (ex
 | 6 | `awabres` | none (0x0) | — | Poison (0x10) | Poison (+0x0C, 180f) | 2 | 45 | 0.1 | 0.00 | Gunny, Crabby Hermit, Crabby Hermit (Enhanced) | — | Gunny 26; Crabby Hermit 76 |
 | 7 | `g_wave1` | none (0x0) | — | — | — | 3 | 34 | 0.1 | 1.20 | Golem, Titan, Steel Giant, Blizzard, Gol, Sil, Sil (Enhanced), Steel Giant (Enhanced), Gol (Enhanced), Titan (Enhanced) | — | Titan 90; Steel Giant 64; Blizzard 105 |
 | 8 | `g_wave2` | none (0x0) | — | — | — | 3 | 66 | 2.1 | 5.00 | — | — | — |
+|   | ↳ in the PATCHED disc config 8 is the Bomb Gemron's explosion: `zibaku_f2`'s config (fireball model, Fire, react 3, player only, 110 frames) with its phase-0 damage radius 50 instead of 14; damage = the script's `_SET_SHOT2` argument — ElfSpeciesPatches.PatchBlastConfig | | | | | | | | | | | |
 | 9 | `magic_noroi` | none (0x0) | — | Curse (0x20) | — (curse: n/a on enemies) | 2 | 16 | 1.1 | 0.00 | Ghost | — | — |
 | 10 | `magic_bin` | none (0x0) | — | Stamina (0x08), 65% roll | — | 2 | 0 | 0.8 | 0.00 | Heart, Heart (Enhanced) | — | — |
 | 11 | `magic_isi` | none (0x0) | — | Freeze (0x04) | Freeze (+0x08, 300f) | 2 | 5 | 1.1 | 5.00 | Earth Digger, Auntie Medu, Lich, Moon Digger, Auntie Medu (Enhanced), Bishop Q, Lich (Enhanced) | — | Auntie Medu 60 |

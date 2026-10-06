@@ -14,7 +14,8 @@ namespace Dark_Cloud_Improved_Version
     /// the entries kept as they are (eyes, claws, the underbelly's reds), the three gem spheres' meshes replaced by the thrown-bomb
     /// item model (dun\item\main_data\bakudan) scaled to each sphere and turned so its wick points as designed, the bomb's sheet
     /// added to the pack's bank; the glow overlays dropped. Its script is Holy Gemron's with the death path exploding — a
-    /// <c>_SET_SHOT2</c> blast (shot slot 1) at the body once the death motion reaches frame 122 — and a self-destruct: the AI
+    /// <c>_SET_SHOT2</c> blast (shot slot 1: the radius-50 fireball of ElfSpeciesPatches.PatchBlastConfig) at the body once the death
+    /// motion reaches frame 122 — and a self-destruct: the AI
     /// loop's head calls a function that, with HP under a quarter and the player within 22 units, plays the death motion at
     /// 0.25× and blows up at the same frame (the outlaws Sam / Billy / Mr. Blare's own pattern). The name goes into the empty
     /// message 3000 + species id of dunmsd00_1.mes in place.</summary>

@@ -111,7 +111,7 @@ namespace Dark_Cloud_Improved_Version
                     WeaponThreads.LaunchCurses();
                     ElementMenu.Tick();                    // the quick-change menu's element pick (D-pad UP), applied to the weapon record and HUD
                     EnemyPoisonDuration.Tick();            // enemy poison ends after status susceptibility × 2 s (the engine's never does)
-                    BombGemron.Tick();                     // the Bomb Gemron's blast visual on its death / self-destruct frame
+                    BombGemron.Tick();                     // the Bomb Gemron's bomb on its apple shot and the spark on its fuse
 
                     // Enemies.PollEnemyDynamics();
                     // Enemies.MonitorFlashTimer();

@@ -254,9 +254,9 @@ namespace Dark_Cloud_Improved_Version
             HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=1.2f, ProjectileLifetime=0 };
 
-        // Index 8 — "g_wave2": ground wave 2 (wide AoE).
+        // Index 8 — "g_wave2": ground wave 2 (wide AoE). No species or script uses it, so the ISO patch rewrites this config as
+        // the Bomb Gemron's explosion (ElfSpeciesPatches.PatchBlastConfig); the vanilla values stay here as the record of the stock disc.
         // Wide (2.1×3.4×1.0) and very fast (pspd=5.0); 3 phases. Covers large area.
-        // Likely DarkGenie's floor-wave or a boss ground pound that radiates outward.
         internal static readonly BehaviorScript GroundWave2 = new BehaviorScript {
             Index=8, ScriptName="g_wave2",
             BehaviorMode=0, HitboxWidth=2.1f, HitboxHeight=3.4f, HitboxDepth=1.0f,

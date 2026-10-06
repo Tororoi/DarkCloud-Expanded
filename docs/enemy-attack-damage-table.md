@@ -51,7 +51,9 @@ Low bits (`0x1`–`0x80`) are non-status shot/element flags and are not shown. A
 
 ### Damage column forms (projectiles)
 
-`N` = fixed STB literal · `N var` = distance-scaled (`N` is the point-blank max, scaled down with range) ·
+`N` = fixed STB literal · `N var` = the script passes the damage through a variable (a function argument); every call site
+hands it a literal, so it is a fixed `N` too — NOT distance-scaled (checked 2026-10-06 against the shot step, the collision class
+and BtCheckDamageProc: no range term anywhere; Golem's callers all pass 64) ·
 `N def` = no explicit STB damage, uses the shot type's `BT_SHOT_EFFECT+0x3C` default. `—` = mechanism
 unused; an all-`—` enemy is a non-attacker by design (Ice Queen shell, King's Curse Coffin, Ice Barrier,
 Dark Genie effect entities — those bosses damage you through spawned companions/hands, noted per row).

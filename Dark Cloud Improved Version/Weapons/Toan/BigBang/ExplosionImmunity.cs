@@ -20,7 +20,7 @@ namespace Dark_Cloud_Improved_Version
         // ⚠ Global, static ELF data shared by every enemy of those species, so it MUST be put back when the blade
         // goes away — Reset does it. Enemies are unaffected either way: CMonstorUnit::CheckDmg never reads the
         // reaction, so a reflected shot still damages them normally.
-        private static readonly int[] ExplosionCfgs = { 3, 16, 17, 18 };   // pump_bom, zibaku_f2, zibaku_r2, zibaku_t2
+        private static readonly int[] ExplosionCfgs = { 3, 16, 17, 18, 8 };   // pump_bom, zibaku_f2, zibaku_r2, zibaku_t2, the Bomb Gemron's blast (ElfSpeciesPatches.PatchBlastConfig)
         private const int    ReactionInert   = 5;      // 1 and 5 are both unhandled; 4 is the light flinch and DAMAGES
         private static readonly int[] _cfgReaction = new int[ExplosionCfgs.Length];
         private static bool  _immune;
