@@ -31,6 +31,15 @@
     <EmbeddedResource Include="Resources\isoPatch\speciesLookup.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.speciesLookup.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\bombRadius.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.bombRadius.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\blowDir.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.blowDir.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\flashSlot.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.flashSlot.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\elementMenu.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.elementMenu.bin</LogicalName>
     </EmbeddedResource>

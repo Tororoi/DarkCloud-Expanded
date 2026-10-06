@@ -174,6 +174,18 @@ namespace Dark_Cloud_Improved_Version
 
     /// <summary>The dead <c>SmoothRest</c> body (262 zero words from 0x27D084, in the main ELF): the camera-height cave takes its head
     /// (ElfCameraPatches, 0x27D090, 408 B → 0x27D228), the rest is free zero words up to 0x27D49C.</summary>
+    /// <summary>The body of <c>sceCdGetToc</c> (656 B from 0x10A7D8, main ELF): a libcdvd routine the game links but never calls — no jal, j,
+    /// stored pointer or lui/addiu pair reaches it, in the ELF or the dungeon overlay.</summary>
+    internal static class DeadCdCave
+    {
+        internal const uint Host = 0x0010A7D8, HostSpan = 656, VanillaWord0 = 0x27BDFF80;   // `addiu sp,sp,-0x80`
+        /// <summary>tools/stubs/blow_dir.s (ElfSpeciesPatches.PatchBlowDir): an item bomb's knockdown thrown away from its blast.</summary>
+        internal const uint BlowDir = Host;   // 156 B → 0x10A874
+        /// <summary>tools/stubs/bomb_radius.s (ElfSpeciesPatches.PatchBombRadius): a shot config's own blast radius and ring.</summary>
+        internal const uint BombRadius = Host + 0xA8;   // 0x10A880
+        internal const uint End = Host + HostSpan;
+    }
+
     internal static class SmoothRestCave
     {
         internal const uint Host         = 0x0027D084;
@@ -188,6 +200,9 @@ namespace Dark_Cloud_Improved_Version
         /// an index past the 167 vanilla rows resolves into CodeCaves.SpeciesRows (a data page: this one holds executed code, and a
         /// PINE write into it kills PCSX2).</summary>
         internal const uint SpeciesLookup = 0x0027D2F8;   // 32 B → 0x27D318
+        /// <summary>tools/stubs/flash_slot.s (ElfSpeciesPatches.PatchFlashSlot): the machine-gun hit flash's size and alpha per slot, and a
+        /// pinned slot's whole spark (alight, cells, burst requests, the blast cutoff, the bone placement), timed in game frames.</summary>
+        internal const uint FlashSlot     = 0x0027D320;   // 328 B → 0x27D468
         internal const uint End          = 0x0027D49C;
     }
 }

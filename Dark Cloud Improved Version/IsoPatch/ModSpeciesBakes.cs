@@ -17,7 +17,8 @@ namespace Dark_Cloud_Improved_Version
     /// <c>_SET_SHOT2</c> blast (shot slot 1: the radius-50 fireball of ElfSpeciesPatches.PatchBlastConfig) at the body once the death
     /// motion reaches frame 122 — and a self-destruct: the AI
     /// loop's head calls a function that, with HP under a quarter and the player within 22 units, plays the death motion at
-    /// 0.25× and blows up at the same frame (the outlaws Sam / Billy / Mr. Blare's own pattern). The name goes into the empty
+    /// 0.25× and blows up at the same frame (the outlaws Sam / Billy / Mr. Blare's own pattern); its throw is aimed at the player's
+    /// feet + 14, where the shot's contact test looks. The name goes into the empty
     /// message 3000 + species id of dunmsd00_1.mes in place.</summary>
     internal static class ModSpeciesBakes
     {
@@ -26,6 +27,12 @@ namespace Dark_Cloud_Improved_Version
         private const string Source = "e115a", Orphan = "e147a";                   // Holy Gemron; the orphan entries repurposed (e147a.chr / .stb)
         private const string BombMds = @"dun\item\main_data\bakudan.mds", BombImg = @"dun\item\main_data\bakudan.img";
         private const string NameBank = @"dun\message\ww_mes\dunmsd00_1.mes";
+        /// <summary>The Bomb Gemron's shots' drawing model (ElfSpeciesPatches.PatchBombConfigs): <c>dun\effect\g_wave2.chr</c>, whose own config
+        /// those shots replace, rebuilt as Witch Illza's apple shot (<c>ringo_ex</c>) with the apple's mesh (<c>dokuring__m</c>) swapped for the
+        /// item bomb's and the bomb's picture added to its bank — the bomb the Big Bang's pellets fly as; its cfg record renamed to the
+        /// name the shot pack's loader asks for (<c>&lt;model&gt;.cfg</c>).</summary>
+        private const string ShotSource = @"dun\effect\ringo_ex.chr", ShotPack = @"dun\effect\g_wave2.chr";
+        private const string ShotMds = "ringo_ex.mds", ShotImg = "dokuring.img", ShotCfg = "ringo_ex.cfg", ShotCfgAs = "g_wave2.cfg", ShotNode = "dokuring__m";
         private const string Name = "Bomb Gemron";
 
         internal static void Run(IsoArchive arc, Action<string> log)
@@ -43,6 +50,9 @@ namespace Dark_Cloud_Improved_Version
             byte[] stb = BombGemronScript(arc.Read(Dir + Source + ".stb"), out string why);
             arc.Redirect(Dir + BombGemronStem + ".stb", stb);
             log($"{BombGemronStem}.stb: {why}");
+            byte[] shot = BombShotPack(arc.Read(ShotSource), arc.Read(BombMds), arc.Read(BombImg));
+            arc.Redirect(ShotPack, shot);
+            log($"{ShotPack}: the apple shot wearing the bomb, {shot.Length:N0} B");
             int id = DungeonMessageBank.NameBase + EnemySpecies.BombGemron.Id;
             byte[] mes = arc.Read(NameBank);
             byte[] named = SetText(mes, id, WeaponDescriptions.Encode(Name).Concat(new ushort[] { 0xFF01 }).ToArray());
@@ -88,6 +98,25 @@ namespace Dark_Cloud_Improved_Version
             var items = bank.Entries.Select(e => (e.name, e.name == Sheet ? Recolor(bank.Block(e.name)) : bank.Block(e.name))).ToList();
             items.AddRange(bbank.Entries.Select(e => (e.name, bbank.Block(e.name))));
             pack.Require(Img).ReplacePayload(ImgBank.Build(bank.Magic, items));
+            return pack.Rebuild();
+        }
+
+        /// <summary>The apple shot's pack with the apple drawn as the bomb (<see cref="ShotPack"/>).</summary>
+        private static byte[] BombShotPack(byte[] srcChr, byte[] bombMds, byte[] bombImg)
+        {
+            var pack = ChrPack.Parse(srcChr);
+            var bombNodes = ModelCodec.ReadSkeleton(bombMds);
+            int bombOff = bombNodes[0].MeshOff;
+            byte[] bomb = bombMds.AsSpan(bombOff, (int)IsoBytes.U32(bombMds, bombOff + 8)).ToArray();
+            ChrRecord mds = pack.Require(ShotMds);
+            mds.ReplacePayload(ReplaceMeshes(mds.Payload, new Dictionary<string, byte[]> { [ShotNode] = bomb }));
+            ChrRecord img = pack.Require(ShotImg);
+            var bank = new ImgBank(img.Payload); var bbank = new ImgBank(bombImg);
+            var items = bank.Entries.Select(e => (e.name, bank.Block(e.name))).ToList();
+            items.AddRange(bbank.Entries.Select(e => (e.name, bbank.Block(e.name))));
+            img.ReplacePayload(ImgBank.Build(bank.Magic, items));
+            ChrRecord cfg = pack.Require(ShotCfg);
+            Array.Clear(cfg.Raw, 0, 0x40); Encoding.Latin1.GetBytes(ShotCfgAs).CopyTo(cfg.Raw, 0); cfg.Name = ShotCfgAs;
             return pack.Rebuild();
         }
 
@@ -210,11 +239,11 @@ namespace Dark_Cloud_Improved_Version
         private const uint OpPushVar = 1, OpPushRef = 2, OpPushConst = 3, OpDrop = 4, OpStore = 5, OpAdd = 6, OpNeg = 11, OpCmp = 14, OpRet = 15,
                            OpJmp = 16, OpBrFalse = 17, OpCall = 19, OpExt = 21, OpNop = 22, OpYield = 23, OpOr = 25;
         private const uint TInt = 1, TFloat = 2, TStr = 3, VInt = 1, VFloat = 8;    // push-const types; push-var / push-ref local kinds
-        private const uint CmpEq = 40, CmpGt = 44, CmpGe = 45;
+        private const uint CmpEq = 40, CmpLt = 42, CmpGt = 44, CmpGe = 45;
         private const uint FnGetDistance = 10, FnGetPosition = 11, FnSetMoveCancel = 34, FnSetMuteki = 101, FnSetAlpha = 102, FnSetDead = 104,
                            FnGetLifeRate = 109, FnSetMotion = 200, FnChkMotionFrm = 201, FnSetShot2 = 229;
         private const int DeathMotion = 11, HeaderBytes = 56;
-        private const float BlastFrame = 122f, BlastHeight = 11f, BlastDamage = 150f, SelfDestructSpeed = 0.25f, SelfDestructHp = 25f, SelfDestructRange = 22f;
+        private const float BlastFrame = 122f, ClipStart = 105f, BlastHeight = 11f, BlastDamage = 150f, SelfDestructSpeed = 0.25f, SelfDestructHp = 25f, SelfDestructRange = 22f;
         private const uint SelfDestructMuteki = 1600, FadeHeader = 0;                // func 0x60 (the fade-out), header offset codeBase-relative
         private const float FadeStep = 4f, FadeChime = 84f;                          // its arguments, as the vanilla death passes them
 
@@ -276,7 +305,7 @@ namespace Dark_Cloud_Improved_Version
             while (o2.Count % 4 != 0) o2.Add(0);
             int strOff = bcol0 - cb;
             // 1. the blast wait: the vanilla wait (motion end, the death cry at its frame) plus the blast at BlastFrame
-            int waitHdr = o2.Count; o2.AddRange(Header(waitHdr + HeaderBytes - cb, locals: 9, args: 2));
+            int waitHdr = o2.Count; o2.AddRange(Header(waitHdr + HeaderBytes - cb, locals: 10, args: 2));
             o2.AddRange(BlastWait(strOff).Bytes(waitHdr + HeaderBytes, cb));
             // 2. the death function: the vanilla one, its wait call retargeted
             int newDeathHdr = o2.Count; o2.AddRange(Header(newDeathHdr + HeaderBytes - cb, locals: 0, args: 0));
@@ -284,13 +313,30 @@ namespace Dark_Cloud_Improved_Version
             IsoBytes.U32(death, waitCall - deathCode + 8, (uint)(waitHdr - cb));
             o2.AddRange(death); o2.AddRange(new byte[12]);
             // 3. the self-destruct: the loop head's `push 1` as a call that returns 1, or blows up and returns 0
-            int selfHdr = o2.Count; o2.AddRange(Header(selfHdr + HeaderBytes - cb, locals: 8, args: 0));
+            int selfHdr = o2.Count; o2.AddRange(Header(selfHdr + HeaderBytes - cb, locals: 9, args: 0));
             o2.AddRange(SelfDestruct(strOff, fadeHdr).Bytes(selfHdr + HeaderBytes, cb));
             byte[] outb = o2.ToArray();
+            // the throw aimed at the player's feet + AimHeight (Holy's + 7.4 flies under his contact point, feet + 14–18, by more than
+            // the 6 a shot with no radius of its own has to come within)
+            int aim = AimCell(stb);
+            IsoBytes.U32(outb, aim + 8, BitConverter.ToUInt32(BitConverter.GetBytes(AimHeight), 0));
             IsoBytes.U32(outb, deathCall + 8, (uint)(newDeathHdr - cb));
             IsoBytes.U32(outb, loopHead, OpCall); IsoBytes.U32(outb, loopHead + 4, 0); IsoBytes.U32(outb, loopHead + 8, (uint)(selfHdr - cb));
             why = $"death → blast wait @+0x{waitHdr - cb:X} (frame {BlastFrame:g}), self-destruct @+0x{selfHdr - cb:X} from the AI loop head @0x{loopHead:X}, {stb.Length:N0}→{outb.Length:N0} B";
             return outb;
+        }
+
+        private const float HolyAimHeight = 7.4f, AimHeight = 14f;
+
+        /// <summary>The one `push 7.4f` cell — the shot's target raised above the player's feet before `_SET_SHOT('dcol0', …)`.</summary>
+        private static int AimCell(byte[] stb)
+        {
+            uint bits = BitConverter.ToUInt32(BitConverter.GetBytes(HolyAimHeight), 0);
+            int found = -1, n = 0;
+            for (int o = (int)U(stb, 8); o + 12 <= stb.Length; o += 4)
+                if (U(stb, o) == OpPushConst && U(stb, o + 4) == TFloat && U(stb, o + 8) == bits) { found = o; n++; }
+            if (n != 1) throw new IOException($"e115a.stb: {n} `push 7.4f` cells, expected the shot's aim alone");
+            return found;
         }
 
         private static int LabelHeader(byte[] stb, int id)
@@ -307,7 +353,8 @@ namespace Dark_Cloud_Improved_Version
             return b;
         }
 
-        /// <summary>v0 = cry sound, v1 = its frame (the arguments); v2 cried, v3 motion done, v4 frame, v5 blown, v6–v8 position.</summary>
+        /// <summary>v0 = cry sound, v1 = its frame (the arguments); v2 cried, v3 motion done, v4 frame, v5 blown, v6–v8 position, v9 the death
+        /// clip seen running before its blast frame (the frame read on the first ticks can still be the previous clip's, past 122).</summary>
         private static Code BlastWait(int strOff)
         {
             var c = new Code();
@@ -321,7 +368,9 @@ namespace Dark_Cloud_Improved_Version
             c.Int(141); c.Var(0, VInt); c.Ext(2);                                    // _SET_SND_NOW(v0)
             c.Set(2, VInt, () => c.Int(1));
             c.Mark("blast");
+            Started(c, 4, 9);
             c.Var(5, VInt); c.Int(0); c.Add(OpCmp, CmpEq); c.Branch(OpBrFalse, "loop");
+            c.Var(9, VInt); c.Int(1); c.Add(OpCmp, CmpEq); c.Branch(OpBrFalse, "loop");
             c.Var(4, VFloat); c.Float(BlastFrame); c.Add(OpCmp, CmpGe); c.Branch(OpBrFalse, "loop");
             Blast(c, strOff, 6, 7, 8);
             c.Set(5, VInt, () => c.Int(1));
@@ -331,7 +380,7 @@ namespace Dark_Cloud_Improved_Version
             return c;
         }
 
-        /// <summary>v0 HP rate, v1 distance, v2 motion done, v3 blown, v4 frame, v5–v7 position. Returns 1 (the loop head's own value)
+        /// <summary>v0 HP rate, v1 distance, v2 motion done, v3 blown, v4 frame, v5–v7 position, v8 the clip seen running. Returns 1 (the loop head's own value)
         /// unless it blew up, then 0.</summary>
         private static Code SelfDestruct(int strOff, int fadeHdr)
         {
@@ -352,7 +401,9 @@ namespace Dark_Cloud_Improved_Version
             c.Var(2, VInt); c.Int(0); c.Add(OpCmp, CmpEq); c.Branch(OpBrFalse, "end");
             c.Add(OpYield);
             c.Int((int)FnChkMotionFrm); c.Ref(2, VInt); c.Ref(4, VFloat); c.Ext(3);
+            Started(c, 4, 8);
             c.Var(3, VInt); c.Int(0); c.Add(OpCmp, CmpEq); c.Branch(OpBrFalse, "loop");
+            c.Var(8, VInt); c.Int(1); c.Add(OpCmp, CmpEq); c.Branch(OpBrFalse, "loop");
             c.Var(4, VFloat); c.Float(BlastFrame); c.Add(OpCmp, CmpGe); c.Branch(OpBrFalse, "loop");
             Blast(c, strOff, 5, 6, 7);
             c.Set(3, VInt, () => c.Int(1));
@@ -363,6 +414,16 @@ namespace Dark_Cloud_Improved_Version
             c.Int((int)FnSetDead); c.Ext(1);
             c.Ret(0);
             return c;
+        }
+
+        /// <summary><paramref name="started"/> = 1 once <paramref name="frame"/> has been seen inside the death clip below its blast frame.</summary>
+        private static void Started(Code c, int frame, int started)
+        {
+            string skip = "started" + started;
+            c.Var(frame, VFloat); c.Float(ClipStart); c.Add(OpCmp, CmpGe); c.Branch(OpBrFalse, skip);
+            c.Var(frame, VFloat); c.Float(BlastFrame); c.Add(OpCmp, CmpLt); c.Branch(OpBrFalse, skip);
+            c.Set(started, VInt, () => c.Int(1));
+            c.Mark(skip);
         }
 
         /// <summary>_GET_POSITION(-1) into x/y/z, y raised BlastHeight, _SET_SHOT2('bcol0', x, y, z, BlastDamage).</summary>

@@ -36,7 +36,7 @@ disagrees) — check in-game by reflecting the shot at a same-element Gemron (ex
 | 6 | `awabres` | none (0x0) | — | Poison (0x10) | Poison (+0x0C, 180f) | 2 | 45 | 0.1 | 0.00 | Gunny, Crabby Hermit, Crabby Hermit (Enhanced) | — | Gunny 26; Crabby Hermit 76 |
 | 7 | `g_wave1` | none (0x0) | — | — | — | 3 | 34 | 0.1 | 1.20 | Golem, Titan, Steel Giant, Blizzard, Gol, Sil, Sil (Enhanced), Steel Giant (Enhanced), Gol (Enhanced), Titan (Enhanced) | — | Titan 90; Steel Giant 64; Blizzard 105 |
 | 8 | `g_wave2` | none (0x0) | — | — | — | 3 | 66 | 2.1 | 5.00 | — | — | — |
-|   | ↳ in the PATCHED disc config 8 is the Bomb Gemron's explosion: `zibaku_f2`'s config (fireball model, Fire, react 3, player only, 110 frames) with its phase-0 damage radius 50 instead of 14; damage = the script's `_SET_SHOT2` argument — ElfSpeciesPatches.PatchBlastConfig | | | | | | | | | | | |
+|   | ↳ in the PATCHED disc config 8 is the Bomb Gemron's thrown bomb: `ringo_ex`'s flight drawn as `g_wave2` (the apple pack wearing the bomb), no hit of its own, ending in the item-bomb blast at scale 0.5 (radius 12.5 by the +0x56 rule, damage 150, knockdown) on contact, a wall or time — ElfSpeciesPatches.PatchBombConfigs | | | | | | | | | | | |
 | 9 | `magic_noroi` | none (0x0) | — | Curse (0x20) | — (curse: n/a on enemies) | 2 | 16 | 1.1 | 0.00 | Ghost | — | — |
 | 10 | `magic_bin` | none (0x0) | — | Stamina (0x08), 65% roll | — | 2 | 0 | 0.8 | 0.00 | Heart, Heart (Enhanced) | — | — |
 | 11 | `magic_isi` | none (0x0) | — | Freeze (0x04) | Freeze (+0x08, 300f) | 2 | 5 | 1.1 | 5.00 | Earth Digger, Auntie Medu, Lich, Moon Digger, Auntie Medu (Enhanced), Bishop Q, Lich (Enhanced) | — | Auntie Medu 60 |
@@ -56,6 +56,7 @@ disagrees) — check in-game by reflecting the shot at a same-element Gemron (ex
 | 25 | `e115a_ex` | Holy (0x10) | Holy (Gemron Holy) | — | — | 3 | 58 | 1.4 | 0.00 | Gemron (Holy) | — | — |
 | 26 | `last_gw2` | Fire (0x1) | ? | — | — | 3 | 130 | 1.4 | 1.50 | Dark Genie (Final Form) | — | — |
 | 27 | `f_boll_3` (dup, UNUSED) | Fire (0x1) | Fire | Curse (0x20) | — (curse: n/a on enemies) | 3 | 58 | 1.4 | 1.50 | — | — | — |
+|   | ↳ in the PATCHED disc config 27 is the Bomb Gemron's death / self-destruct blast: `g_wave2`, no flight, no life, no hit of its own — the item-bomb blast at scale 2 (radius and shock ring 50: +0x56 = 25 per unit of scale, bomb_radius.s; damage 150, knockdown) where the script places it — ElfSpeciesPatches.PatchBombConfigs | | | | | | | | | | | |
 | 28 | `e118a_Ex` | none (0x0) | — | — | — | 2 | 51 | 4.0 | 0.00 | Silver Gear | — | — |
 | 29 | `nebaneba_b` | none (0x0) | — | Goo (0x40) | Gooey (+0x14, 180f) | 2 | 15 | 0.4 | 0.00 | Opar | — | — |
 | 30 | `engetu` | none (0x0) | — | — | — | 2 | 150 | 3.4 | 0.00 | Black Knight | — | — |

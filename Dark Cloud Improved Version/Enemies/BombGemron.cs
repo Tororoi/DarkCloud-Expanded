@@ -1,26 +1,32 @@
 using System;
-using System.Collections.Generic;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>The Bomb Gemron (EnemySpecies.BombGemron) in play. The species itself is the disc's: its record (SpeciesRows), model,
-    /// script and name (ModSpeciesBakes), its blast the radius-50 fireball of shot config 8 (ElfSpeciesPatches.PatchBlastConfig).
-    /// Two things are the app's, while one is on the floor:
-    ///  · its shot carries the bomb: the pack slot entered for <c>ringo_ex</c> (the apple it throws) has the apple node's visual swapped
-    ///    for the item bomb's in every tree (the template and each sub-shot's own), the sub-shots scaled up, and the bomb's textures
-    ///    kept in the monster block — the graft BombCarrier makes on the Big Bang's borrowed apple shot, on the species' slot instead;
-    ///  · the fuse burns: the engine's blinking hit mark (CHitPointMark, the guard-mark pool's upper entries) sits at the big bomb's
-    ///    wick tip, and during the death motion (11, frames 105–125, the blast at 122) walks the wick to its base — the wick's
-    ///    centreline in the body bone's frame (<see cref="Fuse"/>) through that bone's world matrix as last drawn.</summary>
+    /// <summary>The Bomb Gemron (EnemySpecies.BombGemron) in play. The species is the disc's: its record (SpeciesRows), model, script and
+    /// name (ModSpeciesBakes), its thrown bomb and its blast item-bomb shots (ElfSpeciesPatches.PatchBombConfigs). Its fuse spark is the
+    /// machine-gun hit flash in one of the pool's slots 12–15, run by the flash's own draw once a frame (tools/stubs/flash_slot.s): kept
+    /// alight, its three cells in turn 4 frames each, placed through the body bone's world matrix at the fuse point, a guard-spark burst
+    /// asked for every 15 frames, and put out the frame the death motion (11) passes its blast (122). Every timer is the game's; this
+    /// only
+    ///  · pins a Gemron to a flash slot (CodeCaves.FlashPinTable: its body bone and model block; the slot's size 3 and alpha 0x30 in
+    ///    CodeCaves.FlashSizeTable / FlashAlphaTable) and unpins it — back to Osmond's 5.0 and 0x80 — when it is gone;
+    ///  · writes the fuse point: the wick's tip, and during the death motion the point the motion's frame has reached along the wick
+    ///    (<see cref="Fuse"/>, in the body bone's frame) — a function of the engine's frame, not of time;
+    ///  · answers each burst the draw asks for with the guard spark (CheckDmg's burst, written whole into the hit-mark pool's last
+    ///    entry: 20 marks at twice the size, scatter 0.75) at the point the draw placed the flash this frame, and puts it out when the
+    ///    draw reports the blast.</summary>
     internal static class BombGemron
     {
         private const string Tag = "[BombGemron] ";
-        private const int DeathMotion = 11, ShotConfig = 4;                             // ringo_ex's index in the config table
+        private const int DeathMotion = 11, DeathLoopMotion = 12;
         private const float FuseStart = 105f, BlastFrame = 122f;
-        private const string BodyBone = "tama1__m", CarrierNode = "dokuring__m";      // the big bomb's bone; the apple node in the shot's trees
-        private const int MonsterTextureBlock = 0x26;                                  // BtLoadMonstor's texture block for the species and their shots
-        private const float ShotBombScale = 2f;                                        // the bomb on the apple shot, over the apple's own size
-        private const int MarkLife = 16, MarkFirst = 8;                                // the guard-mark pool: entries 8..15 are ours (0 is the guard's)
+        private const string BodyBone = "tama1__m";                                    // the big bomb's bone
+        private const float FlashSize = 3f;                                            // the flash's size (Osmond's stay 5.0)
+        private const byte FlashAlpha = 0x30;                                          // its alpha in the additive pass, ≈ 38 % (Osmond's 0x80)
+        private const int FlashAlight = 17;                                            // a live timer for the first draw (the draw keeps it)
+        private const int BurstMarks = 20;
+        private const float BurstSpread = 0.75f, BurstSize = 2f, BurstShrink = 0.005f, BurstGravity = 0.02f, BurstSpeed = 1.3f;   // CheckDmg's guard burst, scatter 0.75, every mark (and its shrink) × 2
+        private const float BurstFloorDrop = 6f;                                       // the marks bounce this far below the wick
         /// <summary>The big bomb's wick centreline, tip first, in the body bone's frame (the bake's bomb at 3.5 / 1.22 scale, turned as
         /// the preview page shows it; game_data's albino_gemron.py prints it).</summary>
         private static readonly float[][] Fuse =
@@ -30,147 +36,162 @@ namespace Dark_Cloud_Improved_Version
             new[] { -3.1451f, -3.7073f, 2.846f },  new[] { -2.9902f, -3.1825f, 2.888f },  new[] { -2.7392f, -2.7216f, 2.7487f },
             new[] { -2.4669f, -2.2995f, 2.556f },
         };
-        private const long MarkPool = 0x21EC4940;                                      // MyHitPointMark: 16 × 0x20 {pos vec4, timer, blink, on}
-        private const int MarkStride = 0x20, MarkTimer = 0x10, MarkBlink = 0x14, MarkOn = 0x18;
+        private const int Pins = 4;
 
-        private static readonly uint[] _bodyNode = new uint[EnemyAddresses.FloorSlots.Count];
-        private static long _graftSlot;                                                // the pack slot grafted (0 = none)
-        private static uint _graftRoot, _graftVisual;
-        private static readonly List<(uint node, uint applevisual)> _grafts = new();
-        private static readonly List<long> _objs = new();
-        private static bool _bigBangNoted;
+        private static readonly int[] _pinOf = new int[EnemyAddresses.FloorSlots.Count];   // the unit's pin entry + 1 (0 = none)
+        private static readonly int[] _unitOf = new int[Pins];                              // the pin's unit + 1
+        private static readonly uint[] _bursts = new uint[Pins];                            // the bursts answered
+        private static readonly bool[] _blown = new bool[EnemyAddresses.FloorSlots.Count]; // its blast has gone: no more sparks from it
+        private static readonly float[] _burstAt = new float[3];                           // where our last burst went off
+        private static readonly Random _rng = new();
 
-        /// <summary>Once a dungeon tick.</summary>
-        internal static void Tick()
+        /// <summary>Once a dungeon tick; <paramref name="active"/> only in the walking mode with nothing open and no load on (the trees
+        /// and pools are rebuilt under a menu, the character change and a floor load).</summary>
+        internal static void Tick(bool active)
         {
-            bool any = false;
-            for (int slot = 0; slot < EnemyAddresses.FloorSlots.Count; slot++)
+            if (!active) { Release(); return; }
+            for (int unit = 0; unit < EnemyAddresses.FloorSlots.Count; unit++)
             {
-                long a = EnemyAddresses.FloorSlots.SlotAddr(slot, 0);
-                if (Memory.ReadInt(a + EnemySlotOffsets.RenderStatus) <= 0 || Memory.ReadUShort(a + EnemySlotOffsets.EnemySpeciesId) != EnemySpecies.BombGemron.Id)
-                { _bodyNode[slot] = 0; MarkOff(slot); continue; }
-                any = true;
-                Spark(slot);
+                if (!IsBombGemron(unit)) { _blown[unit] = false; Unpin(unit); continue; }
+                if (_blown[unit]) continue;
+                Drive(unit);
             }
-            if (any) Graft(); else Ungraft();
         }
 
-        // ───────────────────────────── the fuse ─────────────────────────────
-        private static void Spark(int slot)
+        private static bool IsBombGemron(int unit)
         {
-            long chara = ModelScaleOffsets.ModelBase - CCharacter.CharScale + (long)slot * ModelScaleOffsets.ModelStride;   // the model table sits at CCharacter + 0x90
-            if (_bodyNode[slot] == 0)
-            {
-                uint root = Memory.ReadGuestPtr(chara + CCharacter.CharModel);
-                _bodyNode[slot] = Memory.IsValidGuest(root) ? BombCarrier.NodeNamed(root, BodyBone) : 0;
-                if (_bodyNode[slot] == 0) return;
-            }
-            float t = 0f;
-            long model = ModelScaleOffsets.ModelBase + (long)slot * ModelScaleOffsets.ModelStride;
-            if (Memory.ReadInt(model + ModelScaleOffsets.PlayingMotionId) == DeathMotion)
-                t = Math.Max(0f, Math.Min(1f, (Memory.ReadFloat(model + ModelScaleOffsets.PlayingMotionFrame) - FuseStart) / (BlastFrame - FuseStart)));
+            long a = EnemyAddresses.FloorSlots.SlotAddr(unit, 0);
+            return Memory.ReadInt(a + EnemySlotOffsets.RenderStatus) > 0 && Memory.ReadUShort(a + EnemySlotOffsets.EnemySpeciesId) == EnemySpecies.BombGemron.Id;
+        }
+
+        private static long Model(int unit) => ModelScaleOffsets.ModelBase + (long)unit * ModelScaleOffsets.ModelStride;
+        private static long PinEntry(int pin) => CodeCaves.FlashPinTable + (long)pin * CodeCaves.FlashPinStride;
+        private static int FlashSlotOf(int pin) => CodeCaves.FlashPinFirstSlot + pin;
+        private static long FlashPos(int pin) => PlayerAction.MachineGunFlash + (long)FlashSlotOf(pin) * 16;
+        private static long FlashTimer(int pin) => PlayerAction.MachineGunFlash + PlayerAction.MachineGunFlashTimer + (long)FlashSlotOf(pin) * 4;
+
+        private static void Drive(int unit)
+        {
+            long model = Model(unit);
+            int motion = Memory.ReadInt(model + ModelScaleOffsets.PlayingMotionId);
+            bool dying = motion == DeathMotion;
+            float frame = dying ? Memory.ReadFloat(model + ModelScaleOffsets.PlayingMotionFrame) : 0f;
+            int pin = _pinOf[unit] - 1;
+            // Spent, from what the engine holds (so a blast this missed — paused under a knockdown, a menu — still counts): the draw
+            // put it out, its death motion is past the blast, the death loop plays, or the fade-out has begun.
+            bool spent = (pin >= 0 && Memory.ReadUInt(PinEntry(pin) + CodeCaves.FlashPinFrame) == 0)
+                         || (dying && frame >= BlastFrame) || motion == DeathLoopMotion
+                         || Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(unit, EnemySlotOffsets.OpacityFadeStep)) > 0f;
+            if (spent) { Blown(unit, pin); return; }
+            float t = dying && frame >= FuseStart ? (frame - FuseStart) / (BlastFrame - FuseStart) : 0f;
             float s = t * (Fuse.Length - 1); int i = Math.Min(Fuse.Length - 2, (int)s); float f = s - i;
             float lx = Fuse[i][0] + (Fuse[i + 1][0] - Fuse[i][0]) * f, ly = Fuse[i][1] + (Fuse[i + 1][1] - Fuse[i][1]) * f, lz = Fuse[i][2] + (Fuse[i + 1][2] - Fuse[i][2]) * f;
-            byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(_bodyNode[slot]) + CFrameVu1.WorldMatrix, 0x40);
-            if (b == null) return;
-            float M(int k) => BitConverter.ToSingle(b, k * 4);
-            float x = lx * M(0) + ly * M(4) + lz * M(8) + M(12), h = lx * M(1) + ly * M(5) + lz * M(9) + M(13), y = lx * M(2) + ly * M(6) + lz * M(10) + M(14);
-            if (float.IsNaN(x) || float.IsNaN(h) || float.IsNaN(y) || (M(12) == 0f && M(13) == 0f && M(14) == 0f)) return;
-            long e = MarkPool + (long)(MarkFirst + slot % (16 - MarkFirst)) * MarkStride;
-            Memory.WriteVec3(e, x, h, y); Memory.WriteFloat(e + 0xC, 1f);
-            if (Memory.ReadInt(e + MarkOn) != 1) { Memory.WriteInt(e + MarkBlink, 1); Memory.WriteInt(e + MarkOn, 1); }
-            Memory.WriteInt(e + MarkTimer, MarkLife);                                   // kept alight: the engine blinks it 4 on / 4 off
+            if (pin < 0) { Pin(unit, lx, ly, lz); return; }
+            long e = PinEntry(pin);
+            if (Memory.ReadInt(FlashTimer(pin)) < 0) Memory.WriteInt(FlashTimer(pin), FlashAlight);   // the engine cleared the pool (its own reset): alight again
+            var p = new byte[12];
+            BitConverter.GetBytes(lx).CopyTo(p, 0); BitConverter.GetBytes(ly).CopyTo(p, 4); BitConverter.GetBytes(lz).CopyTo(p, 8);
+            Memory.WriteBytesBatch(e + CodeCaves.FlashPinPoint, p);
+            uint asked = Memory.ReadUInt(e + CodeCaves.FlashPinBursts);
+            if (asked != _bursts[pin])
+            {
+                _bursts[pin] = asked;
+                long pos = FlashPos(pin);
+                float x = Memory.ReadFloat(pos), h = Memory.ReadFloat(pos + 4), y = Memory.ReadFloat(pos + 8);
+                if (!float.IsNaN(x + h + y) && !(x == 0f && h == 0f && y == 0f)) Burst(x, h, y, h - BurstFloorDrop);
+            }
         }
 
-        private static void MarkOff(int slot)
+        /// <summary>The unit pinned to a free flash slot at its body bone, the slot drawn at the Gemron's size and alpha.</summary>
+        private static void Pin(int unit, float lx, float ly, float lz)
         {
-            long e = MarkPool + (long)(MarkFirst + slot % (16 - MarkFirst)) * MarkStride;
-            if (Memory.ReadInt(e + MarkTimer) == MarkLife && Memory.ReadInt(e + MarkOn) == 1) Memory.WriteInt(e + MarkTimer, 1);   // ours: let it go out
+            long chara = Model(unit) - CCharacter.CharScale;                           // the model table sits at CCharacter + 0x90
+            uint root = Memory.ReadGuestPtr(chara + CCharacter.CharModel);
+            uint bone = Memory.IsValidGuest(root) ? BombCarrier.NodeNamed(root, BodyBone) : 0;
+            if (bone == 0) return;
+            int pin = Array.IndexOf(_unitOf, 0);
+            if (pin < 0) return;                                                       // four Gemrons already lit
+            var e = new byte[CodeCaves.FlashPinStride];
+            BitConverter.GetBytes(bone).CopyTo(e, CodeCaves.FlashPinFrame);
+            BitConverter.GetBytes((uint)(Model(unit) - 0x20000000L)).CopyTo(e, CodeCaves.FlashPinModel);
+            BitConverter.GetBytes(lx).CopyTo(e, CodeCaves.FlashPinPoint); BitConverter.GetBytes(ly).CopyTo(e, CodeCaves.FlashPinPoint + 4); BitConverter.GetBytes(lz).CopyTo(e, CodeCaves.FlashPinPoint + 8);
+            int slot = FlashSlotOf(pin);
+            Memory.WriteFloat(CodeCaves.FlashSizeTable + slot * 4, FlashSize);
+            Memory.WriteByte(CodeCaves.FlashAlphaTable + slot, FlashAlpha);
+            Memory.WriteBytesBatch(PinEntry(pin), e);
+            Memory.WriteInt(FlashTimer(pin), FlashAlight);                             // last: the draw takes it from here
+            _pinOf[unit] = pin + 1; _unitOf[pin] = unit + 1; _bursts[pin] = 0;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"unit {unit}'s fuse lit (flash slot {slot})");
         }
 
-        // ───────────────────────────── the shot ─────────────────────────────
-        /// <summary>The bomb's mesh onto the apple shot's trees in the pack slot entered for ringo_ex (re-asserted when a rebuild or the
-        /// slot-sharing cave puts an apple back; re-done when the slot is re-entered: new trees).</summary>
-        private static void Graft()
+        private static void Blown(int unit, int pin)
         {
-            if (BombCarrier._grafts.Count > 0)                                           // the Big Bang holds the bomb's textures in its own block
-            { if (!_bigBangNoted) { _bigBangNoted = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the Big Bang has the bomb: the apple stays an apple"); } return; }
-            _bigBangNoted = false;
-            long slot = ShotSlot();
-            if (slot == 0) { Ungraft(); return; }
-            uint root = Memory.ReadGuestPtr(slot + 0xCC);
-            if (!Memory.IsValidGuest(root)) { Ungraft(); return; }
-            uint bombRoot = BombModel.Root();
-            if (bombRoot == 0) return;
-            uint bombVis = Memory.ReadGuestPtr(Memory.ToMmu(bombRoot) + CFrameVu1.GeomPtr);
-            if (!Memory.IsValidGuest(bombVis)) return;
-            if (slot == _graftSlot && root == _graftRoot && bombVis == _graftVisual)
-            {
-                foreach (var (node, _) in _grafts)
-                    if (Memory.ReadGuestPtr(Memory.ToMmu(node) + CFrameVu1.GeomPtr) != _graftVisual) Memory.WriteUInt(Memory.ToMmu(node) + CFrameVu1.GeomPtr, _graftVisual);
-                foreach (long obj in _objs)
-                    if (Math.Abs(Memory.ReadFloat(obj + CCharacter.CharScale) - ShotBombScale) > 0.01f) Memory.WriteVec3(obj + CCharacter.CharScale, ShotBombScale, ShotBombScale, ShotBombScale);
-                BombModel.KeepTextures(MonsterTextureBlock);
-                return;
-            }
-            Ungraft();
-            var roots = new List<uint> { root };
-            int count = Memory.ReadInt(slot + ShotEffectPack.OffCount);
-            for (int i = 0; i < Math.Min(count, ShotEffectPack.SubShots); i++)
-            {
-                long obj = slot + ShotEffectPack.OffObj + (long)i * ShotEffectPack.ObjStride;
-                uint r = Memory.ReadGuestPtr(obj + CCharacter.CharModel);
-                if (Memory.IsValidGuest(r) && !roots.Contains(r)) roots.Add(r);
-                _objs.Add(obj);
-            }
-            var found = new List<(uint, uint)>();
-            foreach (uint r in roots)
-            {
-                uint node = BombCarrier.NodeNamed(r, CarrierNode);
-                uint vis = node != 0 ? Memory.ReadGuestPtr(Memory.ToMmu(node) + CFrameVu1.GeomPtr) : 0;
-                if (node == 0 || (!Memory.IsValidGuest(vis) && vis != bombVis)) { _objs.Clear(); return; }   // a tree still being built: next tick
-                if (vis != bombVis) found.Add((node, vis));
-            }
-            foreach (var (node, _) in found) Memory.WriteUInt(Memory.ToMmu(node) + CFrameVu1.GeomPtr, bombVis);
-            foreach (long obj in _objs) Memory.WriteVec3(obj + CCharacter.CharScale, ShotBombScale, ShotBombScale, ShotBombScale);
-            _grafts.AddRange(found); _graftSlot = slot; _graftRoot = root; _graftVisual = bombVis;
-            BombModel.KeepTextures(MonsterTextureBlock);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the bomb's mesh on the apple shot: {found.Count} tree(s) of slot 0x{slot:X}, {_objs.Count} sub-shots at ×{ShotBombScale:0.#}");
+            _blown[unit] = true;
+            EndBurst();
+            if (pin >= 0) Unpin(unit);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"unit {unit}'s fuse spent");
         }
 
-        /// <summary>The pack slot whose config is ringo_ex (0 = not entered on this floor).</summary>
-        private static long ShotSlot()
+        /// <summary>The unit's flash slot let go: out, unpinned, Osmond's size and alpha back.</summary>
+        private static void Unpin(int unit)
         {
-            uint pack = Memory.ReadGuestPtr(ShotEffectPack.NowShotEffectPtr);
-            if (!Memory.IsValidGuest(pack)) return 0;
-            uint cfg = Memory.ReadUInt(ShotEffectPack.CfgTable + ShotConfig * 4);
-            for (int i = 0; i < ShotEffectPack.PackSlots; i++)
-            {
-                long s = Memory.ToMmu(pack) + (long)i * ShotEffectPack.SlotStride;
-                if (Memory.ReadUInt(s + ShotEffectPack.OffCfg) == cfg) return s;
-            }
-            return 0;
+            int pin = _pinOf[unit] - 1;
+            if (pin < 0) return;
+            int slot = FlashSlotOf(pin);
+            Memory.WriteBytesBatch(PinEntry(pin), new byte[CodeCaves.FlashPinStride]);
+            Memory.WriteInt(FlashTimer(pin), -1);
+            Memory.WriteFloat(CodeCaves.FlashSizeTable + slot * 4, CodeCaves.FlashSizeVanilla);
+            Memory.WriteByte(CodeCaves.FlashAlphaTable + slot, CodeCaves.FlashAlphaVanilla);
+            _pinOf[unit] = 0; _unitOf[pin] = 0;
         }
 
-        private static void Ungraft()
+        /// <summary>CheckDmg's guard burst (kind 2) written whole into the burst pool's last entry: every mark a little off the point,
+        /// scattered about no direction (the engine's own burst uses one axis of its direction for all three, so a guard spark is a pure
+        /// scatter too), a random size, the parameters CheckDmg passes — the marks and their shrink at <see cref="BurstSize"/>.</summary>
+        private static void Burst(float x, float h, float y, float floorY)
         {
-            if (_grafts.Count > 0 && Memory.ReadGuestPtr(_graftSlot + 0xCC) == _graftRoot)
+            long at = PlayerAction.HitMarkBurst + (long)(PlayerAction.HitPointMarkCount - 1) * PlayerAction.HitMarkBurstStride;
+            byte[] e = Memory.ReadBytesBatch(at, PlayerAction.HitMarkBurstStride);
+            if (e == null) return;                                                     // (the object's own header — vtable, mass … — kept)
+            void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
+            void I(int o, int v) => BitConverter.GetBytes(v).CopyTo(e, o);
+            F(PlayerAction.HitMarkBurstPos, x); F(PlayerAction.HitMarkBurstPos + 4, h); F(PlayerAction.HitMarkBurstPos + 8, y); F(PlayerAction.HitMarkBurstPos + 12, 1f);
+            F(PlayerAction.HitMarkBurstShrink, BurstShrink * BurstSize); F(PlayerAction.HitMarkBurstSpread, BurstSpread);
+            F(PlayerAction.HitMarkBurstGravity, BurstGravity); F(PlayerAction.HitMarkBurstSpeed, BurstSpeed); F(PlayerAction.HitMarkBurstFloor, floorY);
+            for (int i = 0; i < PlayerAction.HitMarkBurstMarks; i++)
             {
-                foreach (var (node, apple) in _grafts)
-                    if (Memory.ReadGuestPtr(Memory.ToMmu(node) + CFrameVu1.GeomPtr) == _graftVisual) Memory.WriteUInt(Memory.ToMmu(node) + CFrameVu1.GeomPtr, apple);
-                foreach (long obj in _objs) Memory.WriteVec3(obj + CCharacter.CharScale, 1f, 1f, 1f);
+                int o = PlayerAction.HitMarkBurstOffset + i * 16, v = PlayerAction.HitMarkBurstVelocity + i * 16;
+                F(o, R() - 0.5f); F(o + 4, R() - 0.5f); F(o + 8, R() - 0.5f); F(o + 12, 1f);
+                F(v, BurstSpread * R() - BurstSpread / 2f); F(v + 4, BurstSpread * R() - BurstSpread / 2f); F(v + 8, BurstSpread * R() - BurstSpread / 2f); F(v + 12, 1f);
+                F(PlayerAction.HitMarkBurstSize + i * 4, (0.1f + 1.2f * R()) * BurstSize);
+                I(PlayerAction.HitMarkBurstUsed + i * 4, i < BurstMarks ? 1 : 0);
             }
-            if (_grafts.Count > 0) BombModel.ReleaseTextures();
-            _grafts.Clear(); _objs.Clear(); _graftSlot = 0; _graftRoot = 0; _graftVisual = 0;
+            I(PlayerAction.HitMarkBurstKind, PlayerAction.HitMarkGuard);
+            I(PlayerAction.HitMarkBurstCount, BurstMarks);
+            Memory.WriteBytesBatch(at, e);
+            _burstAt[0] = x; _burstAt[1] = h; _burstAt[2] = y;
+        }
+        private static float R() => (float)_rng.NextDouble();
+
+        /// <summary>Our last burst put out (its marks stop drawing), if the pool's entry is still ours (CheckDmg takes the entries in turn).</summary>
+        private static void EndBurst()
+        {
+            long at = PlayerAction.HitMarkBurst + (long)(PlayerAction.HitPointMarkCount - 1) * PlayerAction.HitMarkBurstStride;
+            if (Memory.ReadFloat(at + PlayerAction.HitMarkBurstPos) != _burstAt[0] || Memory.ReadFloat(at + PlayerAction.HitMarkBurstPos + 8) != _burstAt[2]) return;
+            Memory.WriteInt(at + PlayerAction.HitMarkBurstCount, 0);
         }
 
-        /// <summary>A new floor: the slots are new enemies, the pack re-entered, the cash emptied.</summary>
+        /// <summary>Every flash slot let go (a menu, a character change, a load: the trees and pools are rebuilt).</summary>
+        private static void Release()
+        {
+            for (int unit = 0; unit < EnemyAddresses.FloorSlots.Count; unit++) Unpin(unit);
+        }
+
+        /// <summary>A new floor: the slots are new enemies.</summary>
         internal static void Reset()
         {
-            Array.Clear(_bodyNode, 0, _bodyNode.Length);
-            _grafts.Clear(); _objs.Clear(); _graftSlot = 0; _graftRoot = 0; _graftVisual = 0;
-            BombModel.ReleaseTextures();
-            BombModel.Forget();
+            Release();
+            Array.Clear(_blown, 0, _blown.Length);
         }
     }
 }

@@ -504,6 +504,21 @@ namespace Dark_Cloud_Improved_Version
         /// makes this the only "did my swing connect" signal that survives elemental immunity. GUARDED hits are the
         /// exception: they take an earlier branch that stamps a mark without advancing the counter.</summary>
         internal const long HitPointMark      = 0x21EC4740;
+        /// <summary>The machine-gun hit flash pool (<c>OzumondShotEffect</c>, a CHIT_MACHINGUN_EFFECT: 16 × vec4 positions, then 16 timers):
+        /// Draw shows a 5-unit basefx00 cell (cell = 2 − timer / 6: the bright flash at 12–17, the fading one at 6–11, the last at 0–5)
+        /// while a timer is ≥ 0; Step counts it down; Set takes the first slot whose timer is negative. Pure data: a slot written with a
+        /// position and a timer is a flash.</summary>
+        internal const long MachineGunFlash = 0x21EFC000;
+        internal const int  MachineGunFlashSlots = 16, MachineGunFlashTimer = 0x100;
+        /// <summary>The hit-mark burst pool (<c>HitMark</c>, 16 × CHitMark of 0x660): a CObject (pos at +0x10) with 32 marks — offset[32] vec4
+        /// at +0xB0, velocity[32] at +0x2B0, size[32] at +0x4B0, used[32] at +0x5D4 — and shrink +0x5C0, spread +0x5C4, gravity +0x5C8,
+        /// speed +0x5CC, count +0x654 (marks still drawing; Draw walks that many), kind +0x658 (0 hit, 2 guard), floor_y +0x65C. Step moves
+        /// each used mark, drops it (count−1) once its size shrinks to 0.1. CheckDmg fills entry hitCnt (round robin); the mod's bursts
+        /// use the last entry.</summary>
+        internal const long HitMarkBurst = 0x21EBE140;
+        internal const int  HitMarkBurstStride = 0x660, HitMarkBurstPos = 0x10, HitMarkBurstOffset = 0xB0, HitMarkBurstVelocity = 0x2B0, HitMarkBurstSize = 0x4B0,
+                            HitMarkBurstUsed = 0x5D4, HitMarkBurstShrink = 0x5C0, HitMarkBurstSpread = 0x5C4, HitMarkBurstGravity = 0x5C8, HitMarkBurstSpeed = 0x5CC,
+                            HitMarkBurstCount = 0x654, HitMarkBurstKind = 0x658, HitMarkBurstFloor = 0x65C, HitMarkBurstMarks = 32, HitMarkGuard = 2;
         internal const int  HitPointMarkStride = 0x20, HitPointMarkCount = 16;
         /// <summary>The mark's LIFE countdown within its entry: stamped at 16 and decremented one per frame by
         /// <c>CHitPointMark::Step</c> (0x1B3710), which clears the entry's active word at zero. Since a GUARDED

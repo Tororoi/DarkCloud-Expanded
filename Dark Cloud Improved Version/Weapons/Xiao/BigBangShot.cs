@@ -24,7 +24,11 @@ namespace Dark_Cloud_Improved_Version
         private const string Tag = "[BigBangShot] ";
         private const double GuardSeconds = 3.0, ShotChargeSeconds = 1.0;
         private const float  HoverScale = 4f;                          // the bomb over a target
-        private const float  HoverFxScale = 2f, BombFxScale = 1.1f, PelletFxScale = 0.5f;   // the blast sprites: the drop, the charged shot, the plain shot; each ring reaches its blast's edge
+        private const float  HoverFxScale = 2f, BombFxScale = 1.1f, PelletFxScale = 0.5f;   // the blast sprites: the drop, the charged shot, the plain shot
+        /// <summary>Every blast's damage reach and shock ring: this × its sprites' scale (the drop 50, the charged shot 27.5, the plain
+        /// shot's impact 12.5 — a ring only above scale 1, as the engine's bombs draw it). The Bomb Gemron's bombs follow the same rule.</summary>
+        internal const float RadiusPerScale = ElfSpeciesPatches.RadiusPerScale;
+        private static float ReachOf(float fxScale) => RadiusPerScale * fxScale / BlastFalloff.BlastRadius;   // BlastFalloff's steps, scaled to that reach
         internal const float ShotBombScale = 2f, PelletBombScale = 1f;  // the bomb on the apple shot, over the apple's own size (the sub-shot object's own scale): charged, plain
         private const float  HoverMargin = 10f;                         // the hanging bomb's bottom this far above the species' authored height (Big Bang's blade: 6)
         private const float  ContactPad = 3f;                           // the bomb shot touches an enemy this far outside its body width
@@ -37,7 +41,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  BombLength = 1.22f;                        // bakudan.mds: its mesh runs 1.22 below the root to 1.98 above it at 1×, so this is root-to-bottom — the drop stops with the bottom ON the root
         private const int    CarrierConfig = 4;                         // the shot table's `ringo_ex`: Witch Illza's thrown apple (its flight motion turns the bomb as the apple turns)
         internal const string CarrierNode = "dokuring__m";               // the node that draws the apple in each of its trees (the impact's light, `hikari04__bacapp`, sits beside it)
-        private const float  BombDamage = 0.5f, BombKick = 0.5f, BombReach = 0.5f;            // the charged shot's blast against the drop's (the kick as DISTANCE)
+        private const float  BombDamage = 0.5f, BombKick = 0.5f;                             // the charged shot's blast against the drop's (the kick as DISTANCE)
         private const float  PelletKick = 0.25f;                        // the plain shot's kick DISTANCE, of the drop's (half the charged shot's); its damage is the pellet's own
         /// <summary>The kick strength that throws <paramref name="distanceFraction"/> as far as the drop's: distance ≈ strength² / (2 · decay).</summary>
         private static float KickFor(float distanceFraction) => (float)Math.Sqrt(distanceFraction);
@@ -86,7 +90,18 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The shot effect this sphere wants entered on every floor (BorrowedShots asks every tick): the apple shot,
         /// while Xiao is out with Super Steve carrying a Big Bang sphere.</summary>
         internal static BorrowedEffect WantedShot()
-            => PelletWatch.SuperSteveSphereOn(Items.bigbang) ? _carrier ??= BorrowedShots.TableConfig(CarrierConfig) : null;
+            => PelletWatch.SuperSteveSphereOn(Items.bigbang) ? _carrier ??= Carrier() : null;
+
+        /// <summary>The apple shot as the Big Bang's carrier: a copy of its config whose impact (the plain shot's burst, where its hit is
+        /// planted) reaches RadiusPerScale × the plain shot's scale. A copy, so the cached table config other abilities borrow stays as it is.</summary>
+        private static BorrowedEffect Carrier()
+        {
+            BorrowedEffect table = BorrowedShots.TableConfig(CarrierConfig);
+            if (table == null) return null;
+            byte[] c = (byte[])table.Cfg.Clone();
+            BitConverter.GetBytes(RadiusPerScale * PelletFxScale).CopyTo(c, ShotEffectPack.CfgRadiusImpact);
+            return new BorrowedEffect(c, table.Path);
+        }
 
         /// <summary>The hanging bomb's tint: red while it fades in; the pulse from the frame it is fully in.</summary>
         private static void PulseTint(bool hanging)
@@ -287,7 +302,7 @@ namespace Dark_Cloud_Improved_Version
                 }
                 EndFlight(f);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{(f.Kind == Shot.Bomb ? "charged" : "plain")} bomb bursts at ({f.X:F0},{f.H:F0},{f.Y:F0})" + (live ? " on contact" : " where it died"));
-                if (f.Kind == Shot.Bomb) Blast(f.X, f.H, f.Y, BombFxScale, BombDamage, KickFor(BombKick), BombReach, flash: false, ring: true);
+                if (f.Kind == Shot.Bomb) Blast(f.X, f.H, f.Y, BombFxScale, BombDamage, KickFor(BombKick), ReachOf(BombFxScale), flash: false, ring: true);
                 else { BombFx.Spawn(f.X, f.H, f.Y, PelletFxScale, ringRadius: 0f); GamePad.LightHit(); }              // a plain shot flying as a pellet (no apple shot entered): the visual alone
             }
         }
@@ -306,7 +321,7 @@ namespace Dark_Cloud_Improved_Version
             if (flash) SunSword.FlashAt(BigBangShot.FlashProfile, x, h, y, _planted);
         }
         /// <summary>The hanging bomb's landing (BigBang's owner callback): the full blast, drawn a little above the floor, and the flash.</summary>
-        private static void LandDrop(int slot, float x, float h, float y) => Blast(x, h, y, HoverFxScale, 1f, 1f, 1f, flash: true, ring: true, fxLift: DropFxLift);
+        private static void LandDrop(int slot, float x, float h, float y) => Blast(x, h, y, HoverFxScale, 1f, 1f, ReachOf(HoverFxScale), flash: true, ring: true, fxLift: DropFxLift);
 
         private static Flight Begin(int slot, long pool, Shot kind)
         {

@@ -13,17 +13,20 @@ when it dies, and when near death with the player close it self-destructs: a slo
 | Script `e167a.stb` | same bake | Holy's script plus two appended functions: the death path's wait fires `_SET_SHOT2` at frame 122 of motion 11; the AI loop's head calls a self-destruct check (HP < 25 %, player ≤ 22 units → motion 11 at 0.25×, blast at 122, fade, dead). |
 | Archive entries | `IsoArchive.Rename` | The orphan `e147a` chr/stb entries renamed in DATA.HD2 (the engine's index — the USA build never reads DATA.HED) and in DATA.HED (the mod's). |
 | Name | message 3320 of `dunmsd00_1.mes` | An empty vanilla slot (3000 + species id), written in place into the bank's padding. |
-| Blast | shot config 8 (`ElfSpeciesPatches.PatchBlastConfig`) | `g_wave2`'s record (unused by any species or script) rewritten as `zibaku_f2`'s with its phase-0 radius 50 instead of 14: the outlaws' fireball, fire, knockdown, player only, 110 frames; damage = the script's argument (150), which the stat normalizer scales. Flat inside the radius — the engine has no distance falloff for enemy shots. |
-| Shot | `BombGemron.cs` | The apple it throws (`ringo_ex`) carries the item bomb's mesh: the pack slot's trees have the apple node's visual swapped for the bomb's (the Big Bang's graft, on the species' slot), sub-shots at ×2, the bomb's textures kept in the monster block. Skipped while the Big Bang holds the bomb. |
-| Fuse | `BombGemron.cs` | The engine's blinking hit mark (the guard-mark pool's entries 8–15) at the big bomb's wick tip, walking the wick to its base over the death motion so it reaches the base at the blast. The wick's centreline is a constant in the body bone's frame. |
+| Shots | shot configs 8 and 27 (`ElfSpeciesPatches.PatchBombConfigs`) | Both unused in vanilla (`g_wave2`, the second `f_boll_3`). Neither plants a hit of its own; each ends in the engine's item-bomb blast (SHOT_END_EFFECT_BOMB → SetBombEffect: the item bomb's sprites at the config's scale, its shock ring above 1, one knockdown entry of radius 20 × scale, player only) — the blast the Big Bang's shots and drop draw. Config 8, the thrown bomb: `ringo_ex`'s flight, no radius (contact = the player's head point, feet + 14–18, within 6 of its next point; the script aims the throw at feet + 14 instead of Holy's 7.4, which flew under it), scale 0.5 (radius 10, the Big Bang pellet's size), on contact with the player, a wall or after 160 frames. Config 27, the death and self-destruct blast: no flight, no life, scale 2 (the Big Bang drop's). Damage 150 each, flat, a config constant the normalizer does not reach. A shot only bursts on leaving the flight or impact phase; ending in phase 0 deactivates it silently. |
+| Shot model `g_wave2.chr` | `ModSpeciesBakes.BombShotPack` | Witch Illza's apple pack (`ringo_ex`) with the apple's mesh swapped for the item bomb's and the bomb's picture added, its cfg record renamed `g_wave2.cfg` (the loader asks for `<model>.cfg`). |
+| Fuse | `tools/stubs/flash_slot.s` + `BombGemron.cs` | The machine-gun hit flash (`OzumondShotEffect`) in a slot 12–15, run by the flash's own draw once a frame (hooked at 0x1AEA7C for the size, 0x1AEA9C for the alpha): kept alight, its three cells in turn 4 frames each, placed through the body bone's world matrix at the fuse point, a burst asked for every 15 frames, put out the frame the death motion passes 122. Per-slot size and alpha tables (`CodeCaves.FlashSizeTable` / `FlashAlphaTable`, baked 5.0 / 0x80 so Osmond's flashes are unchanged); the Gemron's slots draw at 3 and 0x30. The app holds no timers: it pins a Gemron to a slot (`CodeCaves.FlashPinTable`) and unpins it, writes the fuse point from the death clip's frame, and answers each burst request with the guard spark (20 marks at twice CheckDmg's size, scatter 0.75) at the point the draw placed the flash. |
+
+| Blast size | `tools/stubs/bomb_radius.s` (sceCdGetToc body, after the knockback cave) | The engine ties a bomb's hit radius (20 × scale) and ring (30 × scale) to its sprites' scale. CSHOT_EFFECT::Step's three SetBombEffect calls go through the cave: a config whose padding halfword +0x56 holds a radius per unit of scale (0 in every vanilla config) gets that × scale for its hit and, above scale 1, its ring. Both Gemron blasts carry 25 — the rule the Big Bang sphere's blasts follow too (drop 50, charged shot 27.5, plain shot's impact 12.5). |
+| Knockback | `tools/stubs/blow_dir.s` (the dead `sceCdGetToc` body) + `DunPatches` | The engine's item bomb plants its hit with velocity (1, 0, 0), so every bomb — vanilla ones too — threw the player toward world +X. BtCheckDamageProc's two copies of a hit's velocity into `blowVelo` (the knockdown at dun 0x1DBB9B4, the guarded slide at 0x1DBB82C) go through the cave: an entry with ready phase 10 (SetBombEffect alone sets it) gets the unit vector from the blast to the player; a blast centred on him (contact) throws him straight back from the way he faces. |
+| Spent | `BombGemron.cs` | A Gemron is spent — never pinned again, its last burst put out — once the draw has put its flash out, its death motion is past 122, the death loop plays, or its fade has begun (engine state, so a blast the app missed while paused still counts). |
 
 ## Tuning
 
-- `ElfSpeciesPatches.BlastRadius` (50) — repatch to change.
+- `ElfSpeciesPatches.ThrowScale` / `BlastScale` (0.5 / 2) and `RadiusPerScale` (25: hit radius and ring = 25 × scale → 12.5 / 50, no ring at or below scale 1) and `ThrowDamage` / `BlastDamage` (150) — repatch to change.
 - `EnemySpecies.BombGemron` — stats; `HomeOf` gives it Holy Gemron's home region for the normalizer.
 - `ModSpeciesBakes` — the sheet adjustment (`Sat`/`Bri`/`Con`/`Light`, `Keep`), bomb sizes and spins; the self-destruct gate
   (`SelfDestructHp`, `SelfDestructRange`, `SelfDestructSpeed`), the blast frame and height.
-- `BombGemron.ShotBombScale` (2) — the bomb on the shot.
 
 ## Lessons
 
@@ -34,5 +37,11 @@ when it dies, and when near death with the player close it self-destructs: a slo
   engine unable to find the file (LoadFile's assert resets the game).
 - A 35th shot config is blocked by the shot-slot sharing cave (it rejects indices past 34 and its per-config table is full), so a
   new blast means rewriting an orphan config.
+- An earlier runtime graft (the bomb's mesh on the live apple shot through the item cash, texture retagging) froze the game on the
+  character change and on dungeon entry; the bomb shot is baked into the disc instead.
+- No timer runs on the app's tick (about 100 Hz and uneven): the spark's cadence, cells and cutoff are counted by the flash's draw in
+  game frames. App-written world positions lag the drawn model and jitter; the draw places the flash through the bone itself.
+- The script's frame check must see the death clip running below 122 before it fires at 122: on the first ticks after `_SET_MOTION`
+  the frame read is still the previous clip's, and an attack or guard clip sits past 122 — the blast went off at once.
 - The item-bomb reaction word and the charge-attack radii in the data page are baked to their vanilla values: the page is
   zero-filled by the loader on every boot, and the app's startup seed alone left them 0 after a reset.

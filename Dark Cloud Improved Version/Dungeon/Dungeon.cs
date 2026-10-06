@@ -111,11 +111,12 @@ namespace Dark_Cloud_Improved_Version
                     WeaponThreads.LaunchCurses();
                     ElementMenu.Tick();                    // the quick-change menu's element pick (D-pad UP), applied to the weapon record and HUD
                     EnemyPoisonDuration.Tick();            // enemy poison ends after status susceptibility × 2 s (the engine's never does)
-                    BombGemron.Tick();                     // the Bomb Gemron's bomb on its apple shot and the spark on its fuse
 
                     // Enemies.PollEnemyDynamics();
                     // Enemies.MonitorFlashTimer();
-                    if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
+                    bool walking = !Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode();
+                    BombGemron.Tick(walking && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && !Player.CheckIsLoading());   // the Bomb Gemron's thrown bombs and fuse; everything let go off the walking mode (a menu, a character change, a load)
+                    if (walking)
                     {
                         WeaponThreads.Launch();
                         CheckActiveItems();

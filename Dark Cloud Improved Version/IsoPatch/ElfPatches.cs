@@ -158,6 +158,9 @@ namespace Dark_Cloud_Improved_Version
             PatchCatGlowPalette(fs, ElfOff);              // … and the cave that paints one of them into the 8-bit glow disc
             PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
             ElfSpeciesPatches.PatchSpeciesExtension(fs, ElfOff);  // the mod's species records (Bomb Gemron) in the segment's data page, reached through the species-lookup stub
+            ElfSpeciesPatches.PatchBlowDir(fs, ElfOff);            // an item bomb throws the player away from its blast (the dun hooks are in DunPatches)
+            ElfSpeciesPatches.PatchBombRadius(fs, ElfOff);         // a shot config's own blast radius and ring (the Bomb Gemron's death blast: 50 at scale 2)
+            ElfSpeciesPatches.PatchFlashSlot(fs, ElfOff);          // the machine-gun hit flash's size and alpha per slot (5.0 / 0x80 baked) and the Bomb Gemron's fuse spark, frame-timed in the draw
             PatchXiaoBuildUp(fs, ElfOff);                 // Xiao's build-up tree: Hardshooter → Double Impact only, Double Impact → Matador only
             PatchFishingPrizeSlingshot(fs, ElfOff);       // the fishing prize exchange sells the Flamingo for 1000 FP (vanilla: the Matador for 1400)
             PatchMapCarveRemainder(fs, ElfOff);           // the monster pool = the (grown) map carve minus the floor's map data (DunPatches grows the carve)

@@ -69,7 +69,10 @@ STUBS = [
     ('confuse_proc.s',           'confuseProc.bin',          0x22B248),    # main ELF: dead DebugItemGetKey's body — the Confuse ability's on-hit roll (ElfWeaponPatches.PatchConfuseProc)
     ('follow.s',                 'follow.bin',               0x1B4690),    # main ELF: DebugInfomationDraw's free tail (ElfWeaponPatches.PatchFollow): a point carried with a unit
     ('bait_keep.s',              'baitKeep.bin',             0x27D230),
-    ('species_lookup.s',         'speciesLookup.bin',        0x27D2F8),    # main ELF: dead SmoothRest body after the Ruby cave (ElfSpeciesPatches): the species table's extension rows
+    ('species_lookup.s',         'speciesLookup.bin',        0x27D2F8),
+    ('flash_slot.s',             'flashSlot.bin',            0x27D320),    # main ELF: dead SmoothRest body after the species lookup (ElfSpeciesPatches.PatchFlashSlot): the machine-gun flash's size and bone pin per slot    # main ELF: dead SmoothRest body after the Ruby cave (ElfSpeciesPatches): the species table's extension rows
+    ('blow_dir.s',               'blowDir.bin',              0x10A7D8),    # main ELF: the dead sceCdGetToc body (DunPatches): an item bomb throws the player away from its blast
+    ('bomb_radius.s',            'bombRadius.bin',           0x10A880),    # main ELF: the dead sceCdGetToc body after the blow direction (ElfSpeciesPatches.PatchBombRadius): a shot config's own blast radius
     ('element_menu.s',           'elementMenu.bin',          0x22B410, 'elementMenuTail.bin', 0x22B5B8),
     ('element_menu_ruby.s',      'elementMenuRuby.bin',      0x27D270),    # main ELF: dead SmoothRest body after the bait keep (ElfElementMenuPatches): Ruby's shot effect reloaded when the picker closes on her   # main ELF: dead DebugItemGetKey tail (hooks) + DebugItemGetDraw body (sheet name, draw, cell test) — the quick-change menu as element picker (ElfElementMenuPatches)    # main ELF: dead SmoothRest body after the camera-height cave (ElfFishingPatches.PatchBaitKeep): the Poisonous Apple stays on the hook
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),

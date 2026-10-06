@@ -309,7 +309,25 @@ namespace Dark_Cloud_Improved_Version
         internal const long SpeciesRows      = 0x21FAF500;   // 312 B → 0x21FAF638
         internal const uint SpeciesRowsGuest = 0x01FAF500;
         internal const int  SpeciesRowCount  = 2;
-        // 0x21FAF640..0x21FAF830 FREE
+        /// <summary>The machine-gun hit flash's size per slot (CHIT_MACHINGUN_EFFECT, 16 slots): Draw reads entry i for slot i through
+        /// SmoothRestCave.FlashSlot. Baked 5.0 each (the engine's constant — Osmond's flashes); a driver of a slot writes its own and
+        /// puts 5.0 back when it lets the slot go (BombGemron's fuse, 3.0).</summary>
+        internal const long FlashSizeTable      = 0x21FAF640;   // 16 floats → 0x21FAF680
+        internal const uint FlashSizeTableGuest = 0x01FAF640;
+        internal const float FlashSizeVanilla   = 5f;
+        /// <summary>The machine-gun hit flash's pin for slots 12–15 (the Bomb Gemron's fuse), 4 × 0x20, entry (slot − 12): +0 the CFrame
+        /// (guest; 0 = not pinned), +4 the unit's model block (guest, ModelScaleOffsets: its playing motion and frame), +8 frames pinned
+        /// (the cave's), +0xC bursts asked for (the cave's: one every 30 frames), +0x10 the point x, y, z in the frame's space (the app's).
+        /// The flash's draw (SmoothRestCave.FlashSlot) keeps a pinned slot alight, steps its cells, places it through the frame's world
+        /// matrix every frame, and puts it out — clearing +0 — once the unit's death motion passes its blast frame.</summary>
+        internal const long FlashPinTable      = 0x21FAF680;   // 0x80 B → 0x21FAF700
+        internal const int  FlashPinFirstSlot = 12, FlashPinStride = 0x20, FlashPinFrame = 0x0, FlashPinModel = 0x4, FlashPinFrames = 0x8,
+                            FlashPinBursts = 0xC, FlashPinPoint = 0x10;
+        /// <summary>The machine-gun hit flash's alpha per slot, 16 bytes (Draw's set3DCellModel alpha through SmoothRestCave.FlashSlot):
+        /// baked 0x80 (the engine's constant — Osmond's flashes); lower is fainter in the additive effects pass.</summary>
+        internal const long FlashAlphaTable    = 0x21FAF700;   // 16 B → 0x21FAF710
+        internal const byte FlashAlphaVanilla  = 0x80;
+        // 0x21FAF710..0x21FAF830 FREE
 
         /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
         /// <c>ElfToanMeleePatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's

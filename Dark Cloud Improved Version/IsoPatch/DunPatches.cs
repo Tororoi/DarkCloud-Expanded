@@ -117,6 +117,11 @@ namespace Dark_Cloud_Improved_Version
             // Divine Beast cat glow: the draw loop's two torch passes → the glow cave's entries, which perform the pass
             // and then draw the cat's glow disc with the same routine (ElfCatPatches.PatchCatGlowDraw writes the cave).
             new(0x01DAEBF8, 0x0C071030, MipsAsm.Jal(ElfCave.CatGlowDrawEntryA), "cat glow hook A (jal DrawFire__11CDungeonMap → cave)"),
+            // An item bomb throws the player away from its blast: BtCheckDamageProc's two copies of the hit's velocity into blowVelo —
+            // before a knockdown, and before a guarded hit's slide — go through the blow-direction cave (ElfSpeciesPatches.PatchBlowDir
+            // writes it), which turns a bomb entry's fixed (1, 0, 0) into the direction from the blast to him.
+            new(0x01DBB9B4, 0x0C04860C, MipsAsm.Jal(DeadCdCave.BlowDir), "bomb knockdown direction (jal sceVu0CopyVector → blow-direction cave)"),
+            new(0x01DBB82C, 0x0C04860C, MipsAsm.Jal(DeadCdCave.BlowDir), "bomb guard-slide direction (jal sceVu0CopyVector → blow-direction cave)"),
             new(0x01DAEC10, 0x0C070F30, MipsAsm.Jal(ElfCave.CatGlowDrawEntryB), "cat glow hook B (jal DrawFireFreeStyle → cave)"),
             // Mirage haze: the draw loop's raster pass → the haze cave, which performs the pass and then draws one raster at
             // the clone's root (ElfWeaponPatches.PatchMirageHazeDraw writes the cave).
