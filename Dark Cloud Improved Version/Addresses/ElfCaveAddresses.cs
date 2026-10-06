@@ -55,6 +55,12 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>ELF-file offset the segment loads from (span RegionEnd−RegionStart, zero-filled at patch
         /// time): dead .reldun debug bytes, outside every phdr's file extent and never read at runtime.</summary>
         internal const uint SegmentFileOff = 0x002AD000;   // 0x4000 B of dead .reldun (0x29FE60..0x2B11C8)
+        /// <summary>The segment actually loaded is one page bigger in FRONT: [DataPageStart, RegionEnd) from file [DataPageFileOff, +0x5000).
+        /// That page (0x1FAF000, the mod's data page: CodeCaves' runtime words) holds DATA the ISO bakes — the species table's
+        /// extension rows (CodeCaves.SpeciesRows) — and never code, so the mod may write there in play; the band's caves keep
+        /// their file offsets (DataPageFileOff + 0x1000 == SegmentFileOff).</summary>
+        internal const uint DataPageStart   = 0x01FAF000;
+        internal const uint DataPageFileOff = SegmentFileOff - 0x1000;
 
         internal const uint CanalEvictFadeHook = 0x01FB0000;   // 64 B → 0x1FB0040
         internal const uint QueensSpray        = 0x01FB0050;   // 180 B → 0x1FB0104

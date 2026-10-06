@@ -172,6 +172,7 @@ namespace Dark_Cloud_Improved_Version
                             hasClearMessageShown = false;
                             EnemyPoisonDuration.Reset();
                             BombGemron.Reset();
+                            SpeciesRows.Ensure();
                             MiniBoss.miniBossRolled = false;
                             MiniBossLootTables.CancelPendingBoost();
                             normalFloorSnapshot = null;

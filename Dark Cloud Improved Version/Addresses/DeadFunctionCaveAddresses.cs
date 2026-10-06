@@ -185,10 +185,9 @@ namespace Dark_Cloud_Improved_Version
         /// is Ruby — her shot effect reloaded for the new element, then MenuTextureReload as the hooked call would have been.</summary>
         internal const uint ElementMenuRuby = 0x0027D270;   // 136 B → 0x27D2F8
         /// <summary>tools/stubs/species_lookup.s (ElfSpeciesPatches): SetupBaseModel's `&MonstorTable[model_no]` goes through here;
-        /// an index past the 167 vanilla rows resolves into <see cref="SpeciesRows"/>.</summary>
-        internal const uint SpeciesLookup = 0x0027D2F8;   // 108 B → 0x27D364
-        /// <summary>The mod's species records (EnemySpeciesTable.ExtensionBase): 2 × 0x9C, index 167 first.</summary>
-        internal const uint SpeciesRows   = 0x0027D364;   // 312 B → 0x27D49C
+        /// an index past the 167 vanilla rows resolves into CodeCaves.SpeciesRows (a data page: this one holds executed code, and a
+        /// PINE write into it kills PCSX2).</summary>
+        internal const uint SpeciesLookup = 0x0027D2F8;   // 32 B → 0x27D318
         internal const uint End          = 0x0027D49C;
     }
 }

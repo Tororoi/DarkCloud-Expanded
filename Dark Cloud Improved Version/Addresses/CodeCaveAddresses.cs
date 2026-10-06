@@ -302,7 +302,14 @@ namespace Dark_Cloud_Improved_Version
         /// the elements the ring offers, in ring order.</summary>
         internal const long ElementMenuMode = 0x21FAF4E0, ElementMenuPick = 0x21FAF4E4, ElementMenuTex = 0x21FAF4E8, ElementMenuMap = 0x21FAF4EC;
         internal const uint ElementMenuModeGuest = 0x01FAF4E0;
-        // 0x21FAF500..0x21FAF830 FREE
+        /// <summary>The species table's extension rows (EnemySpeciesTable.ExtensionBase): 2 × 0x9C, index 167 first, baked by
+        /// ElfSpeciesPatches (this page is the front of the ELF's cave segment, ElfCave.DataPageStart) and reached by the
+        /// species-lookup stub. Data the mod may write (a roster's MonsterType, a record snapshot), so a data page — never beside
+        /// executed cave code.</summary>
+        internal const long SpeciesRows      = 0x21FAF500;   // 312 B → 0x21FAF638
+        internal const uint SpeciesRowsGuest = 0x01FAF500;
+        internal const int  SpeciesRowCount  = 2;
+        // 0x21FAF640..0x21FAF830 FREE
 
         /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
         /// <c>ElfToanMeleePatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's

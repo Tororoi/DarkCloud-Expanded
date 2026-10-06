@@ -2135,8 +2135,8 @@ namespace Dark_Cloud_Improved_Version
             MeleeDamage=new int[]{170}, ProjectileDamage=new int[]{170} };
 
         // ── Mod species ───────────────────────────────────────────────────────────
-        // Records past the 167 vanilla rows live in the SmoothRest cave (EnemySpeciesTable.RecordAddress maps them there;
-        // SetupBaseModel reaches them through the species-lookup stub). Their model/script files are the ISO patch's.
+        // Records past the 167 vanilla rows live in the mod's data page (SpeciesRows, baked into the ISO; EnemySpeciesTable.RecordAddress
+        // maps them there, SetupBaseModel reaches them through the species-lookup stub). Their model/script files are the ISO patch's.
 
         // Bomb Gemron: Holy Gemron's rig, stats and script under a desaturated palette, its three gems replaced by the
         // thrown-bomb model. Immune to every element. Randomizer-only — no vanilla spawn pool, so the stat normalizer treats it

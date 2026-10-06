@@ -82,18 +82,25 @@ namespace Dark_Cloud_Improved_Version
             return false;
         }
 
-        /// <summary>The DATA.HED entry <paramref name="from"/> renamed in place to <paramref name="to"/> (its DATA.HD2 slot and bytes
-        /// untouched). The engine finds a file by a linear scan of the names, so a repurposed orphan entry answers to its new name;
-        /// 79 characters at most.</summary>
+        /// <summary>The archive entry <paramref name="from"/> renamed in place to <paramref name="to"/> (its slot and bytes untouched).
+        /// The USA build never reads DATA.HED: at boot it builds its file-name tree from the names stored inside DATA.HD2 (each
+        /// 32-byte record's first word is its name's offset in that file), so the new name goes there, over the old one, and must
+        /// not be longer than it; DATA.HED (the mod's own index) is renamed to match.</summary>
         internal void Rename(string from, string to)
         {
             int i = ArchiveFind(_hed, from);
             byte[] nb = System.Text.Encoding.Latin1.GetBytes(to.Replace('/', '\\'));
-            if (nb.Length > 79) throw new IOException($"'{to}' is too long for a DATA.HED entry");
+            byte[] old = System.Text.Encoding.Latin1.GetBytes(from.Replace('/', '\\'));
+            if (nb.Length > old.Length) throw new IOException($"'{to}' is longer than '{from}': an HD2 name can only be replaced in place");
+            long hd2 = _hd2Base - 16, nameOff = RdU32(_fs, hd2 + (long)i * 32);
+            byte[] cur = Rd(_fs, hd2 + nameOff, old.Length + 1);
+            if (!cur.AsSpan(0, old.Length).SequenceEqual(old) || cur[old.Length] != 0) throw new IOException($"DATA.HD2 record {i} is not named '{from}'");
+            var slot = new byte[old.Length + 1]; Array.Copy(nb, slot, nb.Length);
+            Wr(_fs, hd2 + nameOff, slot);
             Array.Clear(_hed, i * 80, 80);
             Array.Copy(nb, 0, _hed, i * 80, nb.Length);
             Wr(_fs, _hedIso + i * 80, _hed.AsSpan(i * 80, 80).ToArray());
-            _log($"renamed {from} -> {to} (entry {i})");
+            _log($"renamed {from} -> {to} (entry {i}, HD2 name @0x{nameOff:X})");
         }
 
         /// <summary>Raw DATA.DAT bytes at an offset.</summary>
