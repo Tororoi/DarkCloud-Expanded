@@ -69,9 +69,11 @@ namespace Dark_Cloud_Improved_Version
             {
                 byte[] mes = arc.Read(name);
                 if (!LooksLikeBank(mes)) continue;
-                var r = FixBank(mes, name, tally, log);
+                int size = mes.Length;
+                var r = FixBank(ref mes, name, tally, log);
                 if (r.messages == 0) continue;
-                arc.Overwrite(name, mes);
+                if (mes.Length == size) arc.Overwrite(name, mes);
+                else arc.Redirect(name, mes);                                   // grown by a relocated message (a bank with no padding left: the system banks' appended names sit at their end)
                 banks++; messages += r.messages; spaces += r.spaces; punct += r.punct; relocated += r.relocated;
             }
             foreach (var f in Fixes)
@@ -92,7 +94,7 @@ namespace Dark_Cloud_Improved_Version
             return cnt > 0 && cnt <= 5000 && 4 + cnt * 4 < mes.Length;
         }
 
-        private static (int messages, int spaces, int punct, int relocated) FixBank(byte[] mes, string name, Dictionary<string, int> tally, Action<string> log)
+        private static (int messages, int spaces, int punct, int relocated) FixBank(ref byte[] mes, string name, Dictionary<string, int> tally, Action<string> log)
         {
             int cnt = U16(mes, 0);
             var ids = new int[cnt]; var starts = new int[cnt];
@@ -127,8 +129,9 @@ namespace Dark_Cloud_Improved_Version
                 if (!ShrinkTo(text, spanWords))
                 {
                     int at = contentEnd + 16;                              // past the real content, a zero gap kept before it
-                    if (at + text.Count * 2 > Math.Min(mes.Length, BufferLimit))
+                    if (at + text.Count * 2 > BufferLimit)
                         throw new InvalidOperationException($"{name}: message at 0x{tb:X} grew from {words.Length} to {text.Count} words and there is no room to relocate it");
+                    if (at + text.Count * 2 > mes.Length) Array.Resize(ref mes, at + text.Count * 2);   // the bank grows (allocated by its size)
                     for (int i = 0; i < cnt; i++)
                         if (starts[i] == tb) U16(mes, 4 + i * 4 + 2, (ushort)(at / 2 - cnt - 1));
                     Array.Clear(mes, tb, words.Length * 2);                // the old text is never read again

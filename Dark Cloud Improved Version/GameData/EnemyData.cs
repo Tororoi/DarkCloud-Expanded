@@ -2134,6 +2134,29 @@ namespace Dark_Cloud_Improved_Version
             HeightFromRoot=35.5f, BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, EntityScale=14.0f, EntityScaleCopy=14.0f,
             MeleeDamage=new int[]{170}, ProjectileDamage=new int[]{170} };
 
+        // ── Mod species ───────────────────────────────────────────────────────────
+        // Records past the 167 vanilla rows live in the SmoothRest cave (EnemySpeciesTable.RecordAddress maps them there;
+        // SetupBaseModel reaches them through the species-lookup stub). Their model/script files are the ISO patch's.
+
+        // Bomb Gemron: Holy Gemron's rig, stats and script under a desaturated palette, its three gems replaced by the
+        // thrown-bomb model. Immune to every element. Randomizer-only — no vanilla spawn pool, so the stat normalizer treats it
+        // as a Demon Shaft 81–99 native through HomeOf. Its shots and the death / self-destruct blast are BombGemron's.
+        internal static readonly EnemyDefaults BombGemron = new EnemyDefaults {
+            Id=320, TableIndex=167, Name="Bomb Gemron", ModelCode="e167", ModelFootprint=67500,   // footprint estimated from the .chr's growth over e115a (334,944 → 352,032 B); measure with MeasureBufferMode
+            Abs=40, MinGoldDrop=20, DropChance=30, StealItemId=null, RareDropItemId=165,
+            MaxHp=12500, DamageReduction=30, WeaponDefense=10, KnockbackMult=1.0f,
+            Category=EnemyCategory.Dragon, FireRes=0, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,
+            ItemDamageRes=70, ItemStatusRes=60,
+            HeightFromRoot=19.0f, BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
+            MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150,150,150} };   // the Holy ball, then the death and self-destruct blasts (ModSpeciesBakes), in script order
+
+        /// <summary>Mod species with no vanilla spawn pool → the vanilla species whose home region they share. The stat
+        /// normalizer gives them that home, so they are capped like a native of it when the randomizer places them lower.</summary>
+        internal static readonly Dictionary<int, int> HomeOf = new()
+        {
+            { BombGemron.TableIndex.Value, GemronHoly.TableIndex.Value },
+        };
+
         // CUT ENEMY — no species table entry and no CHR model file (e53a.chr/e54a.chr absent).
         // Id=54 is referenced in WOF spawn-pool data and its name appears in the game's name table,
         // but the engine skips EIDs 53–54 entirely in the packed sequential species table.
@@ -2317,7 +2340,7 @@ namespace Dark_Cloud_Improved_Version
             new[] { Sam, MrBlare, Billy },
             new[] { CrabbyHermit, CrabbyHermitEnhanced },
             new[] { Dragon, BlueDragon, BlackDragon },
-            new[] { GemronFire, GemronIce, GemronThunder, GemronWind, GemronHoly },
+            new[] { GemronFire, GemronIce, GemronThunder, GemronWind, GemronHoly, BombGemron },
             new[] { MaskOfPrajna, MaskOfPrajnaEnhanced },
             new[] { Rockanoff, RockanoffEnhanced },
             new[] { Yammich, YammichEnhanced },

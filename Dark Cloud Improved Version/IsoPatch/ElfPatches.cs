@@ -155,6 +155,7 @@ namespace Dark_Cloud_Improved_Version
             PatchSuperSteveIconDraw(fs, ElfOff);          // Super Steve: the attached sphere's weapon icon over Steve on the dungeon HUD (dun.bin hooks in DunPatches)
             PatchCatGlowPalette(fs, ElfOff);              // … and the cave that paints one of them into the 8-bit glow disc
             PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
+            ElfSpeciesPatches.PatchSpeciesExtension(fs, ElfOff);   // the mod's species records (Bomb Gemron) in the SmoothRest cave, reached through the species-lookup stub
             PatchXiaoBuildUp(fs, ElfOff);                 // Xiao's build-up tree: Hardshooter → Double Impact only, Double Impact → Matador only
             PatchFishingPrizeSlingshot(fs, ElfOff);       // the fishing prize exchange sells the Flamingo for 1000 FP (vanilla: the Matador for 1400)
             PatchMapCarveRemainder(fs, ElfOff);           // the monster pool = the (grown) map carve minus the floor's map data (DunPatches grows the carve)

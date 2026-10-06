@@ -550,9 +550,15 @@ namespace Dark_Cloud_Improved_Version
         // Confirmed from ELF program header: LOAD seg file=0x100..0x1A2480, vaddr=0x00100000
         internal const int TableBase  = 0x0027FB00;        // confirmed RAM address of record 0
         internal const int Stride     = 0x9C;              // bytes per record (156)
+        /// <summary>Vanilla records; BtEnemyLayout follows the table 12 B later, so the mod's species (EnemySpecies.BombGemron …)
+        /// are extension rows in the SmoothRest cave, which SetupBaseModel reaches through the species-lookup stub
+        /// (ElfSpeciesPatches).</summary>
+        internal const int VanillaCount  = 167;
+        internal const int ExtensionBase = (int)SmoothRestCave.SpeciesRows;
 
         /// <summary>RAM address of the template record at the given physical table index (from extracted data).</summary>
-        internal static int RecordAddress(int physicalIndex) => TableBase + physicalIndex * Stride;
+        internal static int RecordAddress(int physicalIndex) =>
+            physicalIndex < VanillaCount ? TableBase + physicalIndex * Stride : ExtensionBase + (physicalIndex - VanillaCount) * Stride;
 
         /// <summary>RAM address of a specific field within the record at the given physical index.</summary>
         internal static int FieldAddress(int physicalIndex, int fieldOffset) => RecordAddress(physicalIndex) + fieldOffset;
