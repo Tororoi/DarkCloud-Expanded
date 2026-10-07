@@ -14,7 +14,7 @@ namespace Dark_Cloud_Improved_Version
     ///  · writes the fuse point: the wick's tip, and during the death or the self-destruct motion the point the frame has reached along the wick
     ///    (<see cref="Fuse"/>, in the body bone's frame) — a function of the engine's frame, not of time;
     ///  · gives the big bomb's visual its private vtable, so it reddens as the fuse burns (<see cref="ArmTint"/>);
-    ///  · answers each burst the draw asks for with the guard spark (CheckDmg's burst, written whole into the hit-mark pool's last
+    ///  · answers each burst the draw asks for — only while the draw is placing the flash at this unit's own wick — with the guard spark (CheckDmg's burst, written whole into the hit-mark pool's last
     ///    entry: 20 marks at twice the size, scatter 0.75), each pin into its own hit-mark entry, at the point the draw placed the flash
     ///    this frame, and puts that burst out when the Gemron is spent.</summary>
     internal static class BombGemron
@@ -35,6 +35,8 @@ namespace Dark_Cloud_Improved_Version
         private const int BurstMarks = 20;
         private const float BurstSpread = 0.75f, BurstSize = 2f, BurstShrink = 0.005f, BurstGravity = 0.02f, BurstSpeed = 1.3f;   // CheckDmg's guard burst, scatter 0.75, every mark (and its shrink) × 2
         private const float BurstFloorDrop = 6f;                                       // the marks bounce this far below the wick
+        private const uint NeverCaptured = 0xFFFFFFFF;                                  // the capture stamp Pin leaves (unseen)
+        private const uint CaptureFresh = 4;                                            // frames a capture counts as this frame's (the two reads may straddle one)
         /// <summary>The big bomb's wick centreline, tip first, in the body bone's frame: the bake's bomb at 3.5 / 1.22 scale, aimed, spun
         /// and turned as ModSpeciesBakes places it (BodySpin, BodyPitch/Roll/Yaw). Must follow any change to those.</summary>
         private static readonly float[][] Fuse =
@@ -174,9 +176,15 @@ namespace Dark_Cloud_Improved_Version
             if (asked != _bursts[pin])
             {
                 _bursts[pin] = asked;
+                // Only where the draw has just placed the flash at THIS unit's wick: the slot's position is the last one the draw wrote, so
+                // for a slot freshly handed over (a Gemron that blew gives its slot to the next nearest) or a unit not drawn it is still the
+                // previous wick — a burst there hangs at the blast. The capture is stamped with the pin's frame count each time the monster
+                // draw takes it (Pin resets it to "never").
+                uint frames = Memory.ReadUInt(e + CodeCaves.FlashPinFrames), stamp = Memory.ReadUInt(Capture(pin) + CodeCaves.FlashCaptureStamp);
+                bool seen = stamp != NeverCaptured && frames - stamp <= CaptureFresh;
                 long pos = FlashPos(pin);
                 float x = Memory.ReadFloat(pos), h = Memory.ReadFloat(pos + 4), y = Memory.ReadFloat(pos + 8);
-                if (!float.IsNaN(x + h + y) && !(x == 0f && h == 0f && y == 0f)) Burst(pin, x, h, y, h - BurstFloorDrop);
+                if (seen && !float.IsNaN(x + h + y) && !(x == 0f && h == 0f && y == 0f)) Burst(pin, x, h, y, h - BurstFloorDrop);
             }
         }
 
