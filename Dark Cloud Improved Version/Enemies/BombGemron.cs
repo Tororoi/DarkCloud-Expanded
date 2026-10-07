@@ -6,12 +6,12 @@ namespace Dark_Cloud_Improved_Version
     /// name (ModSpeciesBakes), its thrown bomb and its blast item-bomb shots (ElfSpeciesPatches.PatchBombConfigs). Its fuse spark is the
     /// machine-gun hit flash in one of the pool's slots 12–15, run by the flash's own draw once a frame (tools/stubs/flash_slot.s): kept
     /// alight, its three cells in turn 4 frames each, a guard-spark burst asked for every 15 frames, put out the frame the death motion
-    /// (11) passes its blast (122) or the self-destruct motion (14: the guard's return reversed, then its loop) its final pose (217), and placed where the monster draw captured this unit's wick this frame (tools/stubs/fuse_capture.s —
+    /// (11) passes its blast (122) or the self-destruct motion (14) its final pose (217), and placed where the monster draw captured this unit's wick this frame (tools/stubs/fuse_capture.s —
     /// every Gemron shares one frame tree, posed for each unit in turn, so only the draw's own moment has this unit's pose). Every
     /// timer is the game's; this only
     ///  · pins a Gemron to a flash slot (CodeCaves.FlashPinTable: its body bone and model block; the slot's size 3 and full alpha in
     ///    CodeCaves.FlashSizeTable / FlashAlphaTable) and unpins it — back to Osmond's 5.0 and 0x80 — when it is gone;
-    ///  · writes the fuse point: the wick's tip, and during the death motion or the self-destruct's guard loop the point the frame has reached along the wick
+    ///  · writes the fuse point: the wick's tip, and during the death or the self-destruct motion the point the frame has reached along the wick
     ///    (<see cref="Fuse"/>, in the body bone's frame) — a function of the engine's frame, not of time;
     ///  · gives the big bomb's visual its private vtable, so it reddens as the fuse burns (<see cref="ArmTint"/>);
     ///  · answers each burst the draw asks for with the guard spark (CheckDmg's burst, written whole into the hit-mark pool's last

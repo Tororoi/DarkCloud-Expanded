@@ -45,7 +45,8 @@ namespace Dark_Cloud_Improved_Version
                 if (!arc.Has(from)) throw new IOException($"neither {to} nor the orphan entry {from} is in the archive");
                 arc.Rename(from, to);
             }
-            byte[] chr = BombGemronPack(arc.Read(Dir + Source + ".chr"), arc.Read(BombMds), arc.Read(BombImg));
+            byte[] light = new ImgBank((ChrPack.Parse(arc.Read(GlowDisc.SourcePack)).Find("fire.img") ?? throw new IOException("glow source pack lacks fire.img")).Payload).Block(GlowDisc.SourcePicture);
+            byte[] chr = BombGemronPack(arc.Read(Dir + Source + ".chr"), arc.Read(BombMds), arc.Read(BombImg), ChrPack.Parse(arc.Read(DiscQuadPack)).Require(DiscQuadMds).Payload, light);
             arc.Redirect(Dir + BombGemronStem + ".chr", chr);
             log($"{BombGemronStem}.chr: {chr.Length:N0} B");
             byte[] stb = BombGemronScript(arc.Read(Dir + Source + ".stb"), out string why);
@@ -76,7 +77,7 @@ namespace Dark_Cloud_Improved_Version
         private const string BodyNode = "tama1__m";
         private static readonly string[] WingNodes = { "tamas00__m", "tamas03__m" }, GlowNodes = { "tama__appz", "tamas01__appz", "tamas02__appz" };
 
-        private static byte[] BombGemronPack(byte[] srcChr, byte[] bombMds, byte[] bombImg)
+        private static byte[] BombGemronPack(byte[] srcChr, byte[] bombMds, byte[] bombImg, byte[] quadMds, byte[] light)
         {
             var pack = ChrPack.Parse(srcChr);
             byte[] mds = pack.Require(Mds).Payload;
@@ -97,14 +98,81 @@ namespace Dark_Cloud_Improved_Version
                 dWorld = Unit(Add(Up, toBody, Forward));
                 replaced[wn] = BombMdt(bombMds, 1.3 / BombRadius, RotYTo(Unit(ToLocal(w, dWorld))), WingSpin);
             }
-            pack.Require(Mds).ReplacePayload(ReplaceMeshes(mds, replaced));
-            // the sheet recoloured, the bomb's sheet added to the bank
+            // the glow disc: a node of its own on the big bomb's bone, appended after the last
+            int discIndex = nodes.Count;
+            pack.Require(Mds).ReplacePayload(ReplaceMeshes(mds, replaced, new[] { (DiscRecord(discIndex, body.I), DiscQuad(quadMds)) }));
+            pack.Require(Bbp).ReplacePayload(pack.Require(Bbp).Payload.Concat(new byte[BbpEntry]).ToArray());   // its bind pose (the model is not skinned: all zero)
+            // the sheet recoloured, the bomb's sheet and the glow disc added to the bank
             var bank = new ImgBank(pack.Require(Img).Payload); var bbank = new ImgBank(bombImg);
             var items = bank.Entries.Select(e => (e.name, e.name == Sheet ? Recolor(bank.Block(e.name)) : bank.Block(e.name))).ToList();
             items.AddRange(bbank.Entries.Select(e => (e.name, bbank.Block(e.name))));
+            items.Add((DiscTex, GlowDisc.BuildT8(bank.Block(Sheet), light, GlowDisc.Elements[0].core, GlowDisc.Elements[0].outer)));
             pack.Require(Img).ReplacePayload(ImgBank.Build(bank.Magic, items));
             BakeSelfDestructMotion(pack);
+            AddDiscTrack(pack, discIndex);
             return pack.Rebuild();
+        }
+
+        // ───────────────────────────── the glow disc ─────────────────────────────
+        /// <summary>The Big Bang hanging bomb's glow — the torch glow disc in the Fire ramp (GlowDisc.Elements[0], the glow cave's row 1),
+        /// drawn by the wall-torch routine at 0.6 (45 across at 1.0: 27) round a 4× bomb, 5 toward the camera — as a node of this model, so
+        /// each Gemron draws its own: a quad with the game's glow-sprite flags (czappba: unlit, no depth write, additive, camera-facing: the
+        /// engine turns its +Z to the camera), a little in front of the bomb, grown by a scale track from nothing as the fuse burns. The
+        /// camera-facing draw scales the quad's offset by the node's Z scale, so the track scales X and Y only: the disc grows, its pull stays.</summary>
+        private const string DiscNode = "bombglow__czappba", DiscTex = "bombglow", Bbp = "e115a.bbp";
+        private const int BbpEntry = 64;
+        private const string DiscQuadPack = @"dun\effect\_b_boll.chr", DiscQuadMds = "b_boll.mds", DiscQuadNode = "bool__czappba";   // a game glow sprite's quad, cloned for its MDT shape
+        private const double DiscDiameter = 30.0;                              // across, at full size (chosen on the preview page)
+        private const double DiscPull = 9.4;                                   // its pull toward the camera, constant (chosen on the preview page): clear of the bomb from the start
+        private const float DiscMin = 0.001f;                                   // "none": a scale of 0 would zero the node's axes (the draw takes their inverse lengths)
+        /// <summary>(frame, scale) on the one timeline: none until a fuse, full at its blast, gone the frame after — the death 105→122, the
+        /// self-destruct from its first frame (SelfDestructFuseStart → SelfDestructEnd − 1).</summary>
+        private static readonly (uint frame, float scale)[] DiscKeys =
+            { (0, DiscMin), (105, DiscMin), (122, 1f), (123, DiscMin), (SelfDestructFuseStart, DiscMin), (SelfDestructEnd - 1, 1f), (SelfDestructEnd, DiscMin) };
+
+        /// <summary>The glow sprite's quad, re-laid as a DiscDiameter square DiscPull out along +Z (the camera, once the engine turns it),
+        /// the whole disc on it, its material on DiscTex.</summary>
+        private static byte[] DiscQuad(byte[] quadMds)
+        {
+            RigNode q = ModelCodec.ReadSkeleton(quadMds).First(n => n.Name == DiscQuadNode);
+            var m = MdtMesh.Parse(quadMds, q.MeshOff);
+            double r = DiscDiameter / 2;
+            double[][] corners = { new[] { -r, r, 0.0, 0.0 }, new[] { -r, -r, 0.0, 1.0 }, new[] { r, r, 1.0, 0.0 }, new[] { r, -r, 1.0, 1.0 } };   // (x, y, u, v), the source quad's winding
+            m.Pos = corners.Select(c => new[] { c[0], c[1], DiscPull, 1.0 }).ToList();
+            m.Norm = corners.Select(c => new[] { c[2], c[3], 1.0, 0.0 }).ToList();   // the codec's Norm is the texture coordinates
+            byte[] mat = (byte[])m.Materials[0].Clone();
+            Array.Clear(mat, 0x34, 0x20); Encoding.ASCII.GetBytes(DiscTex).CopyTo(mat, 0x34);
+            m.Materials = new List<byte[]> { mat };
+            return m.Build();
+        }
+
+        /// <summary>The glow node's MDS record: index, size, name, no mesh yet, the bomb's bone as parent, identity at its centre.</summary>
+        private static byte[] DiscRecord(int index, int parent)
+        {
+            var rec = new byte[0x70];
+            IsoBytes.U32(rec, 0, (uint)index); IsoBytes.U32(rec, 4, 0x70);
+            Encoding.ASCII.GetBytes(DiscNode).CopyTo(rec, 0x08);
+            IsoBytes.U32(rec, 0x2C, (uint)parent);
+            float[] id = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+            for (int i = 0; i < 16; i++) IsoBytes.WrF(rec, 0x30 + i * 4, id[i]);
+            return rec;
+        }
+
+        /// <summary>The glow node's scale track (DiscKeys) after e115a.mot's last, its tags the file's own.</summary>
+        private static void AddDiscTrack(ChrPack pack, int node)
+        {
+            ChrRecord rec = pack.Require("e115a.mot");
+            var mot = MotFile.FromRecord(rec);
+            MotTrack last = mot.Tracks[^1];
+            var tr = new MotTrack { W0 = (uint)node, W1 = 0, W2 = 1, W3 = last.W3, W6 = last.W6, W7 = last.W7 };
+            foreach (var (frame, s) in DiscKeys)
+            {
+                var k = new MotKeyframe(new byte[MotKeyframe.Size]) { Frame = frame };
+                IsoBytes.WrF(k.Raw, 0x10, s); IsoBytes.WrF(k.Raw, 0x14, s); IsoBytes.WrF(k.Raw, 0x18, 1f);   // Z stays 1: the pull
+                tr.Keyframes.Add(k);
+            }
+            mot.Tracks.Add(tr);
+            rec.ReplacePayload(mot.BuildPayload());
         }
 
         // ───────────────────────────── the self-destruct motion ─────────────────────────────
@@ -121,15 +189,14 @@ namespace Dark_Cloud_Improved_Version
         /// 188→185 at 0.6.</summary>
         private static readonly (int from, int to, double frames)[] ReversedReturn = { (195, 191, 4), (191, 188, 1.5), (188, 185, 0.75) };
         /// <summary>Motion 6 (the guard loop, 170–180, which starts and ends on 185's pose), played on its own keys at its own 0.15 on a
-        /// whole frame: a fractional return is preceded by its first pose held for the fraction, so it ends on the frame motion 6 starts.
-        /// The fuse burns tip to base over this part only.</summary>
+        /// whole frame: a fractional return is preceded by its first pose held for the fraction, so it ends on the frame motion 6 starts.</summary>
         private static readonly (int from, int to) GuardLoop = (170, 180);
         private static int LoopStart => (int)Math.Ceiling(ReversedReturn.Sum(p => p.frames));
         /// <summary>The key's end: one held frame past the final pose, as the script blows up when _CHK_MOTION_FRM reports done
         /// (frame ≥ end − 1), on the final pose (217).</summary>
         internal const int SelfDestructEnd = 218;
-        /// <summary>The frame motion 6 starts on, where the fuse starts to burn.</summary>
-        internal const int SelfDestructFuseStart = 207;
+        /// <summary>Where the self-destruct's fuse starts to burn (the spark's walk, the glow, the tint): its first frame.</summary>
+        internal const int SelfDestructFuseStart = SelfDestructStart;
         private static readonly string[] Motions = { "e115a.mot", "e115s.mot" };
 
         /// <summary>The source range shown <paramref name="tau"/> key frames into the self-destruct and the source frame it is at (a
@@ -152,7 +219,6 @@ namespace Dark_Cloud_Improved_Version
         private static void BakeSelfDestructMotion(ChrPack pack)
         {
             if (SelfDestructStart + LoopStart + (GuardLoop.to - GuardLoop.from) + 1 != SelfDestructEnd) throw new IOException("SelfDestructEnd does not match the self-destruct's pieces");
-            if (SelfDestructStart + LoopStart != SelfDestructFuseStart) throw new IOException("SelfDestructFuseStart is not the frame motion 6 starts on");
             foreach (string name in Motions)
             {
                 ChrRecord rec = pack.Require(name);
@@ -255,17 +321,23 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The MDS with some nodes' meshes replaced (null drops the mesh), every mesh offset re-laid.</summary>
-        private static byte[] ReplaceMeshes(byte[] mds, Dictionary<string, byte[]> replaced)
+        /// <summary>The MDS with some nodes' meshes replaced (name → MDT bytes, or null to drop the mesh) and <paramref name="appended"/>
+        /// (record, MDT bytes) nodes added after the last; every mesh offset re-laid.</summary>
+        private static byte[] ReplaceMeshes(byte[] mds, Dictionary<string, byte[]> replaced, (byte[] rec, byte[] mdt)[] appended = null)
         {
             int count = (int)IsoBytes.U32(mds, 8), tbl = (int)IsoBytes.U32(mds, 12);
+            var raws = Enumerable.Range(0, count).Select(i => mds.AsSpan(tbl + i * 0x70, 0x70).ToArray()).ToList();
+            replaced = new Dictionary<string, byte[]>(replaced);
+            foreach (var (rec, mdt) in appended ?? Array.Empty<(byte[], byte[])>()) { raws.Add((byte[])rec.Clone()); replaced[IsoBytes.NameAt(rec, 8, 0x20)] = mdt; }
+            count = raws.Count;
             var nodesBlob = new List<byte>(); var meshes = new List<byte>();
             int bse = 0x10 + count * 0x70;
             for (int i = 0; i < count; i++)
             {
-                byte[] raw = mds.AsSpan(tbl + i * 0x70, 0x70).ToArray();
+                byte[] raw = raws[i];
                 string name = IsoBytes.NameAt(raw, 8, 0x20);
                 int off = (int)IsoBytes.U32(raw, 0x28);
-                byte[] blob = replaced.TryGetValue(name, out byte[] nb) ? nb : off != 0 ? mds.AsSpan(off, (int)IsoBytes.U32(mds, off + 8)).ToArray() : null;
+                byte[] blob = replaced.TryGetValue(name, out byte[] nb) ? nb : off != 0 && off < mds.Length ? mds.AsSpan(off, (int)IsoBytes.U32(mds, off + 8)).ToArray() : null;
                 if (blob != null)
                 {
                     IsoBytes.U32(raw, 0x28, (uint)(bse + meshes.Count));

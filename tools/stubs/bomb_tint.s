@@ -8,7 +8,7 @@
 # CodeCaves.BombTintStock. The monster draw sets NowMonstorUnit->current_monster before each unit's Step and Draw, so this reads
 # the unit being drawn, takes the red from its motion's frame, adds it to the ambient's red (mgRenderInfo.ambient, the vector
 # MGSetAmbient writes) for this one draw, and puts the ambient back:
-#  · the self-destruct (motion 14): 0 before its guard loop (207), 150 at its blast (217), linear between;
+#  · the self-destruct (motion 14): 0 at its first frame (200), 150 at its blast (217), linear between;
 #  · the death (motion 11): 0 before 105, 150 at its blast (122), linear between; the death loop (12): 150;
 #  · anything else: 0.
 # 150 is the Big Bang hanging bomb's red (BigBangShot.PulseRed), on the ambient's 0–255 scale. Frames are positive floats,
@@ -45,17 +45,17 @@ body:
     beq   $t5, $t7, full           # the death loop: red to the end
     addiu $t7, $zero, 14           # (delay)
     bne   $t5, $t7, death
-    lui   $t7, 0x434F              # (delay) 207.0: the self-destruct's guard loop, its fuse
-    lui   $t8, 0x4359              # 217.0: its blast
-    b     window
-    lui   $v0, 0x4170              # (delay) 15.0 = 150 / 10 frames
+    lui   $t7, 0x4348              # (delay) 200.0: the self-destruct's first frame, its fuse
+    b     slope
+    lui   $t8, 0x4359              # (delay) 217.0: its blast
 death:
     addiu $t8, $zero, 11
     bne   $t5, $t8, add
     lui   $t7, 0x42D2              # (delay) 105.0: the death's fuse
     lui   $t8, 0x42F4              # 122.0: its blast
+slope:
     lui   $v0, 0x410D
-    ori   $v0, $v0, 0x2D2D         # 8.8235 = 150 / 17 frames
+    ori   $v0, $v0, 0x2D2D         # 8.8235 = 150 / 17 frames: both fuses run 17
 window:
     slt   $t5, $t6, $t7
     bne   $t5, $zero, add          # before the fuse: none
