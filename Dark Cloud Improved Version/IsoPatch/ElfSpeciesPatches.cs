@@ -111,6 +111,17 @@ namespace Dark_Cloud_Improved_Version
                 ReplaceWord(fs, ElfOff, site, 0x0C075650u, Jal(DeadCdCave.BombRadius), "CSHOT_EFFECT::Step's SetBombEffect call");
         }
 
+        /// <summary>The Bomb Gemron's big bomb reddening as its fuse burns (tools/stubs/bomb_tint.s in the dead sceCdReadChain body). No
+        /// hook: the cave is reached only through the private vtable BombGemron gives the bomb's visual.</summary>
+        internal static void PatchBombTint(FileStream fs, Func<uint, long> ElfOff)
+        {
+            byte[] stub = Embedded("bombTint.bin");
+            if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != 0x3C1901FB) throw new IOException($"bombTint.bin malformed ({stub.Length} B) or stale — reassemble its .s.");
+            uint w0 = RdU32(fs, ElfOff(DeadChainCave.Host));
+            if (w0 != DeadChainCave.VanillaWord0 && w0 != U32(stub, 0)) throw new IOException($"sceCdReadChain at 0x{DeadChainCave.Host:X} is not vanilla (0x{w0:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+            WriteBytes(fs, ElfOff, DeadChainCave.BombTint, stub, DeadChainCave.End, "bombTint.bin overruns the sceCdReadChain body");
+        }
+
         /// <summary>Each Bomb Gemron's wick captured while its pose is drawn (tools/stubs/fuse_capture.s in the dead sceCdGetToc body):
         /// CMonstorUnit::DrawMonstor's per-unit `jal MGSetAmbient` (0x1D8F84) goes through the cave.</summary>
         internal static void PatchFuseCapture(FileStream fs, Func<uint, long> ElfOff)

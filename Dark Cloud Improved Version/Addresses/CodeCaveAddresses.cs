@@ -332,7 +332,13 @@ namespace Dark_Cloud_Improved_Version
         /// capture from this frame). 16 B used of each 0x20.</summary>
         internal const long FlashCapture       = 0x21FAF710;   // 4 × 0x20 → 0x21FAF790
         internal const int  FlashCaptureStamp  = 0xC;
-        // 0x21FAF790..0x21FAF830 FREE
+        /// <summary>The stock DrawVu1 targets of the Bomb Gemron's bomb visual (slot 6, slot 7), which tools/stubs/bomb_tint.s calls
+        /// after reddening the ambient; written by BombGemron before it swaps the visual's vtable.</summary>
+        internal const long BombTintStock      = 0x21FAF790;   // 2 words → 0x21FAF798
+        /// <summary>The bomb visual's private vtable: its class vtable with slots 6/7 at DeadCdCave.BombTint (BombGemron).</summary>
+        internal const long BombTintVtable      = 0x21FAF7A0;   // 32 B → 0x21FAF7C0
+        internal const uint BombTintVtableGuest = 0x01FAF7A0;
+        // 0x21FAF7C0..0x21FAF830 FREE
 
         /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
         /// <c>ElfToanMeleePatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's

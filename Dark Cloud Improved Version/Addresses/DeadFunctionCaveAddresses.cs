@@ -188,6 +188,17 @@ namespace Dark_Cloud_Improved_Version
         internal const uint End = Host + HostSpan;
     }
 
+    /// <summary>The dead body of sceCdReadChain: nothing in the ELF, the dungeon overlay or the title overlay calls it, jumps to it or
+    /// holds its address (its one occurrence is the symbol table's).</summary>
+    internal static class DeadChainCave
+    {
+        internal const uint Host = 0x0010A1D0, HostSpan = 0x2F0, VanillaWord0 = 0x27BDFF50;   // `addiu sp,sp,-0xB0`
+        /// <summary>tools/stubs/bomb_tint.s (ElfSpeciesPatches.PatchBombTint): the Bomb Gemron's big bomb reddening as its fuse burns,
+        /// reached only through the private vtable BombGemron gives the bomb's visual (two entries: +0 the uint* DrawVu1, +0xC the packet one).</summary>
+        internal const uint BombTint = Host;   // 244 B → 0x10A2C4
+        internal const uint End = Host + HostSpan;
+    }
+
     internal static class SmoothRestCave
     {
         internal const uint Host         = 0x0027D084;

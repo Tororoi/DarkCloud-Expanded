@@ -161,6 +161,7 @@ namespace Dark_Cloud_Improved_Version
             ElfSpeciesPatches.PatchBlowDir(fs, ElfOff);            // an item bomb throws the player away from its blast (the dun hooks are in DunPatches)
             ElfSpeciesPatches.PatchBombRadius(fs, ElfOff);         // a shot config's own blast radius and ring (the Bomb Gemron's death blast: 50 at scale 2)
             ElfSpeciesPatches.PatchFuseCapture(fs, ElfOff);        // each Bomb Gemron's wick captured in the monster draw (the species shares one frame tree)
+            ElfSpeciesPatches.PatchBombTint(fs, ElfOff);           // the Bomb Gemron's big bomb reddening as its fuse burns (entered through its visual's private vtable)
             ElfSpeciesPatches.PatchFlashSlot(fs, ElfOff);          // the machine-gun hit flash's size and alpha per slot (5.0 / 0x80 baked) and the Bomb Gemron's fuse spark, frame-timed in the draw
             PatchXiaoBuildUp(fs, ElfOff);                 // Xiao's build-up tree: Hardshooter → Double Impact only, Double Impact → Matador only
             PatchFishingPrizeSlingshot(fs, ElfOff);       // the fishing prize exchange sells the Flamingo for 1000 FP (vanilla: the Matador for 1400)
