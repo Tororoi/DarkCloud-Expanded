@@ -106,7 +106,7 @@ namespace Dark_Cloud_Improved_Version
             var bank = new ImgBank(pack.Require(Img).Payload); var bbank = new ImgBank(bombImg);
             var items = bank.Entries.Select(e => (e.name, e.name == Sheet ? Recolor(bank.Block(e.name)) : bank.Block(e.name))).ToList();
             items.AddRange(bbank.Entries.Select(e => (e.name, bbank.Block(e.name))));
-            items.Add((DiscTex, GlowDisc.BuildT8(bank.Block(Sheet), light, GlowDisc.Elements[0].core, GlowDisc.Elements[0].outer)));
+            items.Add((DiscTex, SwizzledDisc(Tim8.ResampleTim8(GlowDisc.BuildT8(bank.Block(Sheet), light, GlowDisc.Elements[0].core, GlowDisc.Elements[0].outer), false, DiscTexSize))));
             pack.Require(Img).ReplacePayload(ImgBank.Build(bank.Magic, items));
             BakeSelfDestructMotion(pack);
             AddDiscTrack(pack, discIndex);
@@ -130,6 +130,21 @@ namespace Dark_Cloud_Improved_Version
         private static readonly (uint frame, float scale)[] DiscKeys =
             { (0, DiscMin), (105, DiscMin), (122, 1f), (123, DiscMin), (SelfDestructFuseStart, DiscMin), (SelfDestructEnd - 1, 1f), (SelfDestructEnd, DiscMin) };
 
+        /// <summary>The disc's texture size. GlowDisc builds it 64×64 (the torch routine's rect), but no picture in a monster's `IM2` bank is
+        /// narrower than 128, the size the block order below is proven at, so the disc is doubled (nearest texel; the GS filters it).</summary>
+        private const int DiscTexSize = 128;
+
+        /// <summary>The disc's pixels in the GS's block order: the Gemron's bank is an `IM2` one, whose 8-bit pictures the engine uploads as
+        /// already swizzled (GlowDisc builds them row-major, as the players' `IMG` banks hold them), so row-major indices would land in the
+        /// wrong blocks — the disc drawn in chunks.</summary>
+        private static byte[] SwizzledDisc(byte[] tim)
+        {
+            var (_, hdr, w, h) = Tim8.PictureInfo(tim);
+            byte[] outp = (byte[])tim.Clone();
+            Tim8.Swizzle8(tim.AsSpan(Tim8.Pic + hdr, w * h).ToArray(), w, h).CopyTo(outp, Tim8.Pic + hdr);
+            return outp;
+        }
+
         /// <summary>The glow sprite's quad, re-laid as a DiscDiameter square DiscPull out along +Z (the camera, once the engine turns it),
         /// the whole disc on it, its material on DiscTex.</summary>
         private static byte[] DiscQuad(byte[] quadMds)
@@ -137,9 +152,21 @@ namespace Dark_Cloud_Improved_Version
             RigNode q = ModelCodec.ReadSkeleton(quadMds).First(n => n.Name == DiscQuadNode);
             var m = MdtMesh.Parse(quadMds, q.MeshOff);
             double r = DiscDiameter / 2;
-            double[][] corners = { new[] { -r, r, 0.0, 0.0 }, new[] { -r, -r, 0.0, 1.0 }, new[] { r, r, 1.0, 0.0 }, new[] { r, -r, 1.0, 1.0 } };   // (x, y, u, v), the source quad's winding
+            double[][] corners = { new[] { -r, r, 0.0, 0.0 }, new[] { -r, -r, 0.0, 1.0 }, new[] { r, r, 1.0, 0.0 }, new[] { r, -r, 1.0, 1.0 } };   // (x, y, u, v) per POSITION, the source quad's winding
             m.Pos = corners.Select(c => new[] { c[0], c[1], DiscPull, 1.0 }).ToList();
-            m.Norm = corners.Select(c => new[] { c[2], c[3], 1.0, 0.0 }).ToList();   // the codec's Norm is the texture coordinates
+            // A vertex record is (position, normal, texture coordinate) and the source quad pairs them crosswise (position 3 takes
+            // coordinate 2, position 2 coordinate 3), so each coordinate is set from the position its records use — by list index the
+            // two right-hand corners swap UVs and the disc maps sheared, its centre at the edges. The codec's Norm is the coordinates.
+            var uv = new double[m.Norm.Count][];
+            foreach (var (_, _, recs) in m.Submeshes)
+                foreach (int[] rec in recs)
+                {
+                    double[] want = { corners[rec[0]][2], corners[rec[0]][3], 1.0, 0.0 };
+                    if (uv[rec[2]] != null && !uv[rec[2]].SequenceEqual(want)) throw new IOException($"{DiscQuadNode}: coordinate {rec[2]} is shared by two corners");
+                    uv[rec[2]] = want;
+                }
+            if (uv.Any(c => c == null)) throw new IOException($"{DiscQuadNode}: a texture coordinate no record uses");
+            m.Norm = uv.ToList();
             byte[] mat = (byte[])m.Materials[0].Clone();
             Array.Clear(mat, 0x34, 0x20); Encoding.ASCII.GetBytes(DiscTex).CopyTo(mat, 0x34);
             m.Materials = new List<byte[]> { mat };
