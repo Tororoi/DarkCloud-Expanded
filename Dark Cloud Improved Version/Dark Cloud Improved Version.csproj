@@ -31,6 +31,9 @@
     <EmbeddedResource Include="Resources\isoPatch\speciesLookup.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.speciesLookup.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\fuseCapture.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.fuseCapture.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\bombRadius.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.bombRadius.bin</LogicalName>
     </EmbeddedResource>

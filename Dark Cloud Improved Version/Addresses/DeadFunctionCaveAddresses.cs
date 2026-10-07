@@ -182,7 +182,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/blow_dir.s (ElfSpeciesPatches.PatchBlowDir): an item bomb's knockdown thrown away from its blast.</summary>
         internal const uint BlowDir = Host;   // 156 B → 0x10A874
         /// <summary>tools/stubs/bomb_radius.s (ElfSpeciesPatches.PatchBombRadius): a shot config's own blast radius and ring.</summary>
-        internal const uint BombRadius = Host + 0xA8;   // 0x10A880
+        internal const uint BombRadius = Host + 0xA8;   // 0x10A880, 144 B → 0x10A910
+        /// <summary>tools/stubs/fuse_capture.s (ElfSpeciesPatches.PatchFuseCapture): each Bomb Gemron's wick, captured in the monster draw.</summary>
+        internal const uint FuseCapture = Host + 0x138;   // 0x10A910, 136 B → 0x10A998
         internal const uint End = Host + HostSpan;
     }
 
@@ -202,7 +204,7 @@ namespace Dark_Cloud_Improved_Version
         internal const uint SpeciesLookup = 0x0027D2F8;   // 32 B → 0x27D318
         /// <summary>tools/stubs/flash_slot.s (ElfSpeciesPatches.PatchFlashSlot): the machine-gun hit flash's size and alpha per slot, and a
         /// pinned slot's whole spark (alight, cells, burst requests, the blast cutoff, the bone placement), timed in game frames.</summary>
-        internal const uint FlashSlot     = 0x0027D320;   // 328 B → 0x27D468
+        internal const uint FlashSlot     = 0x0027D320;   // 316 B → 0x27D45C
         internal const uint End          = 0x0027D49C;
     }
 }

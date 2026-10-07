@@ -327,7 +327,12 @@ namespace Dark_Cloud_Improved_Version
         /// baked 0x80 (the engine's constant — Osmond's flashes); lower is fainter in the additive effects pass.</summary>
         internal const long FlashAlphaTable    = 0x21FAF700;   // 16 B → 0x21FAF710
         internal const byte FlashAlphaVanilla  = 0x80;
-        // 0x21FAF710..0x21FAF830 FREE
+        /// <summary>Each pinned flash's wick in world space as the monster draw captured it for its unit (tools/stubs/fuse_capture.s), one
+        /// per pin at FlashPinTable + 0x90 + pin × 0x20: x, y, z, then the pin's frame count it was taken on (the flash shows only a
+        /// capture from this frame). 16 B used of each 0x20.</summary>
+        internal const long FlashCapture       = 0x21FAF710;   // 4 × 0x20 → 0x21FAF790
+        internal const int  FlashCaptureStamp  = 0xC;
+        // 0x21FAF790..0x21FAF830 FREE
 
         /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
         /// <c>ElfToanMeleePatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's

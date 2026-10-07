@@ -115,7 +115,7 @@ namespace Dark_Cloud_Improved_Version
                     // Enemies.PollEnemyDynamics();
                     // Enemies.MonitorFlashTimer();
                     bool walking = !Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode();
-                    BombGemron.Tick(walking && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && !Player.CheckIsLoading());   // the Bomb Gemron's thrown bombs and fuse; everything let go off the walking mode (a menu, a character change, a load)
+                    BombGemron.Tick(!Player.CheckIsLoading());   // the Bomb Gemron's fuse sparks (data only: kept through menus and knockdowns, let go for a load)
                     if (walking)
                     {
                         WeaponThreads.Launch();

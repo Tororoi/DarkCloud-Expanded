@@ -90,6 +90,10 @@ namespace Dark_Cloud_Improved_Version
             const uint SizeSite = 0x001AEA7C, AlphaSite = 0x001AEA9C;
             byte[] stub = Embedded("flashSlot.bin");
             if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != 0x3C1901FB) throw new IOException($"flashSlot.bin malformed ({stub.Length} B) or stale — reassemble its .s.");
+            uint cutoff = 0x3C190000u | (BitConverter.SingleToUInt32Bits(ModSpeciesBakes.SelfDestructEnd - 1) >> 16);   // lui $t9, the final pose's frame
+            bool found = false;
+            for (int i = 0; i < stub.Length; i += 4) found |= U32(stub, i) == cutoff;
+            if (!found) throw new IOException($"flash_slot.s's self-destruct cutoff is not the final pose ({ModSpeciesBakes.SelfDestructEnd - 1}.0, lui 0x{cutoff & 0xFFFF:X4}) — set it there and reassemble.");
             WriteBytes(fs, ElfOff, SmoothRestCave.FlashSlot, stub, SmoothRestCave.End, "flashSlot.bin overruns the SmoothRest cave");
             ReplaceWords(fs, ElfOff, SizeSite, new[] { 0x3C0240A0u, 0x44826000u }, new[] { Jal(SmoothRestCave.FlashSlot), 0u }, "the machine-gun flash's size (Draw__21CHIT_MACHINGUN_EFFECT)");
             ReplaceWord(fs, ElfOff, AlphaSite, 0x240A0080u, 0x01605025u, "the machine-gun flash's alpha (Draw__21CHIT_MACHINGUN_EFFECT)");
@@ -105,6 +109,16 @@ namespace Dark_Cloud_Improved_Version
             WriteBytes(fs, ElfOff, DeadCdCave.BombRadius, stub, DeadCdCave.End, "bombRadius.bin overruns the sceCdGetToc body");
             foreach (uint site in new uint[] { 0x001AC824, 0x001AC978, 0x001ACAE0 })
                 ReplaceWord(fs, ElfOff, site, 0x0C075650u, Jal(DeadCdCave.BombRadius), "CSHOT_EFFECT::Step's SetBombEffect call");
+        }
+
+        /// <summary>Each Bomb Gemron's wick captured while its pose is drawn (tools/stubs/fuse_capture.s in the dead sceCdGetToc body):
+        /// CMonstorUnit::DrawMonstor's per-unit `jal MGSetAmbient` (0x1D8F84) goes through the cave.</summary>
+        internal static void PatchFuseCapture(FileStream fs, Func<uint, long> ElfOff)
+        {
+            byte[] stub = Embedded("fuseCapture.bin");
+            if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != 0x27BDFFD0) throw new IOException($"fuseCapture.bin malformed ({stub.Length} B) or stale — reassemble its .s.");
+            WriteBytes(fs, ElfOff, DeadCdCave.FuseCapture, stub, DeadCdCave.End, "fuseCapture.bin overruns the sceCdGetToc body");
+            ReplaceWord(fs, ElfOff, 0x001D8F84, 0x0C04B740u, Jal(DeadCdCave.FuseCapture), "DrawMonstor's per-unit MGSetAmbient call");
         }
 
         /// <summary>The blow-direction cave (tools/stubs/blow_dir.s) into the dead sceCdGetToc body; DunPatches points BtCheckDamageProc's two

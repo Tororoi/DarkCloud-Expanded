@@ -19,7 +19,8 @@ namespace Dark_Cloud_Improved_Version
     /// loop's head calls a function that, with HP under a quarter and the player within 22 units, plays the death motion at
     /// 0.25× and blows up at the same frame (the outlaws Sam / Billy / Mr. Blare's own pattern); its throw is aimed at the player's
     /// feet + 14, where the shot's contact test looks. The name goes into the empty
-    /// message 3000 + species id of dunmsd00_1.mes in place.</summary>
+    /// message 3000 + species id of dunmsd00_1.mes in place. Its self-destruct plays key 14, baked as motion 7 reversed
+    /// (<see cref="BakeSelfDestructMotion"/>), and blows up on its final pose.</summary>
     internal static class ModSpeciesBakes
     {
         internal const string BombGemronStem = "e167a";
@@ -62,8 +63,12 @@ namespace Dark_Cloud_Improved_Version
 
         // ───────────────────────────── the model ─────────────────────────────
         private const double BombRadius = 1.22;                                    // the bomb body's radius in its own model (the wick rises to 1.98)
-        private static readonly double BodySpin = (90 - 200 - 45) * (Math.PI / 180.0);   // about the wick axis before it is aimed: positive = counter-clockwise from the wick's tip
+        private static readonly double BodySpin = (90 - 200 - 45 - 50) * (Math.PI / 180.0);   // about the wick axis before it is aimed: positive = counter-clockwise from the wick's tip
         private static readonly double WingSpin = 180 * (Math.PI / 180.0);
+        /// <summary>The big bomb turned after it is aimed (degrees, chosen on the preview page): pitch about the Gemron's left (+ tips the top
+        /// forward), roll about its forward (+ to its right), yaw about its up (+ toward its left), applied in that order about the bomb's
+        /// centre.</summary>
+        private const double BodyPitch = -2.5, BodyRoll = -45.0, BodyYaw = -3.5;
         private static readonly double[] Forward = { 0.0, 0.0, 1.0 }, Up = { 0.0, 1.0, 0.0 };   // the rig at rest: head at +Z, Y up; its right is forward × up = −X
         private const double Sat = 0.9, Bri = 1.0, Con = 0.9, Light = 0.1;         // the sheet adjustment chosen on the preview page
         private static readonly HashSet<int> Keep = new() { 0, 22, 23, 24, 25, 39, 43, 44, 50, 51, 54, 56, 58, 59, 60, 62, 64, 65, 66, 67, 87, 90, 93, 94, 97, 109, 114, 115, 138, 139, 149, 173, 253, 254, 255 };
@@ -83,7 +88,7 @@ namespace Dark_Cloud_Improved_Version
             foreach (string g in GlowNodes) replaced[g] = null;
             // the body bomb: wick down, forward and to the right
             double[] dWorld = Unit(Add(Up.Select(c => -c).ToArray(), Forward, right));
-            replaced[BodyNode] = BombMdt(bombMds, 3.5 / BombRadius, RotYTo(Unit(ToLocal(body, dWorld))), BodySpin);
+            replaced[BodyNode] = BombMdt(bombMds, 3.5 / BombRadius, MatMul(BodyTurn(body), RotYTo(Unit(ToLocal(body, dWorld)))), BodySpin);
             // the wing bombs: wick up, toward the body and forward
             foreach (string wn in WingNodes)
             {
@@ -98,7 +103,121 @@ namespace Dark_Cloud_Improved_Version
             var items = bank.Entries.Select(e => (e.name, e.name == Sheet ? Recolor(bank.Block(e.name)) : bank.Block(e.name))).ToList();
             items.AddRange(bbank.Entries.Select(e => (e.name, bbank.Block(e.name))));
             pack.Require(Img).ReplacePayload(ImgBank.Build(bank.Magic, items));
+            BakeSelfDestructMotion(pack);
             return pack.Rebuild();
+        }
+
+        // ───────────────────────────── the self-destruct motion ─────────────────────────────
+        /// <summary>Key 14 (a duplicate of the attack, 130–150, which the script never plays) becomes the self-destruct, baked into both
+        /// motion files (the body's and the shadow's) from frame 200 at 0.15: <see cref="ReversedReturn"/>, then <see cref="GuardLoop"/>
+        /// once. A key on every frame, the in-between poses sampled from the vanilla keys (rotation slerped, the rest lerped), so the
+        /// engine plays it the same however it steps between keys. Motion 6 itself, the guard loop, is untouched, so guarding never
+        /// blows up.</summary>
+        internal const int SelfDestructMotion = 14;
+        internal const int SelfDestructStart = 200;
+        private const string SelfDestructSpeed = "0.15";
+        /// <summary>Motion 7 (the guard's return, 185–195) reversed, in pieces (source from, source to, key frames) at the key's 0.15: a
+        /// piece's speed is 0.15 × source frames / key frames, and a length may be fractional. Now 195→191 at 0.15, 191→188 at 0.3,
+        /// 188→185 at 0.6.</summary>
+        private static readonly (int from, int to, double frames)[] ReversedReturn = { (195, 191, 4), (191, 188, 1.5), (188, 185, 0.75) };
+        /// <summary>Motion 6 (the guard loop, 170–180, which starts and ends on 185's pose), played on its own keys at its own 0.15 on a
+        /// whole frame: a fractional return is preceded by its first pose held for the fraction, so it ends on the frame motion 6 starts.
+        /// The fuse burns tip to base over this part only.</summary>
+        private static readonly (int from, int to) GuardLoop = (170, 180);
+        private static int LoopStart => (int)Math.Ceiling(ReversedReturn.Sum(p => p.frames));
+        /// <summary>The key's end: one held frame past the final pose, as the script blows up when _CHK_MOTION_FRM reports done
+        /// (frame ≥ end − 1), on the final pose (217).</summary>
+        internal const int SelfDestructEnd = 218;
+        /// <summary>The frame motion 6 starts on, where the fuse starts to burn.</summary>
+        internal const int SelfDestructFuseStart = 207;
+        private static readonly string[] Motions = { "e115a.mot", "e115s.mot" };
+
+        /// <summary>The source range shown <paramref name="tau"/> key frames into the self-destruct and the source frame it is at (a
+        /// piece's end frame belongs to it).</summary>
+        private static ((int from, int to) range, double source) PieceAt(double tau)
+        {
+            double lead = LoopStart - ReversedReturn.Sum(p => p.frames);           // the first pose held, so the return ends on a whole frame
+            if (tau <= lead) return ((ReversedReturn[0].from, ReversedReturn[0].to), ReversedReturn[0].from);
+            double at = lead;
+            foreach (var (from, to, frames) in ReversedReturn)
+            {
+                if (tau <= at + frames) return ((from, to), from + (to - from) * (tau - at) / frames);
+                at += frames;
+            }
+            var last = ReversedReturn[^1];
+            if (tau <= LoopStart) return ((last.from, last.to), last.to);
+            return (GuardLoop, Math.Min(GuardLoop.to, GuardLoop.from + (tau - LoopStart)));
+        }
+
+        private static void BakeSelfDestructMotion(ChrPack pack)
+        {
+            if (SelfDestructStart + LoopStart + (GuardLoop.to - GuardLoop.from) + 1 != SelfDestructEnd) throw new IOException("SelfDestructEnd does not match the self-destruct's pieces");
+            if (SelfDestructStart + LoopStart != SelfDestructFuseStart) throw new IOException("SelfDestructFuseStart is not the frame motion 6 starts on");
+            foreach (string name in Motions)
+            {
+                ChrRecord rec = pack.Require(name);
+                var mot = MotFile.FromRecord(rec);
+                foreach (var tr in mot.Tracks)
+                {
+                    if (tr.Keyframes.Count > 0 && tr.Keyframes[^1].Frame >= SelfDestructStart) throw new IOException($"{name}: a track already reaches frame {tr.Keyframes[^1].Frame}");
+                    var made = new List<MotKeyframe>();
+                    for (int f = SelfDestructStart; f <= SelfDestructEnd; f++)
+                    {
+                        var (range, s) = PieceAt(f - SelfDestructStart);
+                        int lo = Math.Min(range.from, range.to), hi = Math.Max(range.from, range.to);
+                        var keys = tr.Keyframes.Where(k => k.Frame >= lo && k.Frame <= hi).ToDictionary(k => k.Frame);
+                        if (!keys.ContainsKey((uint)lo) || !keys.ContainsKey((uint)hi)) throw new IOException($"{name}: track {tr.W0}/{tr.W2} has no key on {lo} or {hi}");
+                        made.Add(Sample(keys, tr.W2, s, (uint)f));
+                    }
+                    tr.Keyframes.AddRange(made);
+                }
+                rec.ReplacePayload(mot.BuildPayload());
+            }
+            ChrRecord cfgRec = pack.Require("info.cfg");
+            Encoding sjis = Encoding.GetEncoding(932);
+            string cfg = sjis.GetString(cfgRec.Payload);
+            var lines = cfg.Split('\n');
+            int key = -1, n = 0;
+            for (int i = 0; i < lines.Length && key < 0; i++)
+            {
+                string s = lines[i].TrimStart();
+                if (s.StartsWith("KEY_START")) { n = 0; continue; }
+                if (s.StartsWith("KEY")) { if (n == SelfDestructMotion) key = i; n++; }
+            }
+            if (key < 0) throw new IOException("info.cfg: no key 14");
+            string comment = lines[key].Contains("//") ? lines[key].Substring(lines[key].IndexOf("//", StringComparison.Ordinal)) : "\r";
+            lines[key] = $"KEY\t{SelfDestructStart},\t{SelfDestructEnd},\t{SelfDestructSpeed},\t{comment}";
+            cfgRec.ReplacePayload(sjis.GetBytes(string.Join("\n", lines)));
+        }
+
+        /// <summary>The track's pose at source frame <paramref name="s"/> as a key on <paramref name="frame"/>: the key itself when s
+        /// is on one, else the pair around s blended (channel 0, rotation, slerped; the rest lerped).</summary>
+        private static MotKeyframe Sample(Dictionary<uint, MotKeyframe> keys, uint chan, double s, uint frame)
+        {
+            uint a = keys.Keys.Where(f => f <= s).Max();
+            MotKeyframe k = keys[a].Copy(); k.Frame = frame;
+            if (s == a) return k;
+            uint b = keys.Keys.Where(f => f > s).Min();
+            double t = (s - a) / (b - a);
+            float[] va = keys[a].Value, vb = keys[b].Value;
+            double[] v = chan == 0 ? Slerp(va, vb, t) : Enumerable.Range(0, 4).Select(i => va[i] + (vb[i] - (double)va[i]) * t).ToArray();
+            for (int i = 0; i < 4; i++) IsoBytes.WrF(k.Raw, 0x10 + i * 4, (float)v[i]);
+            return k;
+        }
+
+        private static double[] Slerp(float[] a, float[] bf, double t)
+        {
+            double[] b = { bf[0], bf[1], bf[2], bf[3] };
+            double d = (double)a[0] * b[0] + (double)a[1] * b[1] + (double)a[2] * b[2] + (double)a[3] * b[3];
+            if (d < 0) { b = new[] { -b[0], -b[1], -b[2], -b[3] }; d = -d; }
+            double w0, w1;
+            if (d > 0.9995) { w0 = 1 - t; w1 = t; }
+            else { double th = Math.Acos(Math.Min(1.0, d)), sn = Math.Sin(th); w0 = Math.Sin((1 - t) * th) / sn; w1 = Math.Sin(t * th) / sn; }
+            var q = new double[4];
+            for (int i = 0; i < 4; i++) q[i] = w0 * a[i] + w1 * b[i];
+            double n = Math.Sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+            if (n == 0) n = 1.0;
+            return new[] { q[0] / n, q[1] / n, q[2] / n, q[3] / n };
         }
 
         /// <summary>The apple shot's pack with the apple drawn as the bomb (<see cref="ShotPack"/>).</summary>
@@ -211,6 +330,31 @@ namespace Dark_Cloud_Improved_Version
         private static double[] Mul(double[][] m, double[] v) => Enumerable.Range(0, 3).Select(r => ExactMath.Sum(Enumerable.Range(0, 3).Select(c => m[r][c] * v[c]))).ToArray();
 
         /// <summary>The rotation (3×3, rows) taking +Y onto unit vector d (Rodrigues).</summary>
+        /// <summary>The rotation (3×3, rows) by angle <paramref name="a"/> about unit axis <paramref name="k"/>, right-hand rule (Rodrigues).</summary>
+        private static double[][] AxisRot(double[] k, double a)
+        {
+            double c = Math.Cos(a), s = Math.Sin(a), C = 1 - c, x = k[0], y = k[1], z = k[2];
+            return new[]
+            {
+                new[] { c + x * x * C, x * y * C - z * s, x * z * C + y * s },
+                new[] { y * x * C + z * s, c + y * y * C, y * z * C - x * s },
+                new[] { z * x * C - y * s, z * y * C + x * s, c + z * z * C },
+            };
+        }
+
+        private static double[][] MatMul(double[][] A, double[][] B) =>
+            Enumerable.Range(0, 3).Select(r => Enumerable.Range(0, 3).Select(c => ExactMath.Sum(A[r][0] * B[0][c], A[r][1] * B[1][c], A[r][2] * B[2][c])).ToArray()).ToArray();
+
+        /// <summary>BodyPitch / BodyRoll / BodyYaw as a rotation in the body bone's frame: yaw · roll · pitch about the Gemron's up,
+        /// forward and left in that frame.</summary>
+        private static double[][] BodyTurn(RigNode body)
+        {
+            double[] right = Cross(Forward, Up);
+            double[] left = Unit(ToLocal(body, right.Select(c => -c).ToArray())), fwd = Unit(ToLocal(body, Forward)), up = Unit(ToLocal(body, Up));
+            const double D2R = Math.PI / 180.0;
+            return MatMul(AxisRot(up, BodyYaw * D2R), MatMul(AxisRot(fwd, BodyRoll * D2R), AxisRot(left, BodyPitch * D2R)));
+        }
+
         private static double[][] RotYTo(double[] d)
         {
             double[] y = { 0.0, 1.0, 0.0 }; d = Unit(d);
@@ -243,8 +387,8 @@ namespace Dark_Cloud_Improved_Version
         private const uint FnGetDistance = 10, FnGetPosition = 11, FnSetMoveCancel = 34, FnSetMuteki = 101, FnSetAlpha = 102, FnSetDead = 104,
                            FnGetLifeRate = 109, FnSetMotion = 200, FnChkMotionFrm = 201, FnSetShot2 = 229;
         private const int DeathMotion = 11, HeaderBytes = 56;
-        private const float BlastFrame = 122f, ClipStart = 105f, BlastHeight = 11f, BlastDamage = 150f, SelfDestructSpeed = 0.25f, SelfDestructHp = 25f, SelfDestructRange = 22f;
-        private const uint SelfDestructMuteki = 1600, FadeHeader = 0;                // func 0x60 (the fade-out), header offset codeBase-relative
+        private const float BlastFrame = 122f, ClipStart = 105f, BlastHeight = 11f, BlastDamage = 150f, SelfDestructHp = 25f, SelfDestructRange = 22f;
+        private const uint FadeHeader = 0;                                            // func 0x60 (the fade-out), header offset codeBase-relative
         private const float FadeStep = 4f, FadeChime = 84f;                          // its arguments, as the vanilla death passes them
 
         /// <summary>A cell list with symbolic branch targets, laid at a known code offset.</summary>
@@ -313,7 +457,7 @@ namespace Dark_Cloud_Improved_Version
             IsoBytes.U32(death, waitCall - deathCode + 8, (uint)(waitHdr - cb));
             o2.AddRange(death); o2.AddRange(new byte[12]);
             // 3. the self-destruct: the loop head's `push 1` as a call that returns 1, or blows up and returns 0
-            int selfHdr = o2.Count; o2.AddRange(Header(selfHdr + HeaderBytes - cb, locals: 9, args: 0));
+            int selfHdr = o2.Count; o2.AddRange(Header(selfHdr + HeaderBytes - cb, locals: 8, args: 0));
             o2.AddRange(SelfDestruct(strOff, fadeHdr).Bytes(selfHdr + HeaderBytes, cb));
             byte[] outb = o2.ToArray();
             // the throw aimed at the player's feet + AimHeight (Holy's + 7.4 flies under his contact point, feet + 14–18, by more than
@@ -380,8 +524,8 @@ namespace Dark_Cloud_Improved_Version
             return c;
         }
 
-        /// <summary>v0 HP rate, v1 distance, v2 motion done, v3 blown, v4 frame, v5–v7 position, v8 the clip seen running. Returns 1 (the loop head's own value)
-        /// unless it blew up, then 0.</summary>
+        /// <summary>v0 HP rate, v1 distance, v2 motion done (counted from frame 200 on), v4 frame, v5–v7 position. Returns 1 (the loop head's own value) unless it blew
+        /// up, then 0. Hittable throughout (no invincibility: the outlaws' 1600 frames of it made the fuse untouchable).</summary>
         private static Code SelfDestruct(int strOff, int fadeHdr)
         {
             var c = new Code();
@@ -394,22 +538,20 @@ namespace Dark_Cloud_Improved_Version
             c.Ret(1);
             c.Mark("go");
             c.Int((int)FnSetMoveCancel); c.Ext(1);
-            c.Int((int)FnSetMuteki); c.Int((int)SelfDestructMuteki); c.Ext(2);
-            c.Int((int)FnSetMotion); c.Int(DeathMotion); c.Float(SelfDestructSpeed); c.Int(2); c.Int(4); c.Add(OpOr); c.Ext(4);
-            c.Set(2, VInt, () => c.Int(0)); c.Set(3, VInt, () => c.Int(0));
+            c.Int((int)FnSetMotion); c.Int(SelfDestructMotion); c.Float(-1f); c.Int(2); c.Int(4); c.Add(OpOr); c.Ext(4);   // its key's speed; held on its last frame
+            c.Set(2, VInt, () => c.Int(0));
             c.Mark("loop");
             c.Var(2, VInt); c.Int(0); c.Add(OpCmp, CmpEq); c.Branch(OpBrFalse, "end");
             c.Add(OpYield);
-            c.Int((int)FnChkMotionFrm); c.Ref(2, VInt); c.Ref(4, VFloat); c.Ext(3);
-            Started(c, 4, 8);
-            c.Var(3, VInt); c.Int(0); c.Add(OpCmp, CmpEq); c.Branch(OpBrFalse, "loop");
-            c.Var(8, VInt); c.Int(1); c.Add(OpCmp, CmpEq); c.Branch(OpBrFalse, "loop");
-            c.Var(4, VFloat); c.Float(BlastFrame); c.Add(OpCmp, CmpGe); c.Branch(OpBrFalse, "loop");
-            Blast(c, strOff, 5, 6, 7);
-            c.Set(3, VInt, () => c.Int(1));
-            c.Int((int)FnSetAlpha); c.Float(0.5f); c.Ext(2);
+            c.Int((int)FnChkMotionFrm); c.Ref(2, VInt); c.Ref(4, VFloat); c.Ext(3);   // 1 on the motion's last frame
+            c.Var(4, VFloat); c.Float(SelfDestructStart); c.Add(OpCmp, CmpGe); c.Branch(OpBrFalse, "stale");   // a frame below 200 is the old clip's
+            c.Branch(OpJmp, "loop");
+            c.Mark("stale");
+            c.Set(2, VInt, () => c.Int(0));
             c.Branch(OpJmp, "loop");
             c.Mark("end");
+            Blast(c, strOff, 5, 6, 7);
+            c.Int((int)FnSetAlpha); c.Float(0.5f); c.Ext(2);
             c.Float(FadeStep); c.Float(FadeChime); c.Add(OpCall, 0, (uint)fadeHdr); c.Add(OpDrop);
             c.Int((int)FnSetDead); c.Ext(1);
             c.Ret(0);
