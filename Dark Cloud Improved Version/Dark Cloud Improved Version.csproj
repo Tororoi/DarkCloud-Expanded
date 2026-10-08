@@ -34,6 +34,9 @@
     <EmbeddedResource Include="Resources\isoPatch\fuseCapture.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.fuseCapture.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\bombGemronLook.json">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.bombGemronLook.json</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\bombTint.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.bombTint.bin</LogicalName>
     </EmbeddedResource>

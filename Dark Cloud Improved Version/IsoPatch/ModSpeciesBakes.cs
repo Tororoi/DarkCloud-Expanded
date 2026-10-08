@@ -10,8 +10,9 @@ namespace Dark_Cloud_Improved_Version
     /// script under a new file stem in an orphan DATA.HED entry (an index entry no vanilla data references, renamed: the engine
     /// finds a file by a linear name scan), and its name in the dungeon message bank.
     ///
-    /// Bomb Gemron (<see cref="BombGemronStem"/>, from Holy Gemron e115a): the body sheet's CLUT desaturated and lightened except
-    /// the entries kept as they are (eyes, claws, the underbelly's reds), the three gem spheres' meshes replaced by the thrown-bomb
+    /// Bomb Gemron (<see cref="BombGemronStem"/>): Ice Gemron's model, motions and sheets (e112a; the five Gemrons share one rig and
+    /// texture layout) with Holy Gemron's script (e115a). The sheets take the look made on the preview page (<see cref="SheetLook"/>,
+    /// the embedded bombGemronLook.json: per-section sliders over the body sheet, merged to 256 colours), the three gem spheres' meshes replaced by the thrown-bomb
     /// item model (dun\item\main_data\bakudan) scaled to each sphere and turned so its wick points as designed, the bomb's sheet
     /// added to the pack's bank; the glow overlays dropped. Its script is Holy Gemron's with the death path exploding — a
     /// <c>_SET_SHOT2</c> blast (shot slot 1: the radius-50 fireball of ElfSpeciesPatches.PatchBlastConfig) at the body once the death
@@ -25,7 +26,8 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const string BombGemronStem = "e167a";
         private const string Dir = @"dun\monstor\";
-        private const string Source = "e115a", Orphan = "e147a";                   // Holy Gemron; the orphan entries repurposed (e147a.chr / .stb)
+        private const string ModelSource = "e112a", ScriptSource = "e115a", Orphan = "e147a";   // Ice Gemron's model and sheets, Holy Gemron's script; the orphan entries repurposed (e147a.chr / .stb)
+        private const string Look = "bombGemronLook.json";                         // the look made on the preview page (SheetLook), an embedded resource
         private const string BombMds = @"dun\item\main_data\bakudan.mds", BombImg = @"dun\item\main_data\bakudan.img";
         private const string NameBank = @"dun\message\ww_mes\dunmsd00_1.mes";
         /// <summary>The Bomb Gemron's shots' drawing model (ElfSpeciesPatches.PatchBombConfigs): <c>dun\effect\g_wave2.chr</c>, whose own config
@@ -46,10 +48,10 @@ namespace Dark_Cloud_Improved_Version
                 arc.Rename(from, to);
             }
             byte[] light = new ImgBank((ChrPack.Parse(arc.Read(GlowDisc.SourcePack)).Find("fire.img") ?? throw new IOException("glow source pack lacks fire.img")).Payload).Block(GlowDisc.SourcePicture);
-            byte[] chr = BombGemronPack(arc.Read(Dir + Source + ".chr"), arc.Read(BombMds), arc.Read(BombImg), ChrPack.Parse(arc.Read(DiscQuadPack)).Require(DiscQuadMds).Payload, light);
+            byte[] chr = BombGemronPack(arc.Read(Dir + ModelSource + ".chr"), arc.Read(BombMds), arc.Read(BombImg), ChrPack.Parse(arc.Read(DiscQuadPack)).Require(DiscQuadMds).Payload, light);
             arc.Redirect(Dir + BombGemronStem + ".chr", chr);
             log($"{BombGemronStem}.chr: {chr.Length:N0} B");
-            byte[] stb = BombGemronScript(arc.Read(Dir + Source + ".stb"), out string why);
+            byte[] stb = BombGemronScript(arc.Read(Dir + ScriptSource + ".stb"), out string why);
             arc.Redirect(Dir + BombGemronStem + ".stb", stb);
             log($"{BombGemronStem}.stb: {why}");
             byte[] shot = BombShotPack(arc.Read(ShotSource), arc.Read(BombMds), arc.Read(BombImg));
@@ -71,9 +73,7 @@ namespace Dark_Cloud_Improved_Version
         /// centre.</summary>
         private const double BodyPitch = -2.5, BodyRoll = -45.0, BodyYaw = -3.5;
         private static readonly double[] Forward = { 0.0, 0.0, 1.0 }, Up = { 0.0, 1.0, 0.0 };   // the rig at rest: head at +Z, Y up; its right is forward × up = −X
-        private const double Sat = 0.9, Bri = 1.0, Con = 0.9, Light = 0.1;         // the sheet adjustment chosen on the preview page
-        private static readonly HashSet<int> Keep = new() { 0, 22, 23, 24, 25, 39, 43, 44, 50, 51, 54, 56, 58, 59, 60, 62, 64, 65, 66, 67, 87, 90, 93, 94, 97, 109, 114, 115, 138, 139, 149, 173, 253, 254, 255 };
-        private const string Mds = "e115a.mds", Img = "e115a01.img", Sheet = "e115a01";
+        private const string Mds = ModelSource + ".mds", Img = ModelSource + "01.img", Sheet = ModelSource + "01", Sheet2 = ModelSource + "02";
         private const string BodyNode = "tama1__m";
         private static readonly string[] WingNodes = { "tamas00__m", "tamas03__m" }, GlowNodes = { "tama__appz", "tamas01__appz", "tamas02__appz" };
 
@@ -104,7 +104,8 @@ namespace Dark_Cloud_Improved_Version
             pack.Require(Bbp).ReplacePayload(pack.Require(Bbp).Payload.Concat(new byte[BbpEntry]).ToArray());   // its bind pose (the model is not skinned: all zero)
             // the sheet recoloured, the bomb's sheet and the glow disc added to the bank
             var bank = new ImgBank(pack.Require(Img).Payload); var bbank = new ImgBank(bombImg);
-            var items = bank.Entries.Select(e => (e.name, e.name == Sheet ? Recolor(bank.Block(e.name)) : bank.Block(e.name))).ToList();
+            var look = SheetLook.Parse(ElfCaveWriter.Embedded(Look, $"{Look} is not embedded — the Bomb Gemron's look"));
+            var items = bank.Entries.Select(e => (e.name, e.name == Sheet ? look.ApplyToSheet(bank.Block(e.name), out _, out _) : e.name == Sheet2 ? look.ApplyBaseToSheet(bank.Block(e.name)) : bank.Block(e.name))).ToList();
             items.AddRange(bbank.Entries.Select(e => (e.name, bbank.Block(e.name))));
             items.Add((DiscTex, SwizzledDisc(Tim8.ResampleTim8(GlowDisc.BuildT8(bank.Block(Sheet), light, GlowDisc.Elements[0].core, GlowDisc.Elements[0].outer), false, DiscTexSize))));
             pack.Require(Img).ReplacePayload(ImgBank.Build(bank.Magic, items));
@@ -119,7 +120,7 @@ namespace Dark_Cloud_Improved_Version
         /// each Gemron draws its own: a quad with the game's glow-sprite flags (czappba: unlit, no depth write, additive, camera-facing: the
         /// engine turns its +Z to the camera), a little in front of the bomb, grown by a scale track from nothing as the fuse burns. The
         /// camera-facing draw scales the quad's offset by the node's Z scale, so the track scales X and Y only: the disc grows, its pull stays.</summary>
-        private const string DiscNode = "bombglow__czappba", DiscTex = "bombglow", Bbp = "e115a.bbp";
+        private const string DiscNode = "bombglow__czappba", DiscTex = "bombglow", Bbp = ModelSource + ".bbp";
         private const int BbpEntry = 64;
         private const string DiscQuadPack = @"dun\effect\_b_boll.chr", DiscQuadMds = "b_boll.mds", DiscQuadNode = "bool__czappba";   // a game glow sprite's quad, cloned for its MDT shape
         private const double DiscDiameter = 30.0;                              // across, at full size (chosen on the preview page)
@@ -185,10 +186,10 @@ namespace Dark_Cloud_Improved_Version
             return rec;
         }
 
-        /// <summary>The glow node's scale track (DiscKeys) after e115a.mot's last, its tags the file's own.</summary>
+        /// <summary>The glow node's scale track (DiscKeys) after the body motion's last track, its tags the file's own.</summary>
         private static void AddDiscTrack(ChrPack pack, int node)
         {
-            ChrRecord rec = pack.Require("e115a.mot");
+            ChrRecord rec = pack.Require(ModelSource + ".mot");
             var mot = MotFile.FromRecord(rec);
             MotTrack last = mot.Tracks[^1];
             var tr = new MotTrack { W0 = (uint)node, W1 = 0, W2 = 1, W3 = last.W3, W6 = last.W6, W7 = last.W7 };
@@ -224,7 +225,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int SelfDestructEnd = 218;
         /// <summary>Where the self-destruct's fuse starts to burn (the spark's walk, the glow, the tint): its first frame.</summary>
         internal const int SelfDestructFuseStart = SelfDestructStart;
-        private static readonly string[] Motions = { "e115a.mot", "e115s.mot" };
+        private static readonly string[] Motions = { ModelSource + ".mot", "e112s.mot" };   // the body's and the shadow's
 
         /// <summary>The source range shown <paramref name="tau"/> key frames into the self-destruct and the source frame it is at (a
         /// piece's end frame belongs to it).</summary>
@@ -380,41 +381,6 @@ namespace Dark_Cloud_Improved_Version
             return o.ToArray();
         }
 
-        /// <summary>The sheet's TIM2 with every CLUT entry but the kept ones adjusted (alpha as it was). The CLUT is stored in CSM1 order
-        /// (index bits 3/4 swapped), so storage slot j holds pixel index unsw(j).</summary>
-        private static byte[] Recolor(byte[] block)
-        {
-            const int pic = 0x10;
-            int clutSz = (int)IsoBytes.U32(block, pic + 4), imgSz = (int)IsoBytes.U32(block, pic + 8), hdrSz = IsoBytes.U16(block, pic + 0x0C);
-            int start = pic + hdrSz + imgSz;
-            var o = (byte[])block.Clone();
-            for (int j = 0; j < clutSz / 4; j++)
-            {
-                int k = (j & ~0x18) | ((j & 0x08) << 1) | ((j & 0x10) >> 1);
-                if (Keep.Contains(k)) continue;
-                int p = start + j * 4;
-                var (r, g, b) = Adjust(o[p], o[p + 1], o[p + 2]);
-                o[p] = r; o[p + 1] = g; o[p + 2] = b;
-            }
-            return o;
-        }
-
-        /// <summary>One colour through the saturation / contrast / brightness / lightness setting — the preview page's slider maths.</summary>
-        private static (byte r, byte g, byte b) Adjust(byte r, byte g, byte b)
-        {
-            double l = 0.299 * r / 255 + 0.587 * g / 255 + 0.114 * b / 255;
-            var o = new byte[3];
-            double[] cs = { r / 255.0, g / 255.0, b / 255.0 };
-            for (int i = 0; i < 3; i++)
-            {
-                double c = cs[i];
-                c = l + (c - l) * Sat;
-                c = (c - 0.5) * Con + 0.5;
-                c = c * Bri + Light;
-                o[i] = (byte)Math.Round(Math.Max(0.0, Math.Min(1.0, c)) * 255, MidpointRounding.ToEven);
-            }
-            return (o[0], o[1], o[2]);
-        }
 
         // vectors (row convention; sums as the Python builder's, compensated)
         private static double[] Unit(double[] v)
