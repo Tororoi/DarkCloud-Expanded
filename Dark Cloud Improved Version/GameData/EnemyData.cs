@@ -2143,7 +2143,7 @@ namespace Dark_Cloud_Improved_Version
         // as a Demon Shaft 81–99 native through HomeOf. Its shots and the death / self-destruct blast are BombGemron's.
         internal static readonly EnemyDefaults BombGemron = new EnemyDefaults {
             Id=320, TableIndex=167, Name="Bomb Gemron", ModelCode="e167", ModelFootprint=62955,   // measured on a floor of it alone (Gallery of Time 24, 2026-10-08)
-            Abs=40, MinGoldDrop=20, DropChance=30, StealItemId=null, RareDropItemId=165,
+            Abs=40, MinGoldDrop=20, DropChance=30, StealItemId=159, RareDropItemId=177,
             MaxHp=12500, DamageReduction=30, WeaponDefense=10, KnockbackMult=1.0f,
             Category=EnemyCategory.Dragon, FireRes=150, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,
             ItemDamageRes=70, ItemStatusRes=60,
