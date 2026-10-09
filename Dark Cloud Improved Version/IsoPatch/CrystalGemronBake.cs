@@ -152,13 +152,19 @@ namespace Dark_Cloud_Improved_Version
 
         // ───────────────────────────── the script ─────────────────────────────
         /// <summary>Holy Gemron's script with its death wait's cry frame (the float pushed before the death function's first CALL) moved
-        /// out of reach.</summary>
+        /// out of reach, and its AI loop's (label 100) range — walk closer beyond it, shoot within it — widened from 70 to
+        /// <see cref="ShotRange"/> (the loop's three pushed 70.0s), the walk closer stopping at <see cref="WalkIn"/> instead of 50 (the
+        /// float pushed before the loop's one CALL that takes one: the walk's target distance).</summary>
         private static byte[] Script(byte[] stb, out string why)
         {
             uint U(int o) => IsoBytes.U32(stb, o);
-            int cb = (int)U(8), tbl = (int)U(0xC), cnt = (int)U(0x10), label120 = -1;
-            for (int i = 0; i < cnt; i++) if (U(tbl + i * 8) == 120) label120 = (int)U(tbl + i * 8 + 4);
-            if (label120 < 0) throw new IOException($"{Base}.stb: no label 120");
+            int cb = (int)U(8), tbl = (int)U(0xC), cnt = (int)U(0x10), label120 = -1, label100 = -1;
+            for (int i = 0; i < cnt; i++)
+            {
+                if (U(tbl + i * 8) == 120) label120 = (int)U(tbl + i * 8 + 4);
+                if (U(tbl + i * 8) == 100) label100 = (int)U(tbl + i * 8 + 4);
+            }
+            if (label120 < 0 || label100 < 0) throw new IOException($"{Base}.stb: no label 120 or 100");
             int deathCall = cb + (int)U(label120);
             if (U(deathCall) != 19) throw new IOException($"{Base}.stb: label 120 does not start with a CALL");
             int code = cb + (int)U(cb + (int)U(deathCall + 8));
@@ -166,13 +172,24 @@ namespace Dark_Cloud_Improved_Version
             int push = call - 12;
             if (U(push) != 3 || U(push + 4) != 2) throw new IOException($"{Base}.stb: the death wait's frame is not a pushed float");
             float frame = BitConverter.ToSingle(stb, push + 8);
+            if (frame != CryFrame && frame != NeverFrame) throw new IOException($"{Base}.stb: the death wait cries at {frame}, not {CryFrame}");
             byte[] o = (byte[])stb.Clone();
-            if (frame == NeverFrame) { why = "already patched"; return o; }
-            if (frame != CryFrame) throw new IOException($"{Base}.stb: the death wait cries at {frame}, not {CryFrame}");
             IsoBytes.WrF(o, push + 8, NeverFrame);
-            why = $"Holy Gemron's, the death cry's frame {CryFrame} → {NeverFrame} (never reached, as in the vanilla clip)";
+            var ranges = new List<int>();
+            for (int c = cb + (int)U(label100); c + 12 <= stb.Length && U(c) != 15; c += 12)   // the loop, up to its RET
+                if (U(c) == 3 && U(c + 4) == 2 && (BitConverter.ToSingle(stb, c + 8) == VanillaRange || BitConverter.ToSingle(stb, c + 8) == ShotRange)) ranges.Add(c);
+            if (ranges.Count != 3) throw new IOException($"{Base}.stb: {ranges.Count} pushed ranges in the AI loop, expected 3");
+            foreach (int c in ranges) IsoBytes.WrF(o, c + 8, ShotRange);
+            var walks = new List<int>();
+            for (int c = cb + (int)U(label100) + 12; c + 12 <= stb.Length && U(c) != 15; c += 12)
+                if (U(c) == 19 && U(c - 12) == 3 && U(c - 8) == 2 && (BitConverter.ToSingle(stb, c - 4) == VanillaWalkIn || BitConverter.ToSingle(stb, c - 4) == WalkIn)) walks.Add(c - 12);
+            if (walks.Count != 1) throw new IOException($"{Base}.stb: {walks.Count} walk-closer calls in the AI loop, expected 1");
+            IsoBytes.WrF(o, walks[0] + 8, WalkIn);
+            why = $"Holy Gemron's, the death cry's frame {CryFrame} → {NeverFrame} (never reached, as in the vanilla clip), its range {VanillaRange} → {ShotRange}, its walk-in {VanillaWalkIn} → {WalkIn}";
             return o;
         }
+        private const float VanillaRange = 70f, ShotRange = 140f;   // label 100: walk closer beyond it, shoot within it
+        private const float VanillaWalkIn = 50f, WalkIn = 100f;     // …and how close that walk comes
 
         // ───────────────────────────── the model ─────────────────────────────
         private static byte[] Pack(byte[] srcChr, byte[] ballChr)
