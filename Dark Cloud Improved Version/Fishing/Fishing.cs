@@ -631,9 +631,43 @@ namespace Dark_Cloud_Improved_Version
             return size * (1f + (factor - 1f) * t);
         }
 
-        /// <summary>Native smoothing only (strength 0.93, exponent 1.2).</summary>
+        /// <summary>
+        /// 12! × P(S ≤ x) for x in [2, 3], S the sum of the size roll's 12 uniform draws. S is symmetric
+        /// about 6, so this also gives the chance of the top of the roll.
+        /// </summary>
+        static double RollLowTail(double x)
+            => Math.Pow(x, 12) - 12.0 * Math.Pow(x - 1.0, 12) + 66.0 * Math.Pow(x - 2.0, 12);
+
+        /// <summary>
+        /// Native smoothing strength for a species spanning <paramref name="range"/> (MaxSize − BaseSize).
+        /// The native clamp piles every roll past MaxSize into the top display cm (8.5 fish in a million for
+        /// every species), which stands out against the cm below it in proportion to the range: 7.9× for
+        /// Baron Garayan, 2.1× for Mardan Garayan, 1.3× for Niler. This is the strength that leaves the cm
+        /// below MaxSize holding as many fish as MaxSize itself, so every species ramps into its max with no
+        /// spike or cliff (Baron 0.87, Mardan 0.52, Niler 0.21). Same as the Chronicle port's
+        /// game.smooth_fish_sizes.
+        /// </summary>
+        static float SmoothStrength(float range)
+        {
+            double cm = 0.4 / range;                        // one display cm in roll units (range/4 per unit)
+            if (!(cm < 1.0)) return 0f;
+            double atMax = RollLowTail(2.0);                // the roll reaches 4: clamped to MaxSize
+            double below = RollLowTail(2.0 + cm) - atMax;   // the cm just below MaxSize
+            return (float)Math.Max(0.0, 1.0 - below / atMax);
+        }
+
+        /// <summary>
+        /// Native smoothing: the species' <see cref="SmoothStrength"/>, exponent 1.2. Only a clamped roll is
+        /// MaxSize, so the max is exactly as rare as vanilla: a smoothed size stays 0.01 cm under it (the
+        /// game's floor(size × 10) could otherwise round 15.999999 × 10 up to 160). A roll already that close
+        /// keeps its own size.
+        /// </summary>
         static float SmoothNative(float size, float baseSize, float max)
-            => SmoothCore(size, baseSize, max, 0.93f, 1.2f);
+        {
+            if (max <= baseSize || size <= baseSize || size >= max) return size;
+            float smoothed = SmoothCore(size, baseSize, max, SmoothStrength(max - baseSize), 1.2f);
+            return Math.Max(size, Math.Min(smoothed, max - 0.001f));
+        }
 
         /// <summary>
         /// Full Arise transform: native smooth → ×2 scale → smooth over the scaled range.
@@ -643,7 +677,7 @@ namespace Dark_Cloud_Improved_Version
         {
             const float FACTOR = 2f;
             float s = Math.Min(size, max);                          // already clamped, just in case
-            s = SmoothCore(s, baseSize, max, 0.93f, 1.2f);          // 1. native smooth
+            s = SmoothNative(s, baseSize, max);                     // 1. native smooth
             s = ScaleCore(s, min, max, FACTOR);                     // 2. ×2 scale
             float scaledBase = ScaleCore(baseSize, min, max, FACTOR);
             float scaledMax  = max * FACTOR;
@@ -653,7 +687,8 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Applies the native smoothing buff ("Smooth Native Fish Size Distribution") to every slot,
         /// filling the sparse region just below MaxSize so the distribution ramps smoothly into the cap
-        /// instead of the vanilla clamp spike. Does not change the max. Logs original vs new per fish.
+        /// instead of the vanilla clamp spike. The max stays exactly as rare as vanilla. Logs original vs
+        /// new per fish.
         /// </summary>
         internal static void SmoothFishSizes(int slotBase, int slotCount)
         {
