@@ -237,55 +237,17 @@
         </Panel>
       </TabItem>
 
-      <!-- Sandbox tab (shown only in sandbox mode): power tools — Fish Data Farmer + spawn-roster editor -->
+      <!-- Sandbox tab (shown only in sandbox mode): power tools — spawn-roster editor -->
       <TabItem x:Name="Tab_Sandbox" Header="Sandbox" IsVisible="False">
         <Panel>
-          <TextBlock Text="Fish Data Farmer"
-                     FontWeight="SemiBold"
-                     Margin="46,28,0,0"
-                     VerticalAlignment="Top" HorizontalAlignment="Left"/>
-          <TextBlock Text="Enable the farmer, then start the first fishing session manually. It will auto-cycle from there."
-                     Margin="46,52,0,0" Width="414" Height="36"
-                     VerticalAlignment="Top" HorizontalAlignment="Left"
-                     TextWrapping="Wrap" FontWeight="Normal"/>
-          <Button x:Name="Btn_FishFarmer_Toggle" Content="Start"
-                  Width="100" Height="28"
-                  Margin="46,95,0,0"
-                  VerticalAlignment="Top" HorizontalAlignment="Left"
-                  FontWeight="Normal"
-                  Click="DEV_Page1_Btn_FishFarmer_Toggle"/>
-
-          <TextBlock x:Name="Label_FishFarmer_Status"
-                     Text="Status: –"
-                     Margin="46,138,0,0"
-                     VerticalAlignment="Top" HorizontalAlignment="Left"
-                     FontWeight="Normal"/>
-          <TextBlock x:Name="Label_FishFarmer_Sessions"
-                     Text="Sessions: –   Queue: –"
-                     Margin="46,158,0,0"
-                     VerticalAlignment="Top" HorizontalAlignment="Left"
-                     FontWeight="Normal"/>
-          <TextBlock x:Name="Label_FishFarmer_Probe"
-                     Text="Probe: –"
-                     Margin="46,180,0,0" Width="460"
-                     VerticalAlignment="Top" HorizontalAlignment="Left"
-                     FontWeight="Normal" FontFamily="Courier New"
-                     TextWrapping="Wrap"/>
-          <TextBlock x:Name="Label_FishFarmer_Survey"
-                     Text="–"
-                     Margin="46,202,0,0" Width="460"
-                     VerticalAlignment="Top" HorizontalAlignment="Left"
-                     FontWeight="Normal" FontFamily="Courier New"
-                     TextWrapping="Wrap"/>
-
           <!-- Dungeon spawn-roster editor -->
           <TextBlock Text="Spawn roster (TableIdx list, '!' = spawn-once):"
-                     FontWeight="SemiBold" Margin="46,256,0,0"
+                     FontWeight="SemiBold" Margin="46,28,0,0"
                      VerticalAlignment="Top" HorizontalAlignment="Left"/>
           <TextBox x:Name="Tbox_Injector_Table" Text="80,101!,76!,102!,103!,92!,104!,3" Width="280" Height="24"
-                   Margin="46,280,0,0" VerticalAlignment="Top" HorizontalAlignment="Left"/>
+                   Margin="46,52,0,0" VerticalAlignment="Top" HorizontalAlignment="Left"/>
           <Button x:Name="Btn_Injector_Test" Content="Set roster"
-                  Width="92" Height="26" Margin="336,279,0,0"
+                  Width="92" Height="26" Margin="336,51,0,0"
                   VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"
                   Click="Btn_Injector_Test_Click"/>
         </Panel>

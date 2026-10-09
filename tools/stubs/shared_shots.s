@@ -27,10 +27,10 @@
 # THE BLOCK (0x01FAF200, SharedShotBlock): +0x00 "SHRE" (mod; nothing is done without it — a refused config is then
 #   skipped at fire)  +0x04 frame counter (cave)  +0x08 disc entries  +0x0C restores  +0x10 skipped fires  +0x14 no room
 #   +0x18/+0x1C the pool headroom an entry needs, units of 16 B, for two / six sub-shots (mod; 0 = 24,000 / 48,000)
-#   +0x20 stamps[5]: the frame each slot last fired (cave)  +0x40 config table [34] {image store, mark}
-#   +0x150 event ring [16] × {kind, slot, config in, config out (bytes), frame, data units} (kinds: 1 entered from
-#   disc, 2 restored, 3 skipped fire, 4 no room, 5 the entry failed)  +0x250 the ring's write index  +0x260 the
-#   allocator handed to Entry__12 {base, 0, used, cap}
+#   +0x20 stamps[5]: the frame each slot last fired (cave)  +0x40 config table [36] {image store, mark} (the game's 34
+#   and the mod's, ShotEffectPack.CfgCount)  +0x160 event ring [16] × {kind, slot, config in, config out (bytes), frame,
+#   data units} (kinds: 1 entered from disc, 2 restored, 3 skipped fire, 4 no room, 5 the entry failed)  +0x260 the
+#   ring's write index  +0x270 the allocator handed to Entry__12 {base, 0, used, cap}
 # Globals: 0x01DF87D0 CMonstorUnit (+0x48 species rows on the floor, rows at +0x1DE30 × 0x9C, unit blocks at +0x1E3D0
 #   × 0x190: +0 state, +0x24 HP, +0x40 monster type, +0xAC/+0xAE the two slot numbers)   *0x002A35D8 the pack
 #   0x0027FA70 the 34 config pointers   0x01F066D0 the monster pool {base, 0, used, cap}   *0x002A2384 read_buffer
@@ -314,7 +314,7 @@ acquire:
     move  $s2, $a2                 # the count
     lui   $s3, 0x01FA
     ori   $s3, $s3, 0xF200         # the block
-    sltiu $t0, $s0, 34
+    sltiu $t0, $s0, 36
     beq   $t0, $zero, acq_fail     # no such config (a number that is neither a slot nor a config's negative form)
     nop
     move  $a0, $s1
@@ -407,13 +407,13 @@ acq_in:
     addu  $t2, $t2, $t4            # the region
     ori   $t4, $zero, 0xA170
     addu  $t4, $t2, $t4            # its data
-    sw    $t4, 0x0260($s3)
-    sw    $zero, 0x0264($s3)
-    sw    $zero, 0x0268($s3)
+    sw    $t4, 0x0270($s3)
+    sw    $zero, 0x0274($s3)
+    sw    $zero, 0x0278($s3)
     lw    $t4, 0x000C($t1)         # cap
     subu  $t4, $t4, $t3
     addiu $t4, $t4, -2583
-    sw    $t4, 0x026C($s3)         # what the data may take
+    sw    $t4, 0x027C($s3)         # what the data may take
     move  $a0, $s4
     jal   0x001AE440               # Initialize__12CSHOT_EFFECT(slot): emptied
     nop
@@ -426,7 +426,7 @@ acq_in:
     lui   $a2, 0x002A
     lw    $a2, 0x2384($a2)         # read_buffer
     addiu $a3, $zero, 0x26         # the pack's texture block
-    addiu $t0, $s3, 0x260          # our allocator
+    addiu $t0, $s3, 0x270          # our allocator
     jal   0x001ACC70               # Entry__12CSHOT_EFFECT(slot, cfg, buffer, block, alloc, count) → 1 entered
     move  $t1, $s2
     bne   $v0, $zero, acq_entered
@@ -450,7 +450,7 @@ acq_failed:
     b     acq_fail
     nop
 acq_entered:
-    lw    $t0, 0x0268($s3)         # the data it took
+    lw    $t0, 0x0278($s3)         # the data it took
     addiu $t0, $t0, 2583
     jal   carve                    # the region is the pool's now: used moves past it, the signature and mark go in
     move  $a0, $t0
@@ -471,7 +471,7 @@ acq_entered:
     move  $a2, $s0
     move  $a3, $s5
     jal   ring_put
-    lw    $t0, 0x0268($s3)
+    lw    $t0, 0x0278($s3)
     b     acq_refs
     nop
 acq_restore:
@@ -774,7 +774,7 @@ ci_loop:
     beq   $t8, $a0, ci_ret
     nop
     addiu $v0, $v0, 1
-    slti  $t8, $v0, 34
+    slti  $t8, $v0, 36
     bne   $t8, $zero, ci_loop
     addiu $v1, $v1, 4
 ci_none:
@@ -859,11 +859,11 @@ cp_loop:
 ring_put:
     lui   $v1, 0x01FA
     ori   $v1, $v1, 0xF200
-    lw    $v0, 0x0250($v1)         # the write index
+    lw    $v0, 0x0260($v1)         # the write index
     andi  $t8, $v0, 15
     sll   $t8, $t8, 4
     addu  $t8, $v1, $t8
-    addiu $t8, $t8, 0x150
+    addiu $t8, $t8, 0x160
     sb    $a0, 0x0000($t8)
     sb    $a1, 0x0001($t8)
     sb    $a2, 0x0002($t8)
@@ -873,4 +873,4 @@ ring_put:
     sw    $t0, 0x0008($t8)
     addiu $v0, $v0, 1
     jr    $ra
-    sw    $v0, 0x0250($v1)
+    sw    $v0, 0x0260($v1)

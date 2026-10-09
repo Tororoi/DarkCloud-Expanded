@@ -46,6 +46,15 @@
     <EmbeddedResource Include="Resources\isoPatch\eyeTint.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.eyeTint.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\crystalShots.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.crystalShots.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\crystalHome.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.crystalHome.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\crystalPrison.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.crystalPrison.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\bombRadius.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.bombRadius.bin</LogicalName>
     </EmbeddedResource>

@@ -55,6 +55,60 @@ namespace Dark_Cloud_Improved_Version
             WriteBytes(fs, ElfOff, Cfg(BlastConfig), blast);
         }
 
+        /// <summary>The Crystal Gemron's two shots — the Ice Queen's ice arrow and ice prison as monster shots — and the native code that
+        /// drives them (tools/stubs/crystal_shots.s, crystal_home.s, crystal_prison.s; the hook is DunPatches'). Both configs start from
+        /// Holy Gemron's shot (config 25) and are written into the dead sceIoctl body; the shot table's two spare entries (34, 35, the
+        /// zero words before the species table) point at them. The three dead hosts' first two words become `jr ra; li v0,0`.
+        ///  · The ice arrow (34) draws <c>dun\effect\_i_boll.chr</c> (CrystalGemronBake: the korinoya) and hits as the korinoya does:
+        ///    its sure Freeze (0x100000, no roll, no amulet) and a guardable knockback (2).
+        ///  · The ice prison (35) draws <c>dun\effect\_f_boll_2.chr</c> (the kori): stationary, its keys 0 (the ice forming), 2 (held)
+        ///    and 1 (shattering) as its four phases' motions, no hit and no contact (radius −100 while it stands: CSHOT_EFFECT's contact
+        ///    test is "within radius + 6 of the player"), and a long life the cave cuts short when the freeze ends.</summary>
+        internal static void PatchCrystalShots(FileStream fs, Func<uint, long> ElfOff)
+        {
+            long table = ShotEffectPack.CfgTable - 0x20000000L;
+            uint Cfg(int index) => RdU32(fs, ElfOff((uint)(table + index * 4)));
+            byte[] src = Rd(fs, ElfOff(Cfg(CrystalShotSource)), ShotEffectPack.CfgSize);
+            if (NameAt(src, 0, 16) != CrystalShotSourceName) throw new IOException($"shot config {CrystalShotSource} is not {CrystalShotSourceName}");
+
+            byte[] arrow = (byte[])src.Clone();
+            Array.Clear(arrow, 0, 16); System.Text.Encoding.ASCII.GetBytes(CrystalGemronBake.IceArrowModel).CopyTo(arrow, 0);
+            U32(arrow, ShotEffectPack.CfgFlags, (uint)BehaviorScriptTable.AttackStatusFlag.FreezeGuaranteed);
+            U32(arrow, ShotEffectPack.CfgReaction, (uint)BehaviorScriptTable.AttackReaction.Knockback);
+
+            byte[] prison = (byte[])src.Clone();
+            Array.Clear(prison, 0, 16); System.Text.Encoding.ASCII.GetBytes(CrystalGemronBake.IcePrisonModel).CopyTo(prison, 0);
+            U32(prison, 0x10, 1); U32(prison, 0x14, 0);                                  // stationary, not turned to a flight
+            for (int k = 0; k < 4; k++) { WrF(prison, 0x18 + k * 4, 0f); WrF(prison, ShotEffectPack.CfgRadiusMuzzle + k * 4, k < 2 ? -100f : 0f); }
+            U32(prison, ShotEffectPack.CfgWait, IcePrisonLife);
+            U32(prison, 0x3C, 0); U32(prison, ShotEffectPack.CfgFlags, 0);               // no damage, no ailment
+            U16(prison, 0x4C, 0); U16(prison, 0x4E, 2); U16(prison, 0x50, 1); U16(prison, 0x52, 1);   // forming, held, shattering ×2
+
+            foreach (var (host, vanilla, name) in new[] { (DeadIoctlCave.Host, DeadIoctlCave.VanillaWord0, "sceIoctl"),
+                                                          (DeadDiskReadyCave.Host, DeadDiskReadyCave.VanillaWord0, "sceCdDiskReady"),
+                                                          (DeadApplyNCmdCave.Host, DeadApplyNCmdCave.VanillaWord0, "sceCdApplyNCmd") })
+            {
+                ReplaceWord(fs, ElfOff, host, vanilla, 0x03E00008u, $"{name}'s first word");   // jr ra
+                WrU32(fs, ElfOff(host + 4), 0x24020000u);                                         //   li v0,0
+            }
+            WriteBytes(fs, ElfOff, DeadIoctlCave.IceArrowConfig, arrow, DeadIoctlCave.End, "the ice-arrow config overruns the sceIoctl body");
+            WriteBytes(fs, ElfOff, DeadIoctlCave.IcePrisonConfig, prison, DeadIoctlCave.End, "the ice-prison config overruns the sceIoctl body");
+            ReplaceWord(fs, ElfOff, (uint)(table + ShotEffectPack.IceArrowConfig * 4), 0u, DeadIoctlCave.IceArrowConfig, "shot config table entry 34");
+            ReplaceWord(fs, ElfOff, (uint)(table + ShotEffectPack.IcePrisonConfig * 4), 0u, DeadIoctlCave.IcePrisonConfig, "shot config table entry 35");
+            foreach (var (bin, first, at, end, host) in new[] {
+                ("crystalPrison.bin", 0x080461EAu, DeadIoctlCave.CrystalPrison, DeadIoctlCave.End, "sceIoctl"),
+                ("crystalHome.bin",   0x27BDFF90u, DeadDiskReadyCave.CrystalHome, DeadDiskReadyCave.End, "sceCdDiskReady"),
+                ("crystalShots.bin",  0x27BDFF80u, DeadApplyNCmdCave.CrystalShots, DeadApplyNCmdCave.End, "sceCdApplyNCmd") })
+            {
+                byte[] stub = Embedded(bin);
+                if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != first) throw new IOException($"{bin} malformed ({stub.Length} B) or stale — reassemble its .s.");
+                WriteBytes(fs, ElfOff, at, stub, end, $"{bin} overruns the {host} body");
+            }
+        }
+        private const int CrystalShotSource = 25;               // Holy Gemron's shot
+        private const string CrystalShotSourceName = "e115a_ex";
+        private const uint IcePrisonLife = 1800;                // 30 s at most; the cave breaks it as the freeze ends
+
         /// <summary>A config that draws <c>g_wave2</c>, plants nothing, and ends in an item-bomb blast of <paramref name="scale"/>.</summary>
         private static byte[] Bomb(byte[] src, float scale, int damage)
         {
@@ -180,6 +234,7 @@ namespace Dark_Cloud_Improved_Version
         {
             PatchMotionBeforeFirstKey(fs, ElfOff);
             PatchBombConfigs(fs, ElfOff);
+            PatchCrystalShots(fs, ElfOff);
             PatchDataPageDefaults(fs, ElfOff);
             byte[] rows = SpeciesRows.Build(ti => Rd(fs, ElfOff((uint)EnemySpeciesTable.RecordAddress(ti)), EnemySpeciesTable.Stride));
             WriteBytes(fs, ElfOff, CodeCaves.SpeciesRowsGuest, rows, CodeCaves.SpeciesRowsGuest + (uint)rows.Length, "the species rows overrun their reservation");

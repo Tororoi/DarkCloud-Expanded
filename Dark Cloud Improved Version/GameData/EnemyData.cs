@@ -2156,7 +2156,7 @@ namespace Dark_Cloud_Improved_Version
             Id=321, TableIndex=168, Name="Crystal Gemron", ModelCode="e168", ModelFootprint=169171,   // measured on a floor of it alone (Gallery of Time 24, 2026-10-08)
             Abs=100, MinGoldDrop=20, DropChance=30, StealItemId=null, RareDropItemId=165,
             MaxHp=12500, DamageReduction=30, WeaponDefense=10, KnockbackMult=1.0f,
-            Category=EnemyCategory.Dragon, FireRes=50, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=0,
+            Category=EnemyCategory.Dragon, FireRes=0, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,   // immune to every element, as the Bomb Gemron
             ItemDamageRes=70, ItemStatusRes=60,
             HeightFromRoot=19.0f, BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
             MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150} };

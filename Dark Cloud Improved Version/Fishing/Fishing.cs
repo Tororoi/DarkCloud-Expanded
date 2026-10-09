@@ -77,7 +77,6 @@ namespace Dark_Cloud_Improved_Version
                 FishPhaseLogger.OnSessionStart(areaData.SlotBase, areaData.SlotCount);
             }
             UpdateFishRecordsAndAriseBonus("session-start");
-            FishDataFarmer.OnSessionDetected();
         }
 
         /// <summary>
@@ -107,7 +106,6 @@ namespace Dark_Cloud_Improved_Version
             // Flush any deferred record update from a catch just before quitting the session.
             _pendingRecordUpdate = DateTime.MinValue;
             UpdateFishRecordsAndAriseBonus("session-end");
-            FishDataFarmer.OnSessionEnded();
             FishPhaseLogger.OnSessionEnd();
             BlessingGun.FishingReset();
         }

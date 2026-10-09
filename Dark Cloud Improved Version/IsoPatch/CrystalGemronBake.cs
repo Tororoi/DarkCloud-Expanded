@@ -66,6 +66,19 @@ namespace Dark_Cloud_Improved_Version
         /// EyeUv — move into a node of their own under the head (EyeNode: same material, UVs and frame; no flags), and out of the head's
         /// mesh (its strips split around them).</summary>
         internal const string EyeNode = "eyes";
+        /// <summary>The Crystal Gemron's shot (ElfSpeciesPatches.PatchIceArrowConfig, shot config 34): the Ice Queen's ice arrow
+        /// (<c>dun\monstor\korinoya.chr</c>, already a shot's shape — key 0 its flight, key 1 its burst) stored as
+        /// <c>dun\effect\_i_boll.chr</c>, a name nothing loads (its cfg record is <c>i_boll.cfg</c>), its cfg record renamed to the one
+        /// the shot pack's loader asks for (<c>&lt;model&gt;.cfg</c>).</summary>
+        internal const string IceArrowModel = "_i_boll";
+        private const string IceArrowSource = @"dun\monstor\korinoya.chr", IceArrowPack = @"dun\effect\" + IceArrowModel + ".chr";
+        /// <summary>Its ice prison (ElfSpeciesPatches.PatchCrystalShots, shot config 35): the Ice Queen's kori (<c>dun\monstor\kori.chr</c>:
+        /// key 0 the ice forming round the player, key 1 its shatter) stored as <c>dun\effect\_f_boll_2.chr</c>, a name nothing loads
+        /// (its cfg record is <c>f_boll_2.cfg</c>), its cfg record renamed for the loader and a key 2 added that holds key 0's last
+        /// frame — the prison standing while the player is frozen.</summary>
+        internal const string IcePrisonModel = "_f_boll_2";
+        private const string IcePrisonSource = @"dun\monstor\kori.chr", IcePrisonPack = @"dun\effect\" + IcePrisonModel + ".chr";
+        private const string IcePrisonHoldKey = "KEY\t30,\t30,\t0.0,\t//held 0";
         private const string EyeHead = "obj2_2";
         private const double EyeU0 = 0.21, EyeU1 = 0.34, EyeV0 = 0.50, EyeV1 = 0.61;
 
@@ -81,6 +94,12 @@ namespace Dark_Cloud_Improved_Version
             byte[] chr = Pack(arc.Read(Dir + Base + ".chr"), arc.Read(BallChr));
             arc.Redirect(Dir + Stem + ".chr", chr);
             log($"{Stem}.chr: {chr.Length:N0} B");
+            byte[] arrow = IceArrow(arc.Read(IceArrowSource));
+            arc.Redirect(IceArrowPack, arrow);
+            log($"{IceArrowPack}: the Ice Queen's ice arrow, {arrow.Length:N0} B");
+            byte[] prison = IcePrison(arc.Read(IcePrisonSource));
+            arc.Redirect(IcePrisonPack, prison);
+            log($"{IcePrisonPack}: the Ice Queen's ice prison, {prison.Length:N0} B");
             byte[] stb = Script(arc.Read(Dir + Base + ".stb"), out string why);
             arc.Redirect(Dir + Stem + ".stb", stb);
             log($"{Stem}.stb: {why}");
@@ -89,6 +108,31 @@ namespace Dark_Cloud_Improved_Version
             byte[] named = WithName(arc.Read(bank), id, WeaponDescriptions.Encode(Name).Concat(new ushort[] { 0xFF01 }).ToArray());
             if (named == null) log($"name: message {id} already reads '{Name}'");
             else { arc.Redirect(bank, named); log($"name: message {id} = '{Name}'"); }
+        }
+
+        /// <summary>The ice arrow's pack: korinoya's own, its <c>info.cfg</c> named as the shot pack's loader looks it up.</summary>
+        private static byte[] IceArrow(byte[] srcChr)
+        {
+            var pack = ChrPack.Parse(srcChr);
+            ChrRecord cfg = pack.Require("info.cfg");
+            string name = IceArrowModel + ".cfg";
+            Array.Clear(cfg.Raw, 0, 0x40); Encoding.Latin1.GetBytes(name).CopyTo(cfg.Raw, 0); cfg.Name = name;
+            return pack.Rebuild();
+        }
+
+        /// <summary>The ice prison's pack: kori's own, its <c>info.cfg</c> named as the shot pack's loader looks it up, with the held key.</summary>
+        private static byte[] IcePrison(byte[] srcChr)
+        {
+            var pack = ChrPack.Parse(srcChr);
+            ChrRecord cfg = pack.Require("info.cfg");
+            var sjis = Encoding.GetEncoding(932);
+            string text = sjis.GetString(cfg.Payload);
+            int end = text.IndexOf("MOTION_END", StringComparison.Ordinal);
+            if (end < 0) throw new IOException("kori.chr info.cfg: no MOTION_END");
+            cfg.ReplacePayload(sjis.GetBytes(text.Substring(0, end) + IcePrisonHoldKey + "\r\n" + text.Substring(end)));
+            string name = IcePrisonModel + ".cfg";
+            Array.Clear(cfg.Raw, 0, 0x40); Encoding.Latin1.GetBytes(name).CopyTo(cfg.Raw, 0); cfg.Name = name;
+            return pack.Rebuild();
         }
 
         /// <summary>The name bank with message <paramref name="id"/> reading <paramref name="words"/>, or null when it already does. The

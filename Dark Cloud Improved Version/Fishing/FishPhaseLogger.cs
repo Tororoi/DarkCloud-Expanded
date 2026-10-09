@@ -288,7 +288,6 @@ namespace Dark_Cloud_Improved_Version
             float todFloat = Memory.ReadFloat(Addresses.timeofDayWrite);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 $"[FishSession] area={areaId} slots={slotCount} tod={todFloat:F2}");
-            FishDataFarmer.RecordSession(todFloat);
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
                 int slotStart  = slotBase + slotIndex * FishSlotOffsets.Stride;
@@ -299,7 +298,6 @@ namespace Dark_Cloud_Improved_Version
                 float size         = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
                 int   fpMin        = Memory.ReadInt(slotStart   + FishSlotOffsets.BaseFp);
                 int   fpMax        = Memory.ReadInt(slotStart   + FishSlotOffsets.MaxFp);
-                FishDataFarmer.RecordSlot(fishId, todFloat);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"[FishInfo] area={areaId} slot={slotIndex} {Fish.GetName(fishId)} (id={fishId}) " +
                     $"scaleDivisor={scaleDivisor:F1} baseSize={baseSize:F1} max={maxSize:F1}({(int)(maxSize*10)}cm) " +

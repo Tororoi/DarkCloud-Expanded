@@ -202,6 +202,41 @@ namespace Dark_Cloud_Improved_Version
         internal const uint End = Host + HostSpan;
     }
 
+    /// <summary>The body of <c>sceIoctl</c> (576 B from 0x118648, main ELF): a library routine the game links but never calls — no jal, j,
+    /// stored pointer or lui/addiu|ori pair reaches it, in the ELF or the dungeon or title overlay. ElfSpeciesPatches.PatchIceArrowConfig
+    /// turns its first two words into `jr ra; li v0,0`. Nothing writes it at runtime.</summary>
+    internal static class DeadIoctlCave
+    {
+        internal const uint Host = 0x00118648, HostSpan = 576, VanillaWord0 = 0x27BDFF70;   // `addiu sp,sp,-0x90`
+        /// <summary>The Crystal Gemron's ice-arrow shot config (BT_SHOT_EFFECT, 0x70 B), shot config table entry 34.</summary>
+        internal const uint IceArrowConfig = Host + 0x8;   // 0x118650, 0x70 B → 0x1186C0
+        /// <summary>Its ice-prison shot config (the kori), shot config table entry 35.</summary>
+        internal const uint IcePrisonConfig = IceArrowConfig + 0x70;   // 0x1186C0, 0x70 B → 0x118730
+        /// <summary>tools/stubs/crystal_prison.s: Frozen (+0), Standing (+8), Prison (+0x10) — crystal_shots.s calls them.</summary>
+        internal const uint CrystalPrison = IcePrisonConfig + 0x70;    // 0x118730, 260 B → 0x118834
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The body of <c>sceCdDiskReady</c> (504 B from 0x10B2F8, main ELF): never reached, as <see cref="DeadIoctlCave"/>.
+    /// ElfSpeciesPatches.PatchCrystalShots turns its first two words into `jr ra; li v0,0`.</summary>
+    internal static class DeadDiskReadyCave
+    {
+        internal const uint Host = 0x0010B2F8, HostSpan = 504, VanillaWord0 = 0x27BDFF60;   // `addiu sp,sp,-0xA0`
+        /// <summary>tools/stubs/crystal_home.s: one flying ice arrow turned towards the player.</summary>
+        internal const uint CrystalHome = Host + 0x8;   // 0x10B300, 420 B → 0x10B4A4
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The body of <c>sceCdApplyNCmd</c> (512 B from 0x10BBC8, main ELF): never reached, as <see cref="DeadIoctlCave"/>.
+    /// ElfSpeciesPatches.PatchCrystalShots turns its first two words into `jr ra; li v0,0`.</summary>
+    internal static class DeadApplyNCmdCave
+    {
+        internal const uint Host = 0x0010BBC8, HostSpan = 512, VanillaWord0 = 0x27BDFF50;   // `addiu sp,sp,-0xB0`
+        /// <summary>tools/stubs/crystal_shots.s: the Crystal Gemron's shots driven before each monster-pack object's step.</summary>
+        internal const uint CrystalShots = Host + 0x8;   // 0x10BBD0, 492 B → 0x10BDBC
+        internal const uint End = Host + HostSpan;
+    }
+
     internal static class SmoothRestCave
     {
         internal const uint Host         = 0x0027D084;

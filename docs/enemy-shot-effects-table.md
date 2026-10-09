@@ -63,6 +63,10 @@ disagrees) — check in-game by reflecting the shot at a same-element Gemron (ex
 | 31 | `dash` | none (0x0) | — | — | — | 3 | 170 | 2.6 | 0.00 | Black Knight Mount | — | — |
 | 32 | `kamai` | none (0x0) | — | — | — | 3 | 130 | 0.0 | 0.00 | — | Black Knight Mount | — |
 | 33 | `terepo` | none (0x0) | — | — | — | 3 | 90 | 0.0 | 0.00 | — | Black Knight | — |
+| 34 | `_i_boll` | none (0x0) | — | Freeze, sure (0x100000) | — | 2 | 58 (STB 150) | 1.4 | 0.00 | Crystal Gemron | — | — |
+|   | ↳ the MOD's config, PATCHED disc only: table entry 34 (a zero word before the species table) → a copy of `e115a_ex` (25) in the dead sceIoctl body drawing `dun\effect\_i_boll.chr` = the Ice Queen's korinoya (dun\monstor\korinoya.chr, cfg renamed), hitting as the korinoya does (sure Freeze, guardable). Homes natively (crystal_home.s) — ElfSpeciesPatches.PatchCrystalShots, CrystalGemronBake | | | | | | | | | | | |
+| 35 | `_f_boll_2` | none (0x0) | — | — | — | — | 0 | −100 | 0.00 | — | Crystal Gemron | — |
+|   | ↳ the MOD's config, PATCHED disc only: table entry 35 → the ice prison, the Ice Queen's kori (dun\monstor\kori.chr on the dead `_f_boll_2` name, a held key 2 added): stationary, no hit, motions forming / held / shattering. Never fired by a script: crystal_shots.s asks the arrow's Gemron for it (its event2 record) when an arrow freezes the player, holds it while he stays frozen and lets it shatter after | | | | | | | | | | | |
 
 ## Rows needing in-game verification
 
