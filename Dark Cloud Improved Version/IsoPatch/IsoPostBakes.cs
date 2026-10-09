@@ -52,7 +52,7 @@ namespace Dark_Cloud_Improved_Version
             new() { Name = "borrowed-shots",   Progress = "Baking borrowed shot effects …",                 Run = BorrowedShotBakes.Run },
             // The mod's enemy species: the Bomb Gemron's model, script and name under a repurposed orphan DATA.HED entry (its species
             // record is ElfSpeciesPatches'). Idempotent (the script's appended marker; the name compared).
-            new() { Name = "mod-species",      Progress = "Baking the Bomb Gemron …",                         Run = ModSpeciesBakes.Run },
+            new() { Name = "bomb-gemron",      Progress = "Baking the Bomb Gemron …",                         Run = BombGemronBake.Run },
             // The Crystal Gemron's model, script and name under the orphan entries e148a (renamed e168a). Idempotent (the script's moved
             // cry frame; the name compared).
             new() { Name = "crystal-gemron",   Progress = "Baking the Crystal Gemron …",                      Run = CrystalGemronBake.Run },

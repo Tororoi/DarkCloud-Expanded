@@ -142,7 +142,7 @@ namespace Dark_Cloud_Improved_Version
         private static byte[] WithName(byte[] mes, int id, ushort[] words)
         {
             int cnt = IsoBytes.U16(mes, 0);
-            for (int i = 0; i < cnt; i++) if (IsoBytes.U16(mes, 4 + i * 4) == id) return ModSpeciesBakes.SetText(mes, id, words);
+            for (int i = 0; i < cnt; i++) if (IsoBytes.U16(mes, 4 + i * 4) == id) return MesTextBaker.SetMes(mes, id, words);
             byte[] grown = MesTextBaker.AppendMes(mes, true, (id, words));
             if (grown.Length > mes.Length) throw new IOException($"message {id} does not fit the name bank's padding");
             var o = new byte[mes.Length];
@@ -290,7 +290,7 @@ namespace Dark_Cloud_Improved_Version
             var items = bank.Entries.Select(e => (e.name, e.name == Base + "01" ? look.ApplyToSheet(bank.Block(e.name), out _, out _)
                                                           : e.name == Base + "02" ? look.ApplyBaseToSheet(bank.Block(e.name)) : bank.Block(e.name))).ToList();
             var bbank = new ImgBank(ball.Require("ball.img").Payload); items.AddRange(bbank.Entries.Select(e => (e.name, bbank.Block(e.name))));
-            var ex = new ImgBank(ball.Require("e209ex.img").Payload); items.AddRange(ex.Entries.Select(e => (e.name, Swizzled(ex.Block(e.name)))));
+            var ex = new ImgBank(ball.Require("e209ex.img").Payload); items.AddRange(ex.Entries.Select(e => (e.name, Tim8.Swizzled(ex.Block(e.name)))));
             img.ReplacePayload(ImgBank.Build(bank.Magic, items));
             Cfg(pack);
             return pack.Rebuild();
@@ -355,23 +355,9 @@ namespace Dark_Cloud_Improved_Version
             int b = keys.FindIndex(k => k.Frame > frame), a = b - 1;
             double t = (frame - keys[a].Frame) / ((double)keys[b].Frame - keys[a].Frame);
             float[] va = keys[a].Value, vb = keys[b].Value;
-            return tr.W2 == 0 ? Slerp(va, vb, t) : Enumerable.Range(0, 4).Select(i => va[i] + (vb[i] - (double)va[i]) * t).ToArray();
+            return tr.W2 == 0 ? RigMath.SlerpKeys(va, vb, t) : Enumerable.Range(0, 4).Select(i => va[i] + (vb[i] - (double)va[i]) * t).ToArray();
         }
 
-        private static double[] Slerp(float[] a, float[] bf, double t)
-        {
-            double[] b = { bf[0], bf[1], bf[2], bf[3] };
-            double d = (double)a[0] * b[0] + (double)a[1] * b[1] + (double)a[2] * b[2] + (double)a[3] * b[3];
-            if (d < 0) { b = new[] { -b[0], -b[1], -b[2], -b[3] }; d = -d; }
-            double w0, w1;
-            if (d > 0.9995) { w0 = 1 - t; w1 = t; }
-            else { double th = Math.Acos(Math.Min(1.0, d)), sn = Math.Sin(th); w0 = Math.Sin((1 - t) * th) / sn; w1 = Math.Sin(t * th) / sn; }
-            var q = new double[4];
-            for (int i = 0; i < 4; i++) q[i] = w0 * a[i] + w1 * b[i];
-            double n = Math.Sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
-            if (n == 0) n = 1.0;
-            return new[] { q[0] / n, q[1] / n, q[2] / n, q[3] / n };
-        }
 
         /// <summary>Every node's world matrix (row vectors) at a frame of the motion.</summary>
         private static List<double[][]> PoseWorld(List<RigNode> nodes, MotFile mot, double frame)
@@ -381,7 +367,7 @@ namespace Dark_Cloud_Improved_Version
             var W = new List<double[][]>();
             foreach (var n in nodes)
             {
-                double[][] R = rot.TryGetValue((uint)n.I, out var rt) ? QuatMat(At(rt, frame)) : n.R;
+                double[][] R = rot.TryGetValue((uint)n.I, out var rt) ? RigMath.QuatToMat(At(rt, frame)) : n.R;
                 double[] T = trans.TryGetValue((uint)n.I, out var tt) ? At(tt, frame).Take(3).ToArray() : n.T;
                 var L = RigMath.MatFromRT(R, T);
                 W.Add(n.Parent < 0 ? L : RigMath.MatMul(L, W[n.Parent]));
@@ -389,35 +375,17 @@ namespace Dark_Cloud_Improved_Version
             return W;
         }
 
-        private static double[][] QuatMat(double[] q)
-        {
-            double w = q[0], x = q[1], y = q[2], z = q[3];
-            return new[]
-            {
-                new[] { 1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w) },
-                new[] { 2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w) },
-                new[] { 2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y) },
-            };
-        }
 
         /// <summary>The ball root's rotation in its gem bone's frame W: the ball's +Y up the world, its +Z the Gemron's forward.</summary>
         private static double[][] Upright(double[][] W)
         {
             double[] u = Local(W, Up), f = Local(W, Forward);
-            f = Unit(Enumerable.Range(0, 3).Select(i => f[i] - Dot(f, u) * u[i]).ToArray());
-            return new[] { Cross(u, f), u, f };
+            f = RigMath.Unit(Enumerable.Range(0, 3).Select(i => f[i] - RigMath.Dot(f, u) * u[i]).ToArray());
+            return new[] { RigMath.Cross(u, f), u, f };
         }
 
         private static double[] Local(double[][] W, double[] d) =>
-            Unit(Enumerable.Range(0, 3).Select(r => ExactMath.Sum(W[r][0] * d[0], W[r][1] * d[1], W[r][2] * d[2])).ToArray());
-        private static double[] Unit(double[] v)
-        {
-            double n = Math.Sqrt(ExactMath.Sum(v.Select(c => c * c)));
-            if (n == 0) n = 1.0;
-            return v.Select(c => c / n).ToArray();
-        }
-        private static double Dot(double[] a, double[] b) => ExactMath.Sum(a.Zip(b, (x, y) => x * y));
-        private static double[] Cross(double[] a, double[] b) => new[] { a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] };
+            RigMath.Unit(Enumerable.Range(0, 3).Select(r => ExactMath.Sum(W[r][0] * d[0], W[r][1] * d[1], W[r][2] * d[2])).ToArray());
 
         // ───────────────────────────── the eyes' node ─────────────────────────────
         /// <summary>(the head's MDT without the eye triangles, the eyes' MDT): selected by UV centroid; the head's strips split around them
@@ -536,13 +504,5 @@ namespace Dark_Cloud_Improved_Version
             return o.ToArray();
         }
 
-        /// <summary>A row-major 8-bit picture's pixels in the GS block order, for an IM2 bank.</summary>
-        private static byte[] Swizzled(byte[] tim)
-        {
-            var (_, hdr, w, h) = Tim8.PictureInfo(tim);
-            byte[] o = (byte[])tim.Clone();
-            Tim8.Swizzle8(tim.AsSpan(Tim8.Pic + hdr, w * h).ToArray(), w, h).CopyTo(o, Tim8.Pic + hdr);
-            return o;
-        }
     }
 }

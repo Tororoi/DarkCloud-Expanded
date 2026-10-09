@@ -22,7 +22,7 @@ namespace Dark_Cloud_Improved_Version
     /// feet + 14, where the shot's contact test looks. The name goes into the empty
     /// message 3000 + species id of dunmsd00_1.mes in place. Its self-destruct plays key 14, baked as motion 7 reversed
     /// (<see cref="BakeSelfDestructMotion"/>), and blows up on its final pose.</summary>
-    internal static class ModSpeciesBakes
+    internal static class BombGemronBake
     {
         internal const string BombGemronStem = "e167a";
         private const string Dir = @"dun\monstor\";
@@ -59,7 +59,7 @@ namespace Dark_Cloud_Improved_Version
             log($"{ShotPack}: the apple shot wearing the bomb, {shot.Length:N0} B");
             int id = DungeonMessageBank.NameBase + EnemySpecies.BombGemron.Id;
             byte[] mes = arc.Read(NameBank);
-            byte[] named = SetText(mes, id, WeaponDescriptions.Encode(Name).Concat(new ushort[] { 0xFF01 }).ToArray());
+            byte[] named = MesTextBaker.SetMes(mes, id, WeaponDescriptions.Encode(Name).Concat(new ushort[] { 0xFF01 }).ToArray());
             if (named == null) log($"name: message {id} already reads '{Name}'");
             else { arc.Redirect(NameBank, named); log($"name: message {id} = '{Name}'"); }
         }
@@ -84,19 +84,19 @@ namespace Dark_Cloud_Improved_Version
             var nodes = ModelCodec.ReadSkeleton(mds);
             var by = nodes.ToDictionary(n => n.Name);
             RigNode body = by[BodyNode];
-            double[] right = Cross(Forward, Up);
+            double[] right = RigMath.Cross(Forward, Up);
             var replaced = new Dictionary<string, byte[]>();
             foreach (string g in GlowNodes) replaced[g] = null;
             // the body bomb: wick down, forward and to the right
-            double[] dWorld = Unit(Add(Up.Select(c => -c).ToArray(), Forward, right));
-            replaced[BodyNode] = BombMdt(bombMds, 3.5 / BombRadius, MatMul(BodyTurn(body), RotYTo(Unit(ToLocal(body, dWorld)))), BodySpin);
+            double[] dWorld = RigMath.Unit(Add(Up.Select(c => -c).ToArray(), Forward, right));
+            replaced[BodyNode] = BombMdt(bombMds, 3.5 / BombRadius, MatMul(BodyTurn(body), RotYTo(RigMath.Unit(ToLocal(body, dWorld)))), BodySpin);
             // the wing bombs: wick up, toward the body and forward
             foreach (string wn in WingNodes)
             {
                 RigNode w = by[wn];
-                double[] toBody = Unit(new[] { body.WorldPos[0] - w.WorldPos[0], body.WorldPos[1] - w.WorldPos[1], body.WorldPos[2] - w.WorldPos[2] });
-                dWorld = Unit(Add(Up, toBody, Forward));
-                replaced[wn] = BombMdt(bombMds, 1.3 / BombRadius, RotYTo(Unit(ToLocal(w, dWorld))), WingSpin);
+                double[] toBody = RigMath.Unit(new[] { body.WorldPos[0] - w.WorldPos[0], body.WorldPos[1] - w.WorldPos[1], body.WorldPos[2] - w.WorldPos[2] });
+                dWorld = RigMath.Unit(Add(Up, toBody, Forward));
+                replaced[wn] = BombMdt(bombMds, 1.3 / BombRadius, RotYTo(RigMath.Unit(ToLocal(w, dWorld))), WingSpin);
             }
             // the glow disc: a node of its own on the big bomb's bone, appended after the last
             int discIndex = nodes.Count;
@@ -107,7 +107,7 @@ namespace Dark_Cloud_Improved_Version
             var look = SheetLook.Parse(ElfCaveWriter.Embedded(Look, $"{Look} is not embedded — the Bomb Gemron's look"));
             var items = bank.Entries.Select(e => (e.name, e.name == Sheet ? look.ApplyToSheet(bank.Block(e.name), out _, out _) : e.name == Sheet2 ? look.ApplyBaseToSheet(bank.Block(e.name)) : bank.Block(e.name))).ToList();
             items.AddRange(bbank.Entries.Select(e => (e.name, bbank.Block(e.name))));
-            items.Add((DiscTex, SwizzledDisc(Tim8.ResampleTim8(GlowDisc.BuildT8(bank.Block(Sheet), light, GlowDisc.Elements[0].core, GlowDisc.Elements[0].outer), false, DiscTexSize))));
+            items.Add((DiscTex, Tim8.Swizzled(Tim8.ResampleTim8(GlowDisc.BuildT8(bank.Block(Sheet), light, GlowDisc.Elements[0].core, GlowDisc.Elements[0].outer), false, DiscTexSize))));
             pack.Require(Img).ReplacePayload(ImgBank.Build(bank.Magic, items));
             BakeSelfDestructMotion(pack);
             AddDiscTrack(pack, discIndex);
@@ -137,16 +137,6 @@ namespace Dark_Cloud_Improved_Version
         /// narrower than 128, the size the block order below is proven at, so the disc is doubled (nearest texel; the GS filters it).</summary>
         private const int DiscTexSize = 128;
 
-        /// <summary>The disc's pixels in the GS's block order: the Gemron's bank is an `IM2` one, whose 8-bit pictures the engine uploads as
-        /// already swizzled (GlowDisc builds them row-major, as the players' `IMG` banks hold them), so row-major indices would land in the
-        /// wrong blocks — the disc drawn in chunks.</summary>
-        private static byte[] SwizzledDisc(byte[] tim)
-        {
-            var (_, hdr, w, h) = Tim8.PictureInfo(tim);
-            byte[] outp = (byte[])tim.Clone();
-            Tim8.Swizzle8(tim.AsSpan(Tim8.Pic + hdr, w * h).ToArray(), w, h).CopyTo(outp, Tim8.Pic + hdr);
-            return outp;
-        }
 
         /// <summary>The glow sprite's quad, re-laid as a DiscDiameter square DiscPull out along +Z (the camera, once the engine turns it),
         /// the whole disc on it, its material on DiscTex.</summary>
@@ -296,25 +286,11 @@ namespace Dark_Cloud_Improved_Version
             uint b = keys.Keys.Where(f => f > s).Min();
             double t = (s - a) / (b - a);
             float[] va = keys[a].Value, vb = keys[b].Value;
-            double[] v = chan == 0 ? Slerp(va, vb, t) : Enumerable.Range(0, 4).Select(i => va[i] + (vb[i] - (double)va[i]) * t).ToArray();
+            double[] v = chan == 0 ? RigMath.SlerpKeys(va, vb, t) : Enumerable.Range(0, 4).Select(i => va[i] + (vb[i] - (double)va[i]) * t).ToArray();
             for (int i = 0; i < 4; i++) IsoBytes.WrF(k.Raw, 0x10 + i * 4, (float)v[i]);
             return k;
         }
 
-        private static double[] Slerp(float[] a, float[] bf, double t)
-        {
-            double[] b = { bf[0], bf[1], bf[2], bf[3] };
-            double d = (double)a[0] * b[0] + (double)a[1] * b[1] + (double)a[2] * b[2] + (double)a[3] * b[3];
-            if (d < 0) { b = new[] { -b[0], -b[1], -b[2], -b[3] }; d = -d; }
-            double w0, w1;
-            if (d > 0.9995) { w0 = 1 - t; w1 = t; }
-            else { double th = Math.Acos(Math.Min(1.0, d)), sn = Math.Sin(th); w0 = Math.Sin((1 - t) * th) / sn; w1 = Math.Sin(t * th) / sn; }
-            var q = new double[4];
-            for (int i = 0; i < 4; i++) q[i] = w0 * a[i] + w1 * b[i];
-            double n = Math.Sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
-            if (n == 0) n = 1.0;
-            return new[] { q[0] / n, q[1] / n, q[2] / n, q[3] / n };
-        }
 
         /// <summary>The apple shot's pack with the apple drawn as the bomb (<see cref="ShotPack"/>).</summary>
         private static byte[] BombShotPack(byte[] srcChr, byte[] bombMds, byte[] bombImg)
@@ -385,14 +361,6 @@ namespace Dark_Cloud_Improved_Version
 
 
         // vectors (row convention; sums as the Python builder's, compensated)
-        private static double[] Unit(double[] v)
-        {
-            double n = Math.Sqrt(ExactMath.Sum(v.Select(c => c * c)));
-            if (n == 0) n = 1.0;
-            return v.Select(c => c / n).ToArray();
-        }
-        private static double[] Cross(double[] a, double[] b) => new[] { a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] };
-        private static double Dot(double[] a, double[] b) => ExactMath.Sum(a.Zip(b, (x, y) => x * y));
         private static double[] Add(params double[][] vs) => Enumerable.Range(0, 3).Select(c => ExactMath.Sum(vs.Select(v => v[c]))).ToArray();
         private static double[] Mul(double[][] m, double[] v) => Enumerable.Range(0, 3).Select(r => ExactMath.Sum(Enumerable.Range(0, 3).Select(c => m[r][c] * v[c]))).ToArray();
 
@@ -416,16 +384,16 @@ namespace Dark_Cloud_Improved_Version
         /// forward and left in that frame.</summary>
         private static double[][] BodyTurn(RigNode body)
         {
-            double[] right = Cross(Forward, Up);
-            double[] left = Unit(ToLocal(body, right.Select(c => -c).ToArray())), fwd = Unit(ToLocal(body, Forward)), up = Unit(ToLocal(body, Up));
+            double[] right = RigMath.Cross(Forward, Up);
+            double[] left = RigMath.Unit(ToLocal(body, right.Select(c => -c).ToArray())), fwd = RigMath.Unit(ToLocal(body, Forward)), up = RigMath.Unit(ToLocal(body, Up));
             const double D2R = Math.PI / 180.0;
             return MatMul(AxisRot(up, BodyYaw * D2R), MatMul(AxisRot(fwd, BodyRoll * D2R), AxisRot(left, BodyPitch * D2R)));
         }
 
         private static double[][] RotYTo(double[] d)
         {
-            double[] y = { 0.0, 1.0, 0.0 }; d = Unit(d);
-            double c = Math.Max(-1.0, Math.Min(1.0, Dot(y, d))); double[] axis = Cross(y, d); double s = Math.Sqrt(Dot(axis, axis));
+            double[] y = { 0.0, 1.0, 0.0 }; d = RigMath.Unit(d);
+            double c = Math.Max(-1.0, Math.Min(1.0, RigMath.Dot(y, d))); double[] axis = RigMath.Cross(y, d); double s = Math.Sqrt(RigMath.Dot(axis, axis));
             if (s < 1e-6)
                 return c > 0 ? new[] { new[] { 1.0, 0, 0 }, new[] { 0, c, 0 }, new[] { 0, 0, c } } : new[] { new[] { 1.0, 0, 0 }, new[] { 0, -1.0, 0 }, new[] { 0, 0, -1.0 } };
             double[] k = axis.Select(a => a / s).ToArray(); double C = 1 - c;
@@ -641,29 +609,6 @@ namespace Dark_Cloud_Improved_Version
             c.Int((int)FnGetPosition); c.Int(1); c.Add(OpNeg); c.Ref(x, VFloat); c.Ref(y, VFloat); c.Ref(z, VFloat); c.Ext(5);
             c.Set(y, VFloat, () => { c.Var(y, VFloat); c.Float(BlastHeight); c.Add(OpAdd); });
             c.Int((int)FnSetShot2); c.Str(strOff); c.Var(x, VFloat); c.Var(y, VFloat); c.Var(z, VFloat); c.Int((int)BlastDamage); c.Ext(6);
-        }
-
-        // ───────────────────────────── the name ─────────────────────────────
-        /// <summary>Message <paramref name="id"/>'s text set in place: its index entry re-pointed at the end of the real text (the bank's
-        /// trailing padding absorbs the words; the file keeps its size, so the pool it is carved into is unchanged). Null when the
-        /// message already reads so.</summary>
-        internal static byte[] SetText(byte[] mes, int id, ushort[] words)
-        {
-            int cnt = IsoBytes.U16(mes, 0), idxEnd = 4 + cnt * 4, entry = -1;
-            for (int i = 0; i < cnt; i++) if (IsoBytes.U16(mes, 4 + i * 4) == id) entry = 4 + i * 4;
-            if (entry < 0) throw new IOException($"message {id} is not in the bank");
-            int cur = 2 * (cnt + IsoBytes.U16(mes, entry + 2) + 1);
-            bool same = true;
-            for (int i = 0; i < words.Length && same; i++) same = cur + i * 2 + 1 < mes.Length && IsoBytes.U16(mes, cur + i * 2) == words[i];
-            if (same) return null;
-            int blobEnd = mes.Length;
-            while (blobEnd > idxEnd && mes[blobEnd - 1] == 0) blobEnd--;
-            int at = blobEnd + 16; at += at & 1;
-            if (at + words.Length * 2 > mes.Length) throw new IOException($"no room for message {id} in the bank's padding");
-            var o = (byte[])mes.Clone();
-            IsoBytes.U16(o, entry + 2, (ushort)(at / 2 - cnt - 1));
-            for (int i = 0; i < words.Length; i++) IsoBytes.U16(o, at + i * 2, words[i]);
-            return o;
         }
     }
 }

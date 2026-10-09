@@ -3,7 +3,7 @@ using System;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>The Bomb Gemron (EnemySpecies.BombGemron) in play. The species is the disc's: its record (SpeciesRows), model, script and
-    /// name (ModSpeciesBakes), its thrown bomb and its blast item-bomb shots (ElfSpeciesPatches.PatchBombConfigs). Its fuse spark is the
+    /// name (BombGemronBake), its thrown bomb and its blast item-bomb shots (ElfSpeciesPatches.PatchBombConfigs). Its fuse spark is the
     /// machine-gun hit flash in one of the pool's slots 12–15, run by the flash's own draw once a frame (tools/stubs/flash_slot.s): kept
     /// alight, its three cells in turn 4 frames each, a guard-spark burst asked for every 15 frames, put out the frame the death motion
     /// (11) passes its blast (122) or the self-destruct motion (14) its final pose (217), and placed where the monster draw captured this unit's wick this frame (tools/stubs/fuse_capture.s —
@@ -13,7 +13,8 @@ namespace Dark_Cloud_Improved_Version
     ///    CodeCaves.FlashSizeTable / FlashAlphaTable) and unpins it — back to Osmond's 5.0 and 0x80 — when it is gone;
     ///  · writes the fuse point: the wick's tip, and during the death or the self-destruct motion the point the frame has reached along the wick
     ///    (<see cref="Fuse"/>, in the body bone's frame) — a function of the engine's frame, not of time;
-    ///  · gives the big bomb's visual its private vtable, so it reddens as the fuse burns (<see cref="ArmTint"/>);
+    ///  · gives the big bomb's visual its private vtable, so it reddens as the fuse burns (<see cref="Tint"/>: tools/stubs/bomb_tint.s reddens
+    ///    the ambient for that one draw by the drawn unit's fuse, from the engine's own frame);
     ///  · answers each burst the draw asks for — only while the draw is placing the flash at this unit's own wick — with the guard spark (CheckDmg's burst, written whole into the hit-mark pool's last
     ///    entry: 20 marks at twice the size, scatter 0.75), each pin into its own hit-mark entry, at the point the draw placed the flash
     ///    this frame, and puts that burst out when the Gemron is spent.</summary>
@@ -22,8 +23,8 @@ namespace Dark_Cloud_Improved_Version
         private const string Tag = "[BombGemron] ";
         private const int DeathMotion = 11, DeathLoopMotion = 12;
         private const float FuseStart = 105f, BlastFrame = 122f;                       // the death motion's fuse
-        private const int SelfDestructMotion = ModSpeciesBakes.SelfDestructMotion;
-        private const float SelfDestructFuseStart = ModSpeciesBakes.SelfDestructFuseStart, SelfDestructBlast = ModSpeciesBakes.SelfDestructEnd - 1;   // _CHK_MOTION_FRM's last frame
+        private const int SelfDestructMotion = BombGemronBake.SelfDestructMotion;
+        private const float SelfDestructFuseStart = BombGemronBake.SelfDestructFuseStart, SelfDestructBlast = BombGemronBake.SelfDestructEnd - 1;   // _CHK_MOTION_FRM's last frame
 
         /// <summary>The fuse window of a last motion (the death, or the self-destruct), or null for any other.</summary>
         private static (float start, float blast)? FuseOf(int motion) =>
@@ -38,7 +39,7 @@ namespace Dark_Cloud_Improved_Version
         private const uint NeverCaptured = 0xFFFFFFFF;                                  // the capture stamp Pin leaves (unseen)
         private const uint CaptureFresh = 4;                                            // frames a capture counts as this frame's (the two reads may straddle one)
         /// <summary>The big bomb's wick centreline, tip first, in the body bone's frame: the bake's bomb at 3.5 / 1.22 scale, aimed, spun
-        /// and turned as ModSpeciesBakes places it (BodySpin, BodyPitch/Roll/Yaw). Must follow any change to those.</summary>
+        /// and turned as BombGemronBake places it (BodySpin, BodyPitch/Roll/Yaw). Must follow any change to those.</summary>
         private static readonly float[][] Fuse =
         {
             new[] { -4.502f, 0.4241f, 0.163f }, new[] { -4.7109f, 0.4496f, 0.1215f }, new[] { -4.7651f, 0.3937f, 0.651f },
@@ -53,7 +54,8 @@ namespace Dark_Cloud_Improved_Version
         private static readonly int[] _unitOf = new int[Pins];                              // the pin's unit + 1
         private static readonly uint[] _bursts = new uint[Pins];                            // the bursts answered
         private static readonly bool[] _blown = new bool[EnemyAddresses.FloorSlots.Count]; // its blast has gone: no more sparks from it
-        private static uint _tintVisual;                                                    // the bomb visual last armed (guest), 0 = none
+        private static readonly NodeDrawHook Tint = new("the Bomb Gemron's big bomb", "bomb_tint", DeadChainCave.BombTint,
+            CodeCaves.BombTintStock, CodeCaves.BombTintVtable, CodeCaves.BombTintVtableGuest);
         private static readonly bool[] _sawDeath = new bool[EnemyAddresses.FloorSlots.Count]; // its death motion has been seen playing
         private static readonly float[,] _burstAt = new float[Pins, 3];                    // where each pin's last burst went off
         private static readonly Random _rng = new();
@@ -71,7 +73,7 @@ namespace Dark_Cloud_Improved_Version
             for (int unit = 0; unit < EnemyAddresses.FloorSlots.Count; unit++)
             {
                 if (!IsBombGemron(unit)) { _blown[unit] = false; _sawDeath[unit] = false; Unpin(unit); continue; }
-                if (!tinted) { ArmTint(unit); tinted = true; }                         // the species' one bomb visual
+                if (!tinted) { Tint.Arm(unit, BodyBone); tinted = true; }                         // the species' one bomb visual
                 if (_blown[unit] || Spent(unit)) continue;
                 float dx = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(unit, EnemySlotOffsets.LocationX)) - px;
                 float dy = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(unit, EnemySlotOffsets.LocationY)) - py;
@@ -80,40 +82,6 @@ namespace Dark_Cloud_Improved_Version
             live.Sort((a, b) => a.score.CompareTo(b.score));
             for (int k = Pins; k < live.Count; k++) Unpin(live[k].unit);              // the far ones give their slots up first
             for (int k = 0; k < Math.Min(Pins, live.Count); k++) Drive(live[k].unit);
-        }
-
-        /// <summary>The big bomb's visual — the tama1__m frame's, one object every Bomb Gemron on the floor draws — given a private copy
-        /// of its class vtable (CodeCaves.BombTintVtable) whose two DrawVu1 slots enter tools/stubs/bomb_tint.s (DeadChainCave.BombTint),
-        /// the stock targets in CodeCaves.BombTintStock: the cave reddens the ambient for that one draw by the drawn unit's fuse, from the
-        /// engine's own frame. Data writes only, the vtable pointer last; a new floor's visual is armed afresh.</summary>
-        private static void ArmTint(int unit)
-        {
-            if (_tintVisual != 0 && Memory.ReadGuestPtr(Memory.ToMmu(_tintVisual) + CVisualMDT.VisVtable) == CodeCaves.BombTintVtableGuest) return;
-            long chara = Model(unit) - CCharacter.CharScale;
-            uint root = Memory.ReadGuestPtr(chara + CCharacter.CharModel);
-            uint bone = Memory.IsValidGuest(root) ? BombCarrier.NodeNamed(root, BodyBone) : 0;
-            if (bone == 0) return;
-            uint vis = Memory.ReadGuestPtr(Memory.ToMmu(bone) + CFrameVu1.GeomPtr);
-            if (!Memory.IsValidGuest(vis)) return;
-            long visM = Memory.ToMmu(vis);
-            uint vt = Memory.ReadGuestPtr(visM + CVisualMDT.VisVtable);
-            if (vt != CodeCaves.BombTintVtableGuest)
-            {
-                if (vt != CVisualMDT.Vu1Vtable && vt != CVisualMDT.RigidVtable)
-                {
-                    if (_tintVisual != vis) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the bomb visual 0x{vis:X} has vtable 0x{vt:X}, neither CVisualMDTVu1 nor CVisualVu1 — no fuse tint");
-                    _tintVisual = vis; return;
-                }
-                byte[] tbl = Memory.ReadBytesBatch(Memory.ToMmu(vt), CVisualMDT.Vu1VtableBytes);
-                if (tbl == null) return;
-                Memory.WriteBytesBatch(CodeCaves.BombTintStock, tbl.AsSpan(CVisualMDT.Vu1VtableDrawSlot, 8).ToArray());   // slot 6, slot 7
-                BitConverter.GetBytes(DeadChainCave.BombTint).CopyTo(tbl, CVisualMDT.Vu1VtableDrawSlot);
-                BitConverter.GetBytes(DeadChainCave.BombTint + 0x0Cu).CopyTo(tbl, CVisualMDT.Vu1VtableDrawSlot + 4);
-                Memory.WriteBytesBatch(CodeCaves.BombTintVtable, tbl);
-                Memory.WriteUInt(visM + CVisualMDT.VisVtable, CodeCaves.BombTintVtableGuest);   // last: the next draw takes it
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"bomb visual 0x{vis:X} (class vtable 0x{vt:X}) draws through bomb_tint (0x{DeadChainCave.BombTint:X})");
-            }
-            _tintVisual = vis;
         }
 
         private static bool IsBombGemron(int unit)
@@ -285,7 +253,7 @@ namespace Dark_Cloud_Improved_Version
             Release();
             Array.Clear(_blown, 0, _blown.Length);
             Array.Clear(_sawDeath, 0, _sawDeath.Length);
-            _tintVisual = 0;
+            Tint.Reset();
         }
     }
 }

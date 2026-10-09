@@ -525,4 +525,3 @@ patch=1,EE,E1030001,extended,01F10024 //check mod flag
 patch=1,EE,E1020000,extended,002A2534 //check main menu
 patch=1,EE,21DD2914,extended,24020008 //enable start
 patch=1,EE,202210BC,extended,10400013 //enable save slot
-

@@ -39,7 +39,7 @@
     lui   $t9, 0x42F4              # (delay) 122.0
     addiu $t5, $zero, 14
     bne   $t6, $t5, live           # the self-destruct (key 14, frames 200–218): its blast on its final pose
-    lui   $t9, 0x4359              # (delay) 217.0 (ModSpeciesBakes.SelfDestructEnd − 1)
+    lui   $t9, 0x4359              # (delay) 217.0 (BombGemronBake.SelfDestructEnd − 1)
 blast:
     lw    $t6, 0x0260($t8)         # its frame: a positive float, so it compares as an int
     slt   $t5, $t6, $t9

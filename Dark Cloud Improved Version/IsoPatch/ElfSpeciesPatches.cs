@@ -20,9 +20,9 @@ namespace Dark_Cloud_Improved_Version
         /// sprites at the config's scale, its shock ring above scale 1, and one knockdown entry of radius 20 × scale with the config's
         /// damage, aimed at the config's target) — the blast the Big Bang's shots and drop draw. Neither plants a hit of its own (every
         /// radius 0); a shot explodes when it reaches the impact or the burst phase (contact — the player's head point, his feet + 14–18,
-        /// within 6 of its next point; the Gemron's script aims it there, ModSpeciesBakes —, a wall, or its time running out) because
+        /// within 6 of its next point; the Gemron's script aims it there, BombGemronBake —, a wall, or its time running out) because
         /// those phases have no motion. The drawing model of both is
-        /// <c>g_wave2</c>, the apple pack wearing the bomb (ModSpeciesBakes.BombShotPack).
+        /// <c>g_wave2</c>, the apple pack wearing the bomb (BombGemronBake.BombShotPack).
         ///  · config 8 (<c>g_wave2</c>, unused): the thrown bomb — <c>ringo_ex</c>'s flight (the apple it throws), at the Big Bang pellet's
         ///    blast scale 0.5;
         ///  · config 27 (the second <c>f_boll_3</c>, unused): the death and self-destruct blast — no flight and no life, so it goes off where
@@ -151,10 +151,10 @@ namespace Dark_Cloud_Improved_Version
             const uint SizeSite = 0x001AEA7C, AlphaSite = 0x001AEA9C;
             byte[] stub = Embedded("flashSlot.bin");
             if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != 0x3C1901FB) throw new IOException($"flashSlot.bin malformed ({stub.Length} B) or stale — reassemble its .s.");
-            uint cutoff = 0x3C190000u | (BitConverter.SingleToUInt32Bits(ModSpeciesBakes.SelfDestructEnd - 1) >> 16);   // lui $t9, the final pose's frame
+            uint cutoff = 0x3C190000u | (BitConverter.SingleToUInt32Bits(BombGemronBake.SelfDestructEnd - 1) >> 16);   // lui $t9, the final pose's frame
             bool found = false;
             for (int i = 0; i < stub.Length; i += 4) found |= U32(stub, i) == cutoff;
-            if (!found) throw new IOException($"flash_slot.s's self-destruct cutoff is not the final pose ({ModSpeciesBakes.SelfDestructEnd - 1}.0, lui 0x{cutoff & 0xFFFF:X4}) — set it there and reassemble.");
+            if (!found) throw new IOException($"flash_slot.s's self-destruct cutoff is not the final pose ({BombGemronBake.SelfDestructEnd - 1}.0, lui 0x{cutoff & 0xFFFF:X4}) — set it there and reassemble.");
             WriteBytes(fs, ElfOff, SmoothRestCave.FlashSlot, stub, SmoothRestCave.End, "flashSlot.bin overruns the SmoothRest cave");
             ReplaceWords(fs, ElfOff, SizeSite, new[] { 0x3C0240A0u, 0x44826000u }, new[] { Jal(SmoothRestCave.FlashSlot), 0u }, "the machine-gun flash's size (Draw__21CHIT_MACHINGUN_EFFECT)");
             ReplaceWord(fs, ElfOff, AlphaSite, 0x240A0080u, 0x01605025u, "the machine-gun flash's alpha (Draw__21CHIT_MACHINGUN_EFFECT)");

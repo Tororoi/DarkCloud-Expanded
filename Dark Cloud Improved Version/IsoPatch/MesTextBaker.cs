@@ -110,6 +110,28 @@ namespace Dark_Cloud_Improved_Version
             return outb;
         }
 
+        /// <summary>Message <paramref name="id"/>'s text set in place: its index entry re-pointed at the end of the real text (the bank's
+        /// trailing padding absorbs the words; the file keeps its size, so the pool it is carved into is unchanged). Null when the
+        /// message already reads so.</summary>
+        internal static byte[] SetMes(byte[] mes, int id, ushort[] words)
+        {
+            int cnt = IsoBytes.U16(mes, 0), idxEnd = 4 + cnt * 4, entry = -1;
+            for (int i = 0; i < cnt; i++) if (IsoBytes.U16(mes, 4 + i * 4) == id) entry = 4 + i * 4;
+            if (entry < 0) throw new IOException($"message {id} is not in the bank");
+            int cur = 2 * (cnt + IsoBytes.U16(mes, entry + 2) + 1);
+            bool same = true;
+            for (int i = 0; i < words.Length && same; i++) same = cur + i * 2 + 1 < mes.Length && IsoBytes.U16(mes, cur + i * 2) == words[i];
+            if (same) return null;
+            int blobEnd = mes.Length;
+            while (blobEnd > idxEnd && mes[blobEnd - 1] == 0) blobEnd--;
+            int at = blobEnd + 16; at += at & 1;
+            if (at + words.Length * 2 > mes.Length) throw new IOException($"no room for message {id} in the bank's padding");
+            var o = (byte[])mes.Clone();
+            IsoBytes.U16(o, entry + 2, (ushort)(at / 2 - cnt - 1));
+            for (int i = 0; i < words.Length; i++) IsoBytes.U16(o, at + i * 2, words[i]);
+            return o;
+        }
+
         /// <summary>Move existing messages to the END of a meswin .mes, each into a block of <c>reserveWords</c> words (its
         /// own text, then zeros), and point their index entries there — the count never changes and no other message's
         /// read position shifts. The block is room the app can rewrite at runtime with a longer text (the Bandit

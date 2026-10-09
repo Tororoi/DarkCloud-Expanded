@@ -2148,7 +2148,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=150, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,
             ItemDamageRes=70, ItemStatusRes=60,
             HeightFromRoot=19.0f, BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
-            MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150,150,150} };   // the Holy ball, then the death and self-destruct blasts (ModSpeciesBakes), in script order
+            MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150,150,150} };   // the Holy ball, then the death and self-destruct blasts (BombGemronBake), in script order
 
         // Crystal Gemron: Holy Gemron's rig, stats and script, its three gems replaced by the breaking crystal ball of the e209 event,
         // which shatters through its death (CrystalGemronBake). Randomizer-only, like the Bomb Gemron.
@@ -2431,8 +2431,8 @@ namespace Dark_Cloud_Improved_Version
         // Concept / gag themes.
         internal static readonly Dictionary<int, EnemyDefaults> NotTheBees =              // Σ footprint ≈ 66,587 B
             Group(Hornet, DarkFlower);
-        internal static readonly Dictionary<int, EnemyDefaults> BombsAway =               // Σ footprint ≈ 62,424 B
-            Group(BomberHeadEnhanced);
+        internal static readonly Dictionary<int, EnemyDefaults> BombsAway =               // Σ footprint ≈ 125,379 B
+            Group(BomberHeadEnhanced, BombGemron);
         internal static readonly Dictionary<int, EnemyDefaults> WhackaMole =              // Σ footprint ≈ 102,991 B
             Group(EarthDigger, HaleyHoley);
         internal static readonly Dictionary<int, EnemyDefaults> Bait =                    // Σ footprint ≈ 184,592 B  (King Prickly: single-spawn; 3× weight)

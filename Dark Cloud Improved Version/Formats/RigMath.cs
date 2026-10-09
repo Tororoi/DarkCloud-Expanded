@@ -75,6 +75,7 @@ namespace Dark_Cloud_Improved_Version
         internal static double Sum3(double[] a, double[] b) => ExactMath.Sum(a[0] * b[0], a[1] * b[1], a[2] * b[2]);   // sum(a[i]*b[i] for i in range(3))
         internal static double[] Cross(double[] a, double[] b) => new[] { a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] };
         internal static double[] Unit(double[] v) { double n = Math.Sqrt(ExactMath.Sum(v.Select(c => c * c))); if (n == 0) n = 1.0; return v.Select(c => c / n).ToArray(); }
+        internal static double Dot(double[] a, double[] b) => ExactMath.Sum(a.Zip(b, (x, y) => x * y));
         internal static double Smooth(double t) { t = Math.Min(Math.Max(t, 0.0), 1.0); return t * t * (3 - 2 * t); }
         internal static double Radians(double deg) => deg * (Math.PI / 180.0);
 
@@ -91,6 +92,22 @@ namespace Dark_Cloud_Improved_Version
             }
             double n = Math.Sqrt(ExactMath.Sum(r.Select(x => x * x))); if (n == 0) n = 1.0;
             return r.Select(x => x / n).ToArray();
+        }
+
+        /// <summary>Two .mot rotation keys slerped as the model builders do (plain sums, the shorter way round, linear past 0.9995).</summary>
+        internal static double[] SlerpKeys(float[] a, float[] bf, double t)
+        {
+            double[] b = { bf[0], bf[1], bf[2], bf[3] };
+            double d = (double)a[0] * b[0] + (double)a[1] * b[1] + (double)a[2] * b[2] + (double)a[3] * b[3];
+            if (d < 0) { b = new[] { -b[0], -b[1], -b[2], -b[3] }; d = -d; }
+            double w0, w1;
+            if (d > 0.9995) { w0 = 1 - t; w1 = t; }
+            else { double th = Math.Acos(Math.Min(1.0, d)), sn = Math.Sin(th); w0 = Math.Sin((1 - t) * th) / sn; w1 = Math.Sin(t * th) / sn; }
+            var q = new double[4];
+            for (int i = 0; i < 4; i++) q[i] = w0 * a[i] + w1 * b[i];
+            double n = Math.Sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+            if (n == 0) n = 1.0;
+            return new[] { q[0] / n, q[1] / n, q[2] / n, q[3] / n };
         }
 
         internal sealed class Track { internal int Node, Chan; internal List<double> Frames = new(); internal List<double[]> Vals = new(); }
