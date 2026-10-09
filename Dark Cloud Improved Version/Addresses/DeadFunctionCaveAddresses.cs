@@ -196,12 +196,12 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/bomb_tint.s (ElfSpeciesPatches.PatchBombTint): the Bomb Gemron's big bomb reddening as its fuse burns,
         /// reached only through the private vtable BombGemron gives the bomb's visual (two entries: +0 the uint* DrawVu1, +0xC the packet one).</summary>
         internal const uint BombTint = Host;   // 244 B → 0x10A2C4
-        /// <summary>tools/stubs/eye_tint.s (ElfSpeciesPatches.PatchEyeTint): the Crystal Gemron's eyes tinted white, reached only through
-        /// the private vtable CrystalGemron gives the eyes' visual (two entries: +0 the uint* DrawVu1, +0xC the packet one).</summary>
-        internal const uint EyeTint = Host + 0x100;   // 0x10A2D0, 140 B → 0x10A35C
         /// <summary>tools/stubs/freeze_break.s (ElfDamagePatches.PatchFreezeBreak): a hit breaks the player's freeze — BtCheckDamageProc's
         /// one StatusErrCheck call (dun 0x1DBB1F4, DunPatches) comes here.</summary>
-        internal const uint FreezeBreak = Host + 0x190;   // 0x10A360, 76 B → 0x10A3AC
+        internal const uint FreezeBreak = Host + 0x190;   // 0x10A360, 96 B → 0x10A3C0 (0x10A2D0–0x10A360 before it is free)
+        /// <summary>tools/stubs/eye_tint.s (ElfSpeciesPatches.PatchEyeTint): the Crystal Gemron's eyes tinted, reached only through
+        /// the private vtable CrystalGemron gives the eyes' visual (two entries: +0 the uint* DrawVu1, +0xC the packet one).</summary>
+        internal const uint EyeTint = Host + 0x1F0;   // 0x10A3C0, 156 B → 0x10A45C
         internal const uint End = Host + HostSpan;
     }
 

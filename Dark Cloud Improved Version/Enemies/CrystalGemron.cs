@@ -4,7 +4,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>The Crystal Gemron (EnemySpecies.CrystalGemron) in play. The species is the disc's: its record (SpeciesRows), model (the
     /// breaking crystal balls, its eyes a node of their own), script and name (CrystalGemronBake). In play this only gives the eyes'
-    /// visual its private vtable, so the eyes draw tinted white (<see cref="ArmEyes"/>).</summary>
+    /// visual its private vtable, so the eyes draw tinted (<see cref="ArmEyes"/>).</summary>
     internal static class CrystalGemron
     {
         private const string Tag = "[CrystalGemron] ";

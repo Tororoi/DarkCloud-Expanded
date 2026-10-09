@@ -2139,13 +2139,13 @@ namespace Dark_Cloud_Improved_Version
         // maps them there, SetupBaseModel reaches them through the species-lookup stub). Their model/script files are the ISO patch's.
 
         // Bomb Gemron: Holy Gemron's rig, stats and script under a desaturated palette, its three gems replaced by the
-        // thrown-bomb model. Immune to every element. Randomizer-only — no vanilla spawn pool, so the stat normalizer treats it
+        // thrown-bomb model. Weak to fire, immune to every other element. Randomizer-only — no vanilla spawn pool, so the stat normalizer treats it
         // as a Demon Shaft 81–99 native through HomeOf. Its shots and the death / self-destruct blast are BombGemron's.
         internal static readonly EnemyDefaults BombGemron = new EnemyDefaults {
             Id=320, TableIndex=167, Name="Bomb Gemron", ModelCode="e167", ModelFootprint=62955,   // measured on a floor of it alone (Gallery of Time 24, 2026-10-08)
             Abs=40, MinGoldDrop=20, DropChance=30, StealItemId=null, RareDropItemId=165,
             MaxHp=12500, DamageReduction=30, WeaponDefense=10, KnockbackMult=1.0f,
-            Category=EnemyCategory.Dragon, FireRes=0, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,
+            Category=EnemyCategory.Dragon, FireRes=150, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,
             ItemDamageRes=70, ItemStatusRes=60,
             HeightFromRoot=19.0f, BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
             MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150,150,150} };   // the Holy ball, then the death and self-destruct blasts (ModSpeciesBakes), in script order
@@ -2154,9 +2154,9 @@ namespace Dark_Cloud_Improved_Version
         // which shatters through its death (CrystalGemronBake). Randomizer-only, like the Bomb Gemron.
         internal static readonly EnemyDefaults CrystalGemron = new EnemyDefaults {
             Id=321, TableIndex=168, Name="Crystal Gemron", ModelCode="e168", ModelFootprint=169171,   // measured on a floor of it alone (Gallery of Time 24, 2026-10-08)
-            Abs=100, MinGoldDrop=20, DropChance=30, StealItemId=null, RareDropItemId=165,
+            Abs=80, MinGoldDrop=20, DropChance=30, StealItemId=178, RareDropItemId=231,
             MaxHp=12500, DamageReduction=30, WeaponDefense=10, KnockbackMult=1.0f,
-            Category=EnemyCategory.Dragon, FireRes=0, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,   // immune to every element, as the Bomb Gemron
+            Category=EnemyCategory.Dragon, FireRes=0, IceRes=150, ThunderRes=0, WindRes=0, HolyRes=0,   // weak to ice, immune to every other element
             ItemDamageRes=70, ItemStatusRes=60,
             HeightFromRoot=19.0f, BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
             MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150} };

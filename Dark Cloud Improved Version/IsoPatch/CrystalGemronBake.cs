@@ -80,7 +80,7 @@ namespace Dark_Cloud_Improved_Version
         private const string IcePrisonSource = @"dun\monstor\kori.chr", IcePrisonPack = @"dun\effect\" + IcePrisonModel + ".chr";
         private const string IcePrisonHoldKey = "KEY\t30,\t30,\t0.0,\t//held 0";
         private const string EyeHead = "obj2_2";
-        private const double EyeU0 = 0.21, EyeU1 = 0.34, EyeV0 = 0.50, EyeV1 = 0.61;
+        private const double EyeU0 = 0.21, EyeU1 = 0.35, EyeV0 = 0.50, EyeV1 = 0.61;
 
         internal static void Run(IsoArchive arc, Action<string> log)
         {

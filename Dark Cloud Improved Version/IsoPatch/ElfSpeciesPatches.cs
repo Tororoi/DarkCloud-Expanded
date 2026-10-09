@@ -61,8 +61,8 @@ namespace Dark_Cloud_Improved_Version
         /// zero words before the species table) point at them. The three dead hosts' first two words become `jr ra; li v0,0`.
         ///  · The ice arrow (34) draws <c>dun\effect\_i_boll.chr</c> (CrystalGemronBake: the korinoya), flies from the moment it is fired at
         ///    <see cref="IceArrowSpeed"/> (the korinoya's `_SET_MOVE(…, 1.6)` is 1.6 a step) for as long as the korinoya can (its 480-frame
-        ///    cap; a wall ends either), and hits as the korinoya does — its sure Freeze (0x100000, no roll, no amulet) and a guardable
-        ///    knockback (2) — with the Ice element.
+        ///    cap; a wall ends either), and hits with the vanilla freezing shots' Freeze (0x100: the hit's 65% status roll, an Anti-Freeze
+        ///    Amulet blocks it), the korinoya's guardable knockback (2) and the Ice element.
         ///  · The ice prison (35) draws <c>dun\effect\_f_boll_2.chr</c> (the kori): stationary, its keys 0 (the ice forming), 2 (held)
         ///    and 1 (shattering) as its four phases' motions, no hit and no contact (radius −100 while it stands: CSHOT_EFFECT's contact
         ///    test is "within radius + 6 of the player"), and a long life the cave cuts short when the freeze ends.</summary>
@@ -75,7 +75,7 @@ namespace Dark_Cloud_Improved_Version
 
             byte[] arrow = (byte[])src.Clone();
             Array.Clear(arrow, 0, 16); System.Text.Encoding.ASCII.GetBytes(CrystalGemronBake.IceArrowModel).CopyTo(arrow, 0);
-            U32(arrow, ShotEffectPack.CfgFlags, (uint)BehaviorScriptTable.AttackStatusFlag.FreezeGuaranteed | IceElement);
+            U32(arrow, ShotEffectPack.CfgFlags, (uint)BehaviorScriptTable.AttackStatusFlag.Freeze | IceElement);
             WrF(arrow, 0x18 + 4, IceArrowSpeed);                                        // the flight (phase 1; crystal_home.s steers it at this speed)
             U32(arrow, ShotEffectPack.CfgWait, IceArrowLife);
             U32(arrow, ShotEffectPack.CfgReaction, (uint)BehaviorScriptTable.AttackReaction.Knockback);
@@ -183,7 +183,7 @@ namespace Dark_Cloud_Improved_Version
             WriteBytes(fs, ElfOff, DeadChainCave.BombTint, stub, DeadChainCave.End, "bombTint.bin overruns the sceCdReadChain body");
         }
 
-        /// <summary>The Crystal Gemron's eyes tinted white (tools/stubs/eye_tint.s in the dead sceCdReadChain body, after bomb_tint). No
+        /// <summary>The Crystal Gemron's eyes tinted (tools/stubs/eye_tint.s in the dead sceCdReadChain body, after freeze_break). No
         /// hook: the cave is reached only through the private vtable CrystalGemron gives the eyes' visual.</summary>
         internal static void PatchEyeTint(FileStream fs, Func<uint, long> ElfOff)
         {

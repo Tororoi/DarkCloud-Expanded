@@ -9,8 +9,9 @@ table (`EnemySpeciesTable` @0x27FB00: +0x68 primary / +0x6A secondary shot index
 The shot type's **flags word (+0x40)** goes verbatim into the impact CollisionData entry `+0x50`. Low byte = ELEMENT bit,
 high bits = STATUS bits.
 
-- **Against the PLAYER** (`BtCheckDamageProc`, dun 0x1DBAFD0) only the status bits are read: 0x100 → Freeze (amulet 132 blocks),
-  0x200 → Poison (amulet 135), 0x400 → Curse (amulet 133), 0x800 → Goo (amulet 134), 0x1000 → Stamina (65% roll, no amulet),
+- **Against the PLAYER** (`BtCheckDamageProc`, dun 0x1DBAFD0) only the status bits are read, against ONE roll per hit (0–99, a status landing below 65): 0x100 → Freeze (65%;
+  an Anti-Freeze Amulet 132 blocks it and uses one charge), 0x200 → Poison (65%, amulet 135), 0x400 → Curse (65%, amulet 133),
+  0x800 → Goo (65%, amulet 134), 0x1000 → Stamina (65%, no amulet),
   0x40000 → steal gold, 0x80000 → damage = half current HP, 0x100000 → Freeze unconditionally. **The element bits 0x1–0x10 are
   never read on the player side** — no damage multiplier, no status — so vanilla play never validated them.
 - **Against ENEMIES** (`CMonstorUnit::CheckDmg`, main 0x1D9F10, the path a reflected shot will take) the word is compared
@@ -63,8 +64,8 @@ disagrees) — check in-game by reflecting the shot at a same-element Gemron (ex
 | 31 | `dash` | none (0x0) | — | — | — | 3 | 170 | 2.6 | 0.00 | Black Knight Mount | — | — |
 | 32 | `kamai` | none (0x0) | — | — | — | 3 | 130 | 0.0 | 0.00 | — | Black Knight Mount | — |
 | 33 | `terepo` | none (0x0) | — | — | — | 3 | 90 | 0.0 | 0.00 | — | Black Knight | — |
-| 34 | `_i_boll` | Ice (0x2) | Ice (korinoya) | Freeze, sure (0x100000) | — | 2 | 58 (STB 150) | 1.4 | 0.00 | Crystal Gemron | — | — |
-|   | ↳ the MOD's config, PATCHED disc only: table entry 34 (a zero word before the species table) → a copy of `e115a_ex` (25) in the dead sceIoctl body drawing `dun\effect\_i_boll.chr` = the Ice Queen's korinoya (dun\monstor\korinoya.chr, cfg renamed), flying from the moment it is fired at 1.2 a step (the korinoya flies at 1.6) for up to its 480 frames, hitting as the korinoya does (sure Freeze, guardable) with the Ice element. Steered natively after the korinoya (crystal_home.s: within 60° of its heading the heading turns towards the player 0.12 rad a frame, the model faced along it; straight on outside) — ElfSpeciesPatches.PatchCrystalShots, CrystalGemronBake | | | | | | | | | | | |
+| 34 | `_i_boll` | Ice (0x2) | Ice (korinoya) | Freeze (0x100) | — | 2 | 58 (STB 150) | 1.4 | 0.00 | Crystal Gemron | — | — |
+|   | ↳ the MOD's config, PATCHED disc only: table entry 34 (a zero word before the species table) → a copy of `e115a_ex` (25) in the dead sceIoctl body drawing `dun\effect\_i_boll.chr` = the Ice Queen's korinoya (dun\monstor\korinoya.chr, cfg renamed), flying from the moment it is fired at 1.2 a step (the korinoya flies at 1.6) for up to its 480 frames, hitting with Freeze (0x100, as magic_isi and b_boll: 65%, amulet-blockable; the korinoya's own is sure), the korinoya's guardable knockback and the Ice element. Steered natively after the korinoya (crystal_home.s: within 60° of its heading the heading turns towards the player 0.12 rad a frame, the model faced along it; straight on outside) — ElfSpeciesPatches.PatchCrystalShots, CrystalGemronBake | | | | | | | | | | | |
 | 35 | `_f_boll_2` | none (0x0) | — | — | — | — | 0 | −100 | 0.00 | — | Crystal Gemron | — |
 |   | ↳ the MOD's config, PATCHED disc only: table entry 35 → the ice prison, the Ice Queen's kori (dun\monstor\kori.chr on the dead `_f_boll_2` name, a held key 2 added): stationary, no hit, motions forming / held / shattering. Never fired by a script: crystal_shots.s asks the arrow's Gemron for it (its event2 record) when an arrow freezes the player, holds it while he stays frozen and lets it shatter after | | | | | | | | | | | |
 
