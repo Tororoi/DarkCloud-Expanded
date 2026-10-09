@@ -122,6 +122,15 @@ namespace Dark_Cloud_Improved_Version
             WriteBytes(fs, ElfOff, DeadChainCave.BombTint, stub, DeadChainCave.End, "bombTint.bin overruns the sceCdReadChain body");
         }
 
+        /// <summary>The Crystal Gemron's eyes tinted white (tools/stubs/eye_tint.s in the dead sceCdReadChain body, after bomb_tint). No
+        /// hook: the cave is reached only through the private vtable CrystalGemron gives the eyes' visual.</summary>
+        internal static void PatchEyeTint(FileStream fs, Func<uint, long> ElfOff)
+        {
+            byte[] stub = Embedded("eyeTint.bin");
+            if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != 0x3C1901FB) throw new IOException($"eyeTint.bin malformed ({stub.Length} B) or stale — reassemble its .s.");
+            WriteBytes(fs, ElfOff, DeadChainCave.EyeTint, stub, DeadChainCave.End, "eyeTint.bin overruns the sceCdReadChain body");
+        }
+
         /// <summary>Each Bomb Gemron's wick captured while its pose is drawn (tools/stubs/fuse_capture.s in the dead sceCdGetToc body):
         /// CMonstorUnit::DrawMonstor's per-unit `jal MGSetAmbient` (0x1D8F84) goes through the cave.</summary>
         internal static void PatchFuseCapture(FileStream fs, Func<uint, long> ElfOff)
@@ -158,8 +167,18 @@ namespace Dark_Cloud_Improved_Version
             WriteBytes(fs, ElfOff, (uint)(CodeCaves.FlashAlphaTable - 0x20000000L), alphas);
         }
 
+        /// <summary>MotionProc (0x147D20) plays a track between two of its keys; before the first, vanilla takes key −1 — the 0x20 bytes in
+        /// front of the keys, the track's header — and blends it in whenever the bogus weight lands in [0, 1]. Here a track is skipped
+        /// there instead: at the common point both key searches reach (.L00147F38: `mtc1 $0,$f0; nop; c.lt.s $f20,$f0; nop; bc1t skip`)
+        /// the nop becomes `bltz $s0 (the key), skip` — the c.lt.s its delay slot, the mtc1 still a cycle ahead of it — to the function's
+        /// own exit for a track it does not play (0x14881C, return list->next). Vanilla tracks start on frame 0, so none changes; the Crystal
+        /// Gemron's fades start on its shatter, so only a dying Gemron writes the species' one material.</summary>
+        internal static void PatchMotionBeforeFirstKey(FileStream fs, Func<uint, long> ElfOff) =>
+            ReplaceWord(fs, ElfOff, 0x00147F3C, 0x00000000u, 0x06000237u, "MotionProc's nop after the weight test's mtc1");
+
         internal static void PatchSpeciesExtension(FileStream fs, Func<uint, long> ElfOff)
         {
+            PatchMotionBeforeFirstKey(fs, ElfOff);
             PatchBombConfigs(fs, ElfOff);
             PatchDataPageDefaults(fs, ElfOff);
             byte[] rows = SpeciesRows.Build(ti => Rd(fs, ElfOff((uint)EnemySpeciesTable.RecordAddress(ti)), EnemySpeciesTable.Stride));

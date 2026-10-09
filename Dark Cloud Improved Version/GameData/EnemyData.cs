@@ -2142,7 +2142,7 @@ namespace Dark_Cloud_Improved_Version
         // thrown-bomb model. Immune to every element. Randomizer-only — no vanilla spawn pool, so the stat normalizer treats it
         // as a Demon Shaft 81–99 native through HomeOf. Its shots and the death / self-destruct blast are BombGemron's.
         internal static readonly EnemyDefaults BombGemron = new EnemyDefaults {
-            Id=320, TableIndex=167, Name="Bomb Gemron", ModelCode="e167", ModelFootprint=67500,   // footprint estimated from the .chr's growth over e115a (334,944 → 352,032 B); measure with MeasureBufferMode
+            Id=320, TableIndex=167, Name="Bomb Gemron", ModelCode="e167", ModelFootprint=62955,   // measured on a floor of it alone (Gallery of Time 24, 2026-10-08)
             Abs=40, MinGoldDrop=20, DropChance=30, StealItemId=null, RareDropItemId=165,
             MaxHp=12500, DamageReduction=30, WeaponDefense=10, KnockbackMult=1.0f,
             Category=EnemyCategory.Dragon, FireRes=0, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,
@@ -2150,11 +2150,23 @@ namespace Dark_Cloud_Improved_Version
             HeightFromRoot=19.0f, BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
             MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150,150,150} };   // the Holy ball, then the death and self-destruct blasts (ModSpeciesBakes), in script order
 
+        // Crystal Gemron: Holy Gemron's rig, stats and script, its three gems replaced by the breaking crystal ball of the e209 event,
+        // which shatters through its death (CrystalGemronBake). Randomizer-only, like the Bomb Gemron.
+        internal static readonly EnemyDefaults CrystalGemron = new EnemyDefaults {
+            Id=321, TableIndex=168, Name="Crystal Gemron", ModelCode="e168", ModelFootprint=169171,   // measured on a floor of it alone (Gallery of Time 24, 2026-10-08)
+            Abs=100, MinGoldDrop=20, DropChance=30, StealItemId=null, RareDropItemId=165,
+            MaxHp=12500, DamageReduction=30, WeaponDefense=10, KnockbackMult=1.0f,
+            Category=EnemyCategory.Dragon, FireRes=50, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=0,
+            ItemDamageRes=70, ItemStatusRes=60,
+            HeightFromRoot=19.0f, BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
+            MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150} };
+
         /// <summary>Mod species with no vanilla spawn pool → the vanilla species whose home region they share. The stat
         /// normalizer gives them that home, so they are capped like a native of it when the randomizer places them lower.</summary>
         internal static readonly Dictionary<int, int> HomeOf = new()
         {
             { BombGemron.TableIndex.Value, GemronHoly.TableIndex.Value },
+            { CrystalGemron.TableIndex.Value, GemronHoly.TableIndex.Value },
         };
 
         // CUT ENEMY — no species table entry and no CHR model file (e53a.chr/e54a.chr absent).

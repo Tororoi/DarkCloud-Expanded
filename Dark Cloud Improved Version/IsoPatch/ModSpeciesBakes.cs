@@ -127,9 +127,11 @@ namespace Dark_Cloud_Improved_Version
         private const double DiscPull = 9.4;                                   // its pull toward the camera, constant (chosen on the preview page): clear of the bomb from the start
         private const float DiscMin = 0.001f;                                   // "none": a scale of 0 would zero the node's axes (the draw takes their inverse lengths)
         /// <summary>(frame, scale) on the one timeline: none until a fuse, full at its blast, gone the frame after — the death 105→122, the
-        /// self-destruct from its first frame (SelfDestructFuseStart → SelfDestructEnd − 1).</summary>
+        /// self-destruct from its first frame (SelfDestructFuseStart → SelfDestructEnd − 1). The last key lies past SelfDestructEnd: the
+        /// engine plays a track only between two of its keys (MotionProc skips it on its last key, and the node keeps whatever the last Bomb
+        /// Gemron drawn left in the species' shared frames), and the self-destruct holds on its end.</summary>
         private static readonly (uint frame, float scale)[] DiscKeys =
-            { (0, DiscMin), (105, DiscMin), (122, 1f), (123, DiscMin), (SelfDestructFuseStart, DiscMin), (SelfDestructEnd - 1, 1f), (SelfDestructEnd, DiscMin) };
+            { (0, DiscMin), (105, DiscMin), (122, 1f), (123, DiscMin), (SelfDestructFuseStart, DiscMin), (SelfDestructEnd - 1, 1f), (SelfDestructEnd, DiscMin), (SelfDestructEnd + 1, DiscMin) };
 
         /// <summary>The disc's texture size. GlowDisc builds it 64×64 (the torch routine's rect), but no picture in a monster's `IM2` bank is
         /// narrower than 128, the size the block order below is proven at, so the disc is doubled (nearest texel; the GS filters it).</summary>
@@ -255,7 +257,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     if (tr.Keyframes.Count > 0 && tr.Keyframes[^1].Frame >= SelfDestructStart) throw new IOException($"{name}: a track already reaches frame {tr.Keyframes[^1].Frame}");
                     var made = new List<MotKeyframe>();
-                    for (int f = SelfDestructStart; f <= SelfDestructEnd; f++)
+                    for (int f = SelfDestructStart; f <= SelfDestructEnd + 1; f++)   // a key past the end: the engine skips a track on its last key, and the self-destruct holds on its end
                     {
                         var (range, s) = PieceAt(f - SelfDestructStart);
                         int lo = Math.Min(range.from, range.to), hi = Math.Max(range.from, range.to);
@@ -645,7 +647,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Message <paramref name="id"/>'s text set in place: its index entry re-pointed at the end of the real text (the bank's
         /// trailing padding absorbs the words; the file keeps its size, so the pool it is carved into is unchanged). Null when the
         /// message already reads so.</summary>
-        private static byte[] SetText(byte[] mes, int id, ushort[] words)
+        internal static byte[] SetText(byte[] mes, int id, ushort[] words)
         {
             int cnt = IsoBytes.U16(mes, 0), idxEnd = 4 + cnt * 4, entry = -1;
             for (int i = 0; i < cnt; i++) if (IsoBytes.U16(mes, 4 + i * 4) == id) entry = 4 + i * 4;

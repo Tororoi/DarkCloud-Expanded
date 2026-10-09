@@ -18,10 +18,12 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The Bomb Gemron: Holy Gemron's record under the mod's model and script stems, every element resistance 0, its two
         /// shots the item-bomb shots of ElfSpeciesPatches.PatchBombConfigs — config 8 the thrown bomb, config 27 the death and
-        /// self-destruct blast.</summary>
-        internal static readonly (EnemyDefaults species, int template, string stem, ushort shot0, ushort shot1)[] Rows =
+        /// self-destruct blast. The Crystal Gemron: Holy Gemron's record under its stems, Holy Gemron's own shots (null keeps the
+        /// template's).</summary>
+        internal static readonly (EnemyDefaults species, int template, string stem, ushort? shot0, ushort? shot1)[] Rows =
         {
             (EnemySpecies.BombGemron, EnemySpecies.GemronHoly.TableIndex.Value, ModSpeciesBakes.BombGemronStem, 8, 27),
+            (EnemySpecies.CrystalGemron, EnemySpecies.GemronHoly.TableIndex.Value, CrystalGemronBake.Stem, null, null),
         };
 
         /// <summary>Every reserved row's bytes, the unused rows zero; <paramref name="template"/> reads a vanilla record by index.</summary>
@@ -51,7 +53,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The template record under the species' own names and EnemyData fields.</summary>
-        private static void Fill(byte[] row, EnemyDefaults e, string stem, ushort shot0, ushort shot1)
+        private static void Fill(byte[] row, EnemyDefaults e, string stem, ushort? shot0, ushort? shot1)
         {
             Array.Clear(row, 0, 0x50);                                                  // model_name[4][16] + script_name[16]
             Name(row, ModelName, stem); Name(row, ScriptName, stem);
@@ -62,7 +64,8 @@ namespace Dark_Cloud_Improved_Version
             U16(row, EnemySpeciesTable.HolyRes, e.HolyRes.Value);
             WrF(row, EnemySpeciesTable.EntityScale, e.EntityScale.Value);
             U16(row, EnemySpeciesTable.DamageReduction, e.DamageReduction.Value); U16(row, EnemySpeciesTable.WeaponDefense, e.WeaponDefense.Value);
-            U16(row, EnemySpeciesTable.PrimaryBstIndex, shot0); U16(row, EnemySpeciesTable.SecondaryBstIndex, shot1);
+            if (shot0 != null) U16(row, EnemySpeciesTable.PrimaryBstIndex, shot0.Value);
+            if (shot1 != null) U16(row, EnemySpeciesTable.SecondaryBstIndex, shot1.Value);
             U32(row, EnemySpeciesTable.Abs, (uint)e.Abs.Value); U32(row, EnemySpeciesTable.MinGoldDrop, (uint)e.MinGoldDrop.Value);
             U32(row, EnemySpeciesTable.DropChance, (uint)e.DropChance.Value);
             U16(row, EnemySpeciesTable.EnemySpeciesId, e.Id);

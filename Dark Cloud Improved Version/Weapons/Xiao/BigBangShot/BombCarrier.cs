@@ -64,11 +64,13 @@ namespace Dark_Cloud_Improved_Version
             if (_grafts.Count == 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the apple shot's trees already carry the bomb"); return; }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"the bomb's mesh grafted onto `{CarrierNode}` in {_grafts.Count} of the apple shot's trees ({roots.Count} trees: the template and the sub-shots) → visual 0x{bombVis:X}");
         }
+        private const int MaxTreeNodes = 512;                                           // the Crystal Gemron's tree, the biggest searched, has 296
+
         /// <summary>The node under <paramref name="root"/> (root included) named <paramref name="name"/>; 0 when none.</summary>
         internal static uint NodeNamed(uint root, string name)
         {
             var work = new Stack<uint>(); work.Push(root); int guard = 0;
-            while (work.Count > 0 && guard++ < 64)
+            while (work.Count > 0 && guard++ < MaxTreeNodes)
             {
                 uint n = work.Pop();
                 if (!Memory.IsValidGuest(n)) continue;

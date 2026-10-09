@@ -62,16 +62,24 @@ faded through material alpha. Only 46 of ~6000 effect meshes carry vertex colour
 
 ```
 TEX_ANIME <group>, <enabled>
-TEX_SCROLL_DATA "<dst tex>", x, y, w, h, "<src tex>", sx, sy, dx, dy, <short>, <flag>
+TEX_SCROLL_DATA "<src tex>", sx, sy, w, h, "<dst tex>", dx, dy, step x, step y, <duration>, <hold>
 TEX_ANIME_END
 ```
 
-`CommandTEX_SCROLL_DATA` (0x167FA0) registers a `CTexAnimeData`; `TexAnime` (0x167170) runs once per game frame
-(from character draws only: DrawMonstor, EdDrawCharacter, MainDraw — never from `Draw__12CSHOT_EFFECT`, so an effect
-fired as a shot shows its scroll static): it copies the source rectangle (sx, sy, w, h) of the source texture into the
-destination rectangle (x, y, w, h) of the destination texture with an accumulated offset (`+0x4C += dx`, `+0x50 += dy`,
-each wrapped into [0, w) / [0, h)), in up to four `MGMoveImage` pieces so the wrap is seamless. f_boll: the right half of
-its 256-wide texture is the left half scrolling up 4 texels a frame. The atlas does the same as a UV remap in the shader.
+`CommandTEX_SCROLL_DATA` (0x167FA0) registers a `CTexAnimeData` (kind 1): the FIRST texture and rectangle are the source, the
+second texture and corner the destination. `EnterTexAnime` (0x1679E0) flips both y values: the cfg counts from the texture's
+bottom, so a rectangle's top row is `height − y − h` (source: the source texture's height, destination: the destination's).
+`TexAnime` (0x167170) runs once per game frame (from character draws only: DrawMonstor, EdDrawCharacter, MainDraw — never from
+`Draw__12CSHOT_EFFECT`, so an effect fired as a shot shows its scroll static). For each record it takes the integer parts of its
+offsets (`ix = (int)+0x4C`, `iy = (int)+0x50`), copies the source rectangle into the destination in up to four `MGMoveImage`
+pieces so the wrap is seamless — `dest(u, v) = src((u + ix) mod w, (v + iy) mod h)` — and then adds the steps (`+0x44`, `+0x48`) to
+the offsets, wrapping each into [0, w) / [0, h). The shift moves in WHOLE texels: a step of 0.5 moves one texel every second frame.
+Several scrolls on one model sit in separate groups (`c23a`: `TEX_ANIME 0,1` … `TEX_ANIME 1,1` …).
+
+The ball of e209 (`"ball_b01",0,32,128,32,"ball_b01",0,0,0.5,0.5`): rows 64–96 of ball_b01 hold an untouched copy of a tileable
+streak band; it is copied, scrolling diagonally, onto rows 96–128, which the ball's shells draw. The model viewer
+(`viewer_template.html`, `setScroll`) follows these rules; the effects atlas predates them (it reads the two textures the other way
+round, without the flip, and slides by fractions of a texel).
 
 ## Playback
 

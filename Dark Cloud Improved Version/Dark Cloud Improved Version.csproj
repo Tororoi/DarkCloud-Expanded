@@ -37,8 +37,14 @@
     <EmbeddedResource Include="Resources\isoPatch\bombGemronLook.json">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.bombGemronLook.json</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\crystalGemronLook.json">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.crystalGemronLook.json</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\bombTint.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.bombTint.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\eyeTint.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.eyeTint.bin</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\bombRadius.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.bombRadius.bin</LogicalName>

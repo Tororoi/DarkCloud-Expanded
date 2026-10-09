@@ -75,6 +75,7 @@ STUBS = [
     ('bomb_radius.s',            'bombRadius.bin',           0x10A880),    # main ELF: the dead sceCdGetToc body after the blow direction (ElfSpeciesPatches.PatchBombRadius): a shot config's own blast radius
     ('fuse_capture.s',           'fuseCapture.bin',          0x10A910),    # main ELF: the dead sceCdGetToc body after the blast radius (ElfSpeciesPatches.PatchFuseCapture): each Bomb Gemron's wick, captured in the monster draw
     ('bomb_tint.s',              'bombTint.bin',             0x10A1D0),    # main ELF: the dead sceCdReadChain body (ElfSpeciesPatches.PatchBombTint): the Bomb Gemron's big bomb reddens as its fuse burns
+    ('eye_tint.s',               'eyeTint.bin',              0x10A2D0),    # main ELF: the dead sceCdReadChain body after bomb_tint (ElfSpeciesPatches.PatchEyeTint): the Crystal Gemron's eyes tinted white
     ('element_menu.s',           'elementMenu.bin',          0x22B410, 'elementMenuTail.bin', 0x22B5B8),
     ('element_menu_ruby.s',      'elementMenuRuby.bin',      0x27D270),    # main ELF: dead SmoothRest body after the bait keep (ElfElementMenuPatches): Ruby's shot effect reloaded when the picker closes on her   # main ELF: dead DebugItemGetKey tail (hooks) + DebugItemGetDraw body (sheet name, draw, cell test) — the quick-change menu as element picker (ElfElementMenuPatches)    # main ELF: dead SmoothRest body after the camera-height cave (ElfFishingPatches.PatchBaitKeep): the Poisonous Apple stays on the hook
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),

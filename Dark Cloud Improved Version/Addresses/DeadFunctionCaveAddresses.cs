@@ -196,6 +196,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/bomb_tint.s (ElfSpeciesPatches.PatchBombTint): the Bomb Gemron's big bomb reddening as its fuse burns,
         /// reached only through the private vtable BombGemron gives the bomb's visual (two entries: +0 the uint* DrawVu1, +0xC the packet one).</summary>
         internal const uint BombTint = Host;   // 244 B → 0x10A2C4
+        /// <summary>tools/stubs/eye_tint.s (ElfSpeciesPatches.PatchEyeTint): the Crystal Gemron's eyes tinted white, reached only through
+        /// the private vtable CrystalGemron gives the eyes' visual (two entries: +0 the uint* DrawVu1, +0xC the packet one).</summary>
+        internal const uint EyeTint = Host + 0x100;
         internal const uint End = Host + HostSpan;
     }
 

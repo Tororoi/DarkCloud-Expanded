@@ -338,7 +338,13 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The bomb visual's private vtable: its class vtable with slots 6/7 at DeadCdCave.BombTint (BombGemron).</summary>
         internal const long BombTintVtable      = 0x21FAF7A0;   // 32 B → 0x21FAF7C0
         internal const uint BombTintVtableGuest = 0x01FAF7A0;
-        // 0x21FAF7C0..0x21FAF830 FREE
+        /// <summary>The stock DrawVu1 targets of the Crystal Gemron's eyes' visual (slot 6, slot 7), which tools/stubs/eye_tint.s calls
+        /// after tinting the ambient; written by CrystalGemron before it swaps the visual's vtable.</summary>
+        internal const long EyeTintStock      = 0x21FAF7C0;   // 2 words → 0x21FAF7C8
+        /// <summary>The eyes' visual's private vtable: its class vtable with slots 6/7 at DeadChainCave.EyeTint (CrystalGemron).</summary>
+        internal const long EyeTintVtable      = 0x21FAF7D0;   // 32 B → 0x21FAF7F0
+        internal const uint EyeTintVtableGuest = 0x01FAF7D0;
+        // 0x21FAF7F0..0x21FAF830 FREE
 
         /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
         /// <c>ElfToanMeleePatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's
