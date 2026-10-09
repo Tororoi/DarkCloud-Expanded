@@ -28,6 +28,8 @@ namespace Dark_Cloud_Improved_Version
         internal const uint VanillaBankBase = 0x00998840;
         /// <summary>The two messages the mod rewrites: its own dungeon notice, and the floor-clear/last-enemy slot.</summary>
         internal const int CustomId = 10, FloorClearId = 3319;
+        /// <summary>An enemy's name is message NameBase + its species id (the record's name_no).</summary>
+        internal const int NameBase = 3000;
 
         private static uint _bank;                  // the bank pointer the index below came from (0 = nothing cached)
         private static ushort[] _ids, _offs;

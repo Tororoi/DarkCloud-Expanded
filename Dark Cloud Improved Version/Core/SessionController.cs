@@ -27,6 +27,7 @@ namespace Dark_Cloud_Improved_Version
             WeaponBalance.Apply();
             Shop.UpdateShopPrices();
             Enemies.EnableEnemyDrops();   // let the "can't drop" species (flyers, Gol/Sil) drop on death (static species-table patch)
+            SpeciesRows.Ensure();         // the mod's species records (Bomb Gemron) in place past the vanilla table
             WeaponDescriptions.StartDescriptionPatcher();   // keep weapon menu descriptions = WeaponData.ModDescription
             MachoSword.ApplyAbsCodePatches();   // ABS rollover display patches (EE code; menu/HUD code is still cold here)
             TargetRedirectCaves.ArmColdPatch();   // the enemy target redirect: clean _GET_POSITION + _GET_DISTANCE copies in cold-PINE caves, reading the per-slot target table (AggroTable)

@@ -51,7 +51,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/spear_block.s (ElfWeaponPatches.PatchSpearBlock): Step__12CMonstorUnit's `jal MoveChecMonster` (main
         /// 0x1DE344) lands here — the engine's enemy-versus-enemy block, then the same test against CodeCaves.SpearBlock's sphere
         /// while it is armed: a unit heading into it is turned along it at the same speed, sliding round (Babel's risen spear is solid).</summary>
-        internal const uint SpearBlock       = Host + 0x870;  // 0x1B5030, 392 B → 0x1B51B8
+        internal const uint SpearBlock       = Host + 0x870;  // 0x1B5030, 400 B → 0x1B51C0 (NoDrainLanded's start: full)
         /// <summary>ElfDamagePatches.PatchUngagaNoDrain: CheckDmg's two weapon-HP drain calls (main 0x1DB388 for a landed hit,
         /// 0x1DAE94 for a guarded one) land here. An entry of Ungaga's (owner 4) planted by his charge EFFECT (class word +0x38
         /// non-zero — his swings plant 0) or marked by the mod (+0x9C == CodeCaves.NoDrainMark: Babel's spikes) bills nothing;
@@ -61,11 +61,11 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/player_spear_block.s (ElfWeaponPatches.PatchSpearBlock, hooked by DunPatches): the player's move's two
         /// `jal MoveCheck__12CMonstorUnitFPfPfi` (dun 0x1DB39AC / 0x1DB3E58) land here — the engine's player-versus-enemy block,
         /// then CodeCaves.SpearBlock's sphere while it is armed: velocity into the column is dropped, the part along it kept.</summary>
-        internal const uint PlayerSpearBlock = Host + 0xAA0;  // 0x1B5260, 232 B → 0x1B5348
+        internal const uint PlayerSpearBlock = Host + 0xAA0;  // 0x1B5260, 240 B → 0x1B5350 (ShotSpearBlock's start: full)
         /// <summary>tools/stubs/shot_spear_block.s (ElfWeaponPatches.PatchSpearBlock): Step__12CSHOT_EFFECT's `jal checkCollision`
         /// (main 0x1AC3E8) lands here — the engine's test, then, for a shot that is not the player's (victim mask ≠ 2) and met
         /// nothing, CodeCaves.SpearBlock's column (floor − 2 … top): a wall hit where the shot stands.</summary>
-        internal const uint ShotSpearBlock   = Host + 0xB90;  // 0x1B5350, 268 B → 0x1B545C
+        internal const uint ShotSpearBlock   = Host + 0xB90;  // 0x1B5350, 272 B → 0x1B5460 (RockShadow's start: full)
         /// <summary>tools/stubs/rock_shadow.s (ElfWeaponPatches.PatchRockShadow, hooked by DunPatches): Draw_MainUnitShadow's
         /// `jal MGEndDrawShadow` (dun 0x1DADDD4) lands here — one extra MGDrawShadowFast for the frame CodeCaves.RockShadow names
         /// while its flag is set (the Terra Sword's boulder), then the displaced call.</summary>
@@ -174,6 +174,72 @@ namespace Dark_Cloud_Improved_Version
 
     /// <summary>The dead <c>SmoothRest</c> body (262 zero words from 0x27D084, in the main ELF): the camera-height cave takes its head
     /// (ElfCameraPatches, 0x27D090, 408 B → 0x27D228), the rest is free zero words up to 0x27D49C.</summary>
+    /// <summary>The body of <c>sceCdGetToc</c> (656 B from 0x10A7D8, main ELF): a libcdvd routine the game links but never calls — no jal, j,
+    /// stored pointer or lui/addiu pair reaches it, in the ELF or the dungeon overlay.</summary>
+    internal static class DeadCdCave
+    {
+        internal const uint Host = 0x0010A7D8, HostSpan = 656, VanillaWord0 = 0x27BDFF80;   // `addiu sp,sp,-0x80`
+        /// <summary>tools/stubs/blow_dir.s (ElfSpeciesPatches.PatchBlowDir): an item bomb's knockdown thrown away from its blast.</summary>
+        internal const uint BlowDir = Host;   // 160 B → 0x10A878
+        /// <summary>tools/stubs/bomb_radius.s (ElfSpeciesPatches.PatchBombRadius): a shot config's own blast radius and ring.</summary>
+        internal const uint BombRadius = Host + 0xA8;   // 0x10A880, 144 B → 0x10A910
+        /// <summary>tools/stubs/fuse_capture.s (ElfSpeciesPatches.PatchFuseCapture): each Bomb Gemron's wick, captured in the monster draw.</summary>
+        internal const uint FuseCapture = Host + 0x138;   // 0x10A910, 136 B → 0x10A998
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead body of sceCdReadChain: nothing in the ELF, the dungeon overlay or the title overlay calls it, jumps to it or
+    /// holds its address (its one occurrence is the symbol table's).</summary>
+    internal static class DeadChainCave
+    {
+        internal const uint Host = 0x0010A1D0, HostSpan = 0x2F0, VanillaWord0 = 0x27BDFF50;   // `addiu sp,sp,-0xB0`
+        /// <summary>tools/stubs/bomb_tint.s (ElfSpeciesPatches.PatchBombTint): the Bomb Gemron's big bomb reddening as its fuse burns,
+        /// reached only through the private vtable BombGemron gives the bomb's visual (two entries: +0 the uint* DrawVu1, +0xC the packet one).</summary>
+        internal const uint BombTint = Host;   // 244 B → 0x10A2C4
+        /// <summary>tools/stubs/freeze_break.s (ElfDamagePatches.PatchFreezeBreak): a hit breaks the player's freeze — BtCheckDamageProc's
+        /// one StatusErrCheck call (dun 0x1DBB1F4, DunPatches) comes here.</summary>
+        internal const uint FreezeBreak = Host + 0x190;   // 0x10A360, 96 B → 0x10A3C0 (0x10A2D0–0x10A360 before it is free)
+        /// <summary>tools/stubs/eye_tint.s (ElfSpeciesPatches.PatchEyeTint): the Crystal Gemron's eyes tinted, reached only through
+        /// the private vtable CrystalGemron gives the eyes' visual (two entries: +0 the uint* DrawVu1, +0xC the packet one).</summary>
+        internal const uint EyeTint = Host + 0x1F0;   // 0x10A3C0, 156 B → 0x10A45C
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The body of <c>sceIoctl</c> (576 B from 0x118648, main ELF): a library routine the game links but never calls — no jal, j,
+    /// stored pointer or lui/addiu|ori pair reaches it, in the ELF or the dungeon or title overlay. ElfSpeciesPatches.PatchIceArrowConfig
+    /// turns its first two words into `jr ra; li v0,0`. Nothing writes it at runtime.</summary>
+    internal static class DeadIoctlCave
+    {
+        internal const uint Host = 0x00118648, HostSpan = 576, VanillaWord0 = 0x27BDFF70;   // `addiu sp,sp,-0x90`
+        /// <summary>The Crystal Gemron's ice-arrow shot config (BT_SHOT_EFFECT, 0x70 B), shot config table entry 34.</summary>
+        internal const uint IceArrowConfig = Host + 0x8;   // 0x118650, 0x70 B → 0x1186C0
+        /// <summary>Its ice-prison shot config (the kori), shot config table entry 35.</summary>
+        internal const uint IcePrisonConfig = IceArrowConfig + 0x70;   // 0x1186C0, 0x70 B → 0x118730
+        /// <summary>tools/stubs/crystal_prison.s: Frozen (+0), Standing (+8), Prison (+0x10) — crystal_shots.s calls them.</summary>
+        internal const uint CrystalPrison = IcePrisonConfig + 0x70;    // 0x118730, 260 B → 0x118834
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The body of <c>sceCdDiskReady</c> (504 B from 0x10B2F8, main ELF): never reached, as <see cref="DeadIoctlCave"/>.
+    /// ElfSpeciesPatches.PatchCrystalShots turns its first two words into `jr ra; li v0,0`.</summary>
+    internal static class DeadDiskReadyCave
+    {
+        internal const uint Host = 0x0010B2F8, HostSpan = 504, VanillaWord0 = 0x27BDFF60;   // `addiu sp,sp,-0xA0`
+        /// <summary>tools/stubs/crystal_home.s: one flying ice arrow turned towards the player.</summary>
+        internal const uint CrystalHome = Host + 0x8;   // 0x10B300, 420 B → 0x10B4A4
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The body of <c>sceCdApplyNCmd</c> (512 B from 0x10BBC8, main ELF): never reached, as <see cref="DeadIoctlCave"/>.
+    /// ElfSpeciesPatches.PatchCrystalShots turns its first two words into `jr ra; li v0,0`.</summary>
+    internal static class DeadApplyNCmdCave
+    {
+        internal const uint Host = 0x0010BBC8, HostSpan = 512, VanillaWord0 = 0x27BDFF50;   // `addiu sp,sp,-0xB0`
+        /// <summary>tools/stubs/crystal_shots.s: the Crystal Gemron's shots driven before each monster-pack object's step.</summary>
+        internal const uint CrystalShots = Host + 0x8;   // 0x10BBD0, 492 B → 0x10BDBC
+        internal const uint End = Host + HostSpan;
+    }
+
     internal static class SmoothRestCave
     {
         internal const uint Host         = 0x0027D084;
@@ -184,6 +250,13 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/element_menu_ruby.s (ElfElementMenuPatches): the element picker's close cave jumps here when the leader
         /// is Ruby — her shot effect reloaded for the new element, then MenuTextureReload as the hooked call would have been.</summary>
         internal const uint ElementMenuRuby = 0x0027D270;   // 136 B → 0x27D2F8
+        /// <summary>tools/stubs/species_lookup.s (ElfSpeciesPatches): SetupBaseModel's `&MonstorTable[model_no]` goes through here;
+        /// an index past the 167 vanilla rows resolves into CodeCaves.SpeciesRows (a data page: this one holds executed code, and a
+        /// PINE write into it kills PCSX2).</summary>
+        internal const uint SpeciesLookup = 0x0027D2F8;   // 32 B → 0x27D318
+        /// <summary>tools/stubs/flash_slot.s (ElfSpeciesPatches.PatchFlashSlot): the machine-gun hit flash's size and alpha per slot, and a
+        /// pinned slot's whole spark (alight, cells, burst requests, the blast cutoff, the bone placement), timed in game frames.</summary>
+        internal const uint FlashSlot     = 0x0027D320;   // 316 B → 0x27D45C
         internal const uint End          = 0x0027D49C;
     }
 }

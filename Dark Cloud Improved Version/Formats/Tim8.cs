@@ -92,6 +92,25 @@ namespace Dark_Cloud_Improved_Version
             return blockLoc + colLoc + bn;
         }
 
+        /// <summary>Row-major 8-bit pixels into the GS's PSMT8 block order — what an `IM2` bank's pictures hold (<see cref="Unswizzle8"/>
+        /// undone).</summary>
+        internal static byte[] Swizzle8(byte[] rowMajor, int w, int h)
+        {
+            var outp = new byte[w * h];
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) outp[BlockOffset(x, y, w)] = rowMajor[y * w + x];
+            return outp;
+        }
+
+        /// <summary>An 8-bit TIM2 whose picture is row-major, its picture swizzled into the GS block order (what an `IM2` bank's pictures
+        /// hold: the engine uploads them as they are, so row-major pixels would land in the wrong blocks).</summary>
+        internal static byte[] Swizzled(byte[] tim)
+        {
+            var (_, hdr, w, h) = PictureInfo(tim);
+            byte[] o = (byte[])tim.Clone();
+            Swizzle8(tim.AsSpan(Pic + hdr, w * h).ToArray(), w, h).CopyTo(o, Pic + hdr);
+            return o;
+        }
+
         /// <summary>PSMT8 pixels from the GS's block order to row-major (a source byte past the data is left 0).</summary>
         internal static byte[] Unswizzle8(byte[] data, int w, int h)
         {

@@ -251,7 +251,7 @@ namespace Dark_Cloud_Improved_Version
         private static void PatchBstDefault(int slot, int tableIndex, float factor)
         {
             if (tableIndex < 0) return;
-            int idx = Memory.ReadUShort(EnemySpeciesTable.TableBase + (long)tableIndex * EnemySpeciesTable.Stride + EnemySpeciesTable.PrimaryBstIndex);
+            int idx = Memory.ReadUShort(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.PrimaryBstIndex);
             if (idx == 0xFFFF) return;
             int btNative = Memory.ReadInt(BehaviorScriptTable.PointerArray + idx * 4);
             if (btNative == 0) return;

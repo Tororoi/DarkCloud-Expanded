@@ -265,15 +265,15 @@ namespace Dark_Cloud_Improved_Version
         /// a floor needs; SharedShots seeds and reads it): +0x00 "SHRE" (mod; without it a refused config is only skipped when it
         /// fires), +0x04 the cave's frame counter, +0x08 disc entries, +0x0C restores, +0x10 skipped fires, +0x14 no room, +0x18 /
         /// +0x1C the monster-pool headroom an entry needs for two / six sub-shots, units of 16 B (mod; 0 = the cave's 24,000 /
-        /// 48,000), +0x20 five stamps (the frame a slot last fired), +0x40 the config table (34 × {image store, mark}), +0x150 the
-        /// event ring (16 × {kind, slot, config in, config out — bytes; frame; data units}), +0x250 its write index, +0x260 the
-        /// allocator handed to the entry. Runtime data on a runtime-data page.</summary>
+        /// 48,000), +0x20 five stamps (the frame a slot last fired), +0x40 the config table (36 × {image store, mark}: the game's 34
+        /// and the mod's, ShotEffectPack.CfgCount), +0x160 the event ring (16 × {kind, slot, config in, config out — bytes; frame;
+        /// data units}), +0x260 its write index, +0x270 the allocator handed to the entry. Runtime data on a runtime-data page.</summary>
         internal const long SharedShotBlock      = 0x21FAF200;
         internal const uint SharedShotBlockGuest = 0x01FAF200;
         internal const uint SharedShotMagic      = 0x45524853;   // "SHRE"
         internal const int  SharedShotFrame = 0x04, SharedShotEntries = 0x08, SharedShotRestores = 0x0C, SharedShotSkips = 0x10, SharedShotNoRoom = 0x14,
-                            SharedShotNeed2 = 0x18, SharedShotNeed6 = 0x1C, SharedShotStamps = 0x20, SharedShotCfgTable = 0x40, SharedShotRing = 0x150,
-                            SharedShotRingCount = 16, SharedShotRingIndex = 0x250, SharedShotAlloc = 0x260, SharedShotBlockSize = 0x270;
+                            SharedShotNeed2 = 0x18, SharedShotNeed6 = 0x1C, SharedShotStamps = 0x20, SharedShotCfgTable = 0x40, SharedShotRing = 0x160,
+                            SharedShotRingCount = 16, SharedShotRingIndex = 0x260, SharedShotAlloc = 0x270, SharedShotBlockSize = 0x280;
 
         // ── LockOnFactorTable: the per-character lock-on reach factors (0x21FAF480, 0x24 B) ──
         /// <summary>The lock-on reach factor per character (DunPatches: SetNearLockOnTarget and setTargetCursor read their
@@ -302,7 +302,52 @@ namespace Dark_Cloud_Improved_Version
         /// the elements the ring offers, in ring order.</summary>
         internal const long ElementMenuMode = 0x21FAF4E0, ElementMenuPick = 0x21FAF4E4, ElementMenuTex = 0x21FAF4E8, ElementMenuMap = 0x21FAF4EC;
         internal const uint ElementMenuModeGuest = 0x01FAF4E0;
-        // 0x21FAF500..0x21FAF830 FREE
+        /// <summary>The species table's extension rows (EnemySpeciesTable.ExtensionBase): 2 × 0x9C, index 167 first, baked by
+        /// ElfSpeciesPatches (this page is the front of the ELF's cave segment, ElfCave.DataPageStart) and reached by the
+        /// species-lookup stub. Data the mod may write (a roster's MonsterType, a record snapshot), so a data page — never beside
+        /// executed cave code.</summary>
+        internal const long SpeciesRows      = 0x21FAF500;   // 312 B → 0x21FAF638
+        internal const uint SpeciesRowsGuest = 0x01FAF500;
+        internal const int  SpeciesRowCount  = 2;
+        /// <summary>The machine-gun hit flash's size per slot (CHIT_MACHINGUN_EFFECT, 16 slots): Draw reads entry i for slot i through
+        /// SmoothRestCave.FlashSlot. Baked 5.0 each (the engine's constant — Osmond's flashes); a driver of a slot writes its own and
+        /// puts 5.0 back when it lets the slot go (BombGemron's fuse, 3.0).</summary>
+        internal const long FlashSizeTable      = 0x21FAF640;   // 16 floats → 0x21FAF680
+        internal const uint FlashSizeTableGuest = 0x01FAF640;
+        internal const float FlashSizeVanilla   = 5f;
+        /// <summary>The machine-gun hit flash's pin for slots 12–15 (the Bomb Gemron's fuse), 4 × 0x20, entry (slot − 12): +0 the CFrame
+        /// (guest; 0 = not pinned), +4 the unit's model block (guest, ModelScaleOffsets: its playing motion and frame), +8 frames pinned
+        /// (the cave's), +0xC bursts asked for (the cave's: one every 30 frames), +0x10 the point x, y, z in the frame's space (the app's).
+        /// The flash's draw (SmoothRestCave.FlashSlot) keeps a pinned slot alight, steps its cells, places it through the frame's world
+        /// matrix every frame, and puts it out — clearing +0 — once the unit's death motion passes its blast frame.</summary>
+        internal const long FlashPinTable      = 0x21FAF680;   // 0x80 B → 0x21FAF700
+        internal const int  FlashPinFirstSlot = 12, FlashPinStride = 0x20, FlashPinFrame = 0x0, FlashPinModel = 0x4, FlashPinFrames = 0x8,
+                            FlashPinBursts = 0xC, FlashPinPoint = 0x10;
+        /// <summary>The machine-gun hit flash's alpha per slot, 16 bytes (Draw's set3DCellModel alpha through SmoothRestCave.FlashSlot):
+        /// baked 0x80 (the engine's constant — Osmond's flashes); lower is fainter in the additive effects pass.</summary>
+        internal const long FlashAlphaTable    = 0x21FAF700;   // 16 B → 0x21FAF710
+        internal const byte FlashAlphaVanilla  = 0x80;
+        /// <summary>Each pinned flash's wick in world space as the monster draw captured it for its unit (tools/stubs/fuse_capture.s), one
+        /// per pin at FlashPinTable + 0x90 + pin × 0x20: x, y, z, then the pin's frame count it was taken on (the flash shows only a
+        /// capture from this frame). 16 B used of each 0x20.</summary>
+        internal const long FlashCapture       = 0x21FAF710;   // 4 × 0x20 → 0x21FAF790
+        internal const int  FlashCaptureStamp  = 0xC;
+        /// <summary>The stock DrawVu1 targets of the Bomb Gemron's bomb visual (slot 6, slot 7), which tools/stubs/bomb_tint.s calls
+        /// after reddening the ambient; written by BombGemron before it swaps the visual's vtable.</summary>
+        internal const long BombTintStock      = 0x21FAF790;   // 2 words → 0x21FAF798
+        /// <summary>The bomb visual's private vtable: its class vtable with slots 6/7 at DeadCdCave.BombTint (BombGemron).</summary>
+        internal const long BombTintVtable      = 0x21FAF7A0;   // 32 B → 0x21FAF7C0
+        internal const uint BombTintVtableGuest = 0x01FAF7A0;
+        /// <summary>The stock DrawVu1 targets of the Crystal Gemron's eyes' visual (slot 6, slot 7), which tools/stubs/eye_tint.s calls
+        /// after tinting the ambient; written by CrystalGemron before it swaps the visual's vtable.</summary>
+        internal const long EyeTintStock      = 0x21FAF7C0;   // 2 words → 0x21FAF7C8
+        /// <summary>The eyes' visual's private vtable: its class vtable with slots 6/7 at DeadChainCave.EyeTint (CrystalGemron).</summary>
+        internal const long EyeTintVtable      = 0x21FAF7D0;   // 32 B → 0x21FAF7F0
+        internal const uint EyeTintVtableGuest = 0x01FAF7D0;
+        /// <summary>A byte per monster-pack sub-shot: 1 once an ice arrow in its impact has asked its Gemron for the ice prison
+        /// (tools/stubs/crystal_shots.s), 0 outside the impact. Written natively.</summary>
+        internal const long IceArrowFired      = 0x21FAF7F0;   // 8 B → 0x21FAF7F8
+        // 0x21FAF7F8..0x21FAF830 FREE
 
         /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
         /// <c>ElfToanMeleePatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's

@@ -152,6 +152,9 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
             }
+            // Mod species have no pool of their own: each takes the home of the vanilla species it stands beside.
+            foreach (var kv in EnemySpecies.HomeOf)
+                if (!_homeRegion.ContainsKey(kv.Key) && _homeRegion.TryGetValue(kv.Value, out int home)) _homeRegion[kv.Key] = home;
         }
 
         // Per region and stat: the mean over the region's floor enemies, and the running maximum over this region and

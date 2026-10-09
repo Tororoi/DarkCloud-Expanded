@@ -171,9 +171,15 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CfgRadiusMuzzle = 0x28, CfgRadiusImpact = 0x30, CfgRadiusExpire = 0x34;
         internal const int  OffWepFlags = 0xA030;   // + i*4 — SetWepStatus: the weapon's ability flags → entry +0x6C
         internal const int  OffAntiPtr  = 0xA090;   // + i*4 — SetVsMonster: → the weapon's anti-category bytes → entry +0x64
-        /// <summary>The 34 BT_SHOT_EFFECT configs (0x70 B each, the effect's file name at +0) the species rows index.</summary>
+        /// <summary>The BT_SHOT_EFFECT configs (0x70 B each, the effect's file name at +0) the species rows index: the game's 34, then
+        /// the mod's in the table's two spare entries before the species table — <see cref="IceArrowConfig"/> and <see cref="IcePrisonConfig"/>
+        /// (ElfSpeciesPatches.PatchIceArrowConfig).</summary>
         internal const long CfgTable   = 0x2027FA70;
-        internal const int  CfgCount   = 34;
+        internal const int  CfgCount   = 36;
+        /// <summary>The Crystal Gemron's ice arrow: the Ice Queen's korinoya fired as a shot.</summary>
+        internal const int  IceArrowConfig = 34;
+        /// <summary>Its ice prison: the Ice Queen's kori, fired at the player's feet when an arrow freezes him (tools/stubs/crystal_shots.s).</summary>
+        internal const int  IcePrisonConfig = 35;
         internal const int  CfgSize    = 0x70;
         internal const int  CfgVictimMask = 0x48;   // 1 = hurts the player, 2 = hurts enemies
         /// <summary>The hit REACTION the shot's entry carries (→ entry +0x4C): 2 guardable knockback, 3 unguardable

@@ -49,7 +49,6 @@ namespace Dark_Cloud_Improved_Version
         static bool sidequestOptionFlag = false;
         static bool itsfinishedOptionFlag = false;
         static bool isSideQuestDialogueActive = false;
-        static bool _prevL3 = false;
         static int _prevButtonRead = 0;
         static bool currentlyInShop = false;
         static bool shopDataCleared = false;
@@ -633,10 +632,7 @@ namespace Dark_Cloud_Improved_Version
             AllySwitch.TickLocationChange();
 
             int buttonRead = Memory.ReadInt(0x21CBC544);
-            bool l3Down = (buttonRead & 512) != 0;
-            if (l3Down && !_prevL3) FishDataFarmer.Toggle();
-            _prevL3 = l3Down;
-            if (buttonRead != _prevButtonRead && !FishDataFarmer.IsPressingButton)
+            if (buttonRead != _prevButtonRead)
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Input] Player buttons: {FormatButtons(buttonRead)}");
             _prevButtonRead = buttonRead;
 

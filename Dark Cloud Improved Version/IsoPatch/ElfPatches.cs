@@ -58,21 +58,23 @@ namespace Dark_Cloud_Improved_Version
             long elfIso = (long)elf.Ext * SectorBytes;
             byte[] eh = Rd(fs, elfIso, 0x34);
             uint phoff = U32(eh, 0x1c); ushort phent = BitConverter.ToUInt16(eh, 0x2a), phnum = BitConverter.ToUInt16(eh, 0x2c);
-            long pOff = -1, pVa = -1;
+            long pOff = -1, pVa = -1, pFsz = 0;
             for (int i = 0; i < phnum; i++)
             {
                 byte[] ph = Rd(fs, elfIso + phoff + i * phent, 24);
                 uint typ = U32(ph, 0), off = U32(ph, 4), va = U32(ph, 8), fsz = U32(ph, 16);
-                if (typ == 1 && fsz > 0 && va <= DetourVa && DetourVa < va + fsz) { pOff = off; pVa = va; break; }
+                if (typ == 1 && fsz > 0 && va <= DetourVa && DetourVa < va + fsz) { pOff = off; pVa = va; pFsz = fsz; break; }
             }
             if (pOff < 0) throw new IOException("No PT_LOAD covers the patch site — wrong ISO/version.");
             // va → ISO file offset. Two segments: the mod's own cave segment (the hijacked phdr3, guest
             // [ElfCave.RegionStart, ElfCave.RegionEnd) ↔ file [SegmentFileOff, +size)), else the main
             // phdr0 linear map. HijackPhdr3CaveSegment (below) creates the former BEFORE any cave write.
             long ElfOff(uint va) =>
-                (va >= ElfCave.RegionStart && va < ElfCave.RegionEnd)
-                    ? elfIso + ElfCave.SegmentFileOff + (va - ElfCave.RegionStart)
-                    : elfIso + pOff + (va - pVa);
+                (va >= ElfCave.DataPageStart && va < ElfCave.RegionEnd)
+                    ? elfIso + ElfCave.DataPageFileOff + (va - ElfCave.DataPageStart)
+                    : (va >= pVa && va < pVa + pFsz)
+                        ? elfIso + pOff + (va - pVa)
+                        : throw new IOException($"0x{va:X8} is outside the ELF image (0x{pVa:X}..0x{pVa + pFsz:X}) and the cave segment — not a bakeable address");
 
             // Create the cave segment FIRST — every ElfCave-targeted write below lands in its file span.
             HijackPhdr3CaveSegment(fs, elfIso, phoff, phent, phnum, elf.Size);
@@ -115,6 +117,7 @@ namespace Dark_Cloud_Improved_Version
             PatchGuardCrush(fs, ElfOff);                  // crush-marked hits pass every guard window (hooked in front of the cat's cave)
             PatchGuardMask(fs, ElfOff);                   // …and its second link: the guard windows the mod switches off per enemy (GuardGate)
             PatchSetClearsMark(fs, ElfOff);               // …and every entry the engine makes starts unmarked (a reused entry kept the cat's crush mark)
+            PatchFreezeBreak(fs, ElfOff);                 // a hit breaks the player's freeze (with DunPatches' hook)
             PatchConfuseAbility(fs, ElfOff);              // the Confuse weapon ability: shown in the status window, native to Babel's Spear
             PatchCatCapeTint(fs, ElfOff);                 // Divine Beast cat: the Super Steve cape draws under its own ambient, not the cat's
             PatchCatMaskTint(fs, ElfOff);                 // …and its mask does too, reached through a private vtable rather than a hook
@@ -155,6 +158,13 @@ namespace Dark_Cloud_Improved_Version
             PatchSuperSteveIconDraw(fs, ElfOff);          // Super Steve: the attached sphere's weapon icon over Steve on the dungeon HUD (dun.bin hooks in DunPatches)
             PatchCatGlowPalette(fs, ElfOff);              // … and the cave that paints one of them into the 8-bit glow disc
             PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
+            ElfSpeciesPatches.PatchSpeciesExtension(fs, ElfOff);  // the mod's species records (Bomb Gemron) in the segment's data page, reached through the species-lookup stub
+            ElfSpeciesPatches.PatchBlowDir(fs, ElfOff);            // an item bomb throws the player away from its blast (the dun hooks are in DunPatches)
+            ElfSpeciesPatches.PatchBombRadius(fs, ElfOff);         // a shot config's own blast radius and ring (the Bomb Gemron's death blast: 50 at scale 2)
+            ElfSpeciesPatches.PatchFuseCapture(fs, ElfOff);        // each Bomb Gemron's wick captured in the monster draw (the species shares one frame tree)
+            ElfSpeciesPatches.PatchEyeTint(fs, ElfOff);            // the Crystal Gemron's eyes tinted (entered through its eyes' visual's private vtable)
+            ElfSpeciesPatches.PatchBombTint(fs, ElfOff);           // the Bomb Gemron's big bomb reddening as its fuse burns (entered through its visual's private vtable)
+            ElfSpeciesPatches.PatchFlashSlot(fs, ElfOff);          // the machine-gun hit flash's size and alpha per slot (5.0 / 0x80 baked) and the Bomb Gemron's fuse spark, frame-timed in the draw
             PatchXiaoBuildUp(fs, ElfOff);                 // Xiao's build-up tree: Hardshooter → Double Impact only, Double Impact → Matador only
             PatchFishingPrizeSlingshot(fs, ElfOff);       // the fishing prize exchange sells the Flamingo for 1000 FP (vanilla: the Matador for 1400)
             PatchMapCarveRemainder(fs, ElfOff);           // the monster pool = the (grown) map carve minus the floor's map data (DunPatches grows the carve)
@@ -172,7 +182,7 @@ namespace Dark_Cloud_Improved_Version
         // ── The ELF cave SEGMENT: hijack the degenerate phdr3 into a real PT_LOAD ────────────────────
         // SCUS_971.11 ships 4 program headers; phdr3 is a DEGENERATE placeholder (PT_LOAD, filesz=0,
         // MEMSZ=0 — it loads and reserves nothing). Rewrite it to load file span
-        // [ElfCave.SegmentFileOff, +0x4000) at guest [ElfCave.RegionStart, RegionEnd): that file span is
+        // [ElfCave.DataPageFileOff, +0x5000) at guest [ElfCave.DataPageStart, RegionEnd): that file span is
         // dead .reldun debug data BEYOND every phdr's file extent (phdr0 loads only 0x100..0x1a2480;
         // phdr1-3 have filesz=0), so PCSX2 never reads it — and RE tooling uses the PRISTINE extracted
         // ELF, so clobbering it in the PATCHED ISO loses nothing. The guest band is inside the mod's
@@ -182,9 +192,9 @@ namespace Dark_Cloud_Improved_Version
         // would otherwise persist), so this MUST run before any ElfCave-targeted cave write.
         internal static void HijackPhdr3CaveSegment(FileStream fs, long elfIso, uint phoff, ushort phent, ushort phnum, uint elfSize)
         {
-            const uint SegVa   = ElfCave.RegionStart;
-            const uint SegOff  = ElfCave.SegmentFileOff;
-            const uint SegSize = ElfCave.RegionEnd - ElfCave.RegionStart;   // 0x4000 (it can never grow past 0x1FB4000 — runtime data there)
+            const uint SegVa   = ElfCave.DataPageStart;                     // the data page (species rows) in front of the cave band
+            const uint SegOff  = ElfCave.DataPageFileOff;
+            const uint SegSize = ElfCave.RegionEnd - ElfCave.DataPageStart;   // 0x5000 (the band can never grow past 0x1FB4000 — runtime data there)
 
             if (phnum != 4)
                 throw new IOException($"Expected 4 ELF program headers, got {phnum} — wrong ISO/version.");

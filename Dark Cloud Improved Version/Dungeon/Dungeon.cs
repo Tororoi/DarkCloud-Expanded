@@ -114,7 +114,10 @@ namespace Dark_Cloud_Improved_Version
 
                     // Enemies.PollEnemyDynamics();
                     // Enemies.MonitorFlashTimer();
-                    if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
+                    bool walking = !Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode();
+                    BombGemron.Tick(!Player.CheckIsLoading());   // the Bomb Gemron's fuse sparks (data only: kept through menus and knockdowns, let go for a load)
+                    CrystalGemron.Tick(!Player.CheckIsLoading());   // the Crystal Gemron's eyes' tint (one vtable swap per floor)
+                    if (walking)
                     {
                         WeaponThreads.Launch();
                         CheckActiveItems();
@@ -170,6 +173,9 @@ namespace Dark_Cloud_Improved_Version
                             dunUsedEscapeCheck = false;
                             hasClearMessageShown = false;
                             EnemyPoisonDuration.Reset();
+                            BombGemron.Reset();
+                            CrystalGemron.Reset();
+                            SpeciesRows.Ensure();
                             MiniBoss.miniBossRolled = false;
                             MiniBossLootTables.CancelPendingBoost();
                             normalFloorSnapshot = null;

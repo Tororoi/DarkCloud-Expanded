@@ -37,6 +37,7 @@
     add.s $f12, $f12, $f13         # distance², next to the axis
     lui   $t7, 0x40C0              # 6.0
     mtc1  $t7, $f17
+    nop                            # (mtc1's latency: the next FPU op would read the old $f17)
     add.s $f16, $f16, $f17
     mul.s $f16, $f16, $f16         # (r + 6)²
     .word 0x460C8034               # c.lt.s $f16,$f12 — (r+6)² < d²: outside?  (EE cond 0x34; keystone's c.lt.s emits the MIPS 0x3C)
@@ -49,6 +50,7 @@
     mul.s $f9, $f6, $f19
     add.s $f8, $f8, $f9            # velocity · v
     mtc1  $zero, $f11
+    nop                            # (mtc1's latency)
     .word 0x46085834               # c.lt.s $f11,$f8 — 0 < dot: moving into it? (EE cond 0x34, as above)
     nop
     bc1f  out                      # moving away (or across): let it move

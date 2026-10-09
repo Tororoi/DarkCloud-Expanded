@@ -141,7 +141,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The species' shot configs (the species table's two indices; none = 0xFFFF).</summary>
         private static IEnumerable<int> Configs(int ti)
         {
-            long row = 0x20000000L + EnemySpeciesTable.TableBase + (long)ti * EnemySpeciesTable.Stride;
+            long row = 0x20000000L + EnemySpeciesTable.RecordAddress(ti);
             foreach (int off in new[] { EnemySpeciesTable.PrimaryBstIndex, EnemySpeciesTable.SecondaryBstIndex })
             {
                 int v = Memory.ReadUShort(row + off);

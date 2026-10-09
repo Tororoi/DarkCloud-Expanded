@@ -13,7 +13,7 @@ namespace Dark_Cloud_Improved_Version
         private readonly FileStream _fs;
         private readonly bool _ownsStream;
         private readonly byte[] _hed;
-        private readonly long _datIso, _datSize, _hd2Base;
+        private readonly long _datIso, _datSize, _hd2Base, _hedIso;
         private long _tail;
         private readonly Action<string> _log;
 
@@ -31,7 +31,8 @@ namespace Dark_Cloud_Improved_Version
             _datIso = (long)recs["DATA.DAT"].Ext * SectorBytes;
             _datSize = recs["DATA.DAT"].Size;
             _hd2Base = (long)recs["DATA.HD2"].Ext * SectorBytes + 16;
-            _hed = Rd(_fs, (long)recs["DATA.HED"].Ext * SectorBytes, (int)recs["DATA.HED"].Size);
+            _hedIso = (long)recs["DATA.HED"].Ext * SectorBytes;
+            _hed = Rd(_fs, _hedIso, (int)recs["DATA.HED"].Size);
             long end = 0;
             for (int i = 0; i < _hed.Length / 80; i++)
             {
@@ -73,6 +74,35 @@ namespace Dark_Cloud_Improved_Version
             long s = SlotOf(name);
             WrU32(_fs, s, rec.off); WrU32(_fs, s + 4, rec.size); WrU32(_fs, s + 8, rec.sec); WrU32(_fs, s + 12, rec.cnt);
         }
+        /// <summary>Whether DATA.HED lists <paramref name="name"/>.</summary>
+        internal bool Has(string name)
+        {
+            string want = name.Replace('/', '\\');
+            foreach (string n in Names()) if (n == want) return true;
+            return false;
+        }
+
+        /// <summary>The archive entry <paramref name="from"/> renamed in place to <paramref name="to"/> (its slot and bytes untouched).
+        /// The USA build never reads DATA.HED: at boot it builds its file-name tree from the names stored inside DATA.HD2 (each
+        /// 32-byte record's first word is its name's offset in that file), so the new name goes there, over the old one, and must
+        /// not be longer than it; DATA.HED (the mod's own index) is renamed to match.</summary>
+        internal void Rename(string from, string to)
+        {
+            int i = ArchiveFind(_hed, from);
+            byte[] nb = System.Text.Encoding.Latin1.GetBytes(to.Replace('/', '\\'));
+            byte[] old = System.Text.Encoding.Latin1.GetBytes(from.Replace('/', '\\'));
+            if (nb.Length > old.Length) throw new IOException($"'{to}' is longer than '{from}': an HD2 name can only be replaced in place");
+            long hd2 = _hd2Base - 16, nameOff = RdU32(_fs, hd2 + (long)i * 32);
+            byte[] cur = Rd(_fs, hd2 + nameOff, old.Length + 1);
+            if (!cur.AsSpan(0, old.Length).SequenceEqual(old) || cur[old.Length] != 0) throw new IOException($"DATA.HD2 record {i} is not named '{from}'");
+            var slot = new byte[old.Length + 1]; Array.Copy(nb, slot, nb.Length);
+            Wr(_fs, hd2 + nameOff, slot);
+            Array.Clear(_hed, i * 80, 80);
+            Array.Copy(nb, 0, _hed, i * 80, nb.Length);
+            Wr(_fs, _hedIso + i * 80, _hed.AsSpan(i * 80, 80).ToArray());
+            _log($"renamed {from} -> {to} (entry {i}, HD2 name @0x{nameOff:X})");
+        }
+
         /// <summary>Raw DATA.DAT bytes at an offset.</summary>
         internal byte[] ReadAt(long off, int size) => Rd(_fs, _datIso + off, size);
 

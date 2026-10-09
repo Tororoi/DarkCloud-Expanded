@@ -67,9 +67,9 @@ by an entry.
 
 ## The block and the log
 
-`CodeCaves.SharedShotBlock` (0x1FAF200, 0x270 B, runtime data): the magic "SHRE" the mod writes last (without it the
+`CodeCaves.SharedShotBlock` (0x1FAF200, 0x280 B, runtime data): the magic "SHRE" the mod writes last (without it the
 cave leaves every refused config skipped at fire — the ISO alone stays harmless), the frame counter, counters (disc
-entries, restores, skipped fires, no room), the two headroom words, five stamps, the 34-entry config table {image
+entries, restores, skipped fires, no room), the two headroom words, five stamps, the 36-entry config table (the game's 34 and the mod's) {image
 store, mark}, a 16-entry event ring and its write index, and the allocator handed to the entry. `SharedShots` arms it
 at start, zeroes the stamps on each new floor, logs the floor's pack layout and every config waiting outside it about
 1.5 s after the load, and drains the ring: which config entered which slot over which, from disc (with the units it

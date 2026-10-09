@@ -25,33 +25,12 @@ namespace Dark_Cloud_Improved_Version
         // Set from the command-line arg in Program.Main before the window is created.
         public static LaunchMode Mode = LaunchMode.User;
 
-        private readonly DispatcherTimer _fishStatusTimer;
-
         public ModWindow()
         {
             InitializeComponent();
             instance = this;
             if (Mode == LaunchMode.Dev) DevModeLaunch();
             else UserModeLaunch();   // User and Sandbox both use the user tabs; Sandbox additionally shows the Sandbox tab
-
-            _fishStatusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
-            _fishStatusTimer.Tick += (_, _) => UpdateFishFarmerStatus();
-            _fishStatusTimer.Start();
-        }
-
-        private void UpdateFishFarmerStatus()
-        {
-            string status = FishDataFarmer.IsRunning ? "Running" :
-                            FishDataFarmer.Enabled   ? "Waiting" : "Stopped";
-            Label_FishFarmer_Status.Text = $"Status: {status}";
-
-            Label_FishFarmer_Sessions.Text =
-                $"Sessions: {FishDataFarmer.SessionCount}   Queue: {FishDataFarmer.PendingCount}";
-
-            int[] p = Fishing.FishProbe;
-            Label_FishFarmer_Probe.Text =
-                $"708={p[0]:X8}  714={p[1]:X8}  3E20={p[2]:X8}  3E24={p[3]:X8}  3E28={p[4]:X8}";
-            Label_FishFarmer_Survey.Text = FishDataFarmer.GetSurveyText();
         }
 
         public static Thread townThread = new Thread(new ThreadStart(GameLoop.Run)) { IsBackground = true };
@@ -489,12 +468,6 @@ namespace Dark_Cloud_Improved_Version
                     CheatCodes.InputBuffer.debugThread.Start();
                 CBox_DebugThread.IsEnabled = false;
             }
-        }
-
-        private void DEV_Page1_Btn_FishFarmer_Toggle(object sender, RoutedEventArgs e)
-        {
-            FishDataFarmer.Toggle();
-            Btn_FishFarmer_Toggle.Content = (FishDataFarmer.Enabled || FishDataFarmer.IsRunning) ? "Stop" : "Start";
         }
 
         #endregion

@@ -50,6 +50,12 @@ namespace Dark_Cloud_Improved_Version
             // Effect containers the shot-effect pack can load under the dead dun\effect names (BorrowedShots): each a copy with the
             // cfg record the pack's loader asks for by name appended; the sources untouched.
             new() { Name = "borrowed-shots",   Progress = "Baking borrowed shot effects …",                 Run = BorrowedShotBakes.Run },
+            // The mod's enemy species: the Bomb Gemron's model, script and name under a repurposed orphan DATA.HED entry (its species
+            // record is ElfSpeciesPatches'). Idempotent (the script's appended marker; the name compared).
+            new() { Name = "bomb-gemron",      Progress = "Baking the Bomb Gemron …",                         Run = BombGemronBake.Run },
+            // The Crystal Gemron's model, script and name under the orphan entries e148a (renamed e168a). Idempotent (the script's moved
+            // cry frame; the name compared).
+            new() { Name = "crystal-gemron",   Progress = "Baking the Crystal Gemron …",                      Run = CrystalGemronBake.Run },
             new() { Name = "confuse-ability",  Progress = "Baking the Confuse ability's name and icon …",   Run = ConfuseAbilityBakes.Run }, // the name (system banks) and icon (charaface)
             // Spelling fixes to the English text, in place in every English bank — last, so it edits the banks as the steps above
             // leave them (the system banks' appended Confuse name, the relocated item notices).

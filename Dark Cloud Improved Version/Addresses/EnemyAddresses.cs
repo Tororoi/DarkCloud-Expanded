@@ -28,6 +28,13 @@ namespace Dark_Cloud_Improved_Version
             internal const int  LiveCount = 0x4C;     // int — number of live enemies on the floor; decrement when freeing a slot
             internal const int  ScriptRunning = 0x50; // int[16] — per slot: 1 while its script label is mid-run (Step resumes it), 0 = Step starts label 100 next frame
             internal static long ScriptRunningAddr(int slot) => Base + ScriptRunning + (long)slot * 4;
+            /// <summary>The second-shot request per monster (MONSTOR_EVENT_STATE event2[16], 0x30 each; the first shot's array is 16 × 0x30
+            /// before it): +0 the target point (vec4), +0x10 the world point the shot leaves from, +0x20 the frame (CFrame*), +0x24 the timer
+            /// (1 asked for — the step takes the frame's world position and makes it 2; 2 positioned — the step fires shot slot 1 there
+            /// with SetUserID2(monster) and clears it), +0x28 the damage override (−1 none). A record written whole with timer 2 LAST
+            /// makes the engine fire the monster's second shot at any point.</summary>
+            internal const int  ShotRequest2 = 0x60250, ShotRequestStride = 0x30;
+            internal const int  ShotRequestTarget = 0x00, ShotRequestFrom = 0x10, ShotRequestFrame = 0x20, ShotRequestTimer = 0x24, ShotRequestDamage = 0x28;
             /// <summary>The loader's copy of each species' record (EnemySpeciesTable's 0x9C bytes), one per row: SetupBaseModel
             /// overwrites its shot-config indices (+0x68/+0x6A) with the pack SLOT each config got, and SetupViewMonstor copies
             /// them to a unit's FloorSlots block (+0xAC/+0xAE) when it spawns. A refused config is stored as −(index + 2) by the
@@ -550,9 +557,15 @@ namespace Dark_Cloud_Improved_Version
         // Confirmed from ELF program header: LOAD seg file=0x100..0x1A2480, vaddr=0x00100000
         internal const int TableBase  = 0x0027FB00;        // confirmed RAM address of record 0
         internal const int Stride     = 0x9C;              // bytes per record (156)
+        /// <summary>Vanilla records; BtEnemyLayout follows the table 12 B later, so the mod's species (EnemySpecies.BombGemron …)
+        /// are extension rows in the mod's data page (CodeCaves.SpeciesRows, baked by ElfSpeciesPatches), which SetupBaseModel
+        /// reaches through the species-lookup stub.</summary>
+        internal const int VanillaCount  = 167;
+        internal const int ExtensionBase = (int)CodeCaves.SpeciesRowsGuest;
 
         /// <summary>RAM address of the template record at the given physical table index (from extracted data).</summary>
-        internal static int RecordAddress(int physicalIndex) => TableBase + physicalIndex * Stride;
+        internal static int RecordAddress(int physicalIndex) =>
+            physicalIndex < VanillaCount ? TableBase + physicalIndex * Stride : ExtensionBase + (physicalIndex - VanillaCount) * Stride;
 
         /// <summary>RAM address of a specific field within the record at the given physical index.</summary>
         internal static int FieldAddress(int physicalIndex, int fieldOffset) => RecordAddress(physicalIndex) + fieldOffset;

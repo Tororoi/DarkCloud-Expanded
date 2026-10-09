@@ -128,6 +128,9 @@ namespace Dark_Cloud_Improved_Version
         /// <br>7 = Next Floor Screen</br>
         ///</summary>
         public const int dungeonMode = 0x202A355C;
+        /// <summary>The loading screen's <c>end_flag</c> (nowload.cpp): 0 while a load is on (the game spins on it), 1 otherwise — the
+        /// dungeon mode already reads as walking while a floor's packs are still streaming in.</summary>
+        public const int nowLoadingEnd = 0x202A1ED0;
 
         public const int dunBackFloorFlag = 0x202A34B4;
 

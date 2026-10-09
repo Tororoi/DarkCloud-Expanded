@@ -117,7 +117,19 @@ namespace Dark_Cloud_Improved_Version
             // Divine Beast cat glow: the draw loop's two torch passes → the glow cave's entries, which perform the pass
             // and then draw the cat's glow disc with the same routine (ElfCatPatches.PatchCatGlowDraw writes the cave).
             new(0x01DAEBF8, 0x0C071030, MipsAsm.Jal(ElfCave.CatGlowDrawEntryA), "cat glow hook A (jal DrawFire__11CDungeonMap → cave)"),
+            // An item bomb throws the player away from its blast: BtCheckDamageProc's two copies of the hit's velocity into blowVelo —
+            // before a knockdown, and before a guarded hit's slide — go through the blow-direction cave (ElfSpeciesPatches.PatchBlowDir
+            // writes it), which turns a bomb entry's fixed (1, 0, 0) into the direction from the blast to him.
+            new(0x01DBB9B4, 0x0C04860C, MipsAsm.Jal(DeadCdCave.BlowDir), "bomb knockdown direction (jal sceVu0CopyVector → blow-direction cave)"),
+            new(0x01DBB82C, 0x0C04860C, MipsAsm.Jal(DeadCdCave.BlowDir), "bomb guard-slide direction (jal sceVu0CopyVector → blow-direction cave)"),
             new(0x01DAEC10, 0x0C070F30, MipsAsm.Jal(ElfCave.CatGlowDrawEntryB), "cat glow hook B (jal DrawFireFreeStyle → cave)"),
+            // The Crystal Gemron's shots: the monster pack's per-object `jal Step__12CSHOT_EFFECT` goes through crystal_shots.s
+            // (ElfSpeciesPatches.PatchCrystalShots writes it), which homes the ice arrows and raises / holds / breaks the ice
+            // prison, then runs the step.
+            new(0x01DB86F4, 0x0C06B060, MipsAsm.Jal(DeadApplyNCmdCave.CrystalShots), "Crystal Gemron shots (jal Step__12CSHOT_EFFECT → cave)"),
+            // A hit breaks the player's freeze: BtCheckDamageProc's one `jal StatusErrCheck` (the Stamina test opening a registered hit's
+            // work) goes through freeze_break.s (ElfDamagePatches.PatchFreezeBreak writes it), which ends a freeze, then runs the test.
+            new(0x01DBB1F4, 0x0C06C64C, MipsAsm.Jal(DeadChainCave.FreezeBreak), "freeze broken by a hit (jal StatusErrCheck → cave)"),
             // Mirage haze: the draw loop's raster pass → the haze cave, which performs the pass and then draws one raster at
             // the clone's root (ElfWeaponPatches.PatchMirageHazeDraw writes the cave).
             new(MirageHazeHookAddr, MirageHazeHookOrig, MirageHazeHookNew, "mirage haze hook (jal DrawRaster__11CDungeonMap → cave)"),

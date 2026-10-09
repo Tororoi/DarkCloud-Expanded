@@ -30,6 +30,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Bait notice-radius table** — The mod's map of the game's bait table was off by one word: each bait's radius address was the previous bait's, and the Flamingo's bonus also wrote into an unrelated float before the table (128 → 138 while a Flamingo was owned). Corrected against the game's `esa_info` layout.
 - **Dungeon character memory** — The dungeon's character-model pool is raised from 3.36 MB to 3.84 MB in the ISO's dungeon overlay (the disc-read staging buffer trimmed from 4.48 MB to 4.00 MB to pay for it), so Xiao's model with the cat baked in doesn't hang a party switch.
 - **Shot slots** — Floors are no longer limited to five monster shot types: the five slots are shared among every config the floor needs, each read from disc at most once per floor.
+- **Bomb knockback** — Bombs (thrown, trapped or an enemy's) knock the player away from the blast; they always threw him the same world direction.
 - **Ally town dialogue** — An ally's own NPC lines and name tokens show again after an in-town switch.
 - **Game text** — The ISO patch fixes typos in the game's English text and unifies NPC, place and item names (Mr. Mustache, Stu, Mahnia, Sugar, Yellow Drops, Sun & Moon Temple, Muska Desert, Halberd, the Georama shop and house names, and the Pike / Gina / Storage Guard name plates). Double spaces and spaces before punctuation are removed. The mod's own dialogue got the same pass and uses US spellings.
 
@@ -39,6 +40,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 - **Heal ability cadence** — Every weapon with the Heal ability now heals every 3 seconds instead of 4 (patched into the dungeon overlay on the ISO).
 - **Poison wears off** — Enemy poison ends after status susceptibility × 2 seconds (half with Harder Enemy AI on); re-poisoning does not extend it.
+- **A hit breaks your freeze** — Taking a hit while frozen ends the freeze at once, even from an attack that freezes (any other ailment stays).
 - **Element picker** — D-pad Up opens the quick-change ring as an element picker showing the elements the equipped weapon carries plus None (a grey synth sphere; not offered to Ruby or Osmond's machine gun). X applies, Circle cancels. SELECT still opens the character ring. Replaces the old D-pad Up/Down element cycling.
 - **Weapon effects bill WHP** — The big weapon effects below (Solar Flash 5, Big Bang blast 20, Zeus bolt 10, Terra Sword impact 10, Hercules' Wrath 20) charge WHP through the game's own weapon-wear routine, so Endurance, Durable, Fragile, Auto Repair Powder and breaking all apply.
 - **Ungaga's charge shot no longer drains on hit** — His held charge fires a shot every 30 frames (~0.5 s), each costing 0.8 WHP as before; the hits those shots land, blocked or not, used to drain the weapon again and now cost nothing (patched into the ISO's damage routine).
@@ -80,6 +82,11 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Mesh-buffer guard** — Randomized rosters are budgeted against measured per-species model footprints so a floor never overruns the engine's mesh buffer.
 - **Stat normalization** — An out-of-region spawn's HP, ABS, defense and damage are bounded by the region's own enemies: lifted to the pool average when it comes from an earlier region, capped at the highest pool max seen so far when it comes from a later one, never moved the wrong way. Look-alike families (`EnemySpecies.SimilarEnemies`, e.g. Cave Bat < Evil Bat < their Enhanced forms) keep their order on every floor. Bosses and boss support entities are left out. The Demon Shaft bands' back floors were off by one and are fixed.
 - **Reusable stat scaling** — Live per-slot / per-species stat scaling (HP, defense, melee, projectile) is driven through one shared pipeline used by the normalizer, the difficulty options, and miniboss buffs.
+
+### New Enemies
+
+- **Bomb Gemron** — A black Gemron, holding thrown bombs in place of its gems. Weak to fire and immune to every other element, 40 ABS, placed by the randomizer only. It spits bombs, explodes when it dies (radius 50), and self-destructs when near death with the player close (it rears back as the spark walks the fuse and its bomb reddens under a growing glow, then the blast), staying hittable until it blows. Steal item: Bomb. Rare drop: Repair Powder.
+- **Crystal Gemron** — A pale blue Gemron with glowing cyan eyes, holding a life sphere in place of its gem balls. When it dies, the balls shatter upright in its grasp with their glints, light beams and rings. It fires the Ice Queen's homing ice arrow, which can freeze you (like other freezing shots: a 65% chance, blocked by an Anti-Freeze Amulet) and encases you in her ice prison until you break free. Weak to ice and immune to every other element, 80 ABS, placed by the randomizer only. Steal item: Powerup Powder. Rare drop: Crystal Eyeball.
 
 ### Miniboss System
 

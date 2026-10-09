@@ -121,7 +121,7 @@ namespace Dark_Cloud_Improved_Version
             ushort id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(victim, EnemySlotOffsets.EnemySpeciesId));
             if (!EnemySpecies.Defaults.TryGetValue(id, out var species) || species.TableIndex == null)
             { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"stole item {item} from species {id}, which the mod does not know"); return; }
-            long row = 0x20000000L + EnemySpeciesTable.TableBase + (long)species.TableIndex.Value * EnemySpeciesTable.Stride;
+            long row = 0x20000000L + EnemySpeciesTable.RecordAddress(species.TableIndex.Value);
             int cfg = Projectile(Memory.ReadUShort(row + EnemySpeciesTable.PrimaryBstIndex));
             if (cfg < 0) cfg = Projectile(Memory.ReadUShort(row + EnemySpeciesTable.SecondaryBstIndex));   // a self-burst primary: its other shot, if it flies
             if (cfg < 0)

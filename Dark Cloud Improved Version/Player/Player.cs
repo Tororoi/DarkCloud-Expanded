@@ -237,6 +237,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Returns true if the player is not in a menu while inside a dungeon
         /// </summary>
+        /// <summary>A load is on: the loading screen's end flag is down.</summary>
+        public static bool CheckIsLoading() => Memory.ReadInt(Addresses.nowLoadingEnd) == 0;
+
         public static bool CheckDunIsWalkingMode()
         {
             if (Memory.ReadUShort(Addresses.dungeonMode) == 1) return true;

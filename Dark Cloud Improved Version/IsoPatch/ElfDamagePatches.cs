@@ -27,6 +27,19 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(site), MipsAsm.J(cave));
         }
 
+        /// <summary>A hit breaks the player's freeze (tools/stubs/freeze_break.s in the dead sceCdReadChain body): BtCheckDamageProc's one
+        /// `jal StatusErrCheck` — the Stamina test that opens a registered hit's work, before its ailments are dealt — goes through the
+        /// cave (DunPatches), which ends a freeze as its timer would, takes the Freeze off that hit (a hit on a frozen player only breaks the
+        /// freeze) and then runs the test.</summary>
+        internal static void PatchFreezeBreak(FileStream fs, Func<uint, long> ElfOff)
+        {
+            byte[] stub = Embedded("freezeBreak.bin");
+            if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != 0x3C02002A) throw new IOException($"freezeBreak.bin malformed ({stub.Length} B) or stale — reassemble its .s.");
+            uint w0 = RdU32(fs, ElfOff(DeadChainCave.Host));
+            if (w0 != DeadChainCave.VanillaWord0 && w0 != 0x3C1901FB) throw new IOException($"sceCdReadChain at 0x{DeadChainCave.Host:X} is neither vanilla nor the bomb tint's (0x{w0:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+            WriteBytes(fs, ElfOff, DeadChainCave.FreezeBreak, stub, DeadChainCave.End, "freezeBreak.bin overruns the sceCdReadChain body");
+        }
+
         /// <summary>Every engine-made damage entry starts with no mark at +0x9C. `CCollisionData::Set` (0x1B57A0) fills an entry's fields
         /// but never +0x9C, so a mark planted on an entry (the cat's crush mark, which the cat cave stamps after its Set) stayed when
         /// the engine reused the entry — a plain pellet planted there next passed every guard. Set writes +0x20 twice in a row

@@ -9,8 +9,9 @@ table (`EnemySpeciesTable` @0x27FB00: +0x68 primary / +0x6A secondary shot index
 The shot type's **flags word (+0x40)** goes verbatim into the impact CollisionData entry `+0x50`. Low byte = ELEMENT bit,
 high bits = STATUS bits.
 
-- **Against the PLAYER** (`BtCheckDamageProc`, dun 0x1DBAFD0) only the status bits are read: 0x100 → Freeze (amulet 132 blocks),
-  0x200 → Poison (amulet 135), 0x400 → Curse (amulet 133), 0x800 → Goo (amulet 134), 0x1000 → Stamina (65% roll, no amulet),
+- **Against the PLAYER** (`BtCheckDamageProc`, dun 0x1DBAFD0) only the status bits are read, against ONE roll per hit (0–99, a status landing below 65): 0x100 → Freeze (65%;
+  an Anti-Freeze Amulet 132 blocks it and uses one charge), 0x200 → Poison (65%, amulet 135), 0x400 → Curse (65%, amulet 133),
+  0x800 → Goo (65%, amulet 134), 0x1000 → Stamina (65%, no amulet),
   0x40000 → steal gold, 0x80000 → damage = half current HP, 0x100000 → Freeze unconditionally. **The element bits 0x1–0x10 are
   never read on the player side** — no damage multiplier, no status — so vanilla play never validated them.
 - **Against ENEMIES** (`CMonstorUnit::CheckDmg`, main 0x1D9F10, the path a reflected shot will take) the word is compared
@@ -36,6 +37,7 @@ disagrees) — check in-game by reflecting the shot at a same-element Gemron (ex
 | 6 | `awabres` | none (0x0) | — | Poison (0x10) | Poison (+0x0C, 180f) | 2 | 45 | 0.1 | 0.00 | Gunny, Crabby Hermit, Crabby Hermit (Enhanced) | — | Gunny 26; Crabby Hermit 76 |
 | 7 | `g_wave1` | none (0x0) | — | — | — | 3 | 34 | 0.1 | 1.20 | Golem, Titan, Steel Giant, Blizzard, Gol, Sil, Sil (Enhanced), Steel Giant (Enhanced), Gol (Enhanced), Titan (Enhanced) | — | Titan 90; Steel Giant 64; Blizzard 105 |
 | 8 | `g_wave2` | none (0x0) | — | — | — | 3 | 66 | 2.1 | 5.00 | — | — | — |
+|   | ↳ in the PATCHED disc config 8 is the Bomb Gemron's thrown bomb: `ringo_ex`'s flight drawn as `g_wave2` (the apple pack wearing the bomb), no hit of its own, ending in the item-bomb blast at scale 0.5 (radius 12.5 by the +0x56 rule, damage 150, knockdown) on contact, a wall or time — ElfSpeciesPatches.PatchBombConfigs | | | | | | | | | | | |
 | 9 | `magic_noroi` | none (0x0) | — | Curse (0x20) | — (curse: n/a on enemies) | 2 | 16 | 1.1 | 0.00 | Ghost | — | — |
 | 10 | `magic_bin` | none (0x0) | — | Stamina (0x08), 65% roll | — | 2 | 0 | 0.8 | 0.00 | Heart, Heart (Enhanced) | — | — |
 | 11 | `magic_isi` | none (0x0) | — | Freeze (0x04) | Freeze (+0x08, 300f) | 2 | 5 | 1.1 | 5.00 | Earth Digger, Auntie Medu, Lich, Moon Digger, Auntie Medu (Enhanced), Bishop Q, Lich (Enhanced) | — | Auntie Medu 60 |
@@ -55,12 +57,17 @@ disagrees) — check in-game by reflecting the shot at a same-element Gemron (ex
 | 25 | `e115a_ex` | Holy (0x10) | Holy (Gemron Holy) | — | — | 3 | 58 | 1.4 | 0.00 | Gemron (Holy) | — | — |
 | 26 | `last_gw2` | Fire (0x1) | ? | — | — | 3 | 130 | 1.4 | 1.50 | Dark Genie (Final Form) | — | — |
 | 27 | `f_boll_3` (dup, UNUSED) | Fire (0x1) | Fire | Curse (0x20) | — (curse: n/a on enemies) | 3 | 58 | 1.4 | 1.50 | — | — | — |
+|   | ↳ in the PATCHED disc config 27 is the Bomb Gemron's death / self-destruct blast: `g_wave2`, no flight, no life, no hit of its own — the item-bomb blast at scale 2 (radius and shock ring 50: +0x56 = 25 per unit of scale, bomb_radius.s; damage 150, knockdown) where the script places it — ElfSpeciesPatches.PatchBombConfigs | | | | | | | | | | | |
 | 28 | `e118a_Ex` | none (0x0) | — | — | — | 2 | 51 | 4.0 | 0.00 | Silver Gear | — | — |
 | 29 | `nebaneba_b` | none (0x0) | — | Goo (0x40) | Gooey (+0x14, 180f) | 2 | 15 | 0.4 | 0.00 | Opar | — | — |
 | 30 | `engetu` | none (0x0) | — | — | — | 2 | 150 | 3.4 | 0.00 | Black Knight | — | — |
 | 31 | `dash` | none (0x0) | — | — | — | 3 | 170 | 2.6 | 0.00 | Black Knight Mount | — | — |
 | 32 | `kamai` | none (0x0) | — | — | — | 3 | 130 | 0.0 | 0.00 | — | Black Knight Mount | — |
 | 33 | `terepo` | none (0x0) | — | — | — | 3 | 90 | 0.0 | 0.00 | — | Black Knight | — |
+| 34 | `_i_boll` | Ice (0x2) | Ice (korinoya) | Freeze (0x100) | — | 2 | 58 (STB 150) | 1.4 | 0.00 | Crystal Gemron | — | — |
+|   | ↳ the MOD's config, PATCHED disc only: table entry 34 (a zero word before the species table) → a copy of `e115a_ex` (25) in the dead sceIoctl body drawing `dun\effect\_i_boll.chr` = the Ice Queen's korinoya (dun\monstor\korinoya.chr, cfg renamed), flying from the moment it is fired at 1.2 a step (the korinoya flies at 1.6) for up to its 480 frames, hitting with Freeze (0x100, as magic_isi and b_boll: 65%, amulet-blockable; the korinoya's own is sure), the korinoya's guardable knockback and the Ice element. Steered natively after the korinoya (crystal_home.s: within 60° of its heading the heading turns towards the player 0.12 rad a frame, the model faced along it; straight on outside) — ElfSpeciesPatches.PatchCrystalShots, CrystalGemronBake | | | | | | | | | | | |
+| 35 | `_f_boll_2` | none (0x0) | — | — | — | — | 0 | −100 | 0.00 | — | Crystal Gemron | — |
+|   | ↳ the MOD's config, PATCHED disc only: table entry 35 → the ice prison, the Ice Queen's kori (dun\monstor\kori.chr on the dead `_f_boll_2` name, a held key 2 added): stationary, no hit, motions forming / held / shattering. Never fired by a script: crystal_shots.s asks the arrow's Gemron for it (its event2 record) when an arrow freezes the player, holds it while he stays frozen and lets it shatter after | | | | | | | | | | | |
 
 ## Rows needing in-game verification
 

@@ -69,6 +69,17 @@ STUBS = [
     ('confuse_proc.s',           'confuseProc.bin',          0x22B248),    # main ELF: dead DebugItemGetKey's body — the Confuse ability's on-hit roll (ElfWeaponPatches.PatchConfuseProc)
     ('follow.s',                 'follow.bin',               0x1B4690),    # main ELF: DebugInfomationDraw's free tail (ElfWeaponPatches.PatchFollow): a point carried with a unit
     ('bait_keep.s',              'baitKeep.bin',             0x27D230),
+    ('species_lookup.s',         'speciesLookup.bin',        0x27D2F8),
+    ('flash_slot.s',             'flashSlot.bin',            0x27D320),    # main ELF: dead SmoothRest body after the species lookup (ElfSpeciesPatches.PatchFlashSlot): the machine-gun flash's size and bone pin per slot    # main ELF: dead SmoothRest body after the Ruby cave (ElfSpeciesPatches): the species table's extension rows
+    ('blow_dir.s',               'blowDir.bin',              0x10A7D8),    # main ELF: the dead sceCdGetToc body (DunPatches): an item bomb throws the player away from its blast
+    ('bomb_radius.s',            'bombRadius.bin',           0x10A880),    # main ELF: the dead sceCdGetToc body after the blow direction (ElfSpeciesPatches.PatchBombRadius): a shot config's own blast radius
+    ('fuse_capture.s',           'fuseCapture.bin',          0x10A910),    # main ELF: the dead sceCdGetToc body after the blast radius (ElfSpeciesPatches.PatchFuseCapture): each Bomb Gemron's wick, captured in the monster draw
+    ('bomb_tint.s',              'bombTint.bin',             0x10A1D0),    # main ELF: the dead sceCdReadChain body (ElfSpeciesPatches.PatchBombTint): the Bomb Gemron's big bomb reddens as its fuse burns
+    ('eye_tint.s',               'eyeTint.bin',              0x10A3C0),    # after freeze_break
+    ('freeze_break.s',           'freezeBreak.bin',          0x10A360),    # main ELF: the dead sceCdReadChain body after bomb_tint (ElfSpeciesPatches.PatchFreezeBreak): a hit breaks the player's freeze
+    ('crystal_home.s',           'crystalHome.bin',          0x10B300),    # main ELF: the dead sceCdDiskReady body (ElfSpeciesPatches.PatchCrystalShots): one ice arrow turned towards the player
+    ('crystal_prison.s',         'crystalPrison.bin',        0x118730),    # main ELF: the dead sceIoctl body after the two shot configs (ElfSpeciesPatches.PatchCrystalShots): the ice prison held while the player is frozen
+    ('crystal_shots.s',          'crystalShots.bin',         0x10BBD0),    # main ELF: the dead sceCdApplyNCmd body (ElfSpeciesPatches.PatchCrystalShots): the Crystal Gemron's ice arrow homing and ice prison    # main ELF: the dead sceCdReadChain body after bomb_tint (ElfSpeciesPatches.PatchEyeTint): the Crystal Gemron's eyes tinted white
     ('element_menu.s',           'elementMenu.bin',          0x22B410, 'elementMenuTail.bin', 0x22B5B8),
     ('element_menu_ruby.s',      'elementMenuRuby.bin',      0x27D270),    # main ELF: dead SmoothRest body after the bait keep (ElfElementMenuPatches): Ruby's shot effect reloaded when the picker closes on her   # main ELF: dead DebugItemGetKey tail (hooks) + DebugItemGetDraw body (sheet name, draw, cell test) — the quick-change menu as element picker (ElfElementMenuPatches)    # main ELF: dead SmoothRest body after the camera-height cave (ElfFishingPatches.PatchBaitKeep): the Poisonous Apple stays on the hook
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
