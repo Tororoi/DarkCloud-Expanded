@@ -117,6 +117,7 @@ namespace Dark_Cloud_Improved_Version
             PatchGuardCrush(fs, ElfOff);                  // crush-marked hits pass every guard window (hooked in front of the cat's cave)
             PatchGuardMask(fs, ElfOff);                   // …and its second link: the guard windows the mod switches off per enemy (GuardGate)
             PatchSetClearsMark(fs, ElfOff);               // …and every entry the engine makes starts unmarked (a reused entry kept the cat's crush mark)
+            PatchFreezeBreak(fs, ElfOff);                 // a hit breaks the player's freeze (with DunPatches' hook)
             PatchConfuseAbility(fs, ElfOff);              // the Confuse weapon ability: shown in the status window, native to Babel's Spear
             PatchCatCapeTint(fs, ElfOff);                 // Divine Beast cat: the Super Steve cape draws under its own ambient, not the cat's
             PatchCatMaskTint(fs, ElfOff);                 // …and its mask does too, reached through a private vtable rather than a hook

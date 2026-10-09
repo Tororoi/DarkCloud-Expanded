@@ -32,6 +32,7 @@
     addu  $t4, $t3, $t4            # &speed; direction at -0x20, radius at -0x38
     lwc1  $f10, 0x0000($t4)        # speed
     mtc1  $zero, $f11
+    nop                            # (mtc1's latency: the next FPU op would read the old $f11)
     c.eq.s $f10, $f11
     nop
     bc1t  out                      # not moving (or already blocked): nothing to do
@@ -94,6 +95,7 @@
     lui   $t7, 0x3C23
     ori   $t7, $t7, 0xD70A         # 0.01
     mtc1  $t7, $f7
+    nop                            # (mtc1's latency)
     .word 0x46072834               # c.lt.s $f5,$f7 — head-on? (EE cond 0x34)
     nop
     bc1f  norm
@@ -102,7 +104,7 @@
     mov.s $f13, $f18
     mov.s $f5,  $f16
 norm:
-    sqrt.s $f5, $f5
+    .word 0x46050144               # sqrt.s $f5, $f5 (EE: the operand in ft — keystone's form reads $f0)
     div.s $f12, $f12, $f5
     div.s $f13, $f13, $f5
     swc1  $f12, -0x0020($t4)       # the new heading (x, y); height and speed untouched

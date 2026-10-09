@@ -89,6 +89,7 @@ arrow_impact:
     add.s $f0, $f0, $f2
     lui   $t0, 0x43C8              # 400.0: within 20
     mtc1  $t0, $f1
+    nop                            # (mtc1's latency)
     sub.s $f0, $f0, $f1
     mfc1  $t0, $f0
     bgez  $t0, arrow_next          # sign clear: too far (a wall, not him)

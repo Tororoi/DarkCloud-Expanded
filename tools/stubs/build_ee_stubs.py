@@ -76,6 +76,7 @@ STUBS = [
     ('fuse_capture.s',           'fuseCapture.bin',          0x10A910),    # main ELF: the dead sceCdGetToc body after the blast radius (ElfSpeciesPatches.PatchFuseCapture): each Bomb Gemron's wick, captured in the monster draw
     ('bomb_tint.s',              'bombTint.bin',             0x10A1D0),    # main ELF: the dead sceCdReadChain body (ElfSpeciesPatches.PatchBombTint): the Bomb Gemron's big bomb reddens as its fuse burns
     ('eye_tint.s',               'eyeTint.bin',              0x10A2D0),
+    ('freeze_break.s',           'freezeBreak.bin',          0x10A360),    # main ELF: the dead sceCdReadChain body after eye_tint (ElfSpeciesPatches.PatchFreezeBreak): a hit breaks the player's freeze
     ('crystal_home.s',           'crystalHome.bin',          0x10B300),    # main ELF: the dead sceCdDiskReady body (ElfSpeciesPatches.PatchCrystalShots): one ice arrow turned towards the player
     ('crystal_prison.s',         'crystalPrison.bin',        0x118730),    # main ELF: the dead sceIoctl body after the two shot configs (ElfSpeciesPatches.PatchCrystalShots): the ice prison held while the player is frozen
     ('crystal_shots.s',          'crystalShots.bin',         0x10BBD0),    # main ELF: the dead sceCdApplyNCmd body (ElfSpeciesPatches.PatchCrystalShots): the Crystal Gemron's ice arrow homing and ice prison    # main ELF: the dead sceCdReadChain body after bomb_tint (ElfSpeciesPatches.PatchEyeTint): the Crystal Gemron's eyes tinted white

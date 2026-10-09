@@ -51,7 +51,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/spear_block.s (ElfWeaponPatches.PatchSpearBlock): Step__12CMonstorUnit's `jal MoveChecMonster` (main
         /// 0x1DE344) lands here — the engine's enemy-versus-enemy block, then the same test against CodeCaves.SpearBlock's sphere
         /// while it is armed: a unit heading into it is turned along it at the same speed, sliding round (Babel's risen spear is solid).</summary>
-        internal const uint SpearBlock       = Host + 0x870;  // 0x1B5030, 392 B → 0x1B51B8
+        internal const uint SpearBlock       = Host + 0x870;  // 0x1B5030, 400 B → 0x1B51C0 (NoDrainLanded's start: full)
         /// <summary>ElfDamagePatches.PatchUngagaNoDrain: CheckDmg's two weapon-HP drain calls (main 0x1DB388 for a landed hit,
         /// 0x1DAE94 for a guarded one) land here. An entry of Ungaga's (owner 4) planted by his charge EFFECT (class word +0x38
         /// non-zero — his swings plant 0) or marked by the mod (+0x9C == CodeCaves.NoDrainMark: Babel's spikes) bills nothing;
@@ -61,11 +61,11 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/player_spear_block.s (ElfWeaponPatches.PatchSpearBlock, hooked by DunPatches): the player's move's two
         /// `jal MoveCheck__12CMonstorUnitFPfPfi` (dun 0x1DB39AC / 0x1DB3E58) land here — the engine's player-versus-enemy block,
         /// then CodeCaves.SpearBlock's sphere while it is armed: velocity into the column is dropped, the part along it kept.</summary>
-        internal const uint PlayerSpearBlock = Host + 0xAA0;  // 0x1B5260, 232 B → 0x1B5348
+        internal const uint PlayerSpearBlock = Host + 0xAA0;  // 0x1B5260, 240 B → 0x1B5350 (ShotSpearBlock's start: full)
         /// <summary>tools/stubs/shot_spear_block.s (ElfWeaponPatches.PatchSpearBlock): Step__12CSHOT_EFFECT's `jal checkCollision`
         /// (main 0x1AC3E8) lands here — the engine's test, then, for a shot that is not the player's (victim mask ≠ 2) and met
         /// nothing, CodeCaves.SpearBlock's column (floor − 2 … top): a wall hit where the shot stands.</summary>
-        internal const uint ShotSpearBlock   = Host + 0xB90;  // 0x1B5350, 268 B → 0x1B545C
+        internal const uint ShotSpearBlock   = Host + 0xB90;  // 0x1B5350, 272 B → 0x1B5460 (RockShadow's start: full)
         /// <summary>tools/stubs/rock_shadow.s (ElfWeaponPatches.PatchRockShadow, hooked by DunPatches): Draw_MainUnitShadow's
         /// `jal MGEndDrawShadow` (dun 0x1DADDD4) lands here — one extra MGDrawShadowFast for the frame CodeCaves.RockShadow names
         /// while its flag is set (the Terra Sword's boulder), then the displaced call.</summary>
@@ -180,7 +180,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x0010A7D8, HostSpan = 656, VanillaWord0 = 0x27BDFF80;   // `addiu sp,sp,-0x80`
         /// <summary>tools/stubs/blow_dir.s (ElfSpeciesPatches.PatchBlowDir): an item bomb's knockdown thrown away from its blast.</summary>
-        internal const uint BlowDir = Host;   // 156 B → 0x10A874
+        internal const uint BlowDir = Host;   // 160 B → 0x10A878
         /// <summary>tools/stubs/bomb_radius.s (ElfSpeciesPatches.PatchBombRadius): a shot config's own blast radius and ring.</summary>
         internal const uint BombRadius = Host + 0xA8;   // 0x10A880, 144 B → 0x10A910
         /// <summary>tools/stubs/fuse_capture.s (ElfSpeciesPatches.PatchFuseCapture): each Bomb Gemron's wick, captured in the monster draw.</summary>
@@ -198,7 +198,10 @@ namespace Dark_Cloud_Improved_Version
         internal const uint BombTint = Host;   // 244 B → 0x10A2C4
         /// <summary>tools/stubs/eye_tint.s (ElfSpeciesPatches.PatchEyeTint): the Crystal Gemron's eyes tinted white, reached only through
         /// the private vtable CrystalGemron gives the eyes' visual (two entries: +0 the uint* DrawVu1, +0xC the packet one).</summary>
-        internal const uint EyeTint = Host + 0x100;
+        internal const uint EyeTint = Host + 0x100;   // 0x10A2D0, 140 B → 0x10A35C
+        /// <summary>tools/stubs/freeze_break.s (ElfDamagePatches.PatchFreezeBreak): a hit breaks the player's freeze — BtCheckDamageProc's
+        /// one StatusErrCheck call (dun 0x1DBB1F4, DunPatches) comes here.</summary>
+        internal const uint FreezeBreak = Host + 0x190;   // 0x10A360, 76 B → 0x10A3AC
         internal const uint End = Host + HostSpan;
     }
 

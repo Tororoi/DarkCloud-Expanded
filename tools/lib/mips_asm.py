@@ -76,7 +76,24 @@ def assemble(code: str, base: int = 0) -> bytes:
         raise SystemExit("mips_asm: keystone produced no output (syntax error?)")
     if len(enc) % 4:
         raise SystemExit(f"mips_asm: output not word-aligned ({len(enc)} bytes)")
+    _check_ee_rules(bytes(enc), base)
     return bytes(enc)
+
+
+def _check_ee_rules(blob: bytes, base: int) -> None:
+    """Warn (stderr) about the two EE traps above in assembled output: keystone's `sqrt.s` (operand in fs — the R5900 reads ft, i.e.
+    $f0) and an `mtc1` whose very next instruction is a single/word FPU op reading the register it just wrote (mtc1's latency; a
+    false alarm only when that mtc1 sits in a branch delay slot whose branch is taken)."""
+    ws = [struct.unpack_from("<I", blob, i)[0] for i in range(0, len(blob), 4)]
+    for i, w in enumerate(ws):
+        if (w & 0xFFE0003F) == 0x46000004 and ((w >> 16) & 31) == 0 and ((w >> 11) & 31) != 0:
+            print(f"mips_asm: WARNING keystone sqrt.s at 0x{base + 4 * i:x} (0x{w:08X}) reads $f0 on the EE — hand-encode "
+                  f"0x46000004 | (fS<<16) | (fD<<6)", file=sys.stderr)
+        if (w >> 21) == 0x224 and i + 1 < len(ws):                # mtc1 rt, fM
+            fm, n = (w >> 11) & 31, ws[i + 1]
+            if (n >> 26) == 0x11 and ((n >> 21) & 31) in (0x10, 0x14) and fm in ((n >> 11) & 31, (n >> 16) & 31):
+                print(f"mips_asm: WARNING 0x{base + 4 * i + 4:x} reads $f{fm} straight after the mtc1 that wrote it — the EE hands "
+                      f"it the old value; put a nop between them", file=sys.stderr)
 
 
 def assemble_words(code: str, base: int = 0) -> list:

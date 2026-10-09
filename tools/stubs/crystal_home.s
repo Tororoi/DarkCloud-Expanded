@@ -5,7 +5,8 @@
 # flies on as it points. Here the arrow points along its flight (velocity +0x9F40 + sub-shot × 0x10): the target is the player
 # 10.1 above his feet (CharaMain +0x10); within the cone the flight turns towards it by a 0.12 chord (snapping when closer) and the
 # model is faced along it as CSHOT_EFFECT::Set faces it (LookAtMatrixZ, CFrame::SetTransMatrix); either way the flight runs at the
-# config's flight speed (+0x1C). Comparisons go by the sign bit of a difference (keystone's c.lt.s carries the wrong condition code).
+# config's flight speed (+0x1C). EE rules (tools/lib/mips_asm.py): comparisons go by the sign bit of a difference (keystone's c.lt.s
+# carries the wrong condition code), sqrt.s is hand-encoded with its operand in ft, and a nop follows each mtc1 its next FPU op reads.
 
     addiu $sp, $sp, -0x70
     sw    $ra, 0x0000($sp)
@@ -30,7 +31,7 @@
     add.s $f10, $f10, $f11
     mul.s $f11, $f2, $f2
     add.s $f10, $f10, $f11
-    sqrt.s $f10, $f10
+    .word 0x460A0284               # sqrt.s $f10, $f10 (EE: the operand in ft — keystone's form reads $f0)
     mfc1  $t0, $f10
     beq   $t0, $zero, ret          # no direction to keep
     nop
@@ -45,6 +46,7 @@
     lui   $t0, 0x4121
     ori   $t0, $t0, 0x999A         # 10.1
     mtc1  $t0, $f6
+    nop                            # (mtc1's latency: the next FPU op would read the old $f6)
     add.s $f4, $f4, $f6            # the target
     lwc1  $f6, 0x11D0($s2)         # the arrow
     lwc1  $f7, 0x11D4($s2)
@@ -57,7 +59,7 @@
     add.s $f9, $f9, $f10
     mul.s $f10, $f5, $f5
     add.s $f9, $f9, $f10
-    sqrt.s $f9, $f9                # |d| (never 0: the arrow's contact ends it 13 short of him)
+    .word 0x46090244               # sqrt.s $f9, $f9 (EE ft form): |d| (never 0: the arrow's contact ends it 13 short of him)
     div.s $f3, $f3, $f9            # w = d / |d|
     div.s $f4, $f4, $f9
     div.s $f5, $f5, $f9
@@ -68,6 +70,7 @@
     add.s $f12, $f12, $f13         # u · w: the cosine
     lui   $t0, 0x3F00              # 0.5: 60 degrees
     mtc1  $t0, $f13
+    nop
     sub.s $f12, $f12, $f13
     mfc1  $t0, $f12
     bltz  $t0, fly                 # outside the cone: on as it points
@@ -80,16 +83,18 @@
     add.s $f10, $f10, $f11
     mul.s $f11, $f8, $f8
     add.s $f10, $f10, $f11
-    sqrt.s $f10, $f10              # |e|: the chord still to turn
+    .word 0x460A0284               # sqrt.s $f10, $f10 (EE ft form): |e|, the chord still to turn
     lui   $t0, 0x3DF5
     ori   $t0, $t0, 0xC28F         # 0.12
     mtc1  $t0, $f11
+    nop
     sub.s $f12, $f11, $f10
     mfc1  $t0, $f12
     bltz  $t0, step
     div.s $f11, $f11, $f10         # (delay) the share of e to turn: 0.12 / |e| …
     lui   $t0, 0x3F80              # … or, within a step, all of it: face him
     mtc1  $t0, $f11
+    nop
 step:
     mul.s $f6, $f6, $f11
     mul.s $f7, $f7, $f11
@@ -102,7 +107,7 @@ step:
     add.s $f10, $f10, $f11
     mul.s $f11, $f2, $f2
     add.s $f10, $f10, $f11
-    sqrt.s $f10, $f10
+    .word 0x460A0284               # sqrt.s $f10, $f10 (EE: the operand in ft — keystone's form reads $f0)
     div.s $f0, $f0, $f10
     div.s $f1, $f1, $f10
     div.s $f2, $f2, $f10

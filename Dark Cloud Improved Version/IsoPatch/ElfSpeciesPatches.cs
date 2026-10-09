@@ -60,9 +60,9 @@ namespace Dark_Cloud_Improved_Version
         /// Holy Gemron's shot (config 25) and are written into the dead sceIoctl body; the shot table's two spare entries (34, 35, the
         /// zero words before the species table) point at them. The three dead hosts' first two words become `jr ra; li v0,0`.
         ///  · The ice arrow (34) draws <c>dun\effect\_i_boll.chr</c> (CrystalGemronBake: the korinoya), flies from the moment it is fired at
-        ///    half the korinoya's speed (its `_SET_MOVE(…, 1.6)`: 1.6 a step) for as long as the korinoya can (its 480-frame cap; a wall
-        ///    ends either), and hits as the korinoya does — its sure Freeze (0x100000, no roll, no amulet) and a guardable knockback (2) —
-        ///    with the Ice element.
+        ///    <see cref="IceArrowSpeed"/> (the korinoya's `_SET_MOVE(…, 1.6)` is 1.6 a step) for as long as the korinoya can (its 480-frame
+        ///    cap; a wall ends either), and hits as the korinoya does — its sure Freeze (0x100000, no roll, no amulet) and a guardable
+        ///    knockback (2) — with the Ice element.
         ///  · The ice prison (35) draws <c>dun\effect\_f_boll_2.chr</c> (the kori): stationary, its keys 0 (the ice forming), 2 (held)
         ///    and 1 (shattering) as its four phases' motions, no hit and no contact (radius −100 while it stands: CSHOT_EFFECT's contact
         ///    test is "within radius + 6 of the player"), and a long life the cave cuts short when the freeze ends.</summary>
@@ -113,7 +113,7 @@ namespace Dark_Cloud_Improved_Version
         private const string CrystalShotSourceName = "e115a_ex";
         private const uint IcePrisonLife = 1800;                // 30 s at most; the cave breaks it as the freeze ends
         private const uint IceElement = 0x2;                    // CfgFlags' Ice bit
-        private const float IceArrowSpeed = 0.8f;               // half the Ice Queen's korinoya (_SET_MOVE(…, 1.6), a step)
+        private const float IceArrowSpeed = 1.2f;               // three quarters of the Ice Queen's korinoya (_SET_MOVE(…, 1.6), a step)
         private const uint IceArrowLife = 480;                  // the korinoya's flight's cap, in frames
 
         /// <summary>A config that draws <c>g_wave2</c>, plants nothing, and ends in an item-bomb blast of <paramref name="scale"/>.</summary>

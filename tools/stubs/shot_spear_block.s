@@ -41,6 +41,7 @@
     lwc1  $f8, -0x0518($t0)        # the floor
     lui   $t7, 0x4000              # 2.0
     mtc1  $t7, $f9
+    nop                            # (mtc1's latency: the next FPU op would read the old $f9)
     sub.s $f8, $f8, $f9
     .word 0x46082834               # c.lt.s $f5,$f8 — below the floor − 2?  (EE cond 0x34; keystone's c.lt.s emits the MIPS 0x3C)
     nop

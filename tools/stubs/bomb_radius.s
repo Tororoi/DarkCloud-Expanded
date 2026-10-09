@@ -17,8 +17,8 @@
     beq   $t0, $zero, ret
     nop
     mtc1  $t0, $f0
+    lwc1  $f1, 0x0058($a3)         # the scale (here, so cvt does not read $f0 straight after its mtc1)
     cvt.s.w $f0, $f0
-    lwc1  $f1, 0x0058($a3)         # the scale
     mul.s $f0, $f0, $f1            # the radius
     bltz  $v0, ring                # no hit entry made
     lui   $t1, 0x002A              # (delay)
@@ -34,11 +34,11 @@ ring:
     slt   $t3, $t3, $t0
     beq   $t3, $zero, ret          # 1.0 or less: no ring drawn
     nop
+    lui   $t0, 0x3F00
+    mtc1  $t0, $f1                 # 0.5 (loaded first: the stores below keep mul.s off its mtc1)
     lw    $t2, 0x35E8($t1)         # NowShockWave
     swc1  $f0, 0x0010($t2)         # base radius
     swc1  $f0, 0x0014($t2)         # expand radius
-    lui   $t0, 0x3F00
-    mtc1  $t0, $f1                 # 0.5
     mul.s $f1, $f0, $f1
     swc1  $f1, 0x001C($t2)         # its steps
 ret:

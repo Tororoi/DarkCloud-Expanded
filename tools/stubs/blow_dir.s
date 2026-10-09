@@ -40,6 +40,7 @@
 norm:
     lui   $t1, 0x3F80
     mtc1  $t1, $f3                 # 1.0
+    nop                            # (mtc1's latency: rsqrt would read the old $f3)
     .word 0x460118D6               # rsqrt.s f3, f3, f1 (EE: fd = fs / sqrt(ft)) — 1 / |d|
     mul.s $f0, $f0, $f3
     mul.s $f2, $f2, $f3

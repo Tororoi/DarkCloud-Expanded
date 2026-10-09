@@ -127,6 +127,9 @@ namespace Dark_Cloud_Improved_Version
             // (ElfSpeciesPatches.PatchCrystalShots writes it), which homes the ice arrows and raises / holds / breaks the ice
             // prison, then runs the step.
             new(0x01DB86F4, 0x0C06B060, MipsAsm.Jal(DeadApplyNCmdCave.CrystalShots), "Crystal Gemron shots (jal Step__12CSHOT_EFFECT → cave)"),
+            // A hit breaks the player's freeze: BtCheckDamageProc's one `jal StatusErrCheck` (the Stamina test opening a registered hit's
+            // work) goes through freeze_break.s (ElfDamagePatches.PatchFreezeBreak writes it), which ends a freeze, then runs the test.
+            new(0x01DBB1F4, 0x0C06C64C, MipsAsm.Jal(DeadChainCave.FreezeBreak), "freeze broken by a hit (jal StatusErrCheck → cave)"),
             // Mirage haze: the draw loop's raster pass → the haze cave, which performs the pass and then draws one raster at
             // the clone's root (ElfWeaponPatches.PatchMirageHazeDraw writes the cave).
             new(MirageHazeHookAddr, MirageHazeHookOrig, MirageHazeHookNew, "mirage haze hook (jal DrawRaster__11CDungeonMap → cave)"),
