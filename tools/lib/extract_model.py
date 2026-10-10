@@ -433,7 +433,8 @@ def unswizzle8(data, w, h):
 
 
 def tim2_rgba(block, swizzled=False):
-    """(w, h, rgba bytes) from a TIM2 picture. 8-bit indexed only, which is every character texture on the disc.
+    """(w, h, rgba bytes) from a TIM2 picture: 8-bit indexed (every character texture on the disc), or direct colour — 32-bit RGBA or
+    16-bit A1B5G5R5 (image type 3 / 1, no CLUT: some effect sprites, e.g. saget.chr's atr24), stored row-major.
 
     The 256-colour CLUT is stored in the PS2's CSM1 block order, so entries have to be un-swizzled before use — bits 3 and 4
     of the index swap. Reading it straight gives a picture with the right colours in the wrong places; measured on the cat's
@@ -449,8 +450,20 @@ def tim2_rgba(block, swizzled=False):
     _, clut_sz, img_sz = struct.unpack_from('<3I', block, pic)
     hdr_sz, colors = struct.unpack_from('<2H', block, pic + 0x0C)
     w, h = struct.unpack_from('<2H', block, pic + 0x14)
+    kind = block[pic + 0x13]
+    if colors == 0 and kind in (1, 3):                       # direct colour
+        px = block[pic + hdr_sz: pic + hdr_sz + img_sz]
+        out = bytearray()
+        if kind == 3:
+            for i in range(w * h):
+                r, g, b, a = px[i * 4: i * 4 + 4]; out += bytes((r, g, b, min(255, a * 2)))   # PS2 alpha: 0x80 is opaque
+        else:
+            for i in range(w * h):
+                v = px[i * 2] | px[i * 2 + 1] << 8
+                out += bytes(((v & 31) * 255 // 31, (v >> 5 & 31) * 255 // 31, (v >> 10 & 31) * 255 // 31, 255 if v & 0x8000 else 0))
+        return w, h, bytes(out)
     if colors != 256:
-        raise ValueError(f'{colors}-colour TIM2 is not supported (8-bit indexed only)')
+        raise ValueError(f'{colors}-colour TIM2 is not supported (8-bit indexed or 16/32-bit direct only)')
     px = block[pic + hdr_sz: pic + hdr_sz + img_sz]
     if swizzled and w % 16 == 0 and h % 16 == 0:
         px = unswizzle8(px, w, h)
