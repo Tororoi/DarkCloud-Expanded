@@ -7,7 +7,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>Monster sounds and Steve's lines wherever the randomizer places a species: tools/stubs/monster_bank.s (in the dead
     /// soft-float routines) builds each randomized floor's monster bank and Steve lines from the library MonsterSoundBake writes,
-    /// with its helpers in tools/stubs/monster_bank_io.s (the dead CD streaming routines); the dun hook is DunPatches'.</summary>
+    /// with its helpers in tools/stubs/monster_bank_io.s (the dead CD streaming routines); the dun hook is DunPatches'. And se_info's spare id 600 as the life sphere's shatter for the Crystal Gemron's death.</summary>
     internal static class ElfSoundPatches
     {
         internal static void PatchMonsterBank(FileStream fs, Func<uint, long> ElfOff)
@@ -26,6 +26,10 @@ namespace Dark_Cloud_Improved_Version
                 if (stub.Length == 0 || (stub.Length & 3) != 0 || !check(U32(stub, 0))) throw new IOException($"{bin} malformed ({stub.Length} B) or stale — reassemble its .s.");
                 WriteBytes(fs, ElfOff, at, stub, end, $"{bin} overruns the {host} routines' bodies");
             }
+            uint shatter = SeInfo.Table + SeInfo.Shatter * SeInfo.RowBytes;                   // word-aligned; the row's vol_no is the next word's low half, 0
+            ReplaceWord(fs, ElfOff, shatter, 0xFF00FFFFu,                                         // program −1, note −1, port −1
+                        (uint)MonsterSoundBake.ShatterProgram | (uint)MonsterSoundBake.ShatterNote << 8 | 10u << 24,   // on the monster port (MIDI channel 10)
+                        $"se_info row {SeInfo.Shatter}");
         }
     }
 }

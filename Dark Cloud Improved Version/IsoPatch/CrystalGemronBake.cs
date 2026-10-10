@@ -55,9 +55,11 @@ namespace Dark_Cloud_Improved_Version
         private const uint MaterialAlpha = 40;
         private const float Hidden = 0.001f;                                    // "none": a scale of 0 would zero the node's axes
 
-        /// <summary>The vanilla death's wait cries at frame 214, which its 105–125 clip never reaches; the rebuilt clip does, so the
-        /// frame is moved past it (the vanilla death stays silent there).</summary>
-        private const float CryFrame = 214f, NeverFrame = 9999f;
+        /// <summary>The vanilla death waits out its motion (sub 0x5C4: until _CHK_MOTION_FRM reports the end, sounding 2501 + 11 once
+        /// on frame 214, which its 105–125 clip never reaches) before fading out. The rebuilt clip reaches the shatter, so that wait
+        /// sounds the life sphere's shatter (SeInfo.Shatter) as the sphere breaks instead; the death cry at its start (2501 + 13) stays.</summary>
+        private const float CryFrame = 214f;
+        private const int SoundBase = 2501, CryOffset = 11;
 
         private static readonly double[] Forward = { 0.0, 0.0, 1.0 }, Up = { 0.0, 1.0, 0.0 };
 
@@ -172,9 +174,14 @@ namespace Dark_Cloud_Improved_Version
             int push = call - 12;
             if (U(push) != 3 || U(push + 4) != 2) throw new IOException($"{Base}.stb: the death wait's frame is not a pushed float");
             float frame = BitConverter.ToSingle(stb, push + 8);
-            if (frame != CryFrame && frame != NeverFrame) throw new IOException($"{Base}.stb: the death wait cries at {frame}, not {CryFrame}");
+            if (frame != CryFrame && frame != ShatterStart) throw new IOException($"{Base}.stb: the death wait cries at {frame}, not {CryFrame}");
+            int id = push - 24, shatterOffset = SeInfo.Shatter - SoundBase;                       // push SoundBase; push offset; add; push frame
+            if (U(push - 36) != 3 || U(push - 32) != 1 || U(push - 28) != SoundBase || U(push - 12) != 6 || U(id) != 3 || U(id + 4) != 1
+                || (U(id + 8) != CryOffset && (int)U(id + 8) != shatterOffset))
+                throw new IOException($"{Base}.stb: the death wait's sound is not {SoundBase} + {CryOffset}");
             byte[] o = (byte[])stb.Clone();
-            IsoBytes.WrF(o, push + 8, NeverFrame);
+            IsoBytes.WrF(o, push + 8, ShatterStart);
+            IsoBytes.U32(o, id + 8, (uint)shatterOffset);
             var ranges = new List<int>();
             for (int c = cb + (int)U(label100); c + 12 <= stb.Length && U(c) != 15; c += 12)   // the loop, up to its RET
                 if (U(c) == 3 && U(c + 4) == 2 && (BitConverter.ToSingle(stb, c + 8) == VanillaRange || BitConverter.ToSingle(stb, c + 8) == ShotRange)) ranges.Add(c);
@@ -185,7 +192,7 @@ namespace Dark_Cloud_Improved_Version
                 if (U(c) == 19 && U(c - 12) == 3 && U(c - 8) == 2 && (BitConverter.ToSingle(stb, c - 4) == VanillaWalkIn || BitConverter.ToSingle(stb, c - 4) == WalkIn)) walks.Add(c - 12);
             if (walks.Count != 1) throw new IOException($"{Base}.stb: {walks.Count} walk-closer calls in the AI loop, expected 1");
             IsoBytes.WrF(o, walks[0] + 8, WalkIn);
-            why = $"Holy Gemron's, the death cry's frame {CryFrame} → {NeverFrame} (never reached, as in the vanilla clip), its range {VanillaRange} → {ShotRange}, its walk-in {VanillaWalkIn} → {WalkIn}";
+            why = $"Holy Gemron's, the death wait's sound {SoundBase} + {CryOffset} at frame {CryFrame} → the shatter ({SeInfo.Shatter}) at {ShatterStart}, its range {VanillaRange} → {ShotRange}, its walk-in {VanillaWalkIn} → {WalkIn}";
             return o;
         }
         private const float VanillaRange = 70f, ShotRange = 140f;   // label 100: walk closer beyond it, shoot within it

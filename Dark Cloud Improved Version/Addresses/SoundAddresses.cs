@@ -13,4 +13,14 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>now_sound_set: the sound set loaded last (snd{n}.snd); load_snd_set: one loading in the background, −1 = none.</summary>
         internal const long NowSoundSet = 0x202A25EC, LoadSoundSet = 0x202A2630;
     }
+
+    /// <summary>se_info (ELF .data, 2801 × 6 B: program, note, -, port, vol_no): the (program, note) and MIDI port of each sound id
+    /// outside the 100–499 table ranges (GetSeInfo); SndInitSeTable fills vol_no from setbl.txt at boot. Guest addresses.</summary>
+    internal static class SeInfo
+    {
+        internal const uint Table = 0x0025DFB0, RowBytes = 6;
+        /// <summary>Id 600, unused in vanilla (program −1, port −1): the life sphere's shatter (MonsterSoundBake.ShatterUnit) on the
+        /// monster port — played by the Crystal Gemron's death.</summary>
+        internal const int Shatter = 600;
+    }
 }
