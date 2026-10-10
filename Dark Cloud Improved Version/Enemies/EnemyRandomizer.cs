@@ -162,6 +162,7 @@ namespace Dark_Cloud_Improved_Version
                 for (int entry = 0; entry < BtEnemyLayout.EntriesPerFloor; entry++)
                     Memory.WriteInt(BtEnemyLayout.EntryAddress(bases[b], floor, entry) + BtEnemyLayout.Id, o[b][entry]);
             _stagedFloors.Remove(floor);
+            MonsterSounds.ClearFloor(floor);
         }
 
         /// <summary>
@@ -184,6 +185,7 @@ namespace Dark_Cloud_Improved_Version
                 Console.WriteLine($"[Randomizer] restore: {_stagedFloors.Count} staged floor(s) reverted (dungeon {_stageDungeon}: {string.Join(",", _stagedFloors.Keys)}).");
             }
             _stagedFloors.Clear(); _stageDungeon = -1; _menuFloor = -1;   // next entry re-randomizes whatever floors are picked
+            MonsterSounds.ClearAll();
         }
 
         /// <summary>
@@ -254,6 +256,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteInt(EnemySpeciesTable.RecordAddress(ti) + EnemySpeciesTable.MonsterType, cap);
             }
             _stagedFloors[floor] = (snap[0], snap[1]);
+            MonsterSounds.MarkFloor(floor);              // its monster bank built from these species as it loads
             if (themedRoster != null)
                 Console.WriteLine($"[Randomizer] staged dungeon {dungeon} floor {floor} (normal+Ura); "
                     + $"theme: \"{themeName}\"; {capEdits.Count} cap edit(s); budget {budget}B (borrowed-shot headroom {BorrowedShots.Headroom}).");

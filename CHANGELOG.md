@@ -26,12 +26,9 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 - **No-drop enemies** — Regular enemy species that ship unable to drop items (flyers, Gol/Sil, …) had a working `DropChance` but a `DeathDropFlag` of 0, which made the engine skip their entire death-drop block. The flag is now flipped to 1 in the static species table so every spawn drops as intended. Scoped to regular `e####` enemies; bosses, effects, and the steal item are untouched.
 - **Log file names** — Mod log filenames now use a correct `yyyy-MM-dd` date format (was `yyyy-dd-M`, which sorted wrong and collided across months).
-- **Gacious in the randomizer** — The randomizer no longer places vanilla Gacious (a boss-type record that breaks as a regular enemy); Gacious (Enhanced) takes its slot at the same frequency.
-- **Bait notice-radius table** — The mod's map of the game's bait table was off by one word: each bait's radius address was the previous bait's, and the Flamingo's bonus also wrote into an unrelated float before the table (128 → 138 while a Flamingo was owned). Corrected against the game's `esa_info` layout.
 - **Dungeon character memory** — The dungeon's character-model pool is raised from 3.36 MB to 3.84 MB in the ISO's dungeon overlay (the disc-read staging buffer trimmed from 4.48 MB to 4.00 MB to pay for it), so Xiao's model with the cat baked in doesn't hang a party switch.
 - **Shot slots** — Floors are no longer limited to five monster shot types: the five slots are shared among every config the floor needs, each read from disc at most once per floor.
 - **Bomb knockback** — Bombs (thrown, trapped or an enemy's) knock the player away from the blast; they always threw him the same world direction.
-- **Ally town dialogue** — An ally's own NPC lines and name tokens show again after an in-town switch.
 - **Game text** — The ISO patch fixes typos in the game's English text and unifies NPC, place and item names (Mr. Mustache, Stu, Mahnia, Sugar, Yellow Drops, Sun & Moon Temple, Muska Desert, Halberd, the Georama shop and house names, and the Pike / Gina / Storage Guard name plates). Double spaces and spaces before punctuation are removed. The mod's own dialogue got the same pass and uses US spellings.
 
 ---
@@ -39,7 +36,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 ## Game Mechanics
 
 - **Heal ability cadence** — Every weapon with the Heal ability now heals every 3 seconds instead of 4 (patched into the dungeon overlay on the ISO).
-- **Poison wears off** — Enemy poison ends after status susceptibility × 2 seconds (half with Harder Enemy AI on); re-poisoning does not extend it.
+- **Poison wears off** — Enemy's poison status ends after status susceptibility × 2 seconds (half with Harder Enemy AI on); re-poisoning does not extend it.
 - **A hit breaks your freeze** — Taking a hit while frozen ends the freeze at once, even from an attack that freezes (any other ailment stays).
 - **Element picker** — D-pad Up opens the quick-change ring as an element picker showing the elements the equipped weapon carries plus None (a grey synth sphere; not offered to Ruby or Osmond's machine gun). X applies, Circle cancels. SELECT still opens the character ring. Replaces the old D-pad Up/Down element cycling.
 - **Weapon effects bill WHP** — The big weapon effects below (Solar Flash 5, Big Bang blast 20, Zeus bolt 10, Terra Sword impact 10, Hercules' Wrath 20) charge WHP through the game's own weapon-wear routine, so Endurance, Durable, Fragile, Auto Repair Powder and breaking all apply.
@@ -81,6 +78,8 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Spawn any species on regular floors** — Replacing spawn-table entity IDs/models lets any enemy — including bosses and minibosses (Master Utan, Minotaur Joe, Black Knight Mount, King's Curse, Ice Queen, Dark Genie final form) and mimics — appear on normal dungeon floors. Boss behavior scripts are patched in loaded memory so a non-native boss spawns at its floor position instead of snapping to its arena origin, and on death it collapses/fades and interrupts its motion instead of triggering a victory cutscene. Multi-part bosses are forced spawn-once (one skeleton).
 - **Mesh-buffer guard** — Randomized rosters are budgeted against measured per-species model footprints so a floor never overruns the engine's mesh buffer.
 - **Stat normalization** — An out-of-region spawn's HP, ABS, defense and damage are bounded by the region's own enemies: lifted to the pool average when it comes from an earlier region, capped at the highest pool max seen so far when it comes from a later one, never moved the wrong way. Look-alike families (`EnemySpecies.SimilarEnemies`, e.g. Cave Bat < Evil Bat < their Enhanced forms) keep their order on every floor. Bosses and boss support entities are left out. The Demon Shaft bands' back floors were off by one and are fixed.
+- **Monster sounds anywhere** — A randomized floor loads the sounds of the species on it, so enemies placed outside their home dungeon cry, attack and die with their own sounds instead of silence. A floor whose roster's sounds exceed the game's sound memory leaves the last ones out.
+- **Steve talks about any enemy** — Steve's lock-on lines about the enemies on a randomized floor are loaded with it, so he comments on enemies from other dungeons too.
 - **Reusable stat scaling** — Live per-slot / per-species stat scaling (HP, defense, melee, projectile) is driven through one shared pipeline used by the normalizer, the difficulty options, and miniboss buffs.
 
 ### New Enemies
@@ -90,7 +89,6 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 ### Miniboss System
 
-- **Stamina status removed** - Minibosses no longer have Stamina status by default.
 - **Combat scaling** — Minibosses now get a scaled hitbox, dynamically buffed projectile damage, and aggro/reticle ranges enlarged to match their size, with walking animation synced to their scale.
 - **Thematic loot** — Each dungeon has per-enemy flavor drops: 5% rare drop and 30% common drop tables with dungeon-appropriate items. See tables below.
 - **Boosted weapon drops** — Minibosses can drop weapons with preset stats written directly to the weapon slot on pickup. Boost monitor cancels cleanly on floor change.

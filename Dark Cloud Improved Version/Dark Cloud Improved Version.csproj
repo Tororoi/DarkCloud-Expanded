@@ -67,6 +67,12 @@
     <EmbeddedResource Include="Resources\isoPatch\flashSlot.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.flashSlot.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\monsterBank.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.monsterBank.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\monsterBankIo.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.monsterBankIo.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\elementMenu.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.elementMenu.bin</LogicalName>
     </EmbeddedResource>

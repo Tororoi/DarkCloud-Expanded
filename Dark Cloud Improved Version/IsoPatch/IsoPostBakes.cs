@@ -56,6 +56,9 @@ namespace Dark_Cloud_Improved_Version
             // The Crystal Gemron's model, script and name under the orphan entries e148a (renamed e168a). Idempotent (the script's moved
             // cry frame; the name compared).
             new() { Name = "crystal-gemron",   Progress = "Baking the Crystal Gemron …",                      Run = CrystalGemronBake.Run },
+            // Every monster sound program of the dungeon sound sets in one file, from which tools/stubs/monster_bank.s builds each
+            // randomized floor's monster bank (MonsterSoundBake).
+            new() { Name = "monster-sounds",   Progress = "Gathering the monster sounds …",                   Run = MonsterSoundBake.Run },
             new() { Name = "confuse-ability",  Progress = "Baking the Confuse ability's name and icon …",   Run = ConfuseAbilityBakes.Run }, // the name (system banks) and icon (charaface)
             // Spelling fixes to the English text, in place in every English bank — last, so it edits the banks as the steps above
             // leave them (the system banks' appended Confuse name, the relocated item notices).

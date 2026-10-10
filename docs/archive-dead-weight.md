@@ -44,7 +44,7 @@ live twin still present in the archive, which is what makes this category convin
 
 | file | size | sector | live twin? |
 |---|---|---|---|
-| `dun\monstor\e50a.chr_` | 1,305,136 | 235806 | yes |
+| `dun\monstor\e50a.chr_` | 1,305,136 | 235806 | yes — **used**: renamed `sound\set\monlib.snd`, the monster sound library (docs/monster-sounds.md) |
 | `dun\pack\main00n.pac_` | 1,242,448 | 309747 | yes |
 | `dun\monstor\e74a.chr_` | 959,968 | 265933 | yes |
 | `dun\monstor\e59a.chr_` | 953,872 | 265467 | yes |
