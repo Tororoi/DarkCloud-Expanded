@@ -248,7 +248,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x00110840, HostSpan = 0x870, VanillaWord0 = 0x0080482D;   // `move t1, a0`
         /// <summary>tools/stubs/monster_bank.s: the library's path, then (+0x18) each randomized floor's monster bank built.</summary>
-        internal const uint MonsterBank = Host + 0x8;             // 0x110848, 2,136 B → 0x1110A0
+        internal const uint MonsterBank = Host + 0x8;             // 0x110848, 2,152 B → 0x1110B0 (the host full)
         internal const uint MonsterBankEntry = MonsterBank + 0x18;   // 0x110860
         internal const uint End = Host + HostSpan;
     }

@@ -16,7 +16,8 @@
 # sample, sample-set and program chunks (a 16-byte tag/size/max header, the offset table, the records, each chunk padded to 16)
 # — each unit's records copied with their indices moved past the units before it and their VAG offsets past the samples before
 # it, the units of one program under one program record. CSound::LoadHdBd_G swaps it in (the monster port's sounds stop, the old
-# bank's memory is freed). CodeCaves.MonsterBankStats takes the samples' bytes, the units taken and left out, a count of the
+# bank's memory is freed, the port's volume is set to 0) and CSound::SetVol turns the port back up to 0x100, as SetSoundFile does
+# after loading a set. CodeCaves.MonsterBankStats takes the samples' bytes, the units taken and left out, a count of the
 # banks built and the bank's header address in IOP memory (what Gate compares).
 #
 # Frame: 0x28 units left out, 0x30 the units (16 halfwords), 0x50 where each unit's samples went, 0x90 each unit's first sample
@@ -55,10 +56,9 @@
     beq   $v0, $zero, done
     lw    $t0, 0x000C($v0)         # (delay) DATA_HEADER.sector
     lui   $t1, 0x002A
-    lw    $t1, 0x24F0($t1)         # data_sector
-    addu  $s0, $t0, $t1
-    lui   $t0, 0x002A
-    lw    $s2, 0x2384($t0)         # read_buffer: the samples
+    lw    $t2, 0x24F0($t1)         # data_sector
+    addu  $s0, $t0, $t2
+    lw    $s2, 0x2384($t1)         # read_buffer: the samples
     lui   $t0, 0x0008
     addu  $s3, $s2, $t0            # + 0x80000: the library's front
     lui   $t0, 0x000A
@@ -571,6 +571,11 @@ program_next:
     move  $a3, $s2
     jal   0x00146EF0               # CSound::LoadHdBd_G(hd, hd_size, bd, bd_size)
     move  $t0, $s6                 # (delay) the fifth argument rides in t0
+    lui   $a0, 0x002A
+    ori   $a0, $a0, 0x252C         # CSnd
+    addiu $a1, $zero, 10
+    jal   0x00146960               # CSound::SetVol(10, 0x100): the load leaves the monster port at 0 (SetSoundFile turns it back up)
+    addiu $a2, $zero, 0x0100       # (delay)
     lui   $t0, 0x01FB
     addiu $t0, $t0, -0x07F0        # 0x01FAF810 CodeCaves.MonsterBankStats
     lui   $t1, 0x01CF

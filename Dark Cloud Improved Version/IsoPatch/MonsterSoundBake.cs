@@ -331,7 +331,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Each species' Steve lines as a block (by species-table index): count, text halfwords, then (message id, the text's
         /// halfword offset in the block's text) a line, then the texts (each through its 0xFF01). A species' lines are messages
         /// 4000 + its name number × 10 + 0..9 of the dungeon Steve files that carry them (each file only its natives'); the
-        /// extension species take their template's (Holy Gemron's) texts under their own ids.</summary>
+        /// extension species take their template's (Holy Gemron's) texts under their own ids, with EnemyDefaults.SteveLines over them.</summary>
         private static List<(int t, byte[] block)> SteveBlocks(Func<string, byte[]> read)
         {
             var files = SteveFiles.Select(n => read($@"dun\message\ww_mes\{n}.mes")).ToList();
@@ -346,9 +346,11 @@ namespace Dark_Cloud_Improved_Version
                 return null;
             }
             var blocks = new List<(int, byte[])>();
-            foreach (var (t, own, source) in SteveSpecies())
+            foreach (var (t, own, source, custom) in SteveSpecies())
             {
-                var lines = Enumerable.Range(0, SteveLines).Select(k => (id: SteveFirst + own * SteveLines + k, words: Line(SteveFirst + source * SteveLines + k)))
+                ushort[] Text(int k) => custom != null && custom.TryGetValue(k, out string s)
+                    ? MesTextBaker.AppendTerminator(WeaponDescriptions.Encode(s)) : Line(SteveFirst + source * SteveLines + k);
+                var lines = Enumerable.Range(0, SteveLines).Select(k => (id: SteveFirst + own * SteveLines + k, words: Text(k)))
                                       .Where(l => l.words != null).ToList();
                 if (lines.Count == 0) continue;
                 int words = lines.Sum(l => l.words.Length), head = 4 + lines.Count * 4;
@@ -366,14 +368,14 @@ namespace Dark_Cloud_Improved_Version
             return blocks;
         }
 
-        /// <summary>Species-table index → (its name number, the name number whose Steve texts it takes).</summary>
-        private static IEnumerable<(int t, int own, int source)> SteveSpecies()
+        /// <summary>Species-table index → (its name number, the name number whose Steve texts it takes, its own lines over those).</summary>
+        private static IEnumerable<(int t, int own, int source, Dictionary<int, string> custom)> SteveSpecies()
         {
             foreach (var kv in EnemySpecies.All)
             {
                 if (kv.Value.TableIndex is not int t || t >= SpeciesRows) continue;
                 int own = kv.Value.Id, source = t >= EnemySpeciesTable.VanillaCount ? TemplateName(t) : own;
-                yield return (t, own, source);
+                yield return (t, own, source, kv.Value.SteveLines);
             }
         }
 
