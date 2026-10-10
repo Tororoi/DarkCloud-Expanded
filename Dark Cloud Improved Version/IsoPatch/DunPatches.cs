@@ -143,10 +143,10 @@ namespace Dark_Cloud_Improved_Version
             // Super Steve's sphere icon: the HUD's status pass → the icon cave, which performs it and then draws the sphere
             // weapon's icon over Steve (ElfWeaponPatches.PatchSuperSteveIconDraw writes the cave).
             new(SsIconHookAddr, SsIconHookOrig, SsIconHookNew, "super steve icon hook (jal topStatusInfo → cave)"),
-            // The loader's `jal MemoryMapDump` (dun 0x1DB9568) was the Gemron cave's first hook; the cave now sits at the head of
-            // the per-frame chain instead, and an ISO patched with that first hook gets the vanilla word back.
-            // MemoryMapDump (dun 0x1DAC070, printf-only) hosts the guard-bypass cave (DunCave.CatGuardBypass, Caves below): its three
-            // callers become nops — the loader's (the borrowed shots' first hook site), the per-frame one and the bomb-effect draw's.
+            // MemoryMapDump (dun 0x1DAC070, printf-only) hosts the guard-bypass cave (DunCave.CatGuardBypass, Caves below), so none of
+            // its three callers may reach it: the per-frame one and the bomb-effect draw's become nops; the loader's — BtLoadMonstor's
+            // closing call, the floor's species loaded, its layout row in s1, read_buffer free — goes to monster_bank.s instead
+            // (ElfSoundPatches.PatchMonsterBank writes it), which builds a randomized floor's monster bank and returns.
             // THE MONSTER POOL IS THE MAP CARVE'S REMAINDER (BtMapJumpLoad: cap = 0xA7F80 − the floor's map data), and the
             // 27 MB global buffer is full, so it grows by shrinking the dungeon EVENT work buffer (BtScriptWorkBuffer, 100,000
             // units): the memory an in-floor event (kind 0 — the floor keeps its monsters: chests, the cat meetings, the
@@ -160,7 +160,7 @@ namespace Dark_Cloud_Improved_Version
             new(0x01DB4A04, 0x344286A0, 0x34421170, "in-floor event scratch cap 100,000 → 70,000 units"),
             new(MapCarveAddr, 0x34457F80, MapCarveGrownWord, "map carve 688,000 → 718,000 units"),
             new(0x01DAD938, MemoryMapDumpCall, 0, "MemoryMapDump call → nop (its body is the guard-bypass cave)"),
-            new(BorrowedLoadHookAddr, MemoryMapDumpCall, 0, "MemoryMapDump call → nop (the loader's; its body is the guard-bypass cave)"),
+            new(MonsterBankHookAddr, MemoryMapDumpCall, MipsAsm.Jal(DeadFloatCave.MonsterBankEntry), "monster bank (BtLoadMonstor's jal MemoryMapDump → cave)"),
             new(0x01DBA8F4, MemoryMapDumpCall, 0, "MemoryMapDump call → nop (its body is the guard-bypass cave)"),
             new(SsIconCopyHookAddr, SsIconCopyHookOrig, SsIconCopyHookNew, "super steve icon copy hook (jal DngActiveWeaponTextureCopy → cave)"),
             new(SsIconCopyHookAddr2, SsIconCopyHookOrig, SsIconCopyHookNew, "super steve icon copy hook 2 (the step path's jal DngActiveWeaponTextureCopy → cave)"),
@@ -204,7 +204,7 @@ namespace Dark_Cloud_Improved_Version
         internal const uint XiaoShotWhpPatchedWord0 = 0x3C020000u | (uint)((Mailbox.XiaoShotWhpFactor - 0x20000000) >> 16);
         internal const uint XiaoShotWhpPatchedWord1 = 0xC44C0000u | (uint)((Mailbox.XiaoShotWhpFactor - 0x20000000) & 0xFFFF);
         internal const long XiaoShotWhpPatchAddrMmu = 0x20000000L + XiaoShotWhpSiteA;
-        internal const uint BorrowedLoadHookAddr    = 0x01DB9568;                          // OpB_InitProcess: jal MemoryMapDump after the species loop
+        internal const uint MonsterBankHookAddr     = 0x01DB9568;                          // BtLoadMonstor: jal MemoryMapDump after the species loop
         internal const uint MemoryMapDumpCall       = 0x0C76B01C;                          // jal 0x1DAC070
         /// <summary>The map carve's `ori a1,v0,LO` in GameInit — the runtime reads it to know the pool is the grown one.</summary>
         internal const uint MapCarveAddr      = 0x01DAC450;

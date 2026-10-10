@@ -106,6 +106,10 @@ namespace Dark_Cloud_Improved_Version
         internal int[] MeleeDamage;
         internal int[] ProjectileDamage;
 
+        // Steve's lock-on lines (messages 4000 + Id × 10 + 0..9, played in turn) a mod species replaces in the lines it takes from
+        // the species it is built on: line number → text ('\n' = a new row). MonsterSoundBake bakes them into the sound library.
+        internal Dictionary<int, string> SteveLines;
+
         // Model scale table (base 0x21E18530, stride 0x3510 per slot) — separate from enemy slot.
         // "BODY SIZE" triple, set from the MODEL file's info.cfg `BODY_SIZE height,width,depth` line via
         // CommandBODY_SIZE (RE'd; see ModelScaleOffsets.BodyWidth/BodyHeight/BodyDepth). Read live (not cached at spawn).
@@ -2148,18 +2152,20 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=150, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,
             ItemDamageRes=70, ItemStatusRes=60,
             HeightFromRoot=19.0f, BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
-            MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150,150,150} };   // the Holy ball, then the death and self-destruct blasts (BombGemronBake), in script order
+            MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150,150,150},   // the Holy ball, then the death and self-destruct blasts (BombGemronBake), in script order
+            SteveLines=new() { [0] = "He's got a bomb!\n...Oh, he is the bomb...", [1] = "Keep your distance, fiend!" } };   // over Holy Gemron's lines 0-1
 
         // Crystal Gemron: Holy Gemron's rig, stats and script, its three gems replaced by the breaking crystal ball of the e209 event,
         // which shatters through its death (CrystalGemronBake). Randomizer-only, like the Bomb Gemron.
         internal static readonly EnemyDefaults CrystalGemron = new EnemyDefaults {
-            Id=321, TableIndex=168, Name="Crystal Gemron", ModelCode="e168", ModelFootprint=169171,   // measured on a floor of it alone (Gallery of Time 24, 2026-10-08)
+            Id=321, TableIndex=168, Name="Crystal Gemron", ModelCode="e168", ModelFootprint=148974,   // measured on a floor of it alone (Gallery of Time 24, 2026-10-10)
             Abs=80, MinGoldDrop=20, DropChance=30, StealItemId=178, RareDropItemId=231,
             MaxHp=12500, DamageReduction=30, WeaponDefense=10, KnockbackMult=1.0f,
             Category=EnemyCategory.Dragon, FireRes=0, IceRes=150, ThunderRes=0, WindRes=0, HolyRes=0,   // weak to ice, immune to every other element
             ItemDamageRes=70, ItemStatusRes=60,
             HeightFromRoot=19.0f, BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
-            MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150} };
+            MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150},
+            SteveLines=new() { [0] = "Be careful! Its shot is homing!", [1] = "Such pretty eyes!" } };   // over Holy Gemron's lines 0-1
 
         /// <summary>Mod species with no vanilla spawn pool → the vanilla species whose home region they share. The stat
         /// normalizer gives them that home, so they are capped like a native of it when the randomizer places them lower.</summary>

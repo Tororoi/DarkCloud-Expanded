@@ -165,6 +165,7 @@ namespace Dark_Cloud_Improved_Version
             ElfSpeciesPatches.PatchEyeTint(fs, ElfOff);            // the Crystal Gemron's eyes tinted (entered through its eyes' visual's private vtable)
             ElfSpeciesPatches.PatchBombTint(fs, ElfOff);           // the Bomb Gemron's big bomb reddening as its fuse burns (entered through its visual's private vtable)
             ElfSpeciesPatches.PatchFlashSlot(fs, ElfOff);          // the machine-gun hit flash's size and alpha per slot (5.0 / 0x80 baked) and the Bomb Gemron's fuse spark, frame-timed in the draw
+            ElfSoundPatches.PatchMonsterBank(fs, ElfOff);          // each randomized floor's monster bank built from the sounds of the species on it (the dun hook is in DunPatches)
             PatchXiaoBuildUp(fs, ElfOff);                 // Xiao's build-up tree: Hardshooter → Double Impact only, Double Impact → Matador only
             PatchFishingPrizeSlingshot(fs, ElfOff);       // the fishing prize exchange sells the Flamingo for 1000 FP (vanilla: the Matador for 1400)
             PatchMapCarveRemainder(fs, ElfOff);           // the monster pool = the (grown) map carve minus the floor's map data (DunPatches grows the carve)

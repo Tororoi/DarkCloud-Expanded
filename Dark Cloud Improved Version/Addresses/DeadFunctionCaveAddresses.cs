@@ -240,6 +240,31 @@ namespace Dark_Cloud_Improved_Version
         internal const uint End = Host + HostSpan;
     }
 
+    /// <summary>The soft-float routines' bodies (2,160 B from 0x110840, main ELF: _fpadd_parts, fpadd, fpsub, fpmul, fpdiv,
+    /// __fpcmp_parts_f, fpcmp, sitofp): the compiler emits EE floating-point instructions, so nothing calls them — the only
+    /// references are the routines' own to each other, inside the run. ElfSoundPatches.PatchMonsterBank turns the first two words
+    /// into `jr ra; li v0,0`.</summary>
+    internal static class DeadFloatCave
+    {
+        internal const uint Host = 0x00110840, HostSpan = 0x870, VanillaWord0 = 0x0080482D;   // `move t1, a0`
+        /// <summary>tools/stubs/monster_bank.s: the library's path, then (+0x18) each randomized floor's monster bank built.</summary>
+        internal const uint MonsterBank = Host + 0x8;             // 0x110848, 2,152 B → 0x1110B0 (the host full)
+        internal const uint MonsterBankEntry = MonsterBank + 0x18;   // 0x110860
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The CD streaming routines' bodies (864 B from 0x10BEB0, main ELF: sceCdStInit … sceCdStStat): the game never
+    /// streams, so nothing reaches them, as <see cref="DeadIoctlCave"/>. ElfSoundPatches.PatchMonsterBank turns the first two words
+    /// into `jr ra; li v0,0`.</summary>
+    internal static class DeadStreamCave
+    {
+        internal const uint Host = 0x0010BEB0, HostSpan = 0x360, VanillaWord0 = 0x27BDFFF0;   // `addiu sp,sp,-0x10`
+        /// <summary>tools/stubs/monster_bank_io.s: monster_bank.s's helpers (AddUnit +0, Copy +8, Fix +0x10, Read +0x18, Gate +0x20,
+        /// Steve +0x28 — the floor's Steve lines).</summary>
+        internal const uint MonsterBankIo = Host + 0x8;           // 0x10BEB8, 848 B → 0x10C208
+        internal const uint End = Host + HostSpan;
+    }
+
     internal static class SmoothRestCave
     {
         internal const uint Host         = 0x0027D084;

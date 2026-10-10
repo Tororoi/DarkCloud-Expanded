@@ -45,6 +45,7 @@ namespace Dark_Cloud_Improved_Version
                         Memory.WriteInt(BtEnemyLayout.EntryAddress(layoutBase, floor, entry) + BtEnemyLayout.Id, -1);
                 }
             }
+            for (int floor = 0; floor < floors; floor++) MonsterSounds.MarkFloor(floor);   // its sounds and Steve's lines loaded with it
             // Tame a boss-class species before the floor spawns it. Boss detection is by ModelCode 'c'
             // inside RegularizeBossRecord. This edits the shared species record (persists for the session, like
             // RedirectEnemyModel). A single-species roster MUST be repeatable, or ArrangementPos can't fill
@@ -340,6 +341,7 @@ namespace Dark_Cloud_Improved_Version
             }
             _rosterSnapDungeon = -1; _rosterSnapNormal = null; _rosterSnapUra = null;
             _speciesRecordSnaps.Clear();
+            MonsterSounds.ClearAll();
             _rosterAppliedToFloor = false;
             _rosterDungeonWide = false;   // next dungeon entry re-randomizes from vanilla
             _mimicChestDone.Clear();
@@ -455,6 +457,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
             }
+            for (int floor = 0; floor < floors; floor++) MonsterSounds.MarkFloor(floor);   // their sounds and Steve's lines loaded with each floor
             if (population > 0) SetPopulationTarget(population);
             // Log the live BtEnemyLayout AFTER the overwrite — compare against the "before" dump to confirm
             // the edit landed and to see the new per-floor entries.

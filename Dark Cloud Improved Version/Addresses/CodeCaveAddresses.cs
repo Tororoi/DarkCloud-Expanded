@@ -347,7 +347,14 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>A byte per monster-pack sub-shot: 1 once an ice arrow in its impact has asked its Gemron for the ice prison
         /// (tools/stubs/crystal_shots.s), 0 outside the impact. Written natively.</summary>
         internal const long IceArrowFired      = 0x21FAF7F0;   // 8 B → 0x21FAF7F8
-        // 0x21FAF7F8..0x21FAF830 FREE
+        // 0x21FAF7F8..0x21FAF800 FREE
+        /// <summary>A bit a floor index (16 B, floors 0–127): set on the floors the randomizer staged, where tools/stubs/monster_bank.s
+        /// builds the floor's monster bank from the species on it (MonsterSounds writes it).</summary>
+        internal const long MonsterBankFloors      = 0x21FAF800;   // 16 B → 0x21FAF810
+        /// <summary>The last bank monster_bank.s built: samples' bytes, units taken, units left out, banks built so far, and its header's
+        /// IOP address (midi_state.port[3].bank after the swap: while the port still holds it, the next floors' banks are built too).</summary>
+        internal const long MonsterBankStats       = 0x21FAF810;   // 5 words → 0x21FAF824
+        // 0x21FAF824..0x21FAF830 FREE
 
         /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
         /// <c>ElfToanMeleePatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's

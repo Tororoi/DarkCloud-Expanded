@@ -8,8 +8,8 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>The Crystal Gemron on the disc (its species record: SpeciesRows / ElfSpeciesPatches): Holy Gemron (e115a) with each of
     /// its three gem spheres replaced by the breaking crystal ball of the e209 event (<c>gedit\s34\chara\e209ball_b.chr</c>: eight shell
-    /// pieces, ten inner shards and the camera-facing glints, beams and rings around them), the ball's whole node tree grafted under each
-    /// gem bone and scaled to the gem, turned so it breaks upright in the death pose. The death plays the ball's shatter from the frame
+    /// pieces, ten inner shards and the camera-facing glints, beams and rings around them), the ball's node tree grafted under each
+    /// gem bone and scaled to the gem (the wing gems' without the glints, beams and rings), turned so it breaks upright in the death pose. The death plays the ball's shatter from the frame
     /// the vanilla death reaches <see cref="ShatterFrom"/>; the body sheets take the look made on the preview page (the embedded
     /// crystalGemronLook.json, its eye's soft edge included). Under the orphan DATA.HED entries e148a renamed to <see cref="Stem"/>, its
     /// script Holy Gemron's, its name in the dungeon message bank. A byte-exact twin of game_data/viewers/model/crystal_gemron.py's
@@ -23,6 +23,7 @@ namespace Dark_Cloud_Improved_Version
         private const string BallChr = @"gedit\s34\chara\e209ball_b.chr", Ball = "e209ball_b";
         private const double BallRadius = 1.0;                                  // the ball's shell in its own model: centred 1.0 above its root
         private static readonly string[] Gems = { "tama1__m", "tamas00__m", "tamas03__m" };   // the gem bones the balls hang from
+        private static readonly HashSet<string> EffectGems = new() { "tama1__m" };   // the balls that carry the glints, beams and rings (EffectsRoot); the wing balls only break
         private static readonly HashSet<string> GemDrop = new() { "tama1__m", "tamas00__m", "tamas03__m", "tama__appz", "tamas01__appz", "tamas02__appz" };
         private const string BallScroll = "TEX_SCROLL_DATA \"ball_b01\",0,32,128,32,\"ball_b01\",0,0,0.5,0.5,0,1\t//玉";   // the ball's own cfg line
 
@@ -55,9 +56,11 @@ namespace Dark_Cloud_Improved_Version
         private const uint MaterialAlpha = 40;
         private const float Hidden = 0.001f;                                    // "none": a scale of 0 would zero the node's axes
 
-        /// <summary>The vanilla death's wait cries at frame 214, which its 105–125 clip never reaches; the rebuilt clip does, so the
-        /// frame is moved past it (the vanilla death stays silent there).</summary>
-        private const float CryFrame = 214f, NeverFrame = 9999f;
+        /// <summary>The vanilla death waits out its motion (sub 0x5C4: until _CHK_MOTION_FRM reports the end, sounding 2501 + 11 once
+        /// on frame 214, which its 105–125 clip never reaches) before fading out. The rebuilt clip reaches the shatter, so that wait
+        /// sounds the life sphere's shatter (SeInfo.Shatter) as the sphere breaks instead; the death cry at its start (2501 + 13) stays.</summary>
+        private const float CryFrame = 214f;
+        private const int SoundBase = 2501, CryOffset = 11;
 
         private static readonly double[] Forward = { 0.0, 0.0, 1.0 }, Up = { 0.0, 1.0, 0.0 };
 
@@ -172,9 +175,14 @@ namespace Dark_Cloud_Improved_Version
             int push = call - 12;
             if (U(push) != 3 || U(push + 4) != 2) throw new IOException($"{Base}.stb: the death wait's frame is not a pushed float");
             float frame = BitConverter.ToSingle(stb, push + 8);
-            if (frame != CryFrame && frame != NeverFrame) throw new IOException($"{Base}.stb: the death wait cries at {frame}, not {CryFrame}");
+            if (frame != CryFrame && frame != ShatterStart) throw new IOException($"{Base}.stb: the death wait cries at {frame}, not {CryFrame}");
+            int id = push - 24, shatterOffset = SeInfo.Shatter - SoundBase;                       // push SoundBase; push offset; add; push frame
+            if (U(push - 36) != 3 || U(push - 32) != 1 || U(push - 28) != SoundBase || U(push - 12) != 6 || U(id) != 3 || U(id + 4) != 1
+                || (U(id + 8) != CryOffset && (int)U(id + 8) != shatterOffset))
+                throw new IOException($"{Base}.stb: the death wait's sound is not {SoundBase} + {CryOffset}");
             byte[] o = (byte[])stb.Clone();
-            IsoBytes.WrF(o, push + 8, NeverFrame);
+            IsoBytes.WrF(o, push + 8, ShatterStart);
+            IsoBytes.U32(o, id + 8, (uint)shatterOffset);
             var ranges = new List<int>();
             for (int c = cb + (int)U(label100); c + 12 <= stb.Length && U(c) != 15; c += 12)   // the loop, up to its RET
                 if (U(c) == 3 && U(c + 4) == 2 && (BitConverter.ToSingle(stb, c + 8) == VanillaRange || BitConverter.ToSingle(stb, c + 8) == ShotRange)) ranges.Add(c);
@@ -185,7 +193,7 @@ namespace Dark_Cloud_Improved_Version
                 if (U(c) == 19 && U(c - 12) == 3 && U(c - 8) == 2 && (BitConverter.ToSingle(stb, c - 4) == VanillaWalkIn || BitConverter.ToSingle(stb, c - 4) == WalkIn)) walks.Add(c - 12);
             if (walks.Count != 1) throw new IOException($"{Base}.stb: {walks.Count} walk-closer calls in the AI loop, expected 1");
             IsoBytes.WrF(o, walks[0] + 8, WalkIn);
-            why = $"Holy Gemron's, the death cry's frame {CryFrame} → {NeverFrame} (never reached, as in the vanilla clip), its range {VanillaRange} → {ShotRange}, its walk-in {VanillaWalkIn} → {WalkIn}";
+            why = $"Holy Gemron's, the death wait's sound {SoundBase} + {CryOffset} at frame {CryFrame} → the shatter ({SeInfo.Shatter}) at {ShatterStart}, its range {VanillaRange} → {ShotRange}, its walk-in {VanillaWalkIn} → {WalkIn}";
             return o;
         }
         private const float VanillaRange = 70f, ShotRange = 140f;   // label 100: walk closer beyond it, shoot within it
@@ -207,8 +215,12 @@ namespace Dark_Cloud_Improved_Version
             var mot = MotFile.FromPack(pack, Base + ".mot");
             var wbreak = PoseWorld(nodes, mot, ShatterFrom);                       // the pose the balls break in
             MotTrack refTrack = mot.Tracks[^1];
-            var pieces = new HashSet<int>();
-            foreach (var n in bnodes) if (n.Name == PiecesRoot || pieces.Contains(n.Parent)) pieces.Add(n.I);
+            var pieces = new HashSet<int>(); var effects = new HashSet<int>();
+            foreach (var n in bnodes)
+            {
+                if (n.Name == PiecesRoot || pieces.Contains(n.Parent)) pieces.Add(n.I);
+                if (n.Name == EffectsRoot || effects.Contains(n.Parent)) effects.Add(n.I);
+            }
             var grafts = new List<(List<byte[]> recs, Dictionary<int, byte[]> meshes)>();
             var added = new List<MotTrack>();
             int at = nodes.Count;
@@ -219,18 +231,22 @@ namespace Dark_Cloud_Improved_Version
                 double s = gm.Pos.SelectMany(p => p.Take(3)).Max(c => Math.Abs(c)) / BallRadius;   // the gem's radius
                 double[][] R = Upright(wbreak[g.I]);
                 double[] T = R[1].Select(c => -s * BallRadius * c).ToArray();          // the ball's centre on the gem's
+                var keep = bnodes.Where(n => EffectGems.Contains(gem) || !effects.Contains(n.I)).Select(n => n.I).ToList();
+                var nw = new Dictionary<int, int>();                                  // ball node → its index in this graft
+                for (int k = 0; k < keep.Count; k++) nw[keep[k]] = k;
                 var recs = new List<byte[]>(); var meshes = new Dictionary<int, byte[]>();
-                for (int j = 0; j < bnodes.Count; j++)
+                foreach (int j in keep)
                 {
                     RigNode n = bnodes[j];
-                    recs.Add(n.Parent < 0 ? Record(braw[j], at + j, g.I, R, T, 1.0) : Record(braw[j], at + j, at + n.Parent, null, null, s));
-                    if (n.MeshOff != 0) meshes[j] = ScaledMesh(bmds, n.MeshOff, s);
+                    recs.Add(n.Parent < 0 ? Record(braw[j], at + nw[j], g.I, R, T, 1.0) : Record(braw[j], at + nw[j], at + nw[n.Parent], null, null, s));
+                    if (n.MeshOff != 0) meshes[nw[j]] = ScaledMesh(bmds, n.MeshOff, s);
                 }
                 grafts.Add((recs, meshes));
                 foreach (var t in bmot.Tracks)
                 {
+                    if (!nw.ContainsKey((int)t.W0)) continue;
                     double stretch = Stretch / (pieces.Contains((int)t.W0) ? PieceSpeedup : EffectSpeedup);
-                    var tr = new MotTrack { W0 = (uint)at + t.W0, W1 = t.W1, W2 = t.W2, W3 = refTrack.W3, W6 = refTrack.W6, W7 = refTrack.W7 };
+                    var tr = new MotTrack { W0 = (uint)(at + nw[(int)t.W0]), W1 = t.W1, W2 = t.W2, W3 = refTrack.W3, W6 = refTrack.W6, W7 = refTrack.W7 };
                     foreach (var k in t.Keyframes)
                     {
                         float[] v = k.Value;
@@ -254,15 +270,16 @@ namespace Dark_Cloud_Improved_Version
                     (ShardsRoot, new[] { (0, 0.0), (ShatterStart - 1, 0.0), (ShatterStart, 1.0), (TimelineEnd, 1.0) }),
                 })
                 {
-                    var tr = new MotTrack { W0 = (uint)(at + Node(root)), W1 = 0, W2 = SubtreeVisible, W3 = refTrack.W3, W6 = refTrack.W6, W7 = refTrack.W7 };
+                    if (!nw.ContainsKey(Node(root))) continue;
+                    var tr = new MotTrack { W0 = (uint)(at + nw[Node(root)]), W1 = 0, W2 = SubtreeVisible, W3 = refTrack.W3, W6 = refTrack.W6, W7 = refTrack.W7 };
                     foreach (var (f, v) in keys) tr.Keyframes.Add(Key((uint)f, new[] { v, 0, 0, 0 }));
                     added.Add(tr);
                 }
                 // the glints, beams and rings also scaled to nothing outside the shatter (their camera-facing parents)
-                for (int j = 0; j < bnodes.Count; j++)
+                foreach (int j in keep)
                 {
                     if (!bnodes[j].Name.Contains("__ba")) continue;
-                    var tr = new MotTrack { W0 = (uint)(at + j), W1 = 0, W2 = 1, W3 = refTrack.W3, W6 = refTrack.W6, W7 = refTrack.W7 };
+                    var tr = new MotTrack { W0 = (uint)(at + nw[j]), W1 = 0, W2 = 1, W3 = refTrack.W3, W6 = refTrack.W6, W7 = refTrack.W7 };
                     tr.Keyframes.Add(Key(0, new double[] { Hidden, Hidden, Hidden, 0 }));
                     tr.Keyframes.Add(Key((uint)(ShatterStart - 1), new double[] { Hidden, Hidden, Hidden, 0 }));
                     tr.Keyframes.Add(Key((uint)ShatterStart, new double[] { 1, 1, 1, 0 }));
@@ -271,7 +288,7 @@ namespace Dark_Cloud_Improved_Version
                     tr.Keyframes.Add(Key((uint)TimelineEnd, new double[] { Hidden, Hidden, Hidden, 0 }));
                     added.Add(tr);
                 }
-                at += bnodes.Count;
+                at += keep.Count;
             }
             // the eyes: their triangles out of the head into a node of their own (SplitEyes), no tracks (it keeps its bind pose)
             var (headMdt, eyeMdt) = SplitEyes(mds, by[EyeHead]);
