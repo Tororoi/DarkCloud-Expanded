@@ -626,6 +626,8 @@ def build_mesh_weighted(mds, node, nodes, per_vertex, textured=False, bind_world
             if runs: runs[-1] = (runs[-1][0], runs[-1][1], i - runs[-1][1])
             runs.append((texnames[mi] if mi < len(texnames) else '', i, 0))
         if runs: runs[-1] = (runs[-1][0], runs[-1][1], len(tris) - runs[-1][1])
+        run_mats = [mats[f] for _, f, _ in runs]                       # each run's material: its diffuse colour (+0x00 rgb, +0x0C opacity)
+        run_mats = [(mi, list(struct.unpack_from('<4f', m.materials[mi], 0)) if mi < len(m.materials) else [1.0, 1.0, 1.0, 1.0]) for mi in run_mats]
         texuv = mdt_uvs(m)
         uv = [texuv[i] for t in uvtris for i in t]
     else:
@@ -652,7 +654,7 @@ def build_mesh_weighted(mds, node, nodes, per_vertex, textured=False, bind_world
         w0.append(wa / tot if tot > 0 else 1.0)
     out = {'node': owner, 'skin': True, 'nv': len(local_pos), 'tris': tris,
            'b0': infl0_bone, 'p0': infl0_pos, 'b1': infl1_bone, 'p1': infl1_pos, 'w0': w0}
-    if textured: out['uv'], out['runs'] = uv, runs
+    if textured: out['uv'], out['runs'], out['runMats'] = uv, runs, run_mats
     return out
 
 
