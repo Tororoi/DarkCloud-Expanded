@@ -11,7 +11,7 @@ alone. **X** applies the highlighted element and closes the menu; **Circle** lea
 | piece | where | what |
 |---|---|---|
 | `tools/stubs/element_menu.s` | main ELF, the dead `DebugItemGetKey` tail (0x22B410: trig, xkey, start) + `DebugItemGetDraw` body (0x22B5B8: name, draw, valid, pre, close) | the six caves below and the element test |
-| `ElfElementMenuPatches` | five main-ELF sites, one word each | `jal` into the caves |
+| `ElfElementMenuPatches` | five main-ELF sites, one word each, + the exit's lock-off nopped | `jal` into the caves |
 | `DunPatches` | overlay `MoveChara` 0x1DB14A8 / 0x1DB14C0 | the SELECT read → the trigger cave; `slti …,2` → `slti …,1` on the party size |
 | `ElementMenuIconBake` (post-bake `element-menu-icon`) | `commenu\a_usa\quickchr.pac` → `quickchr.img` → `wepicon` | the None cell: cell 125 (dummy item 86) ← a grey copy of the synth sphere's cell 129 |
 | `Dungeon/ElementMenu.cs` | mod, once a dungeon tick | applies a confirmed pick: the weapon record's HUD element byte and the HUD tint |
@@ -35,13 +35,15 @@ overlay). `ChangeMenu` is at 0x01DA8D30: +0 `selected`, +2 `party_size`, +3 `ste
 - **pre** (`CharaChangeKey`'s cursor-move `jal CharaChangeInitToGL`): skipped in picker mode — no character preload per move.
 - **xkey** (`CharaChangeKey`'s SELECT-step `jal Down(X)`): in picker mode a press takes `ElementMenuMap[selected]`, writes it to
   the live weapon, stores the pick, sets `step` = LOADED (6) with `unk_4c` = 16, and plays the confirm sound; the LOADED step then
-  closes the menu on its next frame through the character change's own exit (`BtMenuLoad2(0)`, `LockOffTargte`,
-  `InitReadBG`, result 1) — the overlay sees the same character and resumes play. The cave returns 0, so the handler sees no
+  closes the menu on its next frame through the character change's own exit (`BtMenuLoad2(0)`, `InitReadBG`, result 1; its
+  `LockOffTargte` is nopped) — the overlay sees the same character and resumes play. The cave returns 0, so the handler sees no
   press. In character mode it is the plain `Down(X)`.
 - **draw** (`CharaChangeDraw`'s per-cell `jal DrawMenu2DSprite`): in picker mode the sheet is `wepicon` (the USA quick-menu
   pack holds `quickchara` and `wepicon`; the attachment icons sit from cell 120 = `ComItemInfo.icon_index` + 87), the source
   rect is cell 120 + `ElementMenuMap[s2]` (`u = element*32, v = 480`, 32×32 — the stones of items 81..85, then the baked None
   at cell 125), the destination the 48 px cell's centre, full shade.
+- **lock-on kept**: the LOADED step's exit `jal LockOffTargte` (`CharaChangeKey`, 0x228F88) is a nop, so a lock-on on an enemy
+  survives the menu, for an element pick or a character change alike (nothing after the change drops it either).
 - **close** (`CharaChangeLoop`'s first `jal MenuTextureReload` on the way out): clears `ElementMenuMode`; when the picker closes on
   Ruby it jumps to `element_menu_ruby.s`, which does what the dungeon's character load does for her shot — `Get_Main_EffectPtr(3,
   element)` (overlay 0x1DBA060), the path through `sprintf`, a synchronous `LoadFile` into `read_buffer`, `wait_now_loading_vsync`,

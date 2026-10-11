@@ -167,7 +167,7 @@ namespace Dark_Cloud_Improved_Version
         internal const uint ElementMenuTrig  = ElementMenuHead, ElementMenuXKey = ElementMenuHead + 0x58, ElementMenuStart = ElementMenuHead + 0xD4;
         /// <summary>…and its TAIL in the Draw host after the claimed `jr ra; nop`: the "wepicon" name (+0), the draw cave (+0xC), the
         /// element test, pre (+0x14C) and close (+0x16C).</summary>
-        internal const uint ElementMenuSheetName = DrawHost + 0x8;    // 0x22B5B8, 380 B → 0x22B734 (the Draw host ends at 0x22B7B4)
+        internal const uint ElementMenuSheetName = DrawHost + 0x8;    // 0x22B5B8, 424 B → 0x22B760 (the Draw host ends at 0x22B7B4)
         internal const uint ElementMenuDraw  = DrawHost + 0x14, ElementMenuPre = ElementMenuSheetName + 0x14C, ElementMenuClose = ElementMenuSheetName + 0x16C;
         internal const uint DrawHostEnd          = DrawHost + 516;
     }
