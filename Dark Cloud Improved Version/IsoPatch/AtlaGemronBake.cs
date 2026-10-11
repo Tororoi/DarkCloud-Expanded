@@ -46,6 +46,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int Swap = DeathStart + 122 - ClipFrom;
         private const int Bounce = 12;
         internal const int DeathEnd = Swap + Bounce;
+        /// <summary>The bounce's end in the game (tools/stubs/atla_draw.s): the death key runs to DeathEnd, but at 0.35 a frame from 200 it ends
+        /// on 228.7, so DeathEnd itself never plays.</summary>
+        internal const int Settled = DeathEnd - 1;
         private const int TimelineEnd = DeathEnd + 1;
         private const uint SubtreeVisible = 0x33;
         private static readonly uint[] CameraChannels = { 30, 31, 32, 33 };

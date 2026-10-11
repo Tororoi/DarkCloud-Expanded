@@ -9,15 +9,17 @@ namespace Dark_Cloud_Improved_Version
     /// name and shot (AtlaGemronBake, ElfSpeciesPatches.PatchAtlaShot). In play:
     ///  • the forehead Atlamillia draws tinted (eye_tint.s's Atlamillia entries, through a private vtable: <see cref="Lens"/>);
     ///  • as one dies, a real atla is spawned where it will come to rest (CDungeonMap::SetAtraBoll through NativeCall, under a sentinel
-    ///    parts entry and a name channel: AtlaNameChannels; on a floor whose eight atla places are taken, the nearest atla still on the
-    ///    floor is taken over instead — its own content, no drop — or, when all eight are collected, a collected one's place is reused by
-    ///    data writes) and a bounce entry filled (CodeCaves.AtlaBounce): tools/stubs/atla_draw.s keeps it
+    ///    parts entry and a name channel: AtlaNameChannels; on a floor whose eight atla places are used — a spawned or collected atla
+    ///    keeps its place — a collected one's place is reused by data writes, or, with all eight still on the floor, the nearest is taken
+    ///    over instead: its own content, no drop) and a bounce entry filled (CodeCaves.AtlaBounce): tools/stubs/atla_draw.s keeps it
     ///    out of the draw until the Gemron's death reaches the swap (AtlaGemronBake.Swap, where the held atla leaves the Gemron's draw),
     ///    then bounces it from the held atla's pose to a real atla's over the Gemron's own death frames. The held atla's pose on the swap is
     ///    foreseen from the unit's place, turn and scale and the bake's chain on that frame (the recipe), and refreshed every tick until
     ///    then. Its pickup radius is 0 until it has settled (the cave sets it back);
-    ///  • collected, it hands over what it rolled: 5 % an Atlamillia Sword (CDngStatusData::GetItem), 25 % an Atlamillia SynthSphere, else
-    ///    the SynthSphere of a random weapon (any but the Atlamillia), every base value (attack, endurance, speed, magic, elements and
+    ///  • collected, it hands over what it rolled: 5 % an Atlamillia Sword (CDngStatusData::GetItem; from Sun & Moon Temple on, before it a
+    ///    random weapon's sphere in its stead), 20 % an Atlamillia SynthSphere, 10 % the dungeon's featured weapon's (<see cref="Featured"/>;
+    ///    Demon Shaft has none), else
+    ///    the SynthSphere of a random weapon of a recruited ally (any but the Atlamillia and the unfinished Launchers), every base value (attack, endurance, speed, magic, elements and
     ///    antis) a sixth, rounded up, with all its abilities (tools/stubs/atla_collect.s frees its parts entry, which it has no floor slot
     ///    for). A floor without an atla model hands it over at once. An atla left on the floor is lost with it.</summary>
     internal static class AtlaGemron
@@ -36,6 +38,9 @@ namespace Dark_Cloud_Improved_Version
         private const int EventAtra = 3;
         private const float PickupRadius = 13f;                                     // SetAtraBoll's
         private const int GalleryOfTime = 5, DemonShaft = 6;
+        private const int SwordFromDungeon = 3;                                     // the Atlamillia Sword itself: Sun & Moon Temple on (tier 4)
+        /// <summary>Each dungeon's featured weapon, whose SynthSphere 10 % of the drops are (by dungeon index; 0 = none: Demon Shaft).</summary>
+        private static readonly int[] Featured = { Items.bonerapier, Items.wiseowlsword, Items.dusack, Items.maneater, Items.sevenbranchsword, Items.darkcloud, 0 };
 
         private enum Drop { Sword, AtlaSphere, Sphere }
 
@@ -81,6 +86,11 @@ namespace Dark_Cloud_Improved_Version
                 Pending p = _pending[i];
                 if (p.Unit >= 0 && !Dying(p.Unit)) p.Unit = -1;                       // its slot may hold another Gemron later
                 if (p.Bounce >= 0 && Memory.ReadInt(Bounce(p.Bounce) + CodeCaves.AtlaBounceIndex) != p.Atra) Settle(p);
+                else if (p.Bounce >= 0 && p.Unit < 0)                                     // its Gemron gone and the cave never finished it (not
+                {                                                                         // drawn since): a real atla now
+                    Memory.WriteInt(Bounce(p.Bounce) + CodeCaves.AtlaBounceIndex, -1);
+                    Settle(p);
+                }
                 if (p.Entry < 0) { if (p.Unit < 0 && p.Bounce < 0) _pending.RemoveAt(i); continue; }   // nothing to hand over: kept while it dies
                 if (Memory.ReadInt(AtlaSystem.PartsEntryAddr(p.Dungeon, p.Entry)) == p.Sentinel) continue;   // still on the floor
                 AtlaNameChannels.Cool(p.Channel, p.Dungeon, p.Sentinel);
@@ -124,8 +134,10 @@ namespace Dark_Cloud_Improved_Version
         {
             var p = new Pending { Unit = unit };
             int r = _rng.Next(100);
-            p.Kind = r < 5 ? Drop.Sword : r < 30 ? Drop.AtlaSphere : Drop.Sphere;
-            p.WeaponId = p.Kind == Drop.Sphere ? RandomWeapon() : Items.atlamilliasword;
+            int here = Memory.ReadByte(Addresses.checkDungeon);
+            int featured = here >= 0 && here < Featured.Length ? Featured[here] : 0;
+            p.Kind = r < 5 ? (here >= SwordFromDungeon ? Drop.Sword : Drop.Sphere) : r < 25 ? Drop.AtlaSphere : Drop.Sphere;
+            p.WeaponId = p.Kind != Drop.Sphere ? Items.atlamilliasword : r >= 25 && r < 35 && featured != 0 ? featured : RandomWeapon();
             p.Name = p.Kind == Drop.Sword ? Items.ItemNameTbl[p.WeaponId] : Items.ItemNameTbl[p.WeaponId] + " SynthSphere";
             p.Map = DungeonAddresses.Map.Deref(Memory.ReadUInt(DungeonAddresses.Map.NowDngMapPtr));
             p.Dungeon = Memory.ReadByte(Addresses.checkDungeon);
@@ -136,11 +148,14 @@ namespace Dark_Cloud_Improved_Version
             int reuse = -1;
             if (why == null && Memory.ReadInt(p.Map + MapAtraNum) >= AtraMax)
             {
-                int take = NearestAtla(p.Map, unit);                                     // every place taken: the nearest atla still here comes to it
-                if (take >= 0) { TakeOver(p, unit, block, take, bounce); return; }
-                for (int i = 0; i < AtraMax && reuse < 0; i++)                           // all eight collected: a collected one's place
+                for (int i = 0; i < AtraMax && reuse < 0; i++)                           // every place used: a collected atla's place first,
                     if (Memory.ReadInt(p.Map + MapAtra + (long)i * AtraStride + AtraUsed) == 0) reuse = i;
-                if (reuse < 0) why = "no atla place on this floor";
+                if (reuse < 0)                                                           // else the nearest atla still here comes to it
+                {
+                    int take = NearestAtla(p.Map, unit);
+                    if (take >= 0) { TakeOver(p, unit, block, take, bounce); return; }
+                    why = "no atla place on this floor";
+                }
             }
             if (why == null && !Enumerable.Range(0, EventCount).Any(e => Memory.ReadInt(EventAddr(p.Map, e) + EventKind) == -1)) why = "no free map event";
             if (why == null)
@@ -304,14 +319,22 @@ namespace Dark_Cloud_Improved_Version
 
         private static long EventAddr(long map, int ev) => map + MapEvents + (long)ev * EventStride;
 
+        /// <summary>Weapons the game has records for but never finished: the Launcher and the Launcher V2.</summary>
+        private static readonly HashSet<int> UnusedWeapons = new() { 366, 367 };
+
+        /// <summary>A weapon of the pool (see the exclusions) that belongs to an ally already recruited (Toan always; ally N once
+        /// DngStatusData.AllyCount is above N; the owner from the weapon's live table entry).</summary>
         private static int RandomWeapon()
         {
+            int allies = Memory.ReadByte(DngStatusData.AllyCount);
             var pool = new List<int>();
             for (int id = WeaponList.FirstItemId; id < WeaponList.FirstItemId + WeaponList.Count; id++)
             {
                 string n = Items.ItemNameTbl[id];
-                if (id == Items.atlamilliasword || n.Contains("(broken)") || n.IndexOf("glitch", StringComparison.OrdinalIgnoreCase) >= 0
+                if (id == Items.atlamilliasword || UnusedWeapons.Contains(id) || n.Contains("(broken)") || n.IndexOf("glitch", StringComparison.OrdinalIgnoreCase) >= 0
                     || n.StartsWith("weapon No.") || n == "Empty Slot") continue;
+                int owner = Memory.ReadByte(WeaponList.EntryAddr(id) + WeaponList.Ownership);
+                if (owner != 0 && owner >= allies) continue;                             // that ally has not joined yet
                 pool.Add(id);
             }
             return pool[_rng.Next(pool.Count)];

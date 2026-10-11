@@ -152,14 +152,14 @@ namespace Dark_Cloud_Improved_Version
             byte[] stub = Embedded("atlaDraw.bin");
             if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != 0x3C0801FB) throw new IOException($"atlaDraw.bin malformed ({stub.Length} B) or stale — reassemble its .s.");
             uint swap = 0x3C0E0000u | (BitConverter.SingleToUInt32Bits(AtlaGemronBake.Swap) >> 16);         // lui $t6, the swap frame
-            uint settle = BitConverter.SingleToUInt32Bits(1f / (AtlaGemronBake.DeathEnd - AtlaGemronBake.Swap));
+            uint settle = BitConverter.SingleToUInt32Bits(1f / (AtlaGemronBake.Settled - AtlaGemronBake.Swap));
             bool hasSwap = false, hasSettle = false;
             for (int i = 0; i + 4 < stub.Length; i += 4)
             {
                 hasSwap |= U32(stub, i) == swap;
                 hasSettle |= U32(stub, i) == (0x3C0F0000u | (settle >> 16)) && U32(stub, i + 4) == (0x35EF0000u | (settle & 0xFFFF));
             }
-            if (!hasSwap || !hasSettle) throw new IOException($"atla_draw.s's swap frame / settle length are not AtlaGemronBake's ({AtlaGemronBake.Swap}, {AtlaGemronBake.DeathEnd - AtlaGemronBake.Swap}) — set them and reassemble.");
+            if (!hasSwap || !hasSettle) throw new IOException($"atla_draw.s's swap frame / settle length are not AtlaGemronBake's ({AtlaGemronBake.Swap}, {AtlaGemronBake.Settled - AtlaGemronBake.Swap}) — set them and reassemble.");
             WriteBytes(fs, ElfOff, DeadSeekCave.AtlaDraw, stub, DeadSeekCave.End, "atlaDraw.bin overruns the dead sceCdPause body");
             ReplaceWord(fs, ElfOff, 0x001C51F0, Jal(0x0012ED80), Jal(DeadSeekCave.AtlaDraw), "CDungeonMap::DrawAtraBoll's MGDraw call");
         }

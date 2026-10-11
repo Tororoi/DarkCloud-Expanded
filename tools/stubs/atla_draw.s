@@ -7,9 +7,10 @@
 # CodeCaves.AtlaBounce (2 × 0x50): +0 the atla (−1 none), +4 the map, +8 the dying unit's model block, +0xC Ω and +0x10 1 / sin Ω
 # (the turn), +0x14 q0 and +0x24 q1 (w, x, y, z: the grafted atla's world turn at the swap, a real atla's), +0x34 the start scale,
 # +0x38 K0 and +0x44 K1 (where the frame's position starts and ends: the sphere's centre less the root's offset). The bounce runs on
-# the unit's own death frame (its motion 11, AtlaGemronBake: the swap on 217, settled by 229):
+# the unit's own death frame (its motion 11, AtlaGemronBake: the swap on 217, settled on 228 — its key runs to 229, but at 0.35 a frame
+# from 200 it ends on 228.7, so 229 itself never plays):
 #  · before 217: not drawn (the graft is still in the Gemron's grip); its bob held at 0;
-#  · 217 → 229 (t = 0 → 1, e = 1 − (1 − t)²): turned by slerp(q0, q1, e) (CFrame::SetTransMatrix keeps the root's own offset), scaled
+#  · 217 → 228 (t = 0 → 1, e = 1 − (1 − t)²): turned by slerp(q0, q1, e) (CFrame::SetTransMatrix keeps the root's own offset), scaled
 #    from the start scale to 1, placed at K0 → K1 by e plus 6 × 4t(1 − t) of lift, drawn, then given back its record's turn
 #    (CodeCaves.AtlaRootQuat) and scale 1; its bob held at 0, so it bobs from rest as it settles;
 #  · past it, or once the unit is no longer dying: the entry freed and the atla's pickup radius back to 13 (AtlaGemron holds it at 0
@@ -67,8 +68,8 @@ evnext:
 swap:
     mtc1  $t5, $f0                 # the frame
     mtc1  $t6, $f1                 # 217
-    lui   $t7, 0x3DAA
-    ori   $t7, $t7, 0xAAAB         # 1 / 12 (AtlaGemronBake: 12 frames to settle)
+    lui   $t7, 0x3DBA
+    ori   $t7, $t7, 0x2E8C         # 1 / 11: settled on 228 (AtlaGemronBake.Settled — the last frame the death reaches at 0.35, 228.7)
     mtc1  $t7, $f2
     lui   $t7, 0x3F80
     mtc1  $t7, $f3                 # 1.0

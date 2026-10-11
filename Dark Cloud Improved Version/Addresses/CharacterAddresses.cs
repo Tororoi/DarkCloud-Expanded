@@ -60,6 +60,7 @@ namespace Dark_Cloud_Improved_Version
     internal static class DngStatusData
     {
         internal const long Base                 = 0x21CD954C; // CDngStatusData / "status base"
+        internal const long AllyCount            = Base + 5;   // byte: allies recruited — ally N (0 Toan … 5 Osmond) has joined once it is above N
         internal const int  CharStride           = 0xAA8;      // per-character block stride
         internal const int  WeaponArrayOffset    = 0x450C;     // char block + this = weapon record 0 (id at +0)
         internal const int  EquipSlotArrayOffset = 0x4340;     // + char = that character's equipped weapon slot (byte, 0-9)
