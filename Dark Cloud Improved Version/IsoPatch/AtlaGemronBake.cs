@@ -103,23 +103,113 @@ namespace Dark_Cloud_Improved_Version
         private static int[] Ints(JsonElement e) => e.EnumerateArray().Select(x => x.GetInt32()).ToArray();
 
         // ───────────────────────────── the script ─────────────────────────────
-        /// <summary>Holy Gemron's script with its one _SET_SHOT (push 133, then the bone's string) firing from <see cref="SpawnName"/>: the
-        /// string, the shot function's own copy, renamed in place (the same length).</summary>
+        /// <summary>Holy Gemron's script for a short-range wide shot:
+        ///  · its one _SET_SHOT (push 133, then the bone's string: the shot function's own copy) fires from <see cref="SpawnName"/>, the
+        ///    string renamed in place (the same length), and fired straight ahead: on the fire frame the shot function's `distance &lt; 20`
+        ///    hold-fire check (its _GET_DISTANCE cell on) becomes a JMP to cells appended past the script's end (the engine allocates a
+        ///    script by its file size), which aim the shot at the Gemron's own place + its facing × <see cref="AimAhead"/>, 7.4 up
+        ///    (`_GET_POSITION(-1)`, `_GET_DIRECTION(0)`; vanilla aimed at the player's place, 7.4 up), then JMP back to its _SET_SHOT;
+        ///  · its AI loop (label 100): the range it shoots within and walks closer beyond (its three pushed 70.0s) <see cref="ShotRange"/>;
+        ///    the shot's cooldown, `_GET_RAND(70) + 80` frames, from <see cref="CooldownFrom"/> (40–109); close range (the pushed 20.0 its
+        ///    close branch compares) <see cref="CloseRange"/>; that branch's `_GET_RAND(100) &lt; 40` (backing off) <see cref="BackOffPercent"/>,
+        ///    and its other path the shot instead of the bite: the bite's cells (marker, CALL, drop, marker) rewritten as the AI loop's own
+        ///    shot call (push 0.3, push 0.0, CALL, drop), the back-off's JMP past them now landing on the branch's closing marker.</summary>
         private static byte[] Script(byte[] stb, out string why)
         {
-            int cb = (int)IsoBytes.U32(stb, 8);
+            uint U(int o) => IsoBytes.U32(stb, o);
+            float F(int o) => BitConverter.ToSingle(stb, o);
+            bool Op(int c, uint op) => U(c) == op;
+            bool PushI(int c, uint v) => U(c) == 3 && U(c + 4) == 1 && U(c + 8) == v;
+            bool PushF(int c) => U(c) == 3 && U(c + 4) == 2;
+            int cb = (int)U(8), tbl = (int)U(0xC), cnt = (int)U(0x10), label100 = -1;
+            for (int i = 0; i < cnt; i++) if (U(tbl + i * 8) == 100) label100 = (int)U(tbl + i * 8 + 4);
+            if (label100 < 0) throw new IOException($"{ScriptBase}.stb: no label 100");
+            byte[] o = (byte[])stb.Clone();
+            // the shot's bone
             var sites = new List<int>();
             for (int c = cb; c + 24 <= stb.Length; c += 4)
-                if (IsoBytes.U32(stb, c) == 3 && IsoBytes.U32(stb, c + 4) == 1 && IsoBytes.U32(stb, c + 8) == 133 && IsoBytes.U32(stb, c + 12) == 3 && IsoBytes.U32(stb, c + 16) == 3)
-                    sites.Add(cb + (int)IsoBytes.U32(stb, c + 20));
+                if (PushI(c, 133) && U(c + 12) == 3 && U(c + 16) == 3) sites.Add(c);
             if (sites.Count != 1) throw new IOException($"{ScriptBase}.stb: {sites.Count} _SET_SHOT bone strings, expected 1");
-            string bone = IsoBytes.NameAt(stb, sites[0], 8);
+            int boneAt = cb + (int)U(sites[0] + 20);
+            string bone = IsoBytes.NameAt(stb, boneAt, 8);
             if (bone != SpawnFrom && bone != SpawnName) throw new IOException($"{ScriptBase}.stb: the shot fires from '{bone}', not {SpawnFrom}");
-            byte[] o = (byte[])stb.Clone();
-            Encoding.ASCII.GetBytes(SpawnName).CopyTo(o, sites[0]);
-            why = $"Holy Gemron's, its shot fired from {SpawnName} ({SpawnFrom} before)";
+            Encoding.ASCII.GetBytes(SpawnName).CopyTo(o, boneAt);
+            // the AI loop, up to its RET
+            int start = cb + (int)U(label100), end = start;
+            while (end + 12 <= stb.Length && U(end) != 15) end += 12;
+            var ranges = new List<int>();
+            int cooldown = -1, close = -1, backOff = -1, shotCall = -1;
+            for (int c = start; c < end; c += 12)
+            {
+                bool sideStep = Op(c + 24, 17) && U(c + 32) == 1 && Op(c + 36, 1) && U(c + 40) == 0;  // `v4 <= 50 && v0 == 0`: its own 50
+                if (PushF(c) && (F(c + 8) == VanillaRange || F(c + 8) == ShotRange && !sideStep) && Op(c + 12, 14)) ranges.Add(c);
+                if (PushI(c, 180) && PushI(c + 12, 70))                                   // _GET_RAND(70, …) then + 80
+                    for (int k = c + 24; k < c + 108 && cooldown < 0; k += 12) if (PushI(k, VanillaCooldownFrom) || PushI(k, CooldownFrom)) cooldown = k;
+                if (PushF(c) && F(c + 8) == CloseRange && Op(c + 12, 14) && U(c + 16) == 42 && close < 0) close = c;
+                if (close >= 0 && backOff < 0 && c > close && PushI(c, 180) && PushI(c + 12, 100))   // after it: _GET_RAND(100, …) < 40
+                    for (int k = c + 24; k < c + 108 && backOff < 0; k += 12) if (PushI(k, VanillaBackOff) || PushI(k, BackOffPercent)) backOff = k;
+                if (shotCall < 0 && Op(c, 19) && PushF(c - 24) && PushF(c - 12) && Op(c + 12, 4)) shotCall = c;   // the first: the shot's
+            }
+            if (ranges.Count != 3 || cooldown < 0 || close < 0 || backOff < 0 || shotCall < 0)
+                throw new IOException($"{ScriptBase}.stb: label 100 not as expected ({ranges.Count} ranges, cooldown {cooldown:X}, close range {close:X}, back-off {backOff:X}, shot call {shotCall:X})");
+            // the close branch: cmp, BR_FALSE → other, CALL back-off, drop, JMP → out, other: 4 cells, out: the closing marker
+            int br = backOff + 24, other = backOff + 72, jmp = backOff + 60, outer = other + 48;
+            bool vanillaOther = Op(other, 22) && Op(other + 12, 19) && Op(other + 24, 4) && Op(other + 36, 22) && U(jmp + 4) == other + 36 - cb;
+            bool shotOther = PushF(other) && PushF(other + 12) && Op(other + 24, 19) && Op(other + 36, 4) && U(jmp + 4) == outer - cb;
+            if (!Op(br, 17) || U(br + 4) != other - cb || !Op(backOff + 36, 19) || !Op(jmp, 16) || !Op(outer, 22) || !(vanillaOther || shotOther))
+                throw new IOException($"{ScriptBase}.stb: label 100's close branch at {close:X} not as expected");
+            // the shot function's fire frame: _GET_DISTANCE(&v8), v8 < 20 → hold fire, else v3 += 7.4, then the _SET_SHOT
+            int shotFunc = cb + (int)U(shotCall + 8), shotCode = cb + (int)U(shotFunc), hold = -1;
+            for (int c = shotCode; c < sites[0]; c += 12)
+                if (PushI(c, 10) && U(c + 12) == 2 && U(c + 16) == AimDistance && Op(c + 24, 21) && PushF(c + 48) && F(c + 56) == 20f && Op(c + 60, 14))
+                    hold = c;
+            if (hold < 0 || (sites[0] - hold) != 12 * 15) throw new IOException($"{ScriptBase}.stb: the shot function's hold-fire check not as expected");
+            foreach (int c in ranges) IsoBytes.WrF(o, c + 8, ShotRange);
+            IsoBytes.U32(o, cooldown + 8, CooldownFrom);
+            IsoBytes.U32(o, backOff + 8, BackOffPercent);
+            Array.Copy(stb, shotCall - 24, o, other, 36);                                // push 0.3, push 0.0, CALL the shot
+            Array.Copy(stb, shotCall + 12, o, other + 36, 12);                           // its drop
+            IsoBytes.U32(o, jmp + 4, (uint)(outer - cb));
+            int aim = (o.Length + 3) & ~3;
+            byte[] tail = AimCells(sites[0] - cb);
+            Array.Resize(ref o, aim + tail.Length);
+            tail.CopyTo(o, aim);
+            Cell(o, hold, 16, (uint)(aim - cb), 0);                                     // JMP to the aim
+            why = $"Holy Gemron's, its shot fired from {SpawnName} ({SpawnFrom} before), shooting within {ShotRange} (walking closer beyond), every {CooldownFrom}–{CooldownFrom + 69} frames, under {CloseRange} {BackOffPercent} % backing off, else the shot (the bite before), fired along its facing (at the player before)";
             return o;
         }
+        private const float VanillaRange = 70f, ShotRange = 50f;            // label 100: shoot within it, walk closer beyond it
+        private const uint VanillaCooldownFrom = 80, CooldownFrom = 40;      // the shot's cooldown: _GET_RAND(70) + this, in frames
+        private const float CloseRange = 20f;                                // under it: back off or shoot (vanilla's, unchanged)
+        private const uint VanillaBackOff = 40, BackOffPercent = 60;         // _GET_RAND(100) under it: back off (else the shot)
+        private const float AimAhead = 100f;                                 // the shot's aim: this far along the Gemron's facing
+        private const uint AimDistance = 8, AimX = 2, AimY = 3, AimZ = 4, AimDirX = 8, AimDirY = 9, AimDirZ = 10;   // the shot function's locals
+        private const uint Float = 8;                                                // a local's type in a ref push
+
+        private static void Cell(byte[] b, int at, uint op, uint a1, uint a2)
+        {
+            IsoBytes.U32(b, at, op); IsoBytes.U32(b, at + 4, a1); IsoBytes.U32(b, at + 8, a2);
+        }
+
+        /// <summary>The shot's aim, appended past the script's end: v2..v4 = its own place (_GET_POSITION(-1)), v8..v10 = its facing
+        /// (_GET_DIRECTION(0)), v2 += facing.x × AimAhead, v4 += facing.z × AimAhead, v3 += 7.4, then JMP back to the _SET_SHOT
+        /// (<paramref name="setShot"/>, codeBase-relative).</summary>
+        private static byte[] AimCells(int setShot)
+        {
+            var cells = new List<(uint, uint, uint)>
+            {
+                (3, 1, 11), (3, 1, 1), (11, 0, 0), (2, AimX, Float), (2, AimY, Float), (2, AimZ, Float), (21, 5, 0),     // _GET_POSITION(-1, &v2, &v3, &v4)
+                (3, 1, 31), (3, 2, 0), (2, AimDirX, Float), (2, AimDirY, Float), (2, AimDirZ, Float), (21, 5, 0),       // _GET_DIRECTION(0, &v8, &v9, &v10)
+            };
+            foreach (var (v, d) in new[] { (AimX, AimDirX), (AimZ, AimDirZ) })                                          // v = v + AimAhead × d
+                cells.AddRange(new (uint, uint, uint)[] { (2, v, Float), (1, v, Float), (3, 2, Bits(AimAhead)), (1, d, Float), (8, 0, 0), (6, 0, 0), (5, 0, 0), (4, 0, 0) });
+            cells.AddRange(new (uint, uint, uint)[] { (2, AimY, Float), (1, AimY, Float), (3, 2, Bits(7.4f)), (6, 0, 0), (5, 0, 0), (4, 0, 0) });   // v3 = v3 + 7.4
+            cells.Add((16, (uint)setShot, 0));
+            byte[] b = new byte[cells.Count * 12];
+            for (int i = 0; i < cells.Count; i++) Cell(b, i * 12, cells[i].Item1, cells[i].Item2, cells[i].Item3);
+            return b;
+        }
+        private static uint Bits(float f) => BitConverter.ToUInt32(BitConverter.GetBytes(f), 0);
 
         // ───────────────────────────── the model ─────────────────────────────
         private static byte[] Pack(IsoArchive arc, JsonElement rc)

@@ -10,16 +10,16 @@ namespace Dark_Cloud_Improved_Version
     ///  • the forehead Atlamillia draws tinted (eye_tint.s's Atlamillia entries, through a private vtable: <see cref="Lens"/>);
     ///  • as one dies, a real atla is spawned where it will come to rest (CDungeonMap::SetAtraBoll through NativeCall, under a sentinel
     ///    parts entry and a name channel: AtlaNameChannels; on a floor whose eight atla places are used — a spawned or collected atla
-    ///    keeps its place — a collected one's place is reused by data writes, or, with all eight still on the floor, the nearest is taken
+    ///    keeps its place — a collected one's place is reused by data writes, or, with all eight still on the floor, the one farthest from the player is taken
     ///    over instead: its own content, no drop) and a bounce entry filled (CodeCaves.AtlaBounce): tools/stubs/atla_draw.s keeps it
     ///    out of the draw until the Gemron's death reaches the swap (AtlaGemronBake.Swap, where the held atla leaves the Gemron's draw),
     ///    then bounces it from the held atla's pose to a real atla's over the Gemron's own death frames. The held atla's pose on the swap is
     ///    foreseen from the unit's place, turn and scale and the bake's chain on that frame (the recipe), and refreshed every tick until
     ///    then. Its pickup radius is 0 until it has settled (the cave sets it back);
     ///  • collected, it hands over what it rolled: 5 % an Atlamillia Sword (CDngStatusData::GetItem; from Sun & Moon Temple on, before it a
-    ///    random weapon's sphere in its stead), 20 % an Atlamillia SynthSphere, 10 % the dungeon's featured weapon's (<see cref="Featured"/>;
+    ///    random weapon's sphere in its stead), 15 % an Atlamillia SynthSphere, 10 % the dungeon's featured weapon's (<see cref="Featured"/>;
     ///    Demon Shaft has none), else
-    ///    the SynthSphere of a random weapon of a recruited ally (any but the Atlamillia and the unfinished Launchers), every base value (attack, endurance, speed, magic, elements and
+    ///    the SynthSphere of a random weapon of a recruited ally from the tiers the dungeon draws from (<see cref="SphereTiers"/>), every base value (attack, endurance, speed, magic, elements and
     ///    antis) a sixth, rounded up, with all its abilities (tools/stubs/atla_collect.s frees its parts entry, which it has no floor slot
     ///    for). A floor without an atla model hands it over at once. An atla left on the floor is lost with it.</summary>
     internal static class AtlaGemron
@@ -136,8 +136,8 @@ namespace Dark_Cloud_Improved_Version
             int r = _rng.Next(100);
             int here = Memory.ReadByte(Addresses.checkDungeon);
             int featured = here >= 0 && here < Featured.Length ? Featured[here] : 0;
-            p.Kind = r < 5 ? (here >= SwordFromDungeon ? Drop.Sword : Drop.Sphere) : r < 25 ? Drop.AtlaSphere : Drop.Sphere;
-            p.WeaponId = p.Kind != Drop.Sphere ? Items.atlamilliasword : r >= 25 && r < 35 && featured != 0 ? featured : RandomWeapon();
+            p.Kind = r < 5 ? (here >= SwordFromDungeon ? Drop.Sword : Drop.Sphere) : r < 20 ? Drop.AtlaSphere : Drop.Sphere;
+            p.WeaponId = p.Kind != Drop.Sphere ? Items.atlamilliasword : r >= 20 && r < 30 && featured != 0 ? featured : RandomWeapon(here);
             p.Name = p.Kind == Drop.Sword ? Items.ItemNameTbl[p.WeaponId] : Items.ItemNameTbl[p.WeaponId] + " SynthSphere";
             p.Map = DungeonAddresses.Map.Deref(Memory.ReadUInt(DungeonAddresses.Map.NowDngMapPtr));
             p.Dungeon = Memory.ReadByte(Addresses.checkDungeon);
@@ -150,9 +150,9 @@ namespace Dark_Cloud_Improved_Version
             {
                 for (int i = 0; i < AtraMax && reuse < 0; i++)                           // every place used: a collected atla's place first,
                     if (Memory.ReadInt(p.Map + MapAtra + (long)i * AtraStride + AtraUsed) == 0) reuse = i;
-                if (reuse < 0)                                                           // else the nearest atla still here comes to it
+                if (reuse < 0)                                                           // else the atla still here farthest from the player comes to it
                 {
-                    int take = NearestAtla(p.Map, unit);
+                    int take = FarthestAtla(p.Map);
                     if (take >= 0) { TakeOver(p, unit, block, take, bounce); return; }
                     why = "no atla place on this floor";
                 }
@@ -237,19 +237,19 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
-        /// <summary>The nearest atla still on the floor (drawn, not collected), or -1.</summary>
-        private static int NearestAtla(long map, int unit)
+        /// <summary>The atla still on the floor (drawn, not collected) farthest from the player, or -1.</summary>
+        private static int FarthestAtla(long map)
         {
-            double[] pos = Read3(ModelScaleOffsets.ModelBase + (long)unit * ModelScaleOffsets.ModelStride - CCharacter.CharScale + CCharacter.CharPos);
-            int best = -1; double bd = double.MaxValue;
+            float px = Memory.ReadFloat(PlayerAddresses.DunPositionX), pz = Memory.ReadFloat(PlayerAddresses.DunPositionX + 8);
+            int best = -1; double bd = -1;
             int num = Math.Min(AtraMax, Memory.ReadInt(map + MapAtraNum));
             for (int i = 0; i < num; i++)
             {
                 long atra = map + MapAtra + (long)i * AtraStride;
                 if (Memory.ReadInt(atra + AtraUsed) == 0) continue;
                 double[] q = Read3(atra);
-                double d = (q[0] - pos[0]) * (q[0] - pos[0]) + (q[2] - pos[2]) * (q[2] - pos[2]);
-                if (d < bd) { bd = d; best = i; }
+                double d = (q[0] - px) * (q[0] - px) + (q[2] - pz) * (q[2] - pz);
+                if (d > bd) { bd = d; best = i; }
             }
             return best;
         }
@@ -319,24 +319,53 @@ namespace Dark_Cloud_Improved_Version
 
         private static long EventAddr(long map, int ev) => map + MapEvents + (long)ev * EventStride;
 
-        /// <summary>Weapons the game has records for but never finished: the Launcher and the Launcher V2.</summary>
-        private static readonly HashSet<int> UnusedWeapons = new() { 366, 367 };
+        /// <summary>The SynthSphere tiers (weapon ids; the user's list, by the mod's rebalanced attack + magic + elements + antis, the
+        /// Mardans fixed in the last). A dungeon draws from its own tier and every tier below (dungeon d: tiers 1 to d + 1; Demon Shaft all).
+        /// Not listed: the Atlamillia (its own drops) and the unfinished Launchers.</summary>
+        private static readonly int[][] SphereTiers =
+        {
+            // tier 1: Divine Beast Cave
+            //   Dagger, Wooden Slingshot, Baselard, Bone Slingshot, Steel Slingshot, Mallet, Gladius, Machine Gun, Crysknife, Bone Rapier, Shamshir
+            //   Fighting Stick, Steel Hammer, Gold Ring
+            new[] { 258, 300, 259, 304, 301, 315, 260, 364, 262, 290, 270, 348, 316, 332 },
+            // tier 2: Wise Owl Forest
+            //   Buster Sword, Bandit Slingshot, Pocklekul, Bandit's Ring, Big Bucks Hammer, Frozen Tuna, Plate Hammer, Double Impact, Small Sword
+            //   Steve, Javelin, Flamingo, Platinum Ring, Jackal, Snail, Sax, Wise Owl Sword, Turtle Shell, Chopper, Trial Hammer, Hardshooter
+            new[] { 264, 302, 343, 333, 320, 321, 327, 306, 283, 303, 349, 310, 335, 365, 374, 291, 261, 319, 286, 328, 305 },
+            // tier 3: Shipwreck
+            //   Sand Breaker, Halberd, 5 Foot Nail, Crystal Ring, Macho Sword, Kitchen Knife, Partisan, DeSanga, Blessing Gun, Fairy's Ring
+            //   Battle Ax, Antique Sword, Dusack, Scorpion, Tsukikage, Dragon's Y, Evilcise, Swallow, Serpent Sword, Matador, Choora, Thorn Armlet
+            //   Claymore, Gaia Hammer, Cactus, Lamb's Sword
+            new[] { 284, 350, 359, 334, 269, 265, 353, 351, 368, 337, 318, 263, 293, 352, 266, 307, 282, 375, 268, 311, 287, 344, 288, 322, 360, 272 },
+            // tier 4: Sun & Moon Temple
+            //   Skunk, Magical Hammer, G Crusher, Mirage, Maneater
+            new[] { 369, 317, 370, 354, 289 },
+            // tier 5: Moon Sea
+            //   Divine Beast Title, Sun Sword, Cross Hinder, Goddess Ring, Satan's Ring, 7 Branch Sword, Brave Ark, Aga's Sword
+            new[] { 308, 267, 294, 336, 339, 292, 274, 281 },
+            // tier 6: Gallery of Time
+            //   Dark Cloud, Destruction Ring, Last Judgement, Heaven's Cloud, Drain Seeker, Terra Sword, Hexa Blaster
+            new[] { 273, 338, 323, 271, 285, 355, 371 },
+            // tier 7: Demon Shaft
+            //   Mardan Eins, Mardan Twei, Arise Mardan, Super Steve, Athena's Armlet, Tall Hammer, Satan's Ax, Star Breaker, Hercules' Wrath
+            //   Angel Shooter, Mobius Ring, Supernova, 7th Heaven, Big Bang, Babel's Spear, Angel Gear, Inferno, Secret Armlet, Sword Of Zeus
+            //   Chronicle 2, Chronicle Sword
+            new[] { 278, 279, 280, 312, 340, 324, 325, 372, 356, 309, 341, 373, 295, 275, 357, 313, 329, 345, 296, 298, 297 },
+        };
 
-        /// <summary>A weapon of the pool (see the exclusions) that belongs to an ally already recruited (Toan always; ally N once
+        /// <summary>A weapon of the tiers this dungeon draws from that belongs to an ally already recruited (Toan always; ally N once
         /// DngStatusData.AllyCount is above N; the owner from the weapon's live table entry).</summary>
-        private static int RandomWeapon()
+        private static int RandomWeapon(int dungeon)
         {
             int allies = Memory.ReadByte(DngStatusData.AllyCount);
+            int tiers = Math.Clamp(dungeon + 1, 1, SphereTiers.Length);
             var pool = new List<int>();
-            for (int id = WeaponList.FirstItemId; id < WeaponList.FirstItemId + WeaponList.Count; id++)
-            {
-                string n = Items.ItemNameTbl[id];
-                if (id == Items.atlamilliasword || UnusedWeapons.Contains(id) || n.Contains("(broken)") || n.IndexOf("glitch", StringComparison.OrdinalIgnoreCase) >= 0
-                    || n.StartsWith("weapon No.") || n == "Empty Slot") continue;
-                int owner = Memory.ReadByte(WeaponList.EntryAddr(id) + WeaponList.Ownership);
-                if (owner != 0 && owner >= allies) continue;                             // that ally has not joined yet
-                pool.Add(id);
-            }
+            for (int t = 0; t < tiers; t++)
+                foreach (int id in SphereTiers[t])
+                {
+                    int owner = Memory.ReadByte(WeaponList.EntryAddr(id) + WeaponList.Ownership);
+                    if (owner == 0 || owner < allies) pool.Add(id);                       // else that ally has not joined yet
+                }
             return pool[_rng.Next(pool.Count)];
         }
 
