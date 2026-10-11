@@ -1,6 +1,6 @@
 # Custom enemies
 
-The mod's own enemy species, both built on Holy Gemron and placed by the randomizer only (no vanilla floor lists them):
+The mod's own enemy species, all built on Holy Gemron and placed by the randomizer only (no vanilla floor lists them):
 
 - **Bomb Gemron** (species 320, table index 167, `e167a`): Ice Gemron's model under a recoloured sheet, Holy Gemron's script, its
   three gems replaced by thrown-bomb models. Weak to fire and immune to every other element, 40 ABS. It throws bombs, explodes when
@@ -8,20 +8,25 @@ The mod's own enemy species, both built on Holy Gemron and placed by the randomi
 - **Crystal Gemron** (species 321, table index 168, `e168a`): Holy Gemron with each gem replaced by the e209 event's breaking crystal
   ball, which shatters through its death. Painted pale blues with blue eyes under their own tint. Weak to ice and immune to every
   other element, 80 ABS. It fires the Ice Queen's homing ice arrow and encases a frozen player in her ice prison.
+- **Atla Gemron** (species 322, table index 169, `e169a`): Ice Gemron's model under a brightened look with Holy Gemron's stats and
+  script, holding a dungeon atla in place of its big gem and wearing Toan's Atlamillia on its forehead, the Atlamillia's light
+  charging through its attacks. Its shot is the light's burst. As it dies the atla bounces free and stays on the floor as a real atla,
+  holding a random weapon's SynthSphere, an Atlamillia SynthSphere or the Atlamillia Sword itself.
 
-Each is designed on a preview page (`game_data/viewers/model/bomb_gemron.py`, `crystal_gemron.py`, untracked) whose baked build
-the ISO patch's C# bake reproduces byte for byte; the page writes the look the bake embeds.
+Each is designed on a preview page (`game_data/viewers/model/bomb_gemron.py`, `crystal_gemron.py`, `atla_gemron.py`, untracked) whose
+baked build the ISO patch's C# bake reproduces byte for byte; the page writes the look (and for the Atla Gemron the recipe) the bake embeds.
 
 ## Shared machinery
 
 | Part | Where | Notes |
 |---|---|---|
 | Species records | `SpeciesRows`, baked at `CodeCaves.SpeciesRows` (0x1FAF500) | The vanilla table (167 × 0x9C) has no slack, so the rows live in the data page the cave segment loads in front of its code band. Each row is the vanilla record of the species it is modelled on (Holy Gemron) with its `EnemyData` fields written over it. `SetupBaseModel`, the table's one reader, reaches them through `tools/stubs/species_lookup.s` (SmoothRest cave), hooked at 0x1DFEE0. `EnemySpeciesTable.RecordAddress` maps indices ≥ 167 there for the mod's own readers. |
-| Archive entries | `IsoArchive.Rename` | Each species takes an orphan DATA.HED entry pair (`e147a` → `e167a`, `e148a` → `e168a`), renamed in DATA.HD2 (the engine's index — the USA build never reads DATA.HED) and in DATA.HED (the mod's). |
+| Archive entries | `IsoArchive.Claim` | Each species takes orphan DATA.HED entries no record or script names (`e147a.chr` + `_c13a.stb` → `e167a`, `e148a.chr` + `c13_tatumaki.stb` → `e168a`, `e07a__.chr` + `__e116a.stb` → `e169a`, and `dun\monstor\e20a_.chr` → `dun\effect\atla_s.chr`), renamed in DATA.HD2 (the engine's index — the USA build never reads DATA.HED) and in DATA.HED (the mod's). A new name may not be longer than the old one. The vanilla `e147a.stb` / `e148a.stb` are the Demon Shaft mimics' scripts (records 141 / 142) and must stay. |
 | Names | `dunmsd00_1.mes`, message 3000 + species id | `MesTextBaker.SetMes` writes a name into an existing empty slot in place; a slot the bank lacks is appended inside its padding (`AppendMes`, the file kept its size). |
 | Body sheet looks | `SheetLook` + `Resources/isoPatch/*GemronLook.json` | A look is the sheet split into sections by a texel map (`map.rle`: one byte per texel naming its section, run-length encoded as (count, section) pairs, base64), each section with its own sliders (an HSL hue turn, then saturation, contrast, brightness, lightness), entries the sliders leave alone and entries set to a colour. The colours that gives are merged to 256, the most similar first and near-black first (cost = distance × x·√x, x = 0.12 + luminance), and the sheet re-indexed onto them (pixels in the IM2 block order). The look holds no pixels: those come from the disc at patch time. The preview page computes the identical texels. |
-| Per-unit draw tints | `NodeDrawHook` + a cave in the dead `sceCdReadChain` body | A monster's palette tints its whole draw, and a motion's material-colour track writes one buffer every unit of the species shares, so neither can tint one node. Instead the node's visual gets a private copy of its class vtable (in the data page) whose two DrawVu1 slots enter a cave that adjusts `mgRenderInfo.ambient` for that one draw, calls the stock DrawVu1 and puts the ambient back. The app arms it once per floor. |
-| Post-bakes | `IsoPostBakes`: `bomb-gemron`, `crystal-gemron` | `BombGemronBake`, `CrystalGemronBake`; each idempotent. |
+| Per-unit draw tints | `NodeDrawHook` + a cave in the dead `sceCdReadChain` body | A monster's palette tints its whole draw, and a motion's material-colour track writes one buffer every unit of the species shares, so neither can tint one node. Instead the node's visual gets a private copy of its class vtable whose two DrawVu1 slots enter a cave that adjusts `mgRenderInfo.ambient` for that one draw, calls the stock DrawVu1 and puts the ambient back. The app arms it once per floor. `eye_tint.s` serves two nodes: four entries (slot 6 / slot 7 of the Crystal Gemron's eyes, of the Atla Gemron's atla), each pointing at its stock pair and its tint (`CodeCaves.EyeTintColour` / `AtlaTintColour`, baked). |
+| Shot table | `ElfSpeciesPatches.PatchShotTable`, `CodeCaves.ShotCfgTable` (0x1FAF6D8) | The species loader's two reads of the shot table (SetupBaseModel, 0x1E018C / 0x1E0200) point at a 40-entry copy in the data page: the game's 36 (after the Bomb and Crystal patches), then the mod's (36 the Atla Gemron's). The game's own table stays for the shot-slot sharing cave, which covers the first 36; a floor with more than five shot configs skips the mod's. |
+| Post-bakes | `IsoPostBakes`: `bomb-gemron`, `crystal-gemron`, `atla-gemron` | `BombGemronBake`, `CrystalGemronBake`, `AtlaGemronBake`; each idempotent. |
 
 ## Bomb Gemron
 
@@ -73,6 +78,29 @@ the ISO patch's C# bake reproduces byte for byte; the page writes the look the b
 - `tools/stubs/eye_tint.s` — the eyes' tint, one constant per channel; the preview page's R/G/B sliders try values first.
 - The look — repaint `crystal_textures/blue_pupil.png` and rerun `crystal_gemron.py`, which rewrites `crystalGemronLook.json`.
 
+## Atla Gemron
+
+| Part | Where | Notes |
+|---|---|---|
+| Species record | `SpeciesRows`, index 169 | Holy Gemron's record under `e169a`, its first shot config 36. |
+| Model `e169a.chr` | `AtlaGemronBake` (post-bake `atla-gemron`) | Ice Gemron's pack (e112a). The numbers the preview page derived from the geometry come from the embedded `atlaGemronRecipe.json`, the body sheets' look from `atlaGemronLook.json` (all 16 sections saturation 2, brightness 0.9). The gems and glow shells dropped; appended: the dungeon atla (`dun\etc\atr.mds` in `maindat.pac`, its picture from `atrtx.img`) under `tama1__m` at the gem's size (×0.628, baked into its children and meshes), turned in the gem's frame as a real atla is (its root record: 87° about Z) and then by the page's `GRAFT_TURN` (its atla-turn sliders), the sphere's centre on the gem's; Toan's Atlamillia (`renzu__m` of `c01d.chr`, his record's stretch and the fit's size baked in, its sheet cropped to the 128 × 64 patch it uses) under the head `obj2_2`; the light (`e503ex_atall.chr`'s glow pair `grid2__cappz`/`1` and their ancestors, under a root on the lens's face, scale 2.4; its sheet from an IM2 bank, already in the block order, copied as it is); fly_light's glow pair on each wing gem at its frame 13, half saturated; and the shot's spawn bone `shot0` under the root, 10 in front of `dcol0` on the shot's fire frame (attack 16 frame 138). |
+| Light | same bake | Baked onto the Gemron's own frames: e503ex_atall's key 6 (stage 1's loop, 185–195) laid once over each key's range (twice over the death), and over the attacks' shared range (130–150) the page's sequence on the shot's timing (0.2): the loop to 132, key 7 to 138, key 8 to 140, key 9 (the burst, peaking at 141) to 146.7, key 5 back to the loop by 150. Keys a straight blend reproduces within 0.02 (scale) / 0.05 (translation) / 0.03 (alpha) are dropped. Its fades write the species' one material (`MATERIAL_ANIME 1`). |
+| Death | same bake | The vanilla death (105–125) copied to 200–220 and held to 229 in both motion files (key 11 200–229 at 0.35, key 12 held on 229). The held atla carries a subtree-visibility track: out of the draw from 217 (the copy of 122, the gem landed). |
+| Script `e169a.stb` | same bake (`Script`) | Holy Gemron's, its one `_SET_SHOT` (push 133, then the bone's string: the shot function's own copy of `dcol0`) renamed in place to `shot0`. |
+| Shot (config 36) | `ElfSpeciesPatches.PatchAtlaShot` + `tools/stubs/atla_shot.s` + `dun\effect\atla_s.chr` | A copy of Holy Gemron's config (25: damage, reaction, element, target, sounds) in the free span of the dead `sceCdReadChain` body: one phase (motion 0, then none: the shot ends with its motion), turned to its aim. Its pack is e503ex_atall's key 9 tail (221–250 at 0.35) under the shot's own frame (no track: Set turns it to the aim and places it) and a root turned 90° and sized 0.75; the effect's drawn meshes leave the draw while clear (visibility tracks). `crystal_shots.s` ends in a jump to `atla_shot.s` (the dead `sceCdGetToc` body's tail on into the dead `sceCdSeek` body), which, for this config, moves each live sub-shot 0.649 a frame along its aim through `CCharacter::SetPosition` (the engine holds a shot that touches the player or a wall; speed[0] is only its aim, 2^-20) while the pack's root backs off the same distance, so the burst stands where it was fired and the hit rides forward with its orbs (a straight fit of the page's cubic, within 4 of it); and writes the config's radius: 1 until frame 224.5, 18 by 233.25 (attack frames 140 → 145), the largest of its live sub-shots' (the radius is the config's). The phases it never reaches carry the cave's numbers. Contact plants the hit on the player within radius + 6. |
+| Atlamillia tint | `eye_tint.s` + `AtlaGemron` (`NodeDrawHook`) | The forehead Atlamillia (`renzu__m`) adds 50, 50, 50 to the ambient. |
+| The atla it leaves | `AtlaGemron` + `tools/stubs/atla_draw.s` | As a Gemron's death runs (frames 200–217) the app rolls the drop, takes a parts entry (sentinel part id and name channel: `AtlaNameChannels`, shared with the Atlamillia Insurance), fills a bounce entry (`CodeCaves.AtlaBounce`) and spawns a real atla where it will rest (`CDungeonMap::SetAtraBoll` through `NativeCall`; its pickup radius 0 until it settles, when the cave sets it back to 13). On a floor whose eight atla places are taken, the nearest atla still there is taken over instead (its own content, no drop); when all eight are collected, a collected one's place is reused by data writes. `atla_draw.s` (on from `atla_shot.s` into the dead `sceCdStandby` / `sceCdStop` / `sceCdPause` bodies), hooked at `DrawAtraBoll`'s `jal MGDraw` (0x1C51F0), keeps it out of the draw until the Gemron's death frame reaches 217, then over 217–229 of that frame turns the atla model by slerp from the held atla's world turn to a real atla's (its root record's 87° about Z: `CodeCaves.AtlaRootQuat`), scales it from the held size (×0.628, a miniboss's scale in it) to 1, and moves it from the held sphere's centre to a real atla's over its rest (ease-out, a lift of 6 at the middle), then gives the model back its record's turn. The held pose on 217 is foreseen by the app from the unit's place, Euler turn and scale (`CCharacter::Draw` → `CFrame::GetLWMatrix`: scale on the rows, X then Y then Z, place added) round the bake's chain on that frame (the recipe's `swapRoot` / `swapGraft`), refreshed every tick until then. Collected (its parts entry freed), it hands over 5 % the Atlamillia Sword (`CDngStatusData::GetItem`), 25 % an Atlamillia SynthSphere, else a random weapon's (any but the Atlamillia, broken and glitched entries excluded), every base value a sixth rounded up, with all its abilities. A floor without an atla model hands it over at once; an atla left on the floor is lost with it. |
+| Collecting | `tools/stubs/atla_collect.s` (the dead `sceCdReadIOPm` body), hooked at getAtraToSaveData's `jal GetAtraData` (0x1B7500) | GetAtraData marks the floor's slot holding the atla's parts entry collected — or, failing that, a random atla's (-2) — and frees the entry when its count runs out; its slot table holds 40 floors a dungeon. A sentinel entry (the mod's) goes through it only when its floor's slots hold it (the Atlamillia Insurance's); one spawned on the spot (the Atla Gemron's) only has its own entry counted down and freed. Any other atla: as before on floors 0–39, nothing past them. |
+| Demon Shaft | `tools/stubs/atla_dungeon.s` (after `atla_collect.s`), hooked at BtAtraGetShort_Loop's `move s3, a0` (0x1D2C88) + `AtlaGemron` | Every floor load reads `atr.mds` from `maindat.pac` into the map's atla model (LoadData, any dungeon), so an atla draws in Demon Shaft; but the atla tables hold six dungeons (0–5) and Demon Shaft is 6: its pickup would read the atla's contents past the registry and its name through a null pointer (GetEditAtraData's bound). The cave hands the ceremony 5 for 6, and AtlaGemron keeps Demon Shaft's atla in Gallery of Time's tables (parts entry, sentinel, name channel); its floors past 40 are the collect guard's. |
+
+### Tuning
+
+- `EnemySpecies.AtlaGemron` — stats (Holy Gemron's); `ModelFootprint` is an estimate until measured on a floor of it alone.
+- `atla_gemron.py` — the look (`SHIP_LOOK`), the lens fit (`LENS_FIT`), the light (`CLOCK`, `FX_SIZE`, `FX_UP`), the wing lights (`FLY_FRAME`, `FLY_SAT`), the shot (`SHOT_SIZE`, `SHOT_DIST`, `SHOT_TILT`, `SHOT_FIT`) and the key thinning (`THIN`); rerun it to rewrite the recipe, then rebuild the app.
+- `ElfSpeciesPatches.PatchAtlaShot` — the hit's growth (`AtlaGrowFrom` / `AtlaGrowTo`, `AtlaRadiusFull`).
+- `tools/stubs/atla_draw.s` — the lift (24 × t(1 − t)) and the bounce's frames (217, 1/12: the patch refuses a cave that disagrees with `AtlaGemronBake`).
+- `AtlaGemron` — the drop's odds.
+
 ## Lessons
 
 - The species table has one reader, so an extension table behind a 32-byte stub was enough; but the rows are data the mod writes
@@ -103,6 +131,10 @@ the ISO patch's C# bake reproduces byte for byte; the page writes the look the b
 - A split mesh must re-pad its blocks to 16 bytes: replaying the old padding after a resized display list misaligned the UV, normal
   and material blocks (a flat-green head, then a crash at the death's alpha change).
 - `BombCarrier.NodeNamed` searched 64 nodes; the Crystal Gemron's tree has 296 (the eyes are the last), so the tint never armed.
+- A real atla's root record is turned 87° about Z (its hemispheres split along the model's Y): an atla grafted with an identity root
+  and one drawn by `DrawAtraBoll` differ by that turn, so the bounce ends on the record's.
+- An effect pack's motion is dense (a key a frame on most tracks): the shot's pruned to its window still weighs ~230 KB and its
+  meshes count toward the monster pool once per sub-shot.
 - EE floating point differs from standard MIPS: keystone encodes `sqrt.s` with its operand where the EE does not read it, and an
   `mtc1` result is not ready for the next instruction. The arrow's speed swung with whatever sat in `$f0`. `tools/lib/mips_asm.py`
   now warns about both; unicorn and capstone use standard semantics, so they cannot catch it.

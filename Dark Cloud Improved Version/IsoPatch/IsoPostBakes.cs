@@ -56,6 +56,9 @@ namespace Dark_Cloud_Improved_Version
             // The Crystal Gemron's model, script and name under the orphan entries e148a (renamed e168a). Idempotent (the script's retargeted
             // death sound; the name compared).
             new() { Name = "crystal-gemron",   Progress = "Baking the Crystal Gemron …",                      Run = CrystalGemronBake.Run },
+            // The Atla Gemron's model, script, name and shot pack under the orphan entries e07a__, __e116a and e20a_. Idempotent (the
+            // script's renamed bone accepted; the name compared).
+            new() { Name = "atla-gemron",      Progress = "Baking the Atla Gemron …",                         Run = AtlaGemronBake.Run },
             // Every monster sound program of the dungeon sound sets in one file, from which tools/stubs/monster_bank.s builds each
             // randomized floor's monster bank (MonsterSoundBake).
             new() { Name = "monster-sounds",   Progress = "Gathering the monster sounds …",                   Run = MonsterSoundBake.Run },

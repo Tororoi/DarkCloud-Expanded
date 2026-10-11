@@ -2167,12 +2167,25 @@ namespace Dark_Cloud_Improved_Version
             MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150},
             SteveLines=new() { [0] = "Be careful! Its shot is homing!", [1] = "Such pretty eyes!" } };   // over Holy Gemron's lines 0-1
 
+        // Atla Gemron: Ice Gemron's rig under a brightened look, Holy Gemron's stats and script, holding a dungeon atla in place of its big
+        // gem and wearing Toan's Atlamillia on its forehead (AtlaGemronBake); its shot the Atlamillia's burst (ElfSpeciesPatches.
+        // PatchAtlaShot); on its death the atla bounces free and stays on the floor (AtlaGemron). Randomizer-only, like the Bomb Gemron.
+        internal static readonly EnemyDefaults AtlaGemron = new EnemyDefaults {
+            Id=322, TableIndex=169, Name="Atla Gemron", ModelCode="e169", ModelFootprint=95918,    // measured on a floor of it alone (Gallery of Time 24, 2026-10-10)
+            Abs=35, MinGoldDrop=20, DropChance=30, StealItemId=null, RareDropItemId=165,
+            MaxHp=12500, DamageReduction=30, WeaponDefense=10, KnockbackMult=1.0f,
+            Category=EnemyCategory.Dragon, FireRes=50, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=0,
+            ItemDamageRes=70, ItemStatusRes=60,
+            HeightFromRoot=19.0f, BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
+            MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150} };
+
         /// <summary>Mod species with no vanilla spawn pool → the vanilla species whose home region they share. The stat
         /// normalizer gives them that home, so they are capped like a native of it when the randomizer places them lower.</summary>
         internal static readonly Dictionary<int, int> HomeOf = new()
         {
             { BombGemron.TableIndex.Value, GemronHoly.TableIndex.Value },
             { CrystalGemron.TableIndex.Value, GemronHoly.TableIndex.Value },
+            { AtlaGemron.TableIndex.Value, GemronHoly.TableIndex.Value },
         };
 
         // CUT ENEMY — no species table entry and no CHR model file (e53a.chr/e54a.chr absent).

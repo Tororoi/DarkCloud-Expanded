@@ -38,7 +38,7 @@ namespace Dark_Cloud_Improved_Version
 
         internal static void PatchBombConfigs(FileStream fs, Func<uint, long> ElfOff)
         {
-            long table = ShotEffectPack.CfgTable - 0x20000000L;
+            long table = ShotEffectPack.VanillaCfgTable - 0x20000000L;
             uint Cfg(int index) => RdU32(fs, ElfOff((uint)(table + index * 4)));
             byte[] src = Rd(fs, ElfOff(Cfg(ThrowSource)), ShotEffectPack.CfgSize);
             if (NameAt(src, 0, 16) != ThrowSourceName) throw new IOException($"shot config {ThrowSource} is not {ThrowSourceName}");
@@ -68,7 +68,7 @@ namespace Dark_Cloud_Improved_Version
         ///    test is "within radius + 6 of the player"), and a long life the cave cuts short when the freeze ends.</summary>
         internal static void PatchCrystalShots(FileStream fs, Func<uint, long> ElfOff)
         {
-            long table = ShotEffectPack.CfgTable - 0x20000000L;
+            long table = ShotEffectPack.VanillaCfgTable - 0x20000000L;
             uint Cfg(int index) => RdU32(fs, ElfOff((uint)(table + index * 4)));
             byte[] src = Rd(fs, ElfOff(Cfg(CrystalShotSource)), ShotEffectPack.CfgSize);
             if (NameAt(src, 0, 16) != CrystalShotSourceName) throw new IOException($"shot config {CrystalShotSource} is not {CrystalShotSourceName}");
@@ -115,6 +115,82 @@ namespace Dark_Cloud_Improved_Version
         private const uint IceElement = 0x2;                    // CfgFlags' Ice bit
         private const float IceArrowSpeed = 1.2f;               // three quarters of the Ice Queen's korinoya (_SET_MOVE(…, 1.6), a step)
         private const uint IceArrowLife = 480;                  // the korinoya's flight's cap, in frames
+
+        /// <summary>The Atla Gemron's shot (config 36, in the free span of the dead sceCdReadChain body) and the native code that drives it
+        /// (tools/stubs/atla_shot.s, which crystal_shots.s runs on into). From Holy Gemron's shot (config 25: its damage, reaction, element,
+        /// target and sounds), drawing <c>dun\effecttla_s.chr</c> (AtlaGemronBake: the Atlamillia's burst) with one phase — motion 0, then
+        /// none, so the shot ends with its motion —, turned to its aim (face_flight). It flies <see cref="AtlaGemronBake.ShotFlight"/> a
+        /// frame, moved by the cave every frame (the engine holds a shot that touches the player or a wall: speed[0] is only its aim, 2^-20)
+        /// and its hit radius is the cave's, growing from 1 at <see cref="AtlaGrowFrom"/> to 18 at <see cref="AtlaGrowTo"/>. The phases it
+        /// never reaches carry the cave's numbers: speed[1] 18, speed[2] the flight / speed[0], radius[1] the growth a frame, radius[2] its
+        /// offset, radius[3] 1.</summary>
+        internal static void PatchAtlaShot(FileStream fs, Func<uint, long> ElfOff)
+        {
+            long table = ShotEffectPack.VanillaCfgTable - 0x20000000L;
+            byte[] src = Rd(fs, ElfOff(RdU32(fs, ElfOff((uint)(table + CrystalShotSource * 4)))), ShotEffectPack.CfgSize);
+            if (NameAt(src, 0, 16) != CrystalShotSourceName) throw new IOException($"shot config {CrystalShotSource} is not {CrystalShotSourceName}");
+            byte[] c = (byte[])src.Clone();
+            Array.Clear(c, 0, 16); System.Text.Encoding.ASCII.GetBytes(AtlaGemronBake.ShotModel).CopyTo(c, 0);
+            U32(c, 0x10, 0); U32(c, 0x14, 1);                                            // flies, turned to its aim
+            double k = (AtlaRadiusFull - 1.0) / (AtlaGrowTo - AtlaGrowFrom);
+            WrF(c, 0x18, AtlaAim); WrF(c, 0x1C, AtlaRadiusFull); WrF(c, 0x20, AtlaGemronBake.ShotFlight / AtlaAim); WrF(c, 0x24, 0f);
+            WrF(c, ShotEffectPack.CfgRadiusMuzzle, 0f); WrF(c, ShotEffectPack.CfgRadiusMuzzle + 4, (float)k);
+            WrF(c, ShotEffectPack.CfgRadiusMuzzle + 8, (float)(1.0 - AtlaGrowFrom * k)); WrF(c, ShotEffectPack.CfgRadiusMuzzle + 12, 1f);
+            U16(c, 0x4C, 0); U16(c, 0x4E, 0xFFFF); U16(c, 0x50, 0xFFFF); U16(c, 0x52, 0xFFFF);   // motion 0, then none
+            WriteBytes(fs, ElfOff, DeadChainCave.AtlaShotConfig, c, DeadChainCave.FreezeBreak, "the Atla shot config overruns its span of the sceCdReadChain body");
+            byte[] stub = Embedded("atlaShot.bin");
+            if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != 0x8C880000) throw new IOException($"atlaShot.bin malformed ({stub.Length} B) or stale — reassemble its .s.");
+            uint seek = RdU32(fs, ElfOff(DeadSeekCave.Host)), ours = DeadSeekCave.Host - DeadCdCave.AtlaShot < stub.Length ? U32(stub, (int)(DeadSeekCave.Host - DeadCdCave.AtlaShot)) : 0;
+            if (seek != DeadSeekCave.VanillaWord0 && seek != ours) throw new IOException($"sceCdSeek at 0x{DeadSeekCave.Host:X} is not vanilla (0x{seek:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+            WriteBytes(fs, ElfOff, DeadCdCave.AtlaShot, stub, DeadSeekCave.End, "atlaShot.bin overruns the sceCdSeek body");
+        }
+        /// <summary>The Atla Gemron's atla bouncing free of its dying grip (tools/stubs/atla_draw.s, on from atla_shot.s into the dead
+        /// sceCdStandby / Stop / Pause bodies): CDungeonMap::DrawAtraBoll's `jal MGDraw` (0x1C51F0) goes through it. The cave's swap frame
+        /// and settle length are AtlaGemronBake's.</summary>
+        internal static void PatchAtlaDraw(FileStream fs, Func<uint, long> ElfOff)
+        {
+            byte[] stub = Embedded("atlaDraw.bin");
+            if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != 0x3C0801FB) throw new IOException($"atlaDraw.bin malformed ({stub.Length} B) or stale — reassemble its .s.");
+            uint swap = 0x3C0E0000u | (BitConverter.SingleToUInt32Bits(AtlaGemronBake.Swap) >> 16);         // lui $t6, the swap frame
+            uint settle = BitConverter.SingleToUInt32Bits(1f / (AtlaGemronBake.DeathEnd - AtlaGemronBake.Swap));
+            bool hasSwap = false, hasSettle = false;
+            for (int i = 0; i + 4 < stub.Length; i += 4)
+            {
+                hasSwap |= U32(stub, i) == swap;
+                hasSettle |= U32(stub, i) == (0x3C0F0000u | (settle >> 16)) && U32(stub, i + 4) == (0x35EF0000u | (settle & 0xFFFF));
+            }
+            if (!hasSwap || !hasSettle) throw new IOException($"atla_draw.s's swap frame / settle length are not AtlaGemronBake's ({AtlaGemronBake.Swap}, {AtlaGemronBake.DeathEnd - AtlaGemronBake.Swap}) — set them and reassemble.");
+            WriteBytes(fs, ElfOff, DeadSeekCave.AtlaDraw, stub, DeadSeekCave.End, "atlaDraw.bin overruns the dead sceCdPause body");
+            ReplaceWord(fs, ElfOff, 0x001C51F0, Jal(0x0012ED80), Jal(DeadSeekCave.AtlaDraw), "CDungeonMap::DrawAtraBoll's MGDraw call");
+        }
+
+        /// <summary>Collecting an atla made safe for the mod's atlas and for Demon Shaft's floors past the 40-floor slot table
+        /// (tools/stubs/atla_collect.s in the dead sceCdReadIOPm body): getAtraToSaveData's `jal GetAtraData` (0x1B7500) goes through it.</summary>
+        internal static void PatchAtlaCollect(FileStream fs, Func<uint, long> ElfOff)
+        {
+            byte[] stub = Embedded("atlaCollect.bin");
+            if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != 0x28A80006) throw new IOException($"atlaCollect.bin malformed ({stub.Length} B) or stale — reassemble its .s.");
+            uint w0 = RdU32(fs, ElfOff(DeadReadIopmCave.Host));
+            if (w0 != DeadReadIopmCave.VanillaWord0 && w0 != U32(stub, 0)) throw new IOException($"sceCdReadIOPm at 0x{DeadReadIopmCave.Host:X} is not vanilla (0x{w0:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+            WriteBytes(fs, ElfOff, DeadReadIopmCave.AtlaCollect, stub, DeadReadIopmCave.End, "atlaCollect.bin overruns the sceCdReadIOPm body");
+            ReplaceWord(fs, ElfOff, 0x001B7500, Jal(0x001BF950), Jal(DeadReadIopmCave.AtlaCollect), "getAtraToSaveData's GetAtraData call");
+        }
+
+        /// <summary>Demon Shaft's atlas collected through Gallery of Time's atla tables (tools/stubs/atla_dungeon.s after atla_collect.s):
+        /// BtAtraGetShort_Loop's `move s3, a0` (0x1D2C88, an MMI por) becomes `jal` the cave, which hands it 5 for 6.</summary>
+        internal static void PatchAtlaDungeon(FileStream fs, Func<uint, long> ElfOff)
+        {
+            byte[] stub = Embedded("atlaDungeon.bin");
+            if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != 0x24080006) throw new IOException($"atlaDungeon.bin malformed ({stub.Length} B) or stale — reassemble its .s.");
+            WriteBytes(fs, ElfOff, DeadReadIopmCave.AtlaDungeon, stub, DeadReadIopmCave.End, "atlaDungeon.bin overruns the sceCdReadIOPm body");
+            ReplaceWord(fs, ElfOff, 0x001D2C88, 0x70809E28u, Jal(DeadReadIopmCave.AtlaDungeon), "BtAtraGetShort_Loop's dungeon move");
+        }
+
+        private const float AtlaAim = 1f / (1 << 20);           // speed[0]: the aim's length (Set scales the aim by it; the cave moves the shot)
+        private const float AtlaRadiusFull = 18f;
+        /// <summary>The shot's motion frames (AtlaGemronBake.ShotFrom on, 0.35 a game frame) at attack frames 140 and 145 of the script's
+        /// fire (138, at 0.2): 10 and 35 game frames after it.</summary>
+        private const double AtlaGrowFrom = AtlaGemronBake.ShotFrom + (140 - 138) / 0.2 * 0.35, AtlaGrowTo = AtlaGemronBake.ShotFrom + (145 - 138) / 0.2 * 0.35;
 
         /// <summary>A config that draws <c>g_wave2</c>, plants nothing, and ends in an item-bomb blast of <paramref name="scale"/>.</summary>
         private static byte[] Bomb(byte[] src, float scale, int damage)
@@ -183,12 +259,12 @@ namespace Dark_Cloud_Improved_Version
             WriteBytes(fs, ElfOff, DeadChainCave.BombTint, stub, DeadChainCave.End, "bombTint.bin overruns the sceCdReadChain body");
         }
 
-        /// <summary>The Crystal Gemron's eyes tinted (tools/stubs/eye_tint.s in the dead sceCdReadChain body, after freeze_break). No
-        /// hook: the cave is reached only through the private vtable CrystalGemron gives the eyes' visual.</summary>
+        /// <summary>The Crystal Gemron's eyes and the Atla Gemron's forehead Atlamillia tinted (tools/stubs/eye_tint.s in the dead sceCdReadChain body,
+        /// after freeze_break). No hook: the cave is reached only through the private vtables CrystalGemron and AtlaGemron give the visuals.</summary>
         internal static void PatchEyeTint(FileStream fs, Func<uint, long> ElfOff)
         {
             byte[] stub = Embedded("eyeTint.bin");
-            if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != 0x3C1901FB) throw new IOException($"eyeTint.bin malformed ({stub.Length} B) or stale — reassemble its .s.");
+            if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != 0x3C1801FB) throw new IOException($"eyeTint.bin malformed ({stub.Length} B) or stale — reassemble its .s.");
             WriteBytes(fs, ElfOff, DeadChainCave.EyeTint, stub, DeadChainCave.End, "eyeTint.bin overruns the sceCdReadChain body");
         }
 
@@ -215,8 +291,8 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The data page's words the cold ELF patches read with a vanilla meaning (the app seeds them too, but the page is now
         /// loaded from the ELF on every boot, so a game reset must not leave them zero): the item-bomb reaction (3; 0 would make every
-        /// bomb inert), Toan's charge-attack hit radii (6 / 12; 0 would be a hit radius of nothing) and the machine-gun flash's
-        /// sizes and alphas (5.0 / 0x80 each).</summary>
+        /// bomb inert), Toan's charge-attack hit radii (6 / 12; 0 would be a hit radius of nothing), the machine-gun flash's
+        /// sizes and alphas (5.0 / 0x80 each) and the node tints eye_tint.s adds (the eyes', the atla's).</summary>
         internal static void PatchDataPageDefaults(FileStream fs, Func<uint, long> ElfOff)
         {
             WriteWords(fs, ElfOff, CodeCaves.BombReactionGuest, new[] { (uint)CodeCaves.BombReactionVanilla });
@@ -226,6 +302,12 @@ namespace Dark_Cloud_Improved_Version
             WriteBytes(fs, ElfOff, CodeCaves.FlashSizeTableGuest, sizes);
             var alphas = new byte[16]; Array.Fill(alphas, CodeCaves.FlashAlphaVanilla);
             WriteBytes(fs, ElfOff, (uint)(CodeCaves.FlashAlphaTable - 0x20000000L), alphas);
+            var tints = new byte[24];
+            for (int i = 0; i < 3; i++) { WrF(tints, i * 4, CodeCaves.EyeTintRgb[i]); WrF(tints, 12 + i * 4, CodeCaves.AtlamilliaTintRgb[i]); }
+            WriteBytes(fs, ElfOff, (uint)(CodeCaves.EyeTintColour - 0x20000000L), tints);
+            var quat = new byte[16]; float[] q = AtlaGemronBake.AtlaRootQuat;
+            for (int i = 0; i < 4; i++) WrF(quat, i * 4, q[i]);
+            WriteBytes(fs, ElfOff, (uint)(CodeCaves.AtlaRootQuat - 0x20000000L), quat);
         }
 
         /// <summary>MotionProc (0x147D20) plays a track between two of its keys; before the first, vanilla takes key −1 — the 0x20 bytes in
@@ -237,11 +319,31 @@ namespace Dark_Cloud_Improved_Version
         internal static void PatchMotionBeforeFirstKey(FileStream fs, Func<uint, long> ElfOff) =>
             ReplaceWord(fs, ElfOff, 0x00147F3C, 0x00000000u, 0x06000237u, "MotionProc's nop after the weight test's mtc1");
 
+        /// <summary>The species loader's shot table moved to CodeCaves.ShotCfgTable, past the game's 36 entries: SetupBaseModel's two
+        /// `lui v0,0x28; addiu v0,v0,-0x590` (0x1E018C, 0x1E0200: BtEntryEffectTbl, 0x0027FA70) address it instead, and it holds the
+        /// game's 36 (after PatchBombConfigs and PatchCrystalShots) and the mod's beyond (<paramref name="extra"/>: index → config).</summary>
+        internal static void PatchShotTable(FileStream fs, Func<uint, long> ElfOff, params (int index, uint cfg)[] extra)
+        {
+            var table = new uint[ShotEffectPack.CfgCount];
+            for (int i = 0; i < ShotEffectPack.VanillaCfgCount; i++) table[i] = RdU32(fs, ElfOff((uint)(ShotEffectPack.VanillaCfgTable - 0x20000000L) + (uint)i * 4));
+            foreach (var (index, cfg) in extra) table[index] = cfg;
+            WriteWords(fs, ElfOff, CodeCaves.ShotCfgTableGuest, table);
+            uint hi = (CodeCaves.ShotCfgTableGuest + 0x8000u) >> 16, lo = CodeCaves.ShotCfgTableGuest & 0xFFFF;
+            foreach (uint site in ShotTableSites)
+                ReplaceWords(fs, ElfOff, site, new[] { 0x3C020028u, 0x2442FA70u }, new[] { 0x3C020000u | hi, 0x24420000u | lo }, "SetupBaseModel's shot table address");
+        }
+        private static readonly uint[] ShotTableSites = { 0x001E018C, 0x001E0200 };
+
         internal static void PatchSpeciesExtension(FileStream fs, Func<uint, long> ElfOff)
         {
             PatchMotionBeforeFirstKey(fs, ElfOff);
             PatchBombConfigs(fs, ElfOff);
             PatchCrystalShots(fs, ElfOff);
+            PatchAtlaShot(fs, ElfOff);
+            PatchAtlaDraw(fs, ElfOff);
+            PatchAtlaCollect(fs, ElfOff);
+            PatchAtlaDungeon(fs, ElfOff);
+            PatchShotTable(fs, ElfOff, (ShotEffectPack.AtlaShotConfig, DeadChainCave.AtlaShotConfig));
             PatchDataPageDefaults(fs, ElfOff);
             byte[] rows = SpeciesRows.Build(ti => Rd(fs, ElfOff((uint)EnemySpeciesTable.RecordAddress(ti)), EnemySpeciesTable.Stride));
             WriteBytes(fs, ElfOff, CodeCaves.SpeciesRowsGuest, rows, CodeCaves.SpeciesRowsGuest + (uint)rows.Length, "the species rows overrun their reservation");

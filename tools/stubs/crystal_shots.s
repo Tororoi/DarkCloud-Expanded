@@ -1,7 +1,7 @@
 # crystal_shots.s — the Crystal Gemron's two shots driven before each step: the ice arrow homes, and an arrow that freezes the
 # player brings the ice prison down on him. Assembled at 0x0010BBD0 (DeadApplyNCmdCave.CrystalShots: the dead sceCdApplyNCmd
 # body). DunPatches points the monster pack's per-object `jal Step__12CSHOT_EFFECT` (dun 0x1DB86F4; a0 = the object) here; the
-# work below is done, then Step runs as before.
+# work below is done, then atla_shot.s's (the Atla Gemron's shot), then Step as before.
 #  · Ice arrow (config 34, ElfSpeciesPatches.PatchIceArrowConfig): each flying sub-shot (phase 1) whose target — the player, 10.1
 #    above his feet — lies within 60 degrees of its flight turns 0.15 of the way towards it each step, at its own speed, and its
 #    model is turned to the new flight (LookAtMatrixZ + CFrame::SetTransMatrix, as CSHOT_EFFECT::Set faces it).
@@ -142,5 +142,5 @@ done:
     lw    $s2, 0x000C($sp)
     lw    $s3, 0x0010($sp)
     lw    $a0, 0x0014($sp)
-    j     0x001AC180               # Step__12CSHOT_EFFECT, as before
+    j     0x0010A998               # atla_shot.s (the Atla Gemron's shot), then Step__12CSHOT_EFFECT as before
     addiu $sp, $sp, 0x80

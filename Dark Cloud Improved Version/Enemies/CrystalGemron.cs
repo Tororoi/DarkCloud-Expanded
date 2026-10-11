@@ -7,7 +7,7 @@ namespace Dark_Cloud_Improved_Version
     internal static class CrystalGemron
     {
         private static readonly NodeDrawHook Eyes = new("the Crystal Gemron's eyes", "eye_tint", DeadChainCave.EyeTint,
-            CodeCaves.EyeTintStock, CodeCaves.EyeTintVtable, CodeCaves.EyeTintVtableGuest);
+            CodeCaves.EyeTintStock, CodeCaves.EyeTintVtable, CodeCaves.EyeTintVtableGuest, slot7: 0x10);
 
         /// <summary>Once a dungeon tick; <paramref name="active"/> false while a load is on (the floor's units and pools are rebuilt).</summary>
         internal static void Tick(bool active)

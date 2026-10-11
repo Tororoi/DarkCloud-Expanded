@@ -247,6 +247,9 @@ namespace Dark_Cloud_Improved_Version
             for (int unit = 0; unit < EnemyAddresses.FloorSlots.Count; unit++) Unpin(unit);
         }
 
+        /// <summary>The pin table cleared (it sits in runtime memory the ISO does not bake, CodeCaves.FlashPinTable): no slot pinned.</summary>
+        internal static void ClearPins() => Memory.WriteByteArray(CodeCaves.FlashPinTable, new byte[CodeCaves.FlashPinStride * 4]);
+
         /// <summary>A new floor: the slots are new enemies.</summary>
         internal static void Reset()
         {

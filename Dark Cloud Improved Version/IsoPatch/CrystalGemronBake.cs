@@ -17,7 +17,10 @@ namespace Dark_Cloud_Improved_Version
     internal static class CrystalGemronBake
     {
         internal const string Stem = "e168a";
-        private const string Dir = @"dun\monstor\", Base = "e115a", Orphan = "e148a";
+        private const string Dir = @"dun\monstor\", Base = "e115a";
+        /// <summary>The unused archive entries renamed to the species' (docs/custom-enemies.md, Archive entries): e148a.chr, a duplicate of
+        /// e110a's no record names, and c13_tatumaki.stb, a script nothing loads (e148a.stb is the Demon Shaft king mimic's, record 142).</summary>
+        private const string ChrDonor = "e148a.chr", StbDonor = "c13_tatumaki.stb";
         private const string Name = "Crystal Gemron";
         private const string Look = "crystalGemronLook.json";
         private const string BallChr = @"gedit\s34\chara\e209ball_b.chr", Ball = "e209ball_b";
@@ -87,13 +90,8 @@ namespace Dark_Cloud_Improved_Version
 
         internal static void Run(IsoArchive arc, Action<string> log)
         {
-            foreach (string ext in new[] { ".chr", ".stb" })
-            {
-                string to = Dir + Stem + ext, from = Dir + Orphan + ext;
-                if (arc.Has(to)) continue;
-                if (!arc.Has(from)) throw new IOException($"neither {to} nor the orphan entry {from} is in the archive");
-                arc.Rename(from, to);
-            }
+            arc.Claim(Dir + ChrDonor, Dir + Stem + ".chr");
+            arc.Claim(Dir + StbDonor, Dir + Stem + ".stb");
             byte[] chr = Pack(arc.Read(Dir + Base + ".chr"), arc.Read(BallChr));
             arc.Redirect(Dir + Stem + ".chr", chr);
             log($"{Stem}.chr: {chr.Length:N0} B");
@@ -142,7 +140,7 @@ namespace Dark_Cloud_Improved_Version
         /// bank has no entry for a new species' id (its index runs to 3320, the Bomb Gemron's, then 3999), so one is added
         /// (MesTextBaker.AppendMes: the index stays id-sorted, every message keeps its text) with the text just past the bank's own, and
         /// the file is padded back to its size: what the engine loads after it does not move.</summary>
-        private static byte[] WithName(byte[] mes, int id, ushort[] words)
+        internal static byte[] WithName(byte[] mes, int id, ushort[] words)
         {
             int cnt = IsoBytes.U16(mes, 0);
             for (int i = 0; i < cnt; i++) if (IsoBytes.U16(mes, 4 + i * 4) == id) return MesTextBaker.SetMes(mes, id, words);
@@ -352,10 +350,10 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        private static double[] Values(MotKeyframe k) => k.Value.Select(x => (double)x).ToArray();
+        internal static double[] Values(MotKeyframe k) => k.Value.Select(x => (double)x).ToArray();
 
         /// <summary>A keyframe as the Python builder makes it: zero, the frame, four floats.</summary>
-        private static MotKeyframe Key(uint frame, double[] v)
+        internal static MotKeyframe Key(uint frame, double[] v)
         {
             var k = new MotKeyframe(new byte[MotKeyframe.Size]) { Frame = frame };
             for (int i = 0; i < 4; i++) IsoBytes.WrF(k.Raw, 0x10 + i * 4, (float)v[i]);
@@ -364,7 +362,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>A track's value at a frame: the first or last key outside its range, else the pair around it blended (rotation
         /// slerped, the rest lerped) — on a key too, t = 0 (crystal_gemron._at).</summary>
-        private static double[] At(MotTrack tr, double frame)
+        internal static double[] At(MotTrack tr, double frame)
         {
             var keys = tr.Keyframes;
             if (frame <= keys[0].Frame) return keys[0].Value.Select(x => (double)x).ToArray();
@@ -471,7 +469,7 @@ namespace Dark_Cloud_Improved_Version
         // ───────────────────────────── the graft ─────────────────────────────
         /// <summary>A ball node's record under the Gemron: its index and parent; the root's rotation and position given, the rest's position
         /// scaled.</summary>
-        private static byte[] Record(byte[] raw, int index, int parent, double[][] R, double[] T, double scale)
+        internal static byte[] Record(byte[] raw, int index, int parent, double[][] R, double[] T, double scale)
         {
             byte[] rec = (byte[])raw.Clone();
             IsoBytes.U32(rec, 0x00, (uint)index);
@@ -483,7 +481,7 @@ namespace Dark_Cloud_Improved_Version
             return rec;
         }
 
-        private static byte[] ScaledMesh(byte[] mds, int off, double s)
+        internal static byte[] ScaledMesh(byte[] mds, int off, double s)
         {
             var m = MdtMesh.Parse(mds, off);
             m.Pos = m.Pos.Select(p => new[] { p[0] * s, p[1] * s, p[2] * s, p[3] }).ToList();
@@ -492,7 +490,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The MDS with the gems' meshes (and their glow shells) removed, <paramref name="replace"/>'s meshes swapped in and the
         /// grafts' records appended in order, every mesh offset re-laid.</summary>
-        private static byte[] GraftMds(byte[] mds, List<(List<byte[]> recs, Dictionary<int, byte[]> meshes)> grafts, Dictionary<string, byte[]> replace)
+        internal static byte[] GraftMds(byte[] mds, List<(List<byte[]> recs, Dictionary<int, byte[]> meshes)> grafts, Dictionary<string, byte[]> replace)
         {
             int count = (int)IsoBytes.U32(mds, 8), tbl = (int)IsoBytes.U32(mds, 12);
             var raws = new List<byte[]>(); var blobs = new List<byte[]>();

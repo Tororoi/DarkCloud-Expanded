@@ -26,7 +26,10 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const string BombGemronStem = "e167a";
         private const string Dir = @"dun\monstor\";
-        private const string ModelSource = "e112a", ScriptSource = "e115a", Orphan = "e147a";   // Ice Gemron's model and sheets, Holy Gemron's script; the orphan entries repurposed (e147a.chr / .stb)
+        private const string ModelSource = "e112a", ScriptSource = "e115a";   // Ice Gemron's model and sheets, Holy Gemron's script
+        /// <summary>The unused archive entries renamed to the species' (docs/custom-enemies.md, Archive entries): e147a.chr, a duplicate of
+        /// e109a's no record names, and _c13a.stb, a script nothing loads (e147a.stb is the Demon Shaft mimic's, record 141).</summary>
+        private const string ChrDonor = "e147a.chr", StbDonor = "_c13a.stb";
         private const string Look = "bombGemronLook.json";                         // the look made on the preview page (SheetLook), an embedded resource
         private const string BombMds = @"dun\item\main_data\bakudan.mds", BombImg = @"dun\item\main_data\bakudan.img";
         private const string NameBank = @"dun\message\ww_mes\dunmsd00_1.mes";
@@ -40,13 +43,8 @@ namespace Dark_Cloud_Improved_Version
 
         internal static void Run(IsoArchive arc, Action<string> log)
         {
-            foreach (string ext in new[] { ".chr", ".stb" })
-            {
-                string to = Dir + BombGemronStem + ext, from = Dir + Orphan + ext;
-                if (arc.Has(to)) continue;
-                if (!arc.Has(from)) throw new IOException($"neither {to} nor the orphan entry {from} is in the archive");
-                arc.Rename(from, to);
-            }
+            arc.Claim(Dir + ChrDonor, Dir + BombGemronStem + ".chr");
+            arc.Claim(Dir + StbDonor, Dir + BombGemronStem + ".stb");
             byte[] light = new ImgBank((ChrPack.Parse(arc.Read(GlowDisc.SourcePack)).Find("fire.img") ?? throw new IOException("glow source pack lacks fire.img")).Payload).Block(GlowDisc.SourcePicture);
             byte[] chr = BombGemronPack(arc.Read(Dir + ModelSource + ".chr"), arc.Read(BombMds), arc.Read(BombImg), ChrPack.Parse(arc.Read(DiscQuadPack)).Require(DiscQuadMds).Payload, light);
             arc.Redirect(Dir + BombGemronStem + ".chr", chr);

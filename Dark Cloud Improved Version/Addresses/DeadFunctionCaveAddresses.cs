@@ -174,6 +174,20 @@ namespace Dark_Cloud_Improved_Version
 
     /// <summary>The dead <c>SmoothRest</c> body (262 zero words from 0x27D084, in the main ELF): the camera-height cave takes its head
     /// (ElfCameraPatches, 0x27D090, 408 B → 0x27D228), the rest is free zero words up to 0x27D49C.</summary>
+    /// <summary>The body of <c>sceCdReadIOPm</c> (328 B from 0x10A690, main ELF, right before <see cref="DeadCdCave"/>'s host): never reached,
+    /// as <see cref="DeadIoctlCave"/> (no jal, j, stored pointer or lui/addiu|ori pair in the ELF's loaded image, the dungeon or the title
+    /// overlay).</summary>
+    internal static class DeadReadIopmCave
+    {
+        internal const uint Host = 0x0010A690, HostSpan = 0x148, VanillaWord0 = 0x27BDFF90;   // `addiu sp,sp,-0x70`
+        /// <summary>tools/stubs/atla_collect.s (ElfSpeciesPatches.PatchAtlaCollect): what collecting an atla marks, safe for the mod's atlas
+        /// and Demon Shaft's floors past the slot table.</summary>
+        internal const uint AtlaCollect = Host;   // 180 B → 0x10A744
+        /// <summary>tools/stubs/atla_dungeon.s (ElfSpeciesPatches.PatchAtlaDungeon): Demon Shaft's atla ceremony on Gallery of Time's tables.</summary>
+        internal const uint AtlaDungeon = Host + 0xC0;   // 0x10A750, 24 B → 0x10A768
+        internal const uint End = Host + HostSpan;
+    }
+
     /// <summary>The body of <c>sceCdGetToc</c> (656 B from 0x10A7D8, main ELF): a libcdvd routine the game links but never calls — no jal, j,
     /// stored pointer or lui/addiu pair reaches it, in the ELF or the dungeon overlay.</summary>
     internal static class DeadCdCave
@@ -185,6 +199,21 @@ namespace Dark_Cloud_Improved_Version
         internal const uint BombRadius = Host + 0xA8;   // 0x10A880, 144 B → 0x10A910
         /// <summary>tools/stubs/fuse_capture.s (ElfSpeciesPatches.PatchFuseCapture): each Bomb Gemron's wick, captured in the monster draw.</summary>
         internal const uint FuseCapture = Host + 0x138;   // 0x10A910, 136 B → 0x10A998
+        /// <summary>tools/stubs/atla_shot.s (ElfSpeciesPatches.PatchAtlaShot): the Atla Gemron's shot's hit radius and flight, from the
+        /// host's tail on into the dead sceCdSeek body after it (<see cref="DeadSeekCave"/>), up to <see cref="DeadSeekCave.End"/>.</summary>
+        internal const uint AtlaShot = Host + 0x1C0;   // 0x10A998, 296 B → 0x10AAC0
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The bodies of <c>sceCdSeek</c>, <c>sceCdStandby</c>, <c>sceCdStop</c> and <c>sceCdPause</c> (816 B from 0x10AA68, main ELF,
+    /// right after <see cref="DeadCdCave"/>'s host): never reached, as <see cref="DeadIoctlCave"/> (no jal, j, stored pointer or lui/addiu|ori
+    /// pair in the ELF's loaded image, the dungeon or the title overlay). <see cref="DeadCdCave.AtlaShot"/> runs on into it, so no first
+    /// word is claimed.</summary>
+    internal static class DeadSeekCave
+    {
+        internal const uint Host = 0x0010AA68, HostSpan = 0x330, VanillaWord0 = 0x27BDFFB0;   // `addiu sp,sp,-0x50`
+        /// <summary>tools/stubs/atla_draw.s (ElfSpeciesPatches.PatchAtlaDraw): the Atla Gemron's atla bouncing free, in CDungeonMap::DrawAtraBoll.</summary>
+        internal const uint AtlaDraw = 0x0010AAC0;   // 636 B → 0x10AD3C
         internal const uint End = Host + HostSpan;
     }
 
@@ -198,10 +227,14 @@ namespace Dark_Cloud_Improved_Version
         internal const uint BombTint = Host;   // 244 B → 0x10A2C4
         /// <summary>tools/stubs/freeze_break.s (ElfDamagePatches.PatchFreezeBreak): a hit breaks the player's freeze — BtCheckDamageProc's
         /// one StatusErrCheck call (dun 0x1DBB1F4, DunPatches) comes here.</summary>
-        internal const uint FreezeBreak = Host + 0x190;   // 0x10A360, 96 B → 0x10A3C0 (0x10A2D0–0x10A360 before it is free)
+        internal const uint FreezeBreak = Host + 0x190;   // 0x10A360, 96 B → 0x10A3C0 (0x10A340–0x10A360 before it is free)
         /// <summary>tools/stubs/eye_tint.s (ElfSpeciesPatches.PatchEyeTint): the Crystal Gemron's eyes tinted, reached only through
-        /// the private vtable CrystalGemron gives the eyes' visual (two entries: +0 the uint* DrawVu1, +0xC the packet one).</summary>
-        internal const uint EyeTint = Host + 0x1F0;   // 0x10A3C0, 156 B → 0x10A45C
+        /// the private vtable CrystalGemron gives the eyes' visual (two entries: +0 the uint* DrawVu1, +0x10 the packet one).</summary>
+        internal const uint EyeTint = Host + 0x1F0;   // 0x10A3C0, 180 B → 0x10A474
+        /// <summary>The same cave's entries for the Atla Gemron's forehead Atlamillia (AtlaGemron's private vtable): slot 6 here, slot 7 + 0x10.</summary>
+        internal const uint AtlamilliaTint = EyeTint + 0x20;
+        /// <summary>The Atla Gemron's shot config (BT_SHOT_EFFECT, 0x70 B), shot config table entry 36 (ElfSpeciesPatches.PatchAtlaShot).</summary>
+        internal const uint AtlaShotConfig = Host + 0x100;   // 0x10A2D0, 0x70 B → 0x10A340
         internal const uint End = Host + HostSpan;
     }
 

@@ -22,14 +22,8 @@ namespace Dark_Cloud_Improved_Version
     ///    id (24-39: grant-proof, see AtlaSystem) and count 1, then write its index into a free
     ///    slot of a random valid floor (per MaxFloorTbl/NoEntryTbl). The engine spawns the atla
     ///    at that floor's next build.
-    ///  • Ceremony name: each pending sphere claims a NAME CHANNEL — one of 13 orphaned
-    ///    message pairs in the system bank (cut-content entries no vanilla code path can
-    ///    request; enumerated against the full EditElementData table, including the georama
-    ///    UI readers EdEditBuildHelpMes/MoveEditCursor/AtoraNameDraw, which all go through
-    ///    GetAtraMsgNo). The orphan's offset is repointed at "[weapon] SynthSphere" text in
-    ///    the bank buffer's free tail, and the sentinel's EditElementData nameIdx is aimed at
-    ///    it. The game then resolves the right name natively at open time — no polling, no
-    ///    rewrite races, and entry 999 (the menus' shared empty-name string) stays vanilla.
+    ///  • Ceremony name: each pending sphere claims a name channel ("[weapon] SynthSphere",
+    ///    AtlaNameChannels) on its sentinel part id.
     ///  • Delivery: when the slot turns -3 (player collected it), the sphere is written to the
     ///    attachment board; the parts entry self-frees natively. The name channel is released
     ///    once the ceremony fully ends (atraGetStatus back to 0 — releasing earlier could
@@ -48,14 +42,7 @@ namespace Dark_Cloud_Improved_Version
             public string WeaponName;
         }
 
-        private sealed class CoolingChannel
-        {
-            public int Channel, Dungeon, Sentinel;
-            public DateTime Deadline;  // release even if atraGetStatus never settles
-        }
-
         private static readonly List<PendingSphere> _pending = new List<PendingSphere>();
-        private static readonly List<CoolingChannel> _cooling = new List<CoolingChannel>();
         private static readonly Random _rng = new Random();
 
         private static DateTime _nextTick = DateTime.MinValue;
@@ -64,48 +51,22 @@ namespace Dark_Cloud_Improved_Version
         private static int _snapChar = -1;
         private static byte[] _snapBag;    // active character's 10 weapon records
 
-        // ── Name channels: 13 orphaned system-mes pairs ──
-        // The bank (meswin/system_1.mes, 633 entries) loads into the static 96KB
-        // SystemMesBuffer at 0x21CBCA00. These 13 ids exist in the bank but are UNREACHABLE
-        // from the vanilla EditElementData table (verified by enumerating every id
-        // GetAtraMsgNo can produce, incl. the dungeon-2 flag special case) — leftover cut
-        // content ("Dummy", "Amuleo", "Wise Owl Entry", "Pillar" + blanks). Nothing vanilla
-        // ever requests them, so their pair offsets can be repointed freely.
-        // Header pair offsets are halfword indices biased by +(entryCount + 2).
-        // ⚠ GetTextLineDataTop_system (0x14F520) reads the pair offset as a SIGNED short
-        // (short* indexing → lh), so stored offsets must stay ≤ 0x7FFF: channel text must sit
-        // below buffer byte ~66800 (at count=633). The English bank ends at byte 47906.
-        private const long SysMesBase = 0x21CBCA00;
-        private const int ChannelTextBase = 48256;     // free tail, signed-offset safe
-        private const int ChannelTextStride = 96;      // 48 words per channel text slot
-        private static readonly ushort[] ChannelMsgIds =
-            { 1256, 1257, 1258, 1414, 1415, 1614, 1615, 1814, 1885, 1886, 2012, 2069, 2080 };
-        private const int ChannelCount = 13;
-
-        private static bool _bankReady;
-        private static readonly long[] _chPairAddr = new long[ChannelCount];      // offset halfword address
-        private static readonly ushort[] _chVanillaOff = new ushort[ChannelCount];
-        private static readonly ushort[] _chPatchedOff = new ushort[ChannelCount];
-        private static readonly string[] _chText = new string[ChannelCount];      // null = free
-
-        private static long ChannelTextAddr(int k) => SysMesBase + ChannelTextBase + k * ChannelTextStride;
-
         /// <summary>Atlamillia Insurance: the pass the main loop hands every tick (self-gated to ~2 Hz).</summary>
         public static void AtlamilliaInsuranceEffect()
         {
             if (DateTime.UtcNow < _nextTick) return;
             _nextTick = DateTime.UtcNow.AddMilliseconds(500);
 
-            // Ownership check and name-channel prep/heal, refreshed every ~5s
+            // Ownership check, refreshed every ~5s
             if (DateTime.UtcNow >= _nextOwnedCheck)
             {
                 _nextOwnedCheck = DateTime.UtcNow.AddSeconds(5);
                 _owned = IsAtlamilliaOwned();
-                PrepareNameChannels();
             }
+            AtlaNameChannels.Prepare();
 
             DeliverCollected();
-            ReleaseCooledChannels();
+            AtlaNameChannels.ReleaseCooled();
 
             // Break detection only matters in a dungeon with the sword owned
             if (!_owned || Memory.ReadByte(Addresses.mode) != 3)
@@ -144,124 +105,6 @@ namespace Dark_Cloud_Improved_Version
             }
             _snapChar = character;
             _snapBag = bag;
-        }
-
-        /// <summary>Scans the system-mes bank header: caches each orphan pair's address,
-        /// vanilla offset and per-channel patched offset, and re-applies text + repoint for
-        /// channels that are claimed (heals a bank reload). Also restores entry 999 to the
-        /// vanilla empty string if a previous mod version left it repointed (999 doubles as
-        /// the menus' generic blank-name text — it must stay vanilla).</summary>
-        private static void PrepareNameChannels()
-        {
-            _bankReady = false;
-            int cnt = Memory.ReadUShort(SysMesBase);
-            if (cnt <= 0 || cnt > 2000) return;                    // bank not loaded / foreign
-            byte[] hdr = Memory.ReadBytesBatch(SysMesBase + 4, cnt * 4);
-            if (hdr == null) return;
-
-            int textBase = 4 + cnt * 4;
-            int found = 0;
-            long pair999 = 0, pair803 = 0;
-            ushort off999 = 0, off803 = 0;
-            for (int i = 0; i < cnt; i++)
-            {
-                ushort id = BitConverter.ToUInt16(hdr, i * 4);
-                ushort off = BitConverter.ToUInt16(hdr, i * 4 + 2);
-                if (id == 999) { pair999 = SysMesBase + 4 + i * 4 + 2; off999 = off; }
-                if (id == 803) { pair803 = SysMesBase + 4 + i * 4 + 2; off803 = off; }
-                for (int k = 0; k < ChannelCount; k++)
-                {
-                    if (id != ChannelMsgIds[k]) continue;
-                    _chPairAddr[k] = SysMesBase + 4 + i * 4 + 2;
-                    int wordIdx = (ChannelTextBase + k * ChannelTextStride - textBase) / 2;
-                    _chPatchedOff[k] = (ushort)(wordIdx + cnt + 2);
-                    // Capture the vanilla offset only while unclaimed (a claimed channel's
-                    // header word may currently hold OUR patched offset).
-                    if (_chText[k] == null) _chVanillaOff[k] = off;
-                    found++;
-                    break;
-                }
-            }
-            if (found < ChannelCount) return;                      // unexpected bank variant
-            _bankReady = true;
-
-            // Heal claimed channels after a bank reload: text and repoint must both hold.
-            for (int k = 0; k < ChannelCount; k++)
-            {
-                if (_chText[k] == null) continue;
-                byte[] text = EncodeSphereName(_chText[k]);
-                byte[] cur = Memory.ReadBytesBatch(ChannelTextAddr(k), text.Length);
-                if (cur == null || !cur.AsSpan().SequenceEqual(text))
-                    Memory.WriteByteArray(ChannelTextAddr(k), text);
-                if (Memory.ReadUShort(_chPairAddr[k]) != _chPatchedOff[k])
-                    Memory.WriteUShort(_chPairAddr[k], _chPatchedOff[k]);
-            }
-
-            // Hygiene: entries 999 and 803 are vanilla twins (both point at the shared "").
-            // If they differ, a previous mod version's 999 repoint is still live — restore it.
-            if (pair999 != 0 && pair803 != 0 && off999 != off803)
-                Memory.WriteUShort(pair999, off803);
-        }
-
-        /// <summary>Claims a free name channel for a pending sphere: writes the ceremony text
-        /// into the channel's tail slot, repoints the orphan pair at it, and aims the
-        /// sentinel's EditElementData nameIdx at the orphan id. Returns the channel index or
-        /// -1 (no channel free / bank not ready → the ceremony shows a blank name instead).</summary>
-        private static int ClaimNameChannel(int dungeon, int sentinel, string weaponName)
-        {
-            if (!_bankReady) return -1;
-            for (int k = 0; k < ChannelCount; k++)
-            {
-                if (_chText[k] != null) continue;
-                _chText[k] = "\n" + weaponName + " SynthSphere";
-                Memory.WriteByteArray(ChannelTextAddr(k), EncodeSphereName(_chText[k]));
-                Memory.WriteUShort(_chPairAddr[k], _chPatchedOff[k]);
-                Memory.WriteInt(AtlaSystem.NameIdxAddr(dungeon, sentinel),
-                    ChannelMsgIds[k] - 1000 - 200 * dungeon);
-                return k;
-            }
-            return -1;
-        }
-
-        /// <summary>Returns a channel to the pool: orphan pair offset back to vanilla, the
-        /// sentinel's nameIdx back to -1.</summary>
-        private static void ReleaseNameChannel(int channel, int dungeon, int sentinel)
-        {
-            Memory.WriteInt(AtlaSystem.NameIdxAddr(dungeon, sentinel), -1);
-            if (channel < 0 || channel >= ChannelCount || _chText[channel] == null) return;
-            if (_chPairAddr[channel] != 0)
-                Memory.WriteUShort(_chPairAddr[channel], _chVanillaOff[channel]);
-            _chText[channel] = null;
-        }
-
-        /// <summary>Releases cooling channels once their ceremony has fully ended
-        /// (atraGetStatus back to 0 clears the message in the same step), or at the deadline
-        /// as a backstop.</summary>
-        private static void ReleaseCooledChannels()
-        {
-            if (_cooling.Count == 0) return;
-            bool idle = Memory.ReadInt(AtlaSystem.AtraGetStatus) == 0;
-            for (int i = _cooling.Count - 1; i >= 0; i--)
-            {
-                CoolingChannel c = _cooling[i];
-                if (!idle && DateTime.UtcNow < c.Deadline) continue;
-                ReleaseNameChannel(c.Channel, c.Dungeon, c.Sentinel);
-                _cooling.RemoveAt(i);
-            }
-        }
-
-        private static byte[] EncodeSphereName(string text)
-        {
-            ushort[] words;
-            try { words = WeaponDescriptions.Encode(text); }
-            catch (ArgumentException) { words = WeaponDescriptions.Encode("\nSynthSphere"); }
-            if ((words.Length + 1) * 2 > ChannelTextStride)        // must fit the channel slot
-                words = WeaponDescriptions.Encode("\nSynthSphere");
-            byte[] bytes = new byte[(words.Length + 1) * 2];
-            for (int i = 0; i < words.Length; i++)
-                BitConverter.GetBytes(words[i]).CopyTo(bytes, i * 2);
-            BitConverter.GetBytes((ushort)0xFF01).CopyTo(bytes, words.Length * 2);
-            return bytes;
         }
 
         private static bool IsAtlamilliaOwned()
@@ -318,15 +161,9 @@ namespace Dark_Cloud_Improved_Version
                 return;
             }
 
-            // Pick a sentinel part id (24-39) not used by another pending atla in this dungeon
-            // (each sentinel's nameIdx can only point at one channel at a time).
-            int sentinel = -1;
-            for (int id = AtlaSystem.SentinelPartIdFirst; id <= AtlaSystem.SentinelPartIdLast && sentinel < 0; id++)
-            {
-                bool taken = _pending.Exists(p => p.Dungeon == dungeon && p.Sentinel == id) ||
-                             _cooling.Exists(c => c.Dungeon == dungeon && c.Sentinel == id);
-                if (!taken) sentinel = id;
-            }
+            // A sentinel part id (24-39) no other pending atla in this dungeon carries (each sentinel's nameIdx can point at one
+            // channel at a time)
+            int sentinel = AtlaNameChannels.TakeSentinel(dungeon);
             if (sentinel < 0)
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
@@ -371,6 +208,7 @@ namespace Dark_Cloud_Improved_Version
             }
             if (floor < 0)
             {
+                AtlaNameChannels.FreeSentinel(dungeon, sentinel);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"[Atlamillia] no free atla slot found in dungeon {dungeon} — {name} not saved");
                 return;
@@ -378,7 +216,7 @@ namespace Dark_Cloud_Improved_Version
 
             // Wire the ceremony name, then the parts entry, then the floor slot (the atla
             // spawns at that floor's next build).
-            int channel = ClaimNameChannel(dungeon, sentinel, name);
+            int channel = AtlaNameChannels.Claim(dungeon, sentinel, "\n" + name + " SynthSphere");
             long ea = AtlaSystem.PartsEntryAddr(dungeon, entry);
             Memory.WriteInt(ea, sentinel);
             Memory.WriteInt(ea + 4, -1);
@@ -405,13 +243,9 @@ namespace Dark_Cloud_Improved_Version
                 if (slotVal == p.PartsEntry) continue;              // still waiting
                 _pending.RemoveAt(i);
 
-                // The ceremony message may still be latching/on screen — release the name
-                // channel only once atraGetStatus settles (see ReleaseCooledChannels).
-                _cooling.Add(new CoolingChannel
-                {
-                    Channel = p.Channel, Dungeon = p.Dungeon, Sentinel = p.Sentinel,
-                    Deadline = DateTime.UtcNow.AddSeconds(60),
-                });
+                // The ceremony message may still be latching/on screen — the name channel is released
+                // once atraGetStatus settles (AtlaNameChannels.ReleaseCooled).
+                AtlaNameChannels.Cool(p.Channel, p.Dungeon, p.Sentinel);
 
                 if (slotVal != AtlaSystem.SlotCollected && slotVal != AtlaSystem.SlotEmpty)
                 {
