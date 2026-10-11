@@ -132,7 +132,7 @@ namespace Dark_Cloud_Improved_Version
             if (sites.Count != 1) throw new IOException($"{ScriptBase}.stb: {sites.Count} _SET_SHOT bone strings, expected 1");
             int boneAt = cb + (int)U(sites[0] + 20);
             string bone = IsoBytes.NameAt(stb, boneAt, 8);
-            if (bone != SpawnFrom && bone != SpawnName) throw new IOException($"{ScriptBase}.stb: the shot fires from '{bone}', not {SpawnFrom}");
+            if (bone != SpawnFrom) throw new IOException($"{ScriptBase}.stb: the shot fires from '{bone}', not {SpawnFrom}");
             Encoding.ASCII.GetBytes(SpawnName).CopyTo(o, boneAt);
             // the AI loop, up to its RET
             int start = cb + (int)U(label100), end = start;
@@ -141,22 +141,20 @@ namespace Dark_Cloud_Improved_Version
             int cooldown = -1, close = -1, backOff = -1, shotCall = -1;
             for (int c = start; c < end; c += 12)
             {
-                bool sideStep = Op(c + 24, 17) && U(c + 32) == 1 && Op(c + 36, 1) && U(c + 40) == 0;  // `v4 <= 50 && v0 == 0`: its own 50
-                if (PushF(c) && (F(c + 8) == VanillaRange || F(c + 8) == ShotRange && !sideStep) && Op(c + 12, 14)) ranges.Add(c);
+                if (PushF(c) && F(c + 8) == VanillaRange && Op(c + 12, 14)) ranges.Add(c);
                 if (PushI(c, 180) && PushI(c + 12, 70))                                   // _GET_RAND(70, …) then + 80
-                    for (int k = c + 24; k < c + 108 && cooldown < 0; k += 12) if (PushI(k, VanillaCooldownFrom) || PushI(k, CooldownFrom)) cooldown = k;
+                    for (int k = c + 24; k < c + 108 && cooldown < 0; k += 12) if (PushI(k, VanillaCooldownFrom)) cooldown = k;
                 if (PushF(c) && F(c + 8) == CloseRange && Op(c + 12, 14) && U(c + 16) == 42 && close < 0) close = c;
                 if (close >= 0 && backOff < 0 && c > close && PushI(c, 180) && PushI(c + 12, 100))   // after it: _GET_RAND(100, …) < 40
-                    for (int k = c + 24; k < c + 108 && backOff < 0; k += 12) if (PushI(k, VanillaBackOff) || PushI(k, BackOffPercent)) backOff = k;
-                if (shotCall < 0 && Op(c, 19) && PushF(c - 24) && PushF(c - 12) && Op(c + 12, 4)) shotCall = c;   // the first: the shot's
+                    for (int k = c + 24; k < c + 108 && backOff < 0; k += 12) if (PushI(k, VanillaBackOff)) backOff = k;
+                if (shotCall < 0 && Op(c, 19) && PushF(c - 24) && PushF(c - 12) && Op(c + 12, 4)) shotCall = c;   // the shot's
             }
             if (ranges.Count != 3 || cooldown < 0 || close < 0 || backOff < 0 || shotCall < 0)
                 throw new IOException($"{ScriptBase}.stb: label 100 not as expected ({ranges.Count} ranges, cooldown {cooldown:X}, close range {close:X}, back-off {backOff:X}, shot call {shotCall:X})");
             // the close branch: cmp, BR_FALSE → other, CALL back-off, drop, JMP → out, other: 4 cells, out: the closing marker
             int br = backOff + 24, other = backOff + 72, jmp = backOff + 60, outer = other + 48;
-            bool vanillaOther = Op(other, 22) && Op(other + 12, 19) && Op(other + 24, 4) && Op(other + 36, 22) && U(jmp + 4) == other + 36 - cb;
-            bool shotOther = PushF(other) && PushF(other + 12) && Op(other + 24, 19) && Op(other + 36, 4) && U(jmp + 4) == outer - cb;
-            if (!Op(br, 17) || U(br + 4) != other - cb || !Op(backOff + 36, 19) || !Op(jmp, 16) || !Op(outer, 22) || !(vanillaOther || shotOther))
+            if (!Op(br, 17) || U(br + 4) != other - cb || !Op(backOff + 36, 19) || !Op(jmp, 16) || U(jmp + 4) != other + 36 - cb || !Op(outer, 22)
+                || !Op(other, 22) || !Op(other + 12, 19) || !Op(other + 24, 4) || !Op(other + 36, 22))
                 throw new IOException($"{ScriptBase}.stb: label 100's close branch at {close:X} not as expected");
             // the shot function's fire frame: _GET_DISTANCE(&v8), v8 < 20 → hold fire, else v3 += 7.4, then the _SET_SHOT
             int shotFunc = cb + (int)U(shotCall + 8), shotCode = cb + (int)U(shotFunc), hold = -1;

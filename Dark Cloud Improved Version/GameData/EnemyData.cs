@@ -131,7 +131,7 @@ namespace Dark_Cloud_Improved_Version
         // +0x370: animation clip cap — setting below true count freezes higher-index animations (attacks); Setting above true count does not change default behavior.
         internal int?   ModelAnimCount;
 
-        // Measured runtime model-buffer footprint in bytes (the MonstorModelBuffer space this species' mesh consumes
+        // Measured runtime model-buffer footprint in the buffer's 16-byte units (the MonstorModelBuffer space this species' mesh consumes
         // when loaded — CDataAlloc2 @ 0x21F066D0). This is the RUNTIME load size, NOT the static ModelDataSize above
         // (which doesn't predict it). The randomizer sums these per floor and stops before the per-dungeon buffer cap
         // (DungeonData.ModelBufferCapMin) overflows, which would hang the floor load. Measured via MeasureBufferMode;
@@ -2171,7 +2171,7 @@ namespace Dark_Cloud_Improved_Version
         // gem and wearing Toan's Atlamillia on its forehead (AtlaGemronBake); its shot the Atlamillia's burst (ElfSpeciesPatches.
         // PatchAtlaShot); on its death the atla bounces free and stays on the floor (AtlaGemron). Randomizer-only, like the Bomb Gemron.
         internal static readonly EnemyDefaults AtlaGemron = new EnemyDefaults {
-            Id=322, TableIndex=169, Name="Atla Gemron", ModelCode="e169", ModelFootprint=96302,    // measured 95918 on a floor of it alone (Gallery of Time 24, 2026-10-10), + 384: its script grown by the appended shot aim (allocated 0x7C40 → 0x7DC0)
+            Id=322, TableIndex=169, Name="Atla Gemron", ModelCode="e169", ModelFootprint=95942,    // measured on a floor of it alone (Gallery of Time 24, 2026-10-10, with the appended shot aim)
             Abs=35, MinGoldDrop=20, DropChance=30, StealItemId=235, RareDropItemId=187,
             MaxHp=12500, DamageReduction=30, WeaponDefense=10, KnockbackMult=1.0f,
             Category=EnemyCategory.Dragon, FireRes=0, IceRes=0, ThunderRes=0, WindRes=150, HolyRes=0,
