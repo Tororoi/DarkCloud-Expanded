@@ -171,11 +171,17 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CfgRadiusMuzzle = 0x28, CfgRadiusImpact = 0x30, CfgRadiusExpire = 0x34;
         internal const int  OffWepFlags = 0xA030;   // + i*4 — SetWepStatus: the weapon's ability flags → entry +0x6C
         internal const int  OffAntiPtr  = 0xA090;   // + i*4 — SetVsMonster: → the weapon's anti-category bytes → entry +0x64
-        /// <summary>The BT_SHOT_EFFECT configs (0x70 B each, the effect's file name at +0) the species rows index: the game's 34, then
-        /// the mod's in the table's two spare entries before the species table — <see cref="IceArrowConfig"/> and <see cref="IcePrisonConfig"/>
-        /// (ElfSpeciesPatches.PatchIceArrowConfig).</summary>
-        internal const long CfgTable   = 0x2027FA70;
-        internal const int  CfgCount   = 36;
+        /// <summary>The BT_SHOT_EFFECT configs (0x70 B each, the effect's file name at +0) the species rows index, through the table the
+        /// species loader reads (CodeCaves.ShotCfgTable, ElfSpeciesPatches.PatchShotTable): the game's 34, the mod's
+        /// <see cref="IceArrowConfig"/> and <see cref="IcePrisonConfig"/> (also in the game's table's two spare entries, where the
+        /// shot-slot sharing cave looks), then <see cref="AtlaShotConfig"/> (this table only: the sharing cave leaves it alone).</summary>
+        internal const long CfgTable   = CodeCaves.ShotCfgTable;
+        internal const int  CfgCount   = 40;
+        /// <summary>The game's own table (0x0027FA70, 36 entries up to the species table), the shot-slot sharing cave's.</summary>
+        internal const long VanillaCfgTable = 0x2027FA70;
+        internal const int  VanillaCfgCount = 36;
+        /// <summary>The Atla Gemron's shot: e503ex_atall's burst, stationary, its hit moving out along the Gemron's forward.</summary>
+        internal const int  AtlaShotConfig = 36;
         /// <summary>The Crystal Gemron's ice arrow: the Ice Queen's korinoya fired as a shot.</summary>
         internal const int  IceArrowConfig = 34;
         /// <summary>Its ice prison: the Ice Queen's kori, fired at the player's feet when an arrow freezes him (tools/stubs/crystal_shots.s).</summary>

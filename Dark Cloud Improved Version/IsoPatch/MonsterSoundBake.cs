@@ -225,6 +225,7 @@ namespace Dark_Cloud_Improved_Version
             { 121 * 4 + 0, N },   // 166 c22a
             { 106 * 4 + 1, N },   // 167 Bomb Gemron (Holy Gemron's script)
             { 106 * 4 + 1, ShatterUnit },   // 168 Crystal Gemron (Holy Gemron's script; its death shatters the life sphere)
+            { 106 * 4 + 1, N },   // 169 Atla Gemron (Holy Gemron's script)
         };
 
         private sealed class Bank

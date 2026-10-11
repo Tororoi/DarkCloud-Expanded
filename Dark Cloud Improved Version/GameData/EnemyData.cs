@@ -131,7 +131,7 @@ namespace Dark_Cloud_Improved_Version
         // +0x370: animation clip cap — setting below true count freezes higher-index animations (attacks); Setting above true count does not change default behavior.
         internal int?   ModelAnimCount;
 
-        // Measured runtime model-buffer footprint in bytes (the MonstorModelBuffer space this species' mesh consumes
+        // Measured runtime model-buffer footprint in the buffer's 16-byte units (the MonstorModelBuffer space this species' mesh consumes
         // when loaded — CDataAlloc2 @ 0x21F066D0). This is the RUNTIME load size, NOT the static ModelDataSize above
         // (which doesn't predict it). The randomizer sums these per floor and stops before the per-dungeon buffer cap
         // (DungeonData.ModelBufferCapMin) overflows, which would hang the floor load. Measured via MeasureBufferMode;
@@ -2167,12 +2167,25 @@ namespace Dark_Cloud_Improved_Version
             MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150},
             SteveLines=new() { [0] = "Be careful! Its shot is homing!", [1] = "Such pretty eyes!" } };   // over Holy Gemron's lines 0-1
 
+        // Atla Gemron: Ice Gemron's rig under a brightened look, Holy Gemron's stats and script, holding a dungeon atla in place of its big
+        // gem and wearing Toan's Atlamillia on its forehead (AtlaGemronBake); its shot the Atlamillia's burst (ElfSpeciesPatches.
+        // PatchAtlaShot); on its death the atla bounces free and stays on the floor (AtlaGemron). Randomizer-only, like the Bomb Gemron.
+        internal static readonly EnemyDefaults AtlaGemron = new EnemyDefaults {
+            Id=322, TableIndex=169, Name="Atla Gemron", ModelCode="e169", ModelFootprint=95942,    // measured on a floor of it alone (Gallery of Time 24, 2026-10-10, with the appended shot aim)
+            Abs=40, MinGoldDrop=20, DropChance=30, StealItemId=235, RareDropItemId=187,
+            MaxHp=12500, DamageReduction=30, WeaponDefense=10, KnockbackMult=1.0f,
+            Category=EnemyCategory.Dragon, FireRes=0, IceRes=0, ThunderRes=0, WindRes=150, HolyRes=0,
+            ItemDamageRes=70, ItemStatusRes=60,
+            HeightFromRoot=19.0f, BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
+            MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150} };
+
         /// <summary>Mod species with no vanilla spawn pool → the vanilla species whose home region they share. The stat
         /// normalizer gives them that home, so they are capped like a native of it when the randomizer places them lower.</summary>
         internal static readonly Dictionary<int, int> HomeOf = new()
         {
             { BombGemron.TableIndex.Value, GemronHoly.TableIndex.Value },
             { CrystalGemron.TableIndex.Value, GemronHoly.TableIndex.Value },
+            { AtlaGemron.TableIndex.Value, GemronHoly.TableIndex.Value },
         };
 
         // CUT ENEMY — no species table entry and no CHR model file (e53a.chr/e54a.chr absent).
@@ -2399,6 +2412,8 @@ namespace Dark_Cloud_Improved_Version
             Group(Captain, Corcea, PiratesChariot, Sil, Gol);
         internal static readonly Dictionary<int, EnemyDefaults> GemronElementals =        // Σ footprint ≈ 321,783 B  (requireFullFit)
             Group(GemronFire, GemronIce, GemronThunder, GemronWind, GemronHoly);
+        internal static readonly Dictionary<int, EnemyDefaults> GemronCustom =        // Σ footprint ≈ 321,783 B  (requireFullFit)
+            Group(BombGemron, CrystalGemron, AtlaGemron);
 
         // Per-element themes — thematic/by-lore, each anchored by its Gemron (and the suit card / dragon that carries
         // the matching elemental affinity in the data: Heart=Fire, Spade=Ice, Diamond=Thunder, Club=Wind). Tweak to taste.

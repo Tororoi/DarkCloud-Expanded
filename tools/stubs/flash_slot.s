@@ -21,18 +21,18 @@
     lui   $t9, 0x01FB
     sll   $v0, $s0, 2
     addu  $v0, $v0, $t9
-    lwc1  $f12, -0x09C0($v0)       # 0x01FAF640 CodeCaves.FlashSizeTable[slot]
+    lwc1  $f12, -0x008C($v0)       # 0x01FAFF74 CodeCaves.FlashSizeTable[slot]
     addu  $v0, $s0, $t9
-    lbu   $t3, -0x0900($v0)        # 0x01FAF700 CodeCaves.FlashAlphaTable[slot]
+    lbu   $t3, -0x004C($v0)        # 0x01FAFFB4 CodeCaves.FlashAlphaTable[slot]
     slti  $v0, $s0, 12
     bne   $v0, $zero, done         # only slots 12–15 can be pinned
     sll   $v0, $s0, 5
-    addu  $v0, $v0, $t9            # v0 − 0xB00 = 0x01FAF680 + (slot − 12) × 0x20: the pin entry
-    lw    $t9, -0x0B00($v0)        # the frame, or 0
+    addu  $v0, $v0, $t9            # v0 − 0x1D80 = 0x01FAE400 + (slot − 12) × 0x20: the pin entry
+    lw    $t9, -0x1D80($v0)        # the frame, or 0
     beq   $t9, $zero, done
     sll   $t7, $s0, 2
     addu  $t7, $t7, $s1            # t7 + 0x100 = &timer[slot]
-    lw    $t8, -0x0AFC($v0)        # the unit's model block
+    lw    $t8, -0x1D7C($v0)        # the unit's model block
     lw    $t6, 0x0BD8($t8)         # its playing motion
     addiu $t5, $zero, 11
     beq   $t6, $t5, blast          # the death motion: its blast at frame 122
@@ -46,15 +46,15 @@ blast:
     bne   $t5, $zero, live
     addiu $t6, $zero, -1           # (delay)
     sw    $t6, 0x0100($t7)         # the blast: the flash out,
-    sw    $zero, -0x0B00($v0)      # unpinned (the app sees it and ends its burst),
+    sw    $zero, -0x1D80($v0)      # unpinned (the app sees it and ends its burst),
     b     done
     addu  $t3, $zero, $zero        # (delay) and drawn invisible this last time
 live:
     addiu $t6, $zero, 17
     sw    $t6, 0x0100($t7)         # kept alight
-    lw    $t8, -0x0AF8($v0)
+    lw    $t8, -0x1D78($v0)
     addiu $t8, $t8, 1
-    sw    $t8, -0x0AF8($v0)        # frames pinned
+    sw    $t8, -0x1D78($v0)        # frames pinned
     addiu $t7, $zero, 12
     divu  $zero, $t8, $t7
     mfhi  $t7
@@ -64,20 +64,20 @@ live:
     mfhi  $t7
     bne   $t7, $zero, place
     nop
-    lw    $t7, -0x0AF4($v0)
+    lw    $t7, -0x1D74($v0)
     addiu $t7, $t7, 1
-    sw    $t7, -0x0AF4($v0)        # a burst asked for
+    sw    $t7, -0x1D74($v0)        # a burst asked for
 place:
-    lw    $t7, -0x0A64($v0)        # the capture's stamp (CodeCaves.FlashCapture + 0xC; fuse_capture.s, in the monster draw)
-    lw    $t8, -0x0AF8($v0)        # this frame's count
+    lw    $t7, -0x1CE4($v0)        # the capture's stamp (CodeCaves.FlashCapture + 0xC; fuse_capture.s, in the monster draw)
+    lw    $t8, -0x1D78($v0)        # this frame's count
     addiu $t8, $t8, -1
     bne   $t7, $t8, unseen         # not drawn this frame (off screen, culled): no flash where it was
     nop
-    lw    $t7, -0x0A70($v0)        # the wick where this unit was drawn
+    lw    $t7, -0x1CF0($v0)        # the wick where this unit was drawn
     sw    $t7, 0x0000($a0)
-    lw    $t7, -0x0A6C($v0)
+    lw    $t7, -0x1CEC($v0)
     sw    $t7, 0x0004($a0)
-    lw    $t7, -0x0A68($v0)
+    lw    $t7, -0x1CE8($v0)
     sw    $t7, 0x0008($a0)
     addiu $t6, $zero, 0x0660       # the slot's guard burst (HitMark[slot], 0x01EBE140 + slot × 0x660) follows the wick: its marks are
     mult  $s0, $t6                 # drawn at offsets from its origin, so the origin carried along carries the burst
@@ -90,11 +90,11 @@ place:
     bne   $t5, $t9, done
     lw    $t5, 0x0654($t6)         # (delay) its marks still drawing
     blez  $t5, done
-    lw    $t7, -0x0A70($v0)        # (delay)
+    lw    $t7, -0x1CF0($v0)        # (delay)
     sw    $t7, 0x0010($t6)
-    lw    $t7, -0x0A6C($v0)
+    lw    $t7, -0x1CEC($v0)
     sw    $t7, 0x0014($t6)
-    lw    $t7, -0x0A68($v0)
+    lw    $t7, -0x1CE8($v0)
     b     done
     sw    $t7, 0x0018($t6)         # (delay)
 unseen:

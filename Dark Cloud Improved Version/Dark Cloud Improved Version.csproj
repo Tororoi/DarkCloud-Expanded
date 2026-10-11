@@ -40,6 +40,24 @@
     <EmbeddedResource Include="Resources\isoPatch\crystalGemronLook.json">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.crystalGemronLook.json</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\atlaCollect.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaCollect.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\atlaDungeon.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaDungeon.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\atlaDraw.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaDraw.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\atlaShot.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaShot.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\atlaGemronLook.json">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaGemronLook.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\atlaGemronRecipe.json">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaGemronRecipe.json</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\bombTint.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.bombTint.bin</LogicalName>
     </EmbeddedResource>

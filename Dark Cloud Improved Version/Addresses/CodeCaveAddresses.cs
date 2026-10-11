@@ -302,36 +302,53 @@ namespace Dark_Cloud_Improved_Version
         /// the elements the ring offers, in ring order.</summary>
         internal const long ElementMenuMode = 0x21FAF4E0, ElementMenuPick = 0x21FAF4E4, ElementMenuTex = 0x21FAF4E8, ElementMenuMap = 0x21FAF4EC;
         internal const uint ElementMenuModeGuest = 0x01FAF4E0;
-        /// <summary>The species table's extension rows (EnemySpeciesTable.ExtensionBase): 2 × 0x9C, index 167 first, baked by
+        /// <summary>The species table's extension rows (EnemySpeciesTable.ExtensionBase): 3 × 0x9C, index 167 first, baked by
         /// ElfSpeciesPatches (this page is the front of the ELF's cave segment, ElfCave.DataPageStart) and reached by the
         /// species-lookup stub. Data the mod may write (a roster's MonsterType, a record snapshot), so a data page — never beside
         /// executed cave code.</summary>
-        internal const long SpeciesRows      = 0x21FAF500;   // 312 B → 0x21FAF638
+        internal const long SpeciesRows      = 0x21FAF500;   // 468 B → 0x21FAF6D4
         internal const uint SpeciesRowsGuest = 0x01FAF500;
-        internal const int  SpeciesRowCount  = 2;
-        /// <summary>The machine-gun hit flash's size per slot (CHIT_MACHINGUN_EFFECT, 16 slots): Draw reads entry i for slot i through
-        /// SmoothRestCave.FlashSlot. Baked 5.0 each (the engine's constant — Osmond's flashes); a driver of a slot writes its own and
-        /// puts 5.0 back when it lets the slot go (BombGemron's fuse, 3.0).</summary>
-        internal const long FlashSizeTable      = 0x21FAF640;   // 16 floats → 0x21FAF680
-        internal const uint FlashSizeTableGuest = 0x01FAF640;
-        internal const float FlashSizeVanilla   = 5f;
+        internal const int  SpeciesRowCount  = 3;
+        /// <summary>The monster shot configs' pointer table the species loader reads (SetupBaseModel's two loads, 0x1E018C / 0x1E0200,
+        /// pointed here by ElfSpeciesPatches.PatchShotTable): the game's 36 (0x0027FA70: its 34, then the Crystal Gemron's 34 / 35)
+        /// copied, the Atla Gemron's 36 after them, room to <see cref="ShotEffectPack.CfgCount"/>. Baked; the vanilla table stays as
+        /// it was for the shot-slot sharing cave, which covers the first 36 only.</summary>
+        internal const long ShotCfgTable      = 0x21FAF6D8;   // 40 pointers → 0x21FAF778
+        internal const uint ShotCfgTableGuest = 0x01FAF6D8;
+        /// <summary>The tints tools/stubs/eye_tint.s adds to the ambient (red, green, blue floats on its 0–255 scale): the Crystal Gemron's
+        /// eyes, the Atla Gemron's forehead Atlamillia. Baked (ElfSpeciesPatches.PatchDataPageDefaults).</summary>
+        internal const long EyeTintColour      = 0x21FAF778;   // 12 B → 0x21FAF784
+        internal const long AtlamilliaTintColour     = 0x21FAF784;   // 12 B → 0x21FAF790
+        internal static readonly float[] EyeTintRgb = { 45f, 70f, 50f }, AtlamilliaTintRgb = { 50f, 50f, 50f };
         /// <summary>The machine-gun hit flash's pin for slots 12–15 (the Bomb Gemron's fuse), 4 × 0x20, entry (slot − 12): +0 the CFrame
         /// (guest; 0 = not pinned), +4 the unit's model block (guest, ModelScaleOffsets: its playing motion and frame), +8 frames pinned
         /// (the cave's), +0xC bursts asked for (the cave's: one every 30 frames), +0x10 the point x, y, z in the frame's space (the app's).
         /// The flash's draw (SmoothRestCave.FlashSlot) keeps a pinned slot alight, steps its cells, places it through the frame's world
         /// matrix every frame, and puts it out — clearing +0 — once the unit's death motion passes its blast frame.</summary>
-        internal const long FlashPinTable      = 0x21FAF680;   // 0x80 B → 0x21FAF700
+        internal const long FlashPinTable      = 0x21FAE400;   // 0x80 B → 0x21FAE480 (runtime: the MeshCave margin below the data page)
         internal const int  FlashPinFirstSlot = 12, FlashPinStride = 0x20, FlashPinFrame = 0x0, FlashPinModel = 0x4, FlashPinFrames = 0x8,
                             FlashPinBursts = 0xC, FlashPinPoint = 0x10;
-        /// <summary>The machine-gun hit flash's alpha per slot, 16 bytes (Draw's set3DCellModel alpha through SmoothRestCave.FlashSlot):
-        /// baked 0x80 (the engine's constant — Osmond's flashes); lower is fainter in the additive effects pass.</summary>
-        internal const long FlashAlphaTable    = 0x21FAF700;   // 16 B → 0x21FAF710
-        internal const byte FlashAlphaVanilla  = 0x80;
         /// <summary>Each pinned flash's wick in world space as the monster draw captured it for its unit (tools/stubs/fuse_capture.s), one
         /// per pin at FlashPinTable + 0x90 + pin × 0x20: x, y, z, then the pin's frame count it was taken on (the flash shows only a
         /// capture from this frame). 16 B used of each 0x20.</summary>
-        internal const long FlashCapture       = 0x21FAF710;   // 4 × 0x20 → 0x21FAF790
+        internal const long FlashCapture       = 0x21FAE490;   // 4 × 0x20 → 0x21FAE510 (runtime, beside the pins)
         internal const int  FlashCaptureStamp  = 0xC;
+        /// <summary>The stock DrawVu1 targets of the Atla Gemron's forehead Atlamillia's visual (slot 6, slot 7), which tools/stubs/eye_tint.s calls after tinting the ambient; written by AtlaGemron before it swaps the vtables.</summary>
+        internal const long AtlamilliaTintStock      = 0x21FAE510;   // 2 words → 0x21FAE518 (runtime)
+        /// <summary>The forehead Atlamillia's visual's private vtable: its class vtable with slots 6/7 at DeadChainCave.AtlamilliaTint (AtlaGemron).</summary>
+        internal const long AtlamilliaTintVtable      = 0x21FAE520;   // 32 B → 0x21FAE540 (runtime)
+        internal const uint AtlamilliaTintVtableGuest = 0x01FAE520;
+        /// <summary>The Atla Gemron's atlas bouncing free (tools/stubs/atla_draw.s reads them in CDungeonMap::DrawAtraBoll; AtlaGemron
+        /// fills them), 2 × 0x50: +0 the atla (-1 none), +4 the map (guest), +8 the dying unit's model block (guest), +0xC Ω, +0x10 1 / sin Ω,
+        /// +0x14 q0 and +0x24 q1 (w, x, y, z), +0x34 the start scale, +0x38 K0 and +0x44 K1 (the frame's position at the start and at
+        /// rest).</summary>
+        internal const long AtlaBounce        = 0x21FAE540;   // 2 × 0x50 → 0x21FAE5E0 (runtime)
+        internal const int  AtlaBounceStride = 0x50, AtlaBounceCount = 2, AtlaBounceIndex = 0x0, AtlaBounceMap = 0x4, AtlaBounceBlock = 0x8,
+                            AtlaBounceOmega = 0xC, AtlaBounceInvSin = 0x10, AtlaBounceQ0 = 0x14, AtlaBounceQ1 = 0x24, AtlaBounceScale = 0x34,
+                            AtlaBounceK0 = 0x38, AtlaBounceK1 = 0x44;
+        /// <summary>The place CDungeonMap::SetAtraBoll is handed for an Atla Gemron's atla (AtlaGemron, through NativeCall).</summary>
+        internal const long AtlaSpawnPos      = 0x21FAE5E0;   // 16 B → 0x21FAE5F0 (runtime)
+        internal const uint AtlaSpawnPosGuest = 0x01FAE5E0;
         /// <summary>The stock DrawVu1 targets of the Bomb Gemron's bomb visual (slot 6, slot 7), which tools/stubs/bomb_tint.s calls
         /// after reddening the ambient; written by BombGemron before it swaps the visual's vtable.</summary>
         internal const long BombTintStock      = 0x21FAF790;   // 2 words → 0x21FAF798
@@ -559,7 +576,10 @@ namespace Dark_Cloud_Improved_Version
         /// high half is <see cref="NoDrainMark"/>'s, which is all the no-drain caves test — an Ungaga crushing hit bills no weapon HP.</summary>
         internal const uint CrushMark = 0x4B495243;   // "CRIK"
 
-        // 0x21FAFC90..0x21FAFCB0 FREE
+        /// <summary>A real atla's root turn (w, x, y, z in QuatToMat's order: dun\etc\atr.mds's root record), which tools/stubs/atla_draw.s
+        /// gives the atla model back after drawing a bouncing one. Baked (ElfSpeciesPatches.PatchDataPageDefaults, AtlaGemronBake's recipe).</summary>
+        internal const long AtlaRootQuat       = 0x21FAFC90;   // 16 B → 0x21FAFCA0
+        // 0x21FAFCA0..0x21FAFCB0 FREE
 
         /// <summary>The guard gate's per-enemy window mask (DebugInfoCave.GuardMask, written by GuardGate): one byte per slot, bit w set =
         /// enemy window w blocks nothing (7 = none of its windows).</summary>
@@ -580,8 +600,18 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The stars instance to CONSTRUCT (guest; 0 = none): StarsLane posts a freshly carved instance here, the stars
         /// step cave runs `__ct__12CSHOT_EFFECT` on it (its nine CCharacters' vtables and sub-objects — Initialize and Entry2
         /// make virtual calls through them) and writes 0 back.</summary>
-        internal const long StarsConstruct = 0x21FAFF70; // 4 B (0x21FAFF74..0x21FAFFE0 free)
+        internal const long StarsConstruct = 0x21FAFF70; // 4 B
         internal const uint StarsConstructGuest = 0x01FAFF70;
+        /// <summary>The machine-gun hit flash's size per slot (CHIT_MACHINGUN_EFFECT, 16 slots): Draw reads entry i for slot i through
+        /// SmoothRestCave.FlashSlot. Baked 5.0 each (the engine's constant — Osmond's flashes); a driver of a slot writes its own and
+        /// puts 5.0 back when it lets the slot go (BombGemron's fuse, 3.0).</summary>
+        internal const long FlashSizeTable      = 0x21FAFF74;   // 16 floats → 0x21FAFFB4
+        internal const uint FlashSizeTableGuest = 0x01FAFF74;
+        internal const float FlashSizeVanilla   = 5f;
+        /// <summary>The machine-gun hit flash's alpha per slot, 16 bytes (Draw's set3DCellModel alpha through SmoothRestCave.FlashSlot):
+        /// baked 0x80 (the engine's constant — Osmond's flashes); lower is fainter in the additive effects pass.</summary>
+        internal const long FlashAlphaTable    = 0x21FAFFB4;   // 16 B → 0x21FAFFC4 (0x21FAFFC4..0x21FAFFE0 free)
+        internal const byte FlashAlphaVanilla  = 0x80;
         /// <summary>The Confuse ability's procs (confuse_proc.s): a byte per enemy slot, 1 = the roll succeeded this hit; the mod
         /// (ConfuseAbility) confuses the slot and writes it back to 0.</summary>
         internal const long ConfuseProc = 0x21FAFFE0;   // 16 B

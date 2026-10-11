@@ -252,8 +252,8 @@ namespace Dark_Cloud_Improved_Version
         {
             if (tableIndex < 0) return;
             int idx = Memory.ReadUShort(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.PrimaryBstIndex);
-            if (idx == 0xFFFF) return;
-            int btNative = Memory.ReadInt(BehaviorScriptTable.PointerArray + idx * 4);
+            if (idx >= ShotEffectPack.CfgCount) return;                                  // (0xFFFF: none)
+            int btNative = Memory.ReadInt(ShotEffectPack.CfgTable + idx * 4);              // the species loader's table (past the game's 36: the mod's)
             if (btNative == 0) return;
             long dmgAddr = Memory.ToMmu(btNative) + BehaviorScriptTable.ShotBaseDamage;
 

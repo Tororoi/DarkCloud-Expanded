@@ -19,11 +19,13 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The Bomb Gemron: Holy Gemron's record under the mod's model and script stems (stats from EnemyData), its two
         /// shots the item-bomb shots of ElfSpeciesPatches.PatchBombConfigs — config 8 the thrown bomb, config 27 the death and
         /// self-destruct blast. The Crystal Gemron: Holy Gemron's record under its stems, its shots the ice arrow (config 34) and the
-        /// ice prison (config 35) of ElfSpeciesPatches.PatchCrystalShots (null keeps the template's).</summary>
+        /// ice prison (config 35) of ElfSpeciesPatches.PatchCrystalShots. The Atla Gemron: Holy Gemron's record under its stems, its shot the
+        /// Atlamillia's burst (config 36, ElfSpeciesPatches.PatchAtlaShot) (null keeps the template's).</summary>
         internal static readonly (EnemyDefaults species, int template, string stem, ushort? shot0, ushort? shot1)[] Rows =
         {
             (EnemySpecies.BombGemron, EnemySpecies.GemronHoly.TableIndex.Value, BombGemronBake.BombGemronStem, 8, 27),
             (EnemySpecies.CrystalGemron, EnemySpecies.GemronHoly.TableIndex.Value, CrystalGemronBake.Stem, ShotEffectPack.IceArrowConfig, ShotEffectPack.IcePrisonConfig),
+            (EnemySpecies.AtlaGemron, EnemySpecies.GemronHoly.TableIndex.Value, AtlaGemronBake.Stem, ShotEffectPack.AtlaShotConfig, null),
         };
 
         /// <summary>Every reserved row's bytes, the unused rows zero; <paramref name="template"/> reads a vanilla record by index.</summary>

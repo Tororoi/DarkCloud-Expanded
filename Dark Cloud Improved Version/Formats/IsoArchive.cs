@@ -103,6 +103,15 @@ namespace Dark_Cloud_Improved_Version
             _log($"renamed {from} -> {to} (entry {i}, HD2 name @0x{nameOff:X})");
         }
 
+        /// <summary>The entry <paramref name="to"/>, made from the unused entry <paramref name="from"/> (renamed in place) unless it
+        /// exists already (an ISO patched before).</summary>
+        internal void Claim(string from, string to)
+        {
+            if (Has(to)) return;
+            if (!Has(from)) throw new IOException($"neither {to} nor the unused entry {from} is in the archive");
+            Rename(from, to);
+        }
+
         /// <summary>Raw DATA.DAT bytes at an offset.</summary>
         internal byte[] ReadAt(long off, int size) => Rd(_fs, _datIso + off, size);
 

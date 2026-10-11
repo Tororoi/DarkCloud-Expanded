@@ -21,7 +21,7 @@
     ori   $t2, $t2, 0xFD60         # 0x1FD60: the unit block → its model block (ModelScaleOffsets.ModelFromUnit)
     addu  $t1, $t1, $t2            # this unit's model block
     lui   $t3, 0x01FB
-    addiu $t3, $t3, -0x0980        # 0x01FAF680 CodeCaves.FlashPinTable, entry 0
+    addiu $t3, $t3, -0x1C00        # 0x01FAE400 CodeCaves.FlashPinTable, entry 0
     addiu $t4, $zero, 4
 loop:
     lw    $t5, 0x0000($t3)         # the frame, or 0

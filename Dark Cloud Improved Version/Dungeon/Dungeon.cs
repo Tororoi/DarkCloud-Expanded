@@ -117,6 +117,7 @@ namespace Dark_Cloud_Improved_Version
                     bool walking = !Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode();
                     BombGemron.Tick(!Player.CheckIsLoading());   // the Bomb Gemron's fuse sparks (data only: kept through menus and knockdowns, let go for a load)
                     CrystalGemron.Tick(!Player.CheckIsLoading());   // the Crystal Gemron's eyes' tint (one vtable swap per floor)
+                    AtlaGemron.Tick(!Player.CheckIsLoading());      // the Atla Gemron's atla tint, and the atla it drops as it dies
                     MonsterSounds.Tick();                           // the floor's monster bank, logged
                     if (walking)
                     {
@@ -176,6 +177,7 @@ namespace Dark_Cloud_Improved_Version
                             EnemyPoisonDuration.Reset();
                             BombGemron.Reset();
                             CrystalGemron.Reset();
+                            AtlaGemron.Reset();
                             SpeciesRows.Ensure();
                             MiniBoss.miniBossRolled = false;
                             MiniBossLootTables.CancelPendingBoost();
