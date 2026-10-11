@@ -2172,7 +2172,7 @@ namespace Dark_Cloud_Improved_Version
         // PatchAtlaShot); on its death the atla bounces free and stays on the floor (AtlaGemron). Randomizer-only, like the Bomb Gemron.
         internal static readonly EnemyDefaults AtlaGemron = new EnemyDefaults {
             Id=322, TableIndex=169, Name="Atla Gemron", ModelCode="e169", ModelFootprint=95942,    // measured on a floor of it alone (Gallery of Time 24, 2026-10-10, with the appended shot aim)
-            Abs=35, MinGoldDrop=20, DropChance=30, StealItemId=235, RareDropItemId=187,
+            Abs=40, MinGoldDrop=20, DropChance=30, StealItemId=235, RareDropItemId=187,
             MaxHp=12500, DamageReduction=30, WeaponDefense=10, KnockbackMult=1.0f,
             Category=EnemyCategory.Dragon, FireRes=0, IceRes=0, ThunderRes=0, WindRes=150, HolyRes=0,
             ItemDamageRes=70, ItemStatusRes=60,
@@ -2412,6 +2412,8 @@ namespace Dark_Cloud_Improved_Version
             Group(Captain, Corcea, PiratesChariot, Sil, Gol);
         internal static readonly Dictionary<int, EnemyDefaults> GemronElementals =        // Σ footprint ≈ 321,783 B  (requireFullFit)
             Group(GemronFire, GemronIce, GemronThunder, GemronWind, GemronHoly);
+        internal static readonly Dictionary<int, EnemyDefaults> GemronCustom =        // Σ footprint ≈ 321,783 B  (requireFullFit)
+            Group(BombGemron, CrystalGemron, AtlaGemron);
 
         // Per-element themes — thematic/by-lore, each anchored by its Gemron (and the suit card / dragon that carries
         // the matching elemental affinity in the data: Heart=Fire, Spade=Ice, Diamond=Thunder, Club=Wind). Tweak to taste.
