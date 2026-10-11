@@ -10,11 +10,12 @@ namespace Dark_Cloud_Improved_Version
     /// The dungeon quick-change menu (SELECT) doubling as the weapon's element picker when opened with D-pad UP: the same ring, six
     /// cells for the elements the weapon carries (and None, except for Ruby and Osmond's machine gun) — read from the `wepicon` sheet
     /// the menu's own pack loads, as the character ring shows only the party; X on a cell sets the live weapon's element, records the
-    /// pick for <see cref="ElementMenu"/> and closes the menu the way a character change does; Circle leaves.
+    /// pick for <see cref="ElementMenu"/> and closes the menu the way a character change does; Circle leaves. The menu no longer ends a
+    /// lock-on (its exit's `jal LockOffTargte` is a nop), for an element pick or a character change alike.
     ///
     /// The code is tools/stubs/element_menu.s in the two dead DebugItemGet bodies (<see cref="DebugItemCave"/>) plus element_menu_ruby.s in
     /// the SmoothRest body (Ruby's per-element shot effect reloaded when the picker closes on her); the five main-ELF
-    /// sites below each lose one `jal`/`lb` to it, and DunPatches points the overlay's SELECT read at the trigger cave and relaxes its
+    /// sites below each lose one `jal`/`lb` to it (a sixth, the exit's lock-off, is a nop), and DunPatches points the overlay's SELECT read at the trigger cave and relaxes its
     /// "party of two" test (the picker is for a lone Toan too). The picker flag, the pick and the sheet cache are
     /// <see cref="CodeCaves.ElementMenuMode"/> and its neighbours.
     /// </summary>
@@ -25,6 +26,7 @@ namespace Dark_Cloud_Improved_Version
         private const uint StartSite   = 0x002289D0, StartVanilla   = 0x80420005;   // StartQuickChange: `lb v0,0x5(v0)` (party_size)
         private const uint CloseSite   = 0x00228DD4, CloseVanilla   = 0x0C08B438;   // CharaChangeLoop: `jal MenuTextureReload` on close
         private const uint DrawSite    = 0x00229C24, DrawVanilla    = 0x0C08B3E4;   // CharaChangeDraw: `jal DrawMenu2DSprite` (the cells)
+        private const uint LockOffSite = 0x00228F88, LockOffVanilla = 0x0C76FF38;   // CharaChangeKey: `jal LockOffTargte` (the LOADED step's exit)
 
         internal static void PatchElementMenu(FileStream fs, Func<uint, long> ElfOff)
         {
@@ -46,6 +48,7 @@ namespace Dark_Cloud_Improved_Version
             ReplaceWord(fs, ElfOff, StartSite,  StartVanilla,  Jal(DebugItemCave.ElementMenuStart), "the quick-change menu's party-size load");
             ReplaceWord(fs, ElfOff, CloseSite,  CloseVanilla,  Jal(DebugItemCave.ElementMenuClose), "the quick-change menu's close");
             ReplaceWord(fs, ElfOff, DrawSite,   DrawVanilla,   Jal(DebugItemCave.ElementMenuDraw),  "the quick-change menu's cell draw");
+            ReplaceWord(fs, ElfOff, LockOffSite, LockOffVanilla, 0u, "the quick-change menu's lock-off");
         }
     }
 }
