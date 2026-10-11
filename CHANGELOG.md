@@ -30,6 +30,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Shot slots** — Floors are no longer limited to five monster shot types: the five slots are shared among every config the floor needs, each read from disc at most once per floor.
 - **Bomb knockback** — Bombs (thrown, trapped or an enemy's) knock the player away from the blast; they always threw him the same world direction.
 - **Game text** — The ISO patch fixes typos in the game's English text and unifies NPC, place and item names (Mr. Mustache, Stu, Mahnia, Sugar, Yellow Drops, Sun & Moon Temple, Muska Desert, Halberd, the Georama shop and house names, and the Pike / Gina / Storage Guard name plates). Double spaces and spaces before punctuation are removed. The mod's own dialogue got the same pass and uses US spellings.
+- **Quick select keeps your lock-on** — Changing element or character from the quick-change ring no longer releases the lock-on on an enemy.
 
 ---
 
