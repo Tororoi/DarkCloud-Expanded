@@ -38,6 +38,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread doubleImpactThread = new Thread(new ThreadStart(DoubleImpact.DoubleImpactEffect));
         private static Thread banditSlingshotThread = new Thread(new ThreadStart(BanditSlingshot.StealShotEffect));
         private static Thread banditsRingThread = new Thread(new ThreadStart(BanditsRing.StealShotEffect));
+        private static Thread pocklekulThread = new Thread(new ThreadStart(Pocklekul.PockleSummonEffect));
         private static Thread steelSlingshotThread = new Thread(new ThreadStart(SteelSlingshot.EnduranceUpEffect));
         private static Thread hardshooterThread = new Thread(new ThreadStart(Hardshooter.RicochetEffect));
         private static Thread lockOnReachThread = new Thread(new ThreadStart(Flamingo.LockOnDistanceEffect));
@@ -404,6 +405,10 @@ namespace Dark_Cloud_Improved_Version
                 case Items.banditsring:
 
                     Ensure(ref banditsRingThread, BanditsRing.StealShotEffect);
+                    break;
+                case Items.pocklekul:
+
+                    Ensure(ref pocklekulThread, Pocklekul.PockleSummonEffect);
                     break;
                 default:
                     break;

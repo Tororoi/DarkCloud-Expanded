@@ -23,7 +23,7 @@ namespace Dark_Cloud_Improved_Version
         internal const uint CircleEffects = Host + 0x8;
         /// <summary>ElfFrameChainPatches.PatchCallRequest: a native call the mod asks for (CodeCaves.CallRequest), the tail of the
         /// camera-pin chain (after the WHP bill).</summary>
-        internal const uint CallRequest   = Host + 0x610;  // 0x1B4DD0, 116 B → 0x1B4E44 (the circle cave ends at 0x1B4DC4)
+        internal const uint CallRequest   = Host + 0x610;  // 0x1B4DD0, 120 B → 0x1B4E48 (the circle cave ends at 0x1B4DC4)
         /// <summary>ElfShotPackPatches.PatchPelletSprite: the item id a player pellet's sprite cell is taken from — Mailbox.PelletSpriteId
         /// when set, else the equipped weapon's (draw__5CSHOT's hook at 0x1ABC74 calls it).</summary>
         internal const uint PelletSprite  = Host + 0x690;  // 0x1B4E50, 56 B → 0x1B4E88

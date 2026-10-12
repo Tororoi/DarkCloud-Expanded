@@ -211,7 +211,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The NATIVE CALL cave (see CodeCaves.CallRequest): the tail of the camera-pin chain. A request the mod has
-        /// posted — the magic in place — is consumed (the magic cleared first) and the function called with its six integer
+        /// posted — the magic in place — is consumed (the magic cleared first) and the function called with its eight integer
         /// arguments and f12 from the words; v0 is stored and Done raised. ra is kept on a frame of our own; the hooked
         /// camera pass returns nothing, so the caller-saved registers the call spends are nobody's.</summary>
         internal static void PatchCallRequest(FileStream fs, Func<uint, long> ElfOff)
@@ -226,7 +226,7 @@ namespace Dark_Cloud_Improved_Version
                 0x8F190000u | Lo(CodeCaves.CallMagic),              //  1 lw    t9,magic(t8)
                 0x3C0F0000u | (magic >> 16),                        //  2 lui   t7,HI(magic value)
                 0x35EF0000u | (magic & 0xFFFFu),                    //  3 ori   t7,t7,LO(magic value)
-                0x172F0000u | 22,                                   //  4 bne   t9,t7,ret (+22 → index 27)    nothing posted
+                0x172F0000u | 23,                                   //  4 bne   t9,t7,ret (+23 → index 28)    nothing posted
                 0x00000000u,                                        //  5   nop
                 0x27BDFFE0u,                                        //  6 addiu sp,sp,-0x20
                 0xAFBF0010u,                                        //  7 sw    ra,0x10(sp)
@@ -241,19 +241,20 @@ namespace Dark_Cloud_Improved_Version
                 0x8E080000u | Lo(CodeCaves.CallA4),                 // 16 lw    t0,a4(s0)                    the fifth and sixth, as the EE ABI passes them
                 0x8E090000u | Lo(CodeCaves.CallA5),                 // 17 lw    t1,a5(s0)
                 0xC60C0000u | Lo(CodeCaves.CallF12),                // 18 lwc1  f12,f12(s0)
-                0x0320F809u,                                        // 19 jalr  t9
-                0x00000000u,                                        // 20   nop
-                0xAE020000u | Lo(CodeCaves.CallV0),                 // 21 sw    v0,v0(s0)
-                0x240A0001u,                                        // 22 li    t2,1
-                0xAE0A0000u | Lo(CodeCaves.CallDone),               // 23 sw    t2,done(s0)
-                0x8FBF0010u,                                        // 24 lw    ra,0x10(sp)
-                0x8FB00014u,                                        // 25 lw    s0,0x14(sp)
-                0x27BD0020u,                                        // 26 addiu sp,sp,0x20
-                0x03E00008u,                                        // 27 ret: jr ra
-                0x00000000u,                                        // 28   nop
+                0x8E0B0000u | Lo(CodeCaves.CallA7),                 // 19 lw    t3,a7(s0)                    the eighth
+                0x0320F809u,                                        // 20 jalr  t9
+                0x8E0A0000u | Lo(CodeCaves.CallA6),                 // 21   lw    t2,a6(s0)                  the seventh, in the call's delay slot
+                0xAE020000u | Lo(CodeCaves.CallV0),                 // 22 sw    v0,v0(s0)
+                0x240A0001u,                                        // 23 li    t2,1
+                0xAE0A0000u | Lo(CodeCaves.CallDone),               // 24 sw    t2,done(s0)
+                0x8FBF0010u,                                        // 25 lw    ra,0x10(sp)
+                0x8FB00014u,                                        // 26 lw    s0,0x14(sp)
+                0x27BD0020u,                                        // 27 addiu sp,sp,0x20
+                0x03E00008u,                                        // 28 ret: jr ra
+                0x00000000u,                                        // 29   nop
             };
-            if (cave + (uint)words.Length * 4 > DebugIfCave.Host + DebugIfCave.HostSpan)
-                throw new IOException("The call-request cave does not fit its host (DebugInfomationIF).");
+            if (cave + (uint)words.Length * 4 > DebugIfCave.PelletSprite)
+                throw new IOException("The call-request cave runs into the pellet-sprite cave.");
             if (RdU32(fs, ElfOff(DebugIfCave.Host)) != 0x03E00008u)
                 throw new IOException("PatchCallRequest must follow ElfDeadFunctionPatches.PatchClaimDeadFunctionHosts (the host's `jr ra`).");
             WriteWords(fs, ElfOff, cave, words);

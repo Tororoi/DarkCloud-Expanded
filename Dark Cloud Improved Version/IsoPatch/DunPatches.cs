@@ -108,6 +108,12 @@ namespace Dark_Cloud_Improved_Version
             new(0x01DAC338, 0x34453450, 0x34450B28, "character heap 210000 → 265000 units (GameInit carve)"),
             new(0x01DB9A88, 0x34433450, 0x34430B28, "character heap 210000 → 265000 units (LoadWeapon2 remaining)"),
             new(0x01DBA8B0, 0x34423450, 0x34420B28, "character heap 210000 → 265000 units (LoadChara2 remaining)"),
+            // The POCKLE BLOCK (Pocklekul): LoadChara2's Ruby-only branch copies her c05_f03.chr into the character pool and allocates its
+            // size rounded up, `sra 6; addiu 1; sll 6; sra 4` — ((n >> 6) + 1) << 2 units — so `addiu 1 + Units/4; sll 2; nop` allocates
+            // PockleBlock.Units more: room in the character counter that the weapons and effects, which start after it, never reach.
+            new(0x01DBA870, 0x24420001, 0x24420000u | (uint)(1 + PockleBlock.Units / 4), "Ruby's pockle block (c05_f03 copy rounding, addiu)"),
+            new(0x01DBA874, 0x00021180, 0x00021080, "Ruby's pockle block (c05_f03 copy rounding, sll 6 → 2)"),
+            new(0x01DBA878, 0x00021103, 0x00000000, "Ruby's pockle block (c05_f03 copy rounding, sra 4 → nop)"),
             new(0x01DAC460, 0x3C020004, 0x3C020003, "dungeon read buffer 280000 → 250000 units (lui)"),
             new(0x01DAC464, 0x344545C0, 0x3445D090, "dungeon read buffer 280000 → 250000 units (ori)"),
             // Divine Beast cat: the dungeon step loop's once-per-frame `jal step__5CSHOT` (a0 = player shot pool)

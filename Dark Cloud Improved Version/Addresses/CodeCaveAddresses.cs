@@ -496,13 +496,13 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>A NATIVE CALL REQUEST (DebugIfCave.CallRequest, the tail of the camera-pin chain, once a dungeon frame):
         /// the mod fills the function and its arguments, writes the magic LAST, and the cave calls it from the camera pass's
-        /// epilogue — clearing the magic first, storing v0 and raising Done after. Up to six integer arguments (a0–a3, then
-        /// t0/t1 as the EE ABI passes the fifth and sixth) and one float in f12. Core/NativeCall drives it and waits on Done.
+        /// epilogue — clearing the magic first, storing v0 and raising Done after. Up to eight integer arguments (a0–a3, then
+        /// t0–t3 as the EE ABI passes the fifth to eighth; the eighth's word sits just before the block) and one float in f12. Core/NativeCall drives it and waits on Done.
         /// Only for routines that are themselves called from the dungeon's per-frame update (SetCashModel and its like).</summary>
         internal const long CallRequest      = 0x21FAF950;
         internal const uint CallRequestGuest = 0x01FAF950;
         internal const int  CallMagic = 0x00, CallFunc = 0x04, CallA0 = 0x08, CallA1 = 0x0C, CallA2 = 0x10, CallA3 = 0x14,
-                            CallA4 = 0x18, CallA5 = 0x1C, CallF12 = 0x20, CallV0 = 0x24, CallDone = 0x28;
+                            CallA4 = 0x18, CallA5 = 0x1C, CallF12 = 0x20, CallV0 = 0x24, CallDone = 0x28, CallA6 = 0x2C, CallA7 = -0x04;
         internal const uint CallMagicValue = 0x4C4C4143;   // "CALL"
 
         /// <summary>GLOW ON A PELLET (the cat glow draw cave, tools/stubs/cat_glow_draw.s): a player pellet's pool slot + 1, or 0.

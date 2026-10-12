@@ -289,11 +289,11 @@ namespace Dark_Cloud_Improved_Version
                         // clone's own slot instead, so the PNACH's 3 = "up but paused" state is never written); 2 = in a dungeon
                         // without a decoy → RESTORE the vanilla gates (they don't auto-revert). 0 (town) is set below so the
                         // shared town overlay at those addresses is never touched.
-                        // Guardian Reflector's slingshot prop, Divine Beast Title's cat and Big Bang's judgement blade
-                        // share this gate flag (and the chara slots / caves): while any copy is up, IT drives the flag —
-                        // stand down. (Mirage and Xiao's weapons can never be wielded simultaneously.) A competing 2 here
+                        // Guardian Reflector's slingshot prop, Divine Beast Title's cat, Big Bang's judgement blade and the
+                        // Pocklekul's pockle share this gate flag (and the chara slots / caves): while any copy is up, IT drives
+                        // the flag — stand down. (Mirage and the others can never be wielded simultaneously.) A competing 2 here
                         // made the slot loop run only on the frames the other writer won — the cat flickered.
-                        if (!SlingshotProp.Active && !DivineBeastTitle.Active && !BladeProp.Active)
+                        if (!SlingshotProp.Active && !DivineBeastTitle.Active && !BladeProp.Active && !PockleModel.Up)
                             Memory.WriteInt(Mailbox.MirageSceneGate, (_decoyActive && CharacterClone.IsActive) ? 1 : 2);
                         sleep = FastTickMs;
                     }
@@ -301,7 +301,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         guardLatched = false;
                         if (_decoyActive || CharacterClone.IsActive) EndDecoy();   // left the floor
-                        if (!SlingshotProp.Active && !DivineBeastTitle.Active && !BladeProp.Active)
+                        if (!SlingshotProp.Active && !DivineBeastTitle.Active && !BladeProp.Active && !PockleModel.Up)
                             Memory.WriteInt(Mailbox.MirageSceneGate, 0);   // town: leave the gates to the overlay reload
                     }
                 }

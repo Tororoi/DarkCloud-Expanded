@@ -243,6 +243,11 @@ namespace Dark_Cloud_Improved_Version
     internal static class HealAbility
     {
         internal const long TickCounter = 0x202A3684;   // int, gp-0x616C
+        internal const int  PeriodFrames = (int)(DunPatches.HealCadenceNew & 0xFFFF);   // where the count wraps (DunPatches' cadence)
+
+        /// <summary>Floor frames from <paramref name="before"/> to <paramref name="now"/> (two reads of <see cref="TickCounter"/>
+        /// less than a period apart) — the floor's own frame clock: it stands still with the floor's loop.</summary>
+        internal static int FramesBetween(int before, int now) => ((now - before) % PeriodFrames + PeriodFrames) % PeriodFrames;
     }
 
     /// <summary>The dungeon's CDataAlloc2 bump pools — each {base +0, used +8, cap +0xC}, the last two in 16-byte units —
@@ -353,6 +358,37 @@ namespace Dark_Cloud_Improved_Version
     /// BtSystemScriptAfter (0x1BB5E0) zeroes it at the event's end — right after EdEventAllClear, which deletes the
     /// player's extend motions (MOTION 1+), and alongside a reset of her motion-speed/flags/id words. Anything that
     /// depends on the player's extra motion channels or the texture manager must stand down while it is set.</summary>
+    /// <summary>The Pocklekul's pockle block: room that LoadChara2 sets aside in the character pool for RUBY only — DunPatches grows the
+    /// allocation of her c05_f03.chr copy by <see cref="Units"/> — so it ends where the weapons begin: base + used × 16 of
+    /// <see cref="DataPools.Chara"/>, less <see cref="Units"/> × 16. The weapon and effect counters start after it and reload without
+    /// touching it; the next LoadChara2 (a party switch, a floor) makes it again, empty. Its head holds the block's own CDataAlloc2,
+    /// the cfg name, a LOADTEXTURE_INFO2 pair and the pockle's texture-animation records; the pockle loads into the rest.</summary>
+    internal static class PockleBlock
+    {
+        internal const int  Units = 48000;                      // 768,000 B: the largest pockle (Thursday, 45,935 units as a monster)
+        internal const long RubyEffectCopyPtr = 0x202A35DC;     // ozumond_default_effect (gp−0x6214): Ruby's c05_f03.chr copy, right below
+        internal const int  Alloc = 0x00, CfgName = 0x10, TexInfo = 0x20, TexAnime = 0x40, TexAnimeCount = 32, TexAnimeStride = 0x58;
+        internal const int  Data = TexAnime + TexAnimeCount * TexAnimeStride;   // 0xB40: the pockle's own allocations from here
+        internal const int  CharaSlot = 2;                      // the DungeonCharaDraw slot it stands in
+        internal const int  TexBlock = 0x11 + 4 * CharaSlot;    // that slot's texture group with the scene gate open (the PNACH's 0x11 + 4i)
+    }
+
+    /// <summary>Engine routines a pockle's load and upkeep call through NativeCall.</summary>
+    internal static class CharacterLoad
+    {
+        internal const uint Initialize         = 0x001399D0;   // CCharacter::Initialize(this)
+        internal const uint InitializeTexAnime = 0x00137FF0;   // CCharacter::InitializeTexAnime(this, CTexAnimeData *, count)
+        internal const uint LoadPackData2      = 0x00139850;   // CCharacter::LoadPackData2(this, pack, name, alloc, texture block, image alloc, visual type)
+        internal const uint LoadPackData3      = 0x00139890;   // CCharacter::LoadPackData3(this, pack, name, alloc, texture block, image alloc, keep textures, visual type)
+        internal const uint DeleteTextureBlock = 0x00133700;   // CTextureManager::DeleteTextureBlock(this, block): the block's record and entries cleared
+        internal const uint LoadTextureBlockEX = 0x001340C0;   // CTextureManager::LoadTextureBlockEX(this, block, LOADTEXTURE_INFO2 *)
+        internal const uint SetAttr            = 0x00128B50;   // CFrame::SetAttr(this, CFrameAttr &, children, mask): mask 0x40 = fog_enable only
+        internal const uint SetFrameAttr       = 0x00125EF0;   // SetFrameAttr(CFrame *, children): each node's render flags from its name suffix
+        internal const int  AttrFogEnable = 0x0C, AttrSize = 0x60, AttrMaskFog = 0x40;   // CFrameAttr: fog_enable's byte, the struct's size
+        internal const uint TexManagerGuest    = 0x01C75870;   // TexManager (TextureManager.Base)
+        internal const int  Images = 0xC4;                      // CCharacter::images[4]: images[0] = its own texture bank, copied into its pool
+    }
+
     internal static class DungeonScriptEvent
     {
         internal const long BtEventMode = 0x202A3608;
@@ -375,6 +411,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CharaStride   = 0x14A0;
         internal const long CharaRegistry = 0x21D3D284;  // entry i (int) != 0 → slot i is drawn
         internal const long StepSkipTable = 0x21D3D344;  // entry i (int) != 0 → slot i is NOT stepped
+        internal const long ShadowRegistry = 0x21D3D2C4; // entry i (int) != 0 → slot i casts its shadow (the shadow pass's NPC loop, events only unless opened)
         internal const int  CharaTexBase  = 0x20;        // slot i's texture group = 0x20 + i
 
         internal const int  CharaActive   = 0x146C;      // int — Draw__12CNPCharacter requires != 0
@@ -382,6 +419,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CharaMotionB  = 0x1478;      //   (+0x1474 || +0x1478) != 0 — zero both to freeze
         internal const int  CharaRampA    = 0x1484;      // opacity-ramp amount (int); 0 = no ramp
         internal const int  CharaRampB    = 0x1488;      //   ramp B (engine sets = -1 each step → falls back to A)
+        internal const int  CharaTexBlock = 0x148C;      // int — the texture group the draw loop's TextureAnime pass runs the slot's animations in
     }
 
     /// <summary>The dungeon's camera pointer (ELF <c>NowCamera</c>, gp-0x6358): the CCameraFollow the dungeon driver

@@ -14,7 +14,7 @@ namespace Dark_Cloud_Improved_Version
     internal static class GuardWatch
     {
         internal const int GuardLoopMotion     = 9;    // guard-hold loop (every character)
-        internal const int GuardMoveMotion     = 33;   // guard-while-moving, Xiao / Ungaga (oscillates with 9 under R1)
+        internal const int GuardMoveMotion     = 33;   // guard-while-moving, Xiao / Ungaga / Ruby (oscillates with 9 under R1)
         internal const int GuardMoveMotionToan = 34;   // guard-while-moving, Toan
 
         /// <summary>True while the ACTIVE character is holding a guard: R1 down AND the current motion
@@ -29,8 +29,8 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The guard channel as the Mirage's family reads it, one read of each: <c>r1</c> — R1 down; <c>inPose</c> — R1 down
         /// AND the active character in the guard loop or guard walk (<see cref="GuardLoopMotion"/> / <see cref="GuardMoveMotion"/>:
-        /// Xiao's and Ungaga's; Toan's walk is not a hold pose here). Both out, because a charge treats "R1 held but out of the
-        /// pose" (a swing, a hit) differently from a release.</summary>
+        /// Xiao's, Ungaga's and Ruby's; Toan's walk is not a hold pose here). Both out, because a charge treats "R1 held but out of the
+        /// pose" (a swing, a hit) differently from a release. Ruby's hold is the same pair (mostly 33, 9 a frame now and then).</summary>
         internal static (bool r1, bool inPose) HoldPose()
         {
             bool r1 = (Memory.ReadUShort(Addresses.buttonInputs) & (ushort)Button.R1) != 0;
