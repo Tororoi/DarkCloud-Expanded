@@ -115,7 +115,7 @@ namespace Dark_Cloud_Improved_Version
             return outp;
         }
 
-        /// <summary>All nine palettes back to back — the blob the mod embeds (Resources/isoPatch/catGlowPalettes.bin) and writes into the ELF's
+        /// <summary>All nine palettes back to back — the blob the mod embeds (Resources/isoPatch/data/catGlowPalettes.bin) and writes into the ELF's
         /// table cave. The cave tells "already painted" from ONE word, the brightest level (table slot 114, CLUT index 226 — offsets baked into
         /// the palette stub), so both facts are asserted here.</summary>
         internal static byte[] Palettes(byte[] lightling)

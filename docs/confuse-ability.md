@@ -25,7 +25,7 @@ it carries the ability to other weapons as any ability does. Built in phases.
 - **The icon.** `WeaponOptionStatusDraw` (0x20F7F0, bound `slti at,s5,0xE` at 0x20F9D4 → 0xF) draws 20×20 tiles from the
   `charaface` sheet (256×320, 8-bit, PSMT8-swizzled, in the IM2 bank `commenu\a_usa\charatex.img` and the dungeon menu pack
   `dunmenu5.pak`): bits 1–7 from column u 0xEC, bits 8–14 from u 0xD8, row v = 0x50 + 20·(n − 1) (bits 8 and 9 swap rows). Bit
-  14's tile is (0xD8, 0xC8), empty, beside Steal. Its art is the asset `Resources/isoPatch/confuse_icon.png` (20×20 RGBA, drawn
+  14's tile is (0xD8, 0xC8), empty, beside Steal. Its art is the asset `Resources/isoPatch/assets/confuse_icon.png` (20×20 RGBA, drawn
   in the sheet's palette): decoded at patch time (`Png`, a minimal 8-bit RGB/RGBA reader), each pixel mapped to the sheet's
   nearest palette entry (its CLUT in CSM1 order; alpha < 128 → the tiles' clear corner entry), written in place into every US sheet whose Heal tile is the vanilla one — `charatex.img` and `dunmenu5.pak`; the older variants
   (`_charatex.img`, `nameregi.pak`, `dunmenu3/4/_chk.pak`) differ and are left alone.

@@ -146,7 +146,7 @@ tables read mid-frame) go through the batch writers: a per-byte round trip spans
 ## Address-ordered tables with size and end
 
 Every registry (`ElfCave`, the dead-function hosts, `CodeCaves`) lists its caves in **address order**, each with its
-size and end address on the line. Bin-backed sizes are the `.bin` file's byte size (`Resources/isoPatch`); hand-built
+size and end address on the line. Bin-backed sizes are the `.bin` file's byte size (`Resources/isoPatch/stubs/<group>/`); hand-built
 sizes are the instruction-word count × 4. A multi-entry bin occupies its whole span, not just the labelled entries
 (`CameraNormSideBank`, 2,128 B). Overlap checks run against a **patched** ELF — a vanilla ELF does not yet contain the
 neighbouring bins, so a check against it proves nothing.

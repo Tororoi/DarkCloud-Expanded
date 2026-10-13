@@ -358,7 +358,7 @@ namespace Dark_Cloud_Improved_Version
             catch (Exception) { return false; }
         }
 
-        /// <summary>The nine glow ramps reach the game as an EMBEDDED resource (Resources/isoPatch/catGlowPalettes.bin, written into the ELF by
+        /// <summary>The nine glow ramps reach the game as an EMBEDDED resource (Resources/isoPatch/data/catGlowPalettes.bin, written into the ELF by
         /// ElfCatPatches.PatchCatGlowPalettes). The pack is re-baked on every patch, but that .bin is regenerated only by the build
         /// (tools/build_resources.py), so a bake whose ramps no longer match the embedded blob is refused: the glow would keep its OLD colours
         /// while every diagnostic reported success.</summary>
@@ -369,7 +369,7 @@ namespace Dark_Cloud_Improved_Version
             var img = ChrPack.Parse(glowBytes).Find("fire.img");
             if (img == null) return;
             if (!blob.AsSpan().SequenceEqual(GlowDisc.Palettes(new ImgBank(img.Payload).Block(GlowDisc.SourcePicture))))
-                throw new IOException("GlowDisc.Elements has changed but Resources/isoPatch/catGlowPalettes.bin has not. The patch writes that .bin, so the glow would keep its OLD colours. "
+                throw new IOException("GlowDisc.Elements has changed but Resources/isoPatch/data/catGlowPalettes.bin has not. The patch writes that .bin, so the glow would keep its OLD colours. "
                                       + "Rebuild the mod with the extracted disc available (tools/build_resources.py regenerates the .bin), then patch again.");
         }
 

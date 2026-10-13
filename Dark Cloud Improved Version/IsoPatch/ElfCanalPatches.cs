@@ -18,7 +18,7 @@ namespace Dark_Cloud_Improved_Version
         // the evict flag (mailbox 0x01F10040) it requests the _MAP_JUMP to the East Harbor dock (NextMapNo=19,
         // arrival StartEventNo=404, return code 8) and clears the flag. Frame-perfect — the mod no longer polls
         // the fade; it only sets the flag when the player is caught in the draining canal.
-        // (Stub = tools/stubs/canal_evict_fade_hook.s → Resources/isoPatch/canalEvictFadeHook.bin.)
+        // (Stub = tools/stubs/canal_evict_fade_hook.s → Resources/isoPatch/stubs/town/canalEvictFadeHook.bin.)
         internal static void PatchCanalEvictFadeHook(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint StubAddr = ElfCave.CanalEvictFadeHook;   // registry: CodeCaveAddresses.ElfCave
@@ -37,7 +37,7 @@ namespace Dark_Cloud_Improved_Version
         // the non-Matataki path converge, right before DrawEffect. Redirect it to the queensSprayCave (in the mod's
         // ELF cave segment, after the fade hook), which spawns EffectWaterSpray emitters from CanalTide's table
         // then tail-calls EditEffectStep2. Its delay slot is a nop (nothing displaced), so the redirect is a clean
-        // one-word swap. (Stub = tools/stubs/queens_spray_cave.s → Resources/isoPatch/queensSprayCave.bin.)
+        // one-word swap. (Stub = tools/stubs/queens_spray_cave.s → Resources/isoPatch/stubs/town/queensSprayCave.bin.)
         internal static void PatchQueensSprayHook(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint StubAddr = ElfCave.QueensSpray;   // registry: CodeCaveAddresses.ElfCave
@@ -55,7 +55,7 @@ namespace Dark_Cloud_Improved_Version
         // EffectWaterSpray @0x165184 ends with `jal EnterEffect` (spawn the just-built particle). Redirect it to
         // the sprayBiasShim, which adds the global bias vec (0x01F18300, set per-emitter by the spray cave) to the
         // particle's initial velocity, then tail-jumps to EnterEffect. The bias is 0 for Matataki's own spray, so
-        // this is transparent there. (Stub = tools/stubs/spray_bias_shim.s → Resources/isoPatch/sprayBiasShim.bin.)
+        // this is transparent there. (Stub = tools/stubs/spray_bias_shim.s → Resources/isoPatch/stubs/town/sprayBiasShim.bin.)
         internal static void PatchSprayBiasShim(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint StubAddr = ElfCave.SprayBiasShim;   // registry: CodeCaveAddresses.ElfCave

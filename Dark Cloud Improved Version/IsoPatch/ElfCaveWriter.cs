@@ -13,15 +13,17 @@ namespace Dark_Cloud_Improved_Version
     {
         private const string ResourcePrefix = "Dark_Cloud_Improved_Version.Resources.isoPatch.";
 
-        /// <summary>The bytes of the embedded stub <c>Resources/isoPatch/&lt;name&gt;</c> (tools/stubs/build_ee_stubs.py output).</summary>
+        /// <summary>The bytes of the embedded stub <paramref name="name"/> (tools/stubs/build_ee_stubs.py output, filed under
+        /// Resources/isoPatch/stubs/&lt;group&gt;/; the resource keeps its bare name — the csproj's LogicalName).</summary>
         internal static byte[] Embedded(string name) =>
             Embedded(name, $"Embedded EE function missing: {name} (run tools/stubs/build_ee_stubs.py and rebuild)");
 
-        /// <summary>The bytes of the embedded resource <c>Resources/isoPatch/&lt;name&gt;</c>; <paramref name="missing"/> is the
+        /// <summary>The bytes of the embedded resource <paramref name="name"/> (one of Resources/isoPatch's stubs/, data/ or assets/, by its
+        /// bare name); <paramref name="missing"/> is the
         /// whole message thrown when the assembly does not carry it.</summary>
         internal static byte[] Embedded(string name, string missing) => TryEmbedded(name) ?? throw new IOException(missing);
 
-        /// <summary>The bytes of the embedded resource <c>Resources/isoPatch/&lt;name&gt;</c>, or null when the assembly does not carry it.</summary>
+        /// <summary>The bytes of the embedded resource <paramref name="name"/> (by its bare name), or null when the assembly does not carry it.</summary>
         internal static byte[] TryEmbedded(string name)
         {
             using var st = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream(ResourcePrefix + name);

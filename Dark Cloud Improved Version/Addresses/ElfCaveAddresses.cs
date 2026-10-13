@@ -27,7 +27,7 @@ namespace Dark_Cloud_Improved_Version
     /// Placement: claim <see cref="NextFree"/>, keep this table in ADDRESS ORDER with the cave's SIZE and END,
     /// never place a cave from a patch-local literal, and check overlaps against a PATCHED ELF (a vanilla ELF
     /// does not contain the neighbouring bins). Bin-backed sizes are the .bin file's byte size
-    /// (Resources/isoPatch); hand-built sizes are the instruction-word count × 4.
+    /// (Resources/isoPatch/stubs/<group>/); hand-built sizes are the instruction-word count × 4.
     ///
     ///   0x1FB0000  CanalEvictFadeHook   64 B → 0x1FB0040   canalEvictFadeHook.bin
     ///   0x1FB0050  QueensSpray         180 B → 0x1FB0104   queensSprayCave.bin

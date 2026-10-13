@@ -1,6 +1,6 @@
 # Camera-cave auxiliary bank @0x1FB0350 (the mod's ELF cave segment — CodeCaveAddresses.ElfCave.CameraNormSideBank
 # — past fishlineUncastGate 0x1FB0270+148B).
-# Assembles via tools/mips_asm.py to Resources/isoPatch/cameraNormSide.bin (embedded; written by
+# Assembles via tools/mips_asm.py to Resources/isoPatch/stubs/camera/cameraNormSide.bin (embedded; written by
 # IsoPatcher.PatchNativeCameraPostPass alongside the main camera cave). FIXED LAYOUT (the cave jals
 # hardcode these VAs — keep the nop padding intact):
 #   0x1FB0350  entry: export the true gather count, return        (cave entry `jal 0x1FB0350`)

@@ -16,7 +16,7 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// ICON: the `charaface` sheet (256×320, 8-bit, PSMT8-swizzled in an IM2 bank) holds the ability icons as 20×20 tiles —
     /// WeaponOptionStatusDraw takes bits 1–7 from column u 0xEC and bits 8–14 from column u 0xD8, row v = 0x50 + 20·(n−1) —
-    /// so bit 14 is the empty tile at (0xD8, 0xC8), beside Steal. Its art is Resources/isoPatch/confuse_icon.png (20×20 RGBA,
+    /// so bit 14 is the empty tile at (0xD8, 0xC8), beside Steal. Its art is Resources/isoPatch/assets/confuse_icon.png (20×20 RGBA,
     /// drawn in the sheet's own palette): each pixel mapped to the sheet's nearest palette entry (transparent → the tiles' clear
     /// corner entry) and written into every US copy of the sheet whose Heal tile is the vanilla one (the same palette).
     /// </summary>

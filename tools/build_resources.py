@@ -2,8 +2,8 @@
 """Regenerate the binaries the mod EMBEDS, so they always match the sources they are generated from.
 
 Two generators, so neither is a manual step a person has to remember:
-  tools/stubs/build_ee_stubs.py   — every EE cave stub (.s -> Resources/isoPatch/*.bin)
-  build_cat_pack.glow_palettes()  — the six element glow ramps (GLOW_ELEMENTS -> catGlowPalettes.bin)
+  tools/stubs/build_ee_stubs.py   — every EE cave stub (.s -> Resources/isoPatch/stubs/<group>/*.bin)
+  build_cat_pack.glow_palettes()  — the six element glow ramps (GLOW_ELEMENTS -> Resources/isoPatch/data/catGlowPalettes.bin)
 
 WHY THE BUILD DOES THIS. Editing a source and forgetting its generator ships stale bytes, and the failure is SILENT: the
 glow palette kept its previous colours through an entire patch-and-test cycle that way, because the
@@ -44,7 +44,7 @@ def stubs():
 def palettes():
     """Rebuild the glow ramp tables from GLOW_ELEMENTS, writing only when they differ."""
     dc = os.environ.get("DC1_DATA_DIR") or os.path.join(REPO, "dc_extracted")
-    dest = os.path.join(RES, "catGlowPalettes.bin")
+    dest = os.path.join(RES, "data", "catGlowPalettes.bin")
     if not os.path.isdir(dc):
         print(f"{TAG} no extracted disc at {dc} — glow palettes left as committed"); return
     sys.path[:0] = [os.path.join(HERE, "iso_patch"), os.path.join(HERE, "lib"), os.path.join(HERE, "analysis")]
