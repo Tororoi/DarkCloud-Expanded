@@ -239,7 +239,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/ally_shots.s (ElfAllyPatches): before (+0) / after (+0x40) the summon's load, clear (+0xA4) at its end.</summary>
         internal const uint AllyShotsBefore = Host, AllyShotsAfter = Host + 0x40, AllyShotsClear = Host + 0xA4;   // 324 B → 0x1192E4
         /// <summary>tools/stubs/ally_swing.s: CheckDmg's attack-sphere entry for the ally's unit made with mask 0 (it never hits the player).</summary>
-        internal const uint AllySwing = Host + 0x144, AllyMask = AllySwing + 0x1C;   // 0x1192E4 / 0x119300, 60 B → 0x119320
+        internal const uint AllySwing = Host + 0x144, AllyMask = AllySwing + 0x1C;   // 0x1192E4 / 0x119300
+        /// <summary>…and blocked (ally_collide.s's stop comes here): a floor unit the ally's body stopped noted in CodeCaves.AllyBlocked.</summary>
+        internal const uint AllyBlocked = AllySwing + 0x3C;   // 0x119320; 100 B in all → 0x119348
         internal const uint End = Host + HostSpan;
     }
 
@@ -259,7 +261,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x00118C88, HostSpan = 0x1EC, VanillaWord0 = 0x27BDFF80;   // `addiu sp,sp,-0x80`
         /// <summary>tools/stubs/ally_collide.s (ElfAllyPatches): the ally and the floor's enemies block each other.</summary>
-        internal const uint AllyCollide = Host;   // 416 B → 0x118E28
+        internal const uint AllyCollide = Host, AllyCollideDone = Host + 0x194;   // 416 B → 0x118E28; its exit (cdone) 0x118E1C
         /// <summary>…and the player's move blocked at the ally (the player-spear cave's MoveCheck call comes here).</summary>
         internal const uint AllyPlayerBlock = Host + 0x1A0;   // 0x118E28, 64 B → 0x118E68
         internal const uint End = Host + HostSpan;

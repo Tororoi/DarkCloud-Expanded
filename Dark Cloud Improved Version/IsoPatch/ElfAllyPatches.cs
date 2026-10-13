@@ -79,7 +79,7 @@ namespace Dark_Cloud_Improved_Version
             // CMonstorUnit::CheckDmg's `jal Set__14CCollisionData` (the unit's open attack sphere into the pool) → ally_swing.s: the
             // ally's goes in with mask 0, so it never hits the player.
             byte[] swing = Embedded("allySwing.bin");
-            Require(swing, "allySwing.bin", "ally_swing.s", MipsAsm.J(SetCollisionData));
+            Require(swing, "allySwing.bin", "ally_swing.s", MipsAsm.J(SetCollisionData), MipsAsm.J(DeadSifCave.AllyCollideDone));   // blocked returns to ally_collide.s's exit
             WriteBytes(fs, ElfOff, DeadSifElfCave.AllySwing, swing, DeadSifElfCave.End, "allySwing.bin overruns the sceSifLoadElfPart bodies");
             uint cur = RdU32(fs, ElfOff(CheckDmgSwingSite)), toSwing = MipsAsm.Jal(DeadSifElfCave.AllySwing);
             if (cur != MipsAsm.Jal(SetCollisionData) && cur != toSwing)
@@ -94,8 +94,8 @@ namespace Dark_Cloud_Improved_Version
 
             byte[] collide = Embedded("allyCollide.bin");
             if (collide.Length == 0 || (collide.Length & 3) != 0 || U32(collide, 0) != 0x27BDFFE0u || !ContainsWord(collide, MipsAsm.Jal(DebugIfCave.SpearBlock))
-)
-                throw new IOException($"allyCollide.bin malformed ({collide.Length} B) or stale — reassemble ally_collide.s (it must call the spear-block cave).");
+                || !ContainsWord(collide, MipsAsm.J(DeadSifElfCave.AllyBlocked)) || U32(collide, (int)(DeadSifCave.AllyCollideDone - DeadSifCave.Host)) != 0x8FBF0000u)
+                throw new IOException($"allyCollide.bin malformed ({collide.Length} B) or stale — reassemble ally_collide.s (it must call the spear-block cave, stop through ally_swing.s's blocked, exit where DeadSifCave says).");
             Claim(fs, ElfOff, "sceSifLoadModuleBuffer", DeadSifCave.Host, DeadSifCave.VanillaWord0, collide, DeadSifCave.End);
             // ElfWeaponPatches.PatchSpearBlock (earlier) points the site at its cave; this takes it over and calls that cave in turn.
             uint site = RdU32(fs, ElfOff(StepMoveCheckSite)), ours = MipsAsm.Jal(DeadSifCave.AllyCollide);

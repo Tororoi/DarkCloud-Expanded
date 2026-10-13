@@ -366,7 +366,10 @@ namespace Dark_Cloud_Improved_Version
         internal const long IceArrowFired      = 0x21FAF7F0;   // 8 B → 0x21FAF7F8
         /// <summary>THE ALLY'S MANAGER (tools/stubs/ally_manager.s): the guest address of a private CMonstorUnit the dungeon steps, draws and
         /// shadows after the floor's (0 = none). Written natively (ally_brain.s, ally_despawn.s).</summary>
-        internal const long AllyManager = 0x21FAF7F8;   // 4 B (0x21FAF7FC..0x21FAF800 FREE)
+        internal const long AllyManager = 0x21FAF7F8;   // 4 B
+        /// <summary>A bit per floor slot the ally's body stopped (ally_collide.s → ally_swing.s's blocked): the mod reads it, clears it, and
+        /// sends each such enemy after the ally (ConfusionAlly). Written natively.</summary>
+        internal const long AllyBlocked = 0x21FAF7FC;   // 4 B → 0x21FAF800
         /// <summary>A bit a floor index (16 B, floors 0–127): set on the floors the randomizer staged, where tools/stubs/monster_bank.s
         /// builds the floor's monster bank from the species on it (MonsterSounds writes it).</summary>
         internal const long MonsterBankFloors      = 0x21FAF800;   // 16 B → 0x21FAF810

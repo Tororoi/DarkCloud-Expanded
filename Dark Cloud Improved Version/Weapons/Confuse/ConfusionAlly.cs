@@ -12,7 +12,7 @@ namespace Dark_Cloud_Improved_Version
     /// apart by the unit they are first seen nearer (<see cref="Its"/>). Each tick while it lives: its open swings and its flying shots are
     /// tested against every live enemy, and a hit is planted on the one they reach as one of RUBY'S (<see cref="CollisionPool.PlayerHitEntry"/>:
     /// her kill, her ABS), its damage its own over her ranged distance factor (a shot then taken through the engine's own contact). An
-    /// enemy whose HP that hit lowers is PROVOKED and goes after it until it falls or goes. Every enemy's open swing and every enemy shot
+    /// enemy whose HP that hit lowers — or that its body stops (<see cref="Blocked"/>) — is PROVOKED and goes after it until it falls or goes. Every enemy's open swing and every enemy shot
     /// that reaches its body plant a hit on it, owner −1 (damage − defence). One per pair per ContactCooldown, withdrawn after
     /// ShellLifeSeconds like the confused enemies' (<see cref="ConfusionFriendlyFire"/>). <see cref="Confusion.Tick"/> runs it; the
     /// Pocklekul's thread ticks while a pockle stands.</summary>
@@ -50,6 +50,7 @@ namespace Dark_Cloud_Improved_Version
             if (m == 0 || Memory.ReadInt(m + Unit + UnitHp) <= 0 || Memory.ReadInt(m + Unit + UnitState) < 0) { End(); return; }   // gone, or falling
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
+            Blocked(m);
             Swings(m, pool);
             HitsOnIt(m, pool);
             Shots(m, pool);
@@ -155,6 +156,25 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(m + Unit + EnemySlotOffsets.StolenGold, 0);
         }
 
+        /// <summary>An enemy its body stopped (the native block rule notes it in CodeCaves.AllyBlocked) goes after it, as one it hit does.</summary>
+        private static void Blocked(long m)
+        {
+            uint bits = Memory.ReadUInt(CodeCaves.AllyBlocked);
+            if (bits == 0) return;
+            Memory.WriteUInt(CodeCaves.AllyBlocked, 0);
+            for (int v = 0; v < Slots; v++)
+                if ((bits & (1u << v)) != 0) Provoke(m, v, "blocked by");
+        }
+
+        /// <summary>Enemy <paramref name="v"/> sent after it (its pointer-table entry on the pockle's position), unless confused or already.</summary>
+        private static void Provoke(long m, int v, string why)
+        {
+            if (_provoked[v] || !Enemies.IsLive(v) || IsConfused(v)) return;
+            if (!AggroTable.PointConfused(v, (uint)(m + Chara + CharaPos - Memory.Pcsx2Base))) return;
+            _provoked[v] = true;
+            Log($"enemy slot {v} provoked ({why} the pockle): after it");
+        }
+
         /// <summary>An enemy its hit took HP from goes after it.</summary>
         private static void Landings(long m)
         {
@@ -165,11 +185,7 @@ namespace Dark_Cloud_Improved_Version
                 if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(v, EnemySlotOffsets.Hp)) < hp)
                 {
                     _landing.RemoveAt(k);
-                    if (!IsConfused(v) && AggroTable.PointConfused(v, (uint)(m + Chara + CharaPos - Memory.Pcsx2Base)))
-                    {
-                        _provoked[v] = true;
-                        Log($"enemy slot {v} provoked: after the pockle");
-                    }
+                    Provoke(m, v, "hit by");
                 }
                 else if (GameClock.Now >= until) _landing.RemoveAt(k);
             }

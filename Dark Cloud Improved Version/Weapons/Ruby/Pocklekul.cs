@@ -14,7 +14,7 @@ namespace Dark_Cloud_Improved_Version
         private const string Tag = "[Pocklekul] ";
         private const uint BrainVanillaWord0 = 0x27BDFFA0;   // sceDmaSendN's first word: a disc patched before the native Pocklekul
         private const int MessageMs = 2500;
-        private const float SmokeScale = 0.3f;   // the summon smoke's size for a pockle (Cactus' copy rises in 0.5)
+        private const float SmokeScale = 0.5f;   // the summon smoke's size for a pockle (Cactus' too)
         private static readonly EnemyDefaults[] Pockles =   // ally_brain.s's pockle order (event 0x10 + index)
         {
             EnemySpecies.Sunday, EnemySpecies.Monday, EnemySpecies.Tuesday, EnemySpecies.Wednesday, EnemySpecies.Thursday,

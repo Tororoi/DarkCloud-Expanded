@@ -29,3 +29,19 @@ mask:
 mally:
     jr    $ra
     or    $v0, $t8, $zero
+
+# ally_collide.s's stop (a0 = the moving unit's manager, t1 = CodeCaves.AllyManager): a FLOOR unit the ally's body stopped gets its
+# bit in CodeCaves.AllyBlocked (0x01FAF7FC; the mod reads and clears it — an enemy it blocks goes after it, ConfusionAlly); then back
+# to ally_collide.s's cdone (0x00118E1C), which returns.
+blocked:
+    beq   $a0, $t1, bdone          # the ally's own unit stopped: nothing to note
+    lw    $t4, 0x90($a0)           # (delay) the stopped unit's slot
+    addiu $t5, $zero, 1
+    sllv  $t5, $t5, $t4
+    lui   $t6, 0x01FB
+    lw    $t7, -0x0804($t6)
+    or    $t7, $t7, $t5
+    sw    $t7, -0x0804($t6)
+bdone:
+    j     0x00118E1C               # ally_collide.s cdone
+    nop
