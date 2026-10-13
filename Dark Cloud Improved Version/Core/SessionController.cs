@@ -15,6 +15,10 @@ namespace Dark_Cloud_Improved_Version
         public static int PID_attempts = 0;
         public static int currentFrameCounter = 0;
         public static int previousFrameCounter = 0;
+        // vcount ticks every vertical blank, so between two samples it may advance by the frames the elapsed real time holds (60 a
+        // second, generously): a thread that stalled seconds (PINE contention) sees a big but honest jump, a loaded state does not fit.
+        private static readonly System.Diagnostics.Stopwatch _sampleClock = new();
+        private const int FrameJumpSlack = 720, FramesPerSecondMax = 75;
         public static int previousMode = -1;
         public static Thread townThread = new Thread(new ThreadStart(GameLoop.Run));
         public static Thread changesThread = new Thread(new ThreadStart(ApplyNewChanges));
@@ -290,7 +294,12 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
 
-                if (currentFrameCounter < previousFrameCounter || currentFrameCounter > previousFrameCounter + 720 || currentFrameCounter == 0)
+                double since = _sampleClock.IsRunning ? _sampleClock.Elapsed.TotalSeconds : 0;
+                _sampleClock.Restart();
+                int allowed = FrameJumpSlack + (int)(since * FramesPerSecondMax);
+                if (currentFrameCounter > previousFrameCounter + FrameJumpSlack && currentFrameCounter <= previousFrameCounter + allowed)
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"Session thread stalled {since:0.0} s (vcount {previousFrameCounter} → {currentFrameCounter}): no save state");
+                if (currentFrameCounter < previousFrameCounter || currentFrameCounter > previousFrameCounter + allowed || currentFrameCounter == 0)
                 {
                     Thread.Sleep(200);
                     if (currentFrameCounter == 0)
@@ -298,7 +307,7 @@ namespace Dark_Cloud_Improved_Version
                     else if (currentFrameCounter < previousFrameCounter)
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"Save state detected! Reason: currentFrameCounter ({currentFrameCounter}) < previousFrameCounter ({previousFrameCounter})");
                     else
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"Save state detected! Reason: currentFrameCounter ({currentFrameCounter}) > previousFrameCounter ({previousFrameCounter}) + 360");
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"Save state detected! Reason: currentFrameCounter ({currentFrameCounter}) > previousFrameCounter ({previousFrameCounter}) + {allowed} ({since:0.0} s since the last sample)");
                     if (Player.InDungeonFloor() == true)
                         Memory.WriteInt(Addresses.dungeonDebugMenu, 151); //If we are in a dungeon, this will take us to the main menu
                     else

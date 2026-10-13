@@ -23,7 +23,7 @@ namespace Dark_Cloud_Improved_Version
         internal const uint CircleEffects = Host + 0x8;
         /// <summary>ElfFrameChainPatches.PatchCallRequest: a native call the mod asks for (CodeCaves.CallRequest), the tail of the
         /// camera-pin chain (after the WHP bill).</summary>
-        internal const uint CallRequest   = Host + 0x610;  // 0x1B4DD0, 120 B → 0x1B4E48 (the circle cave ends at 0x1B4DC4)
+        internal const uint CallRequest   = Host + 0x610;  // 0x1B4DD0, 116 B → 0x1B4E44 (the circle cave ends at 0x1B4DC4)
         /// <summary>ElfShotPackPatches.PatchPelletSprite: the item id a player pellet's sprite cell is taken from — Mailbox.PelletSpriteId
         /// when set, else the equipped weapon's (draw__5CSHOT's hook at 0x1ABC74 calls it).</summary>
         internal const uint PelletSprite  = Host + 0x690;  // 0x1B4E50, 56 B → 0x1B4E88
@@ -174,19 +174,71 @@ namespace Dark_Cloud_Improved_Version
 
     /// <summary>The dead <c>SmoothRest</c> body (262 zero words from 0x27D084, in the main ELF): the camera-height cave takes its head
     /// (ElfCameraPatches, 0x27D090, 408 B → 0x27D228), the rest is free zero words up to 0x27D49C.</summary>
-    /// <summary>The body of <c>sceCdReadIOPm</c> (328 B from 0x10A690, main ELF, right before <see cref="DeadCdCave"/>'s host): never reached,
-    /// as <see cref="DeadIoctlCave"/> (no jal, j, stored pointer or lui/addiu|ori pair in the ELF's loaded image, the dungeon or the title
-    /// overlay).</summary>
     /// <summary>The dead sceMcSetFileInfo (0x11EDC8, 0x154 B) and sceMcRename (0x11EF20, 0xFC B) bodies — no jal, j, pointer or lui/lo pair
     /// reaches either in the ELF's loaded image, DUN.BIN or TITLE.BIN (proved 2026-10-12): 596 contiguous bytes.</summary>
     internal static class DeadMcCave
     {
         internal const uint Host = 0x0011EDC8, HostSpan = 0x254, VanillaWord0 = 0x27BDFFB0;   // `addiu sp,sp,-0x50`
         /// <summary>tools/stubs/ally_manager.s (ElfAllyPatches): the ally's private monster manager ridden beside the floor's.</summary>
-        internal const uint AllyStep = Host, AllyDraw = Host + 0x10, AllyShadow = Host + 0x20, AllyCallPriv = Host + 0x8C;   // 200 B → 0x11EE90
+        internal const uint AllyStep = Host, AllyDraw = Host + 0x10, AllyShadow = Host + 0x20;   // 216 B → 0x11EEA0
+        /// <summary>tools/stubs/ally_follow.s's tail (after #SPLIT): the ally's turn and clip while it walks beside Ruby.</summary>
+        internal const uint AllyTurn = Host + 0xD8;   // 0x11EEA0, 172 B → 0x11EF4C
         internal const uint End = Host + HostSpan;
     }
 
+    /// <summary>The dead sceDmaSendN, sceDmaSendI, sceDmaRecv, sceDmaRecvN, sceDmaRecvI and sceDmaSendM bodies (0x10C7D0, 1,160 B to the live
+    /// sceDmaSync) — no jal, j, pointer or lui/lo pair reaches any of them in the ELF's loaded image, DUN.BIN or TITLE.BIN (proved 2026-10-12).</summary>
+    internal static class DeadDmaCave
+    {
+        internal const uint Host = 0x0010C7D0, HostSpan = 1160, VanillaWord0 = 0x27BDFFA0;   // `addiu sp,sp,-0x60`
+        /// <summary>tools/stubs/ally_brain.s (ElfAllyPatches): the Pocklekul's pockle once a frame — guard charge, target, end.</summary>
+        internal const uint AllyBrain = Host;   // 1,068 B → 0x10CBFC
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead scePadInfoPressMode, scePadEnterPressMode, scePadExitPressMode, scePadSetVrefParam, scePadGetPortMax and
+    /// scePadGetSlotMax bodies (0x1203D0, 688 B) — unreferenced in the loaded image, DUN.BIN and TITLE.BIN (proved 2026-10-12).</summary>
+    internal static class DeadPadPressCave
+    {
+        internal const uint Host = 0x001203D0, HostSpan = 688, VanillaWord0 = 0x0080302D;   // `daddu a2,a0,zero`
+        /// <summary>tools/stubs/ally_brain.s's tail (after #SPLIT): the summon.</summary>
+        internal const uint AllySummon = Host;   // 596 B → 0x120624
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead sceSifSetRpcQueue, sceSifRegisterRpc, sceSifRemoveRpc and sceSifRemoveRpcQueue bodies (0x1176D8, 552 B) —
+    /// unreferenced in the loaded image, DUN.BIN and TITLE.BIN (proved 2026-10-12).</summary>
+    internal static class DeadSifRpcCave
+    {
+        internal const uint Host = 0x001176D8, HostSpan = 552, VanillaWord0 = 0x3C030001;   // `lui v1,0x1`
+        /// <summary>tools/stubs/ally_follow.s (ElfAllyPatches): the ally with no enemy walks beside Ruby.</summary>
+        internal const uint AllyFollow = Host;   // 428 B → 0x117884
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead sceSifGetOtherData body (0x117080, 344 B) — unreferenced in the loaded image, DUN.BIN and TITLE.BIN, nothing jumps
+    /// into it (proved 2026-10-12).</summary>
+    internal static class DeadSifDataCave
+    {
+        internal const uint Host = 0x00117080, HostSpan = 344, VanillaWord0 = 0x27BDFF70;   // `addiu sp,sp,-0x90`
+        /// <summary>tools/stubs/ally_despawn.s (ElfAllyPatches): the ally's end.</summary>
+        internal const uint AllyDespawn = Host;   // 212 B → 0x117154
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead sceSifLoadModuleBuffer body (0x118C88, 0x1EC B) — unreferenced in the loaded image, DUN.BIN and TITLE.BIN, nothing
+    /// jumps into it (proved 2026-10-12).</summary>
+    internal static class DeadSifCave
+    {
+        internal const uint Host = 0x00118C88, HostSpan = 0x1EC, VanillaWord0 = 0x27BDFF80;   // `addiu sp,sp,-0x80`
+        /// <summary>tools/stubs/ally_collide.s (ElfAllyPatches): the ally and the floor's enemies block each other.</summary>
+        internal const uint AllyCollide = Host;   // 416 B → 0x118E28
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The body of <c>sceCdReadIOPm</c> (328 B from 0x10A690, main ELF, right before <see cref="DeadCdCave"/>'s host): never reached,
+    /// as <see cref="DeadIoctlCave"/> (no jal, j, stored pointer or lui/addiu|ori pair in the ELF's loaded image, the dungeon or the title
+    /// overlay).</summary>
     internal static class DeadReadIopmCave
     {
         internal const uint Host = 0x0010A690, HostSpan = 0x148, VanillaWord0 = 0x27BDFF90;   // `addiu sp,sp,-0x70`
@@ -195,8 +247,6 @@ namespace Dark_Cloud_Improved_Version
         internal const uint AtlaCollect = Host;   // 180 B → 0x10A744
         /// <summary>tools/stubs/atla_dungeon.s (ElfSpeciesPatches.PatchAtlaDungeon): Demon Shaft's atla ceremony on Gallery of Time's tables.</summary>
         internal const uint AtlaDungeon = Host + 0xC0;   // 0x10A750, 24 B → 0x10A768
-        /// <summary>tools/stubs/pockle_move.s (ElfFrameChainPatches.PatchCallRequest): the Pocklekul's pockle moved once a dungeon frame.</summary>
-        internal const uint PockleMove = Host + 0xE0;    // 0x10A770, 68 B → 0x10A7B4
         internal const uint End = Host + HostSpan;
     }
 

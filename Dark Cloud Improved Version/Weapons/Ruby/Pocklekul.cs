@@ -1,60 +1,63 @@
-using System;
 using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Pocklekul — a guard held for a second summons a random day-of-the-week pockle (<see cref="PockleUnit"/>: a real monster on a
-    /// private monster manager the game steps beside the floor's, its own script running natively), which goes for the locked-on enemy or
-    /// the one nearest Ruby; guarding again summons nothing while one stands. The hold is counted in floor frames
-    /// (<see cref="HealAbility.FramesBetween"/>, the floor's own clock: it stands still with a pause) while Ruby holds her guard pose — R1
-    /// down, motion 9 or 33 (<see cref="GuardWatch.HoldPose"/>: a held guard is mostly 33, back to 9 a frame now and then).</summary>
+    /// <summary>Pocklekul — a guard held for a second summons a random day-of-the-week pockle: a real monster on a private monster manager
+    /// the game steps beside the floor's, its own script running natively, going for the locked-on enemy or the one nearest Ruby, walking
+    /// beside her when there is none; guarding again summons nothing while one stands. All of it is native (tools/stubs/ally_brain.s and its
+    /// fellows, ElfAllyPatches): this thread arms it while the ring is in Ruby's hand (CodeCaves.AllyArmed — disarming ends a standing
+    /// pockle), logs what it reports (CodeCaves.AllyEvent), and while one stands ticks its friendly fire (<see cref="ConfusionAlly"/>:
+    /// its swings on the enemies, theirs and their shots on it).</summary>
     internal static class Pocklekul
     {
         private const string Tag = "[Pocklekul] ";
-        private const int   ChargeFrames  = 60;       // a second of guard
-        private const long  DriveStepHold = 0x202A3564, FrameCapture = 0x202A3568;   // set at a menu's opening (StarsLane's)
-        private static readonly Random _rng = new Random();
+        private const uint BrainVanillaWord0 = 0x27BDFFA0;   // sceDmaSendN's first word: a disc patched before the native Pocklekul
+        private static readonly string[] Days = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
 
         /// <summary>The Pocklekul's thread: runs while the ring is in Ruby's hand on a dungeon floor.</summary>
         public static void PockleSummonEffect()
         {
-            int prev = Memory.ReadInt(HealAbility.TickCounter), held = 0;
-            bool latched = false, pending = false;
-            while (Player.InDungeonFloor() && Player.CurrentCharacterNum() == Player.RubyId
-                   && Player.Weapon.GetCurrentWeaponId() == Items.pocklekul)
+            if (Memory.ReadUInt(Memory.ToMmu(DeadDmaCave.AllyBrain)) == BrainVanillaWord0)
             {
-                int now = Memory.ReadInt(HealAbility.TickCounter), frames = HealAbility.FramesBetween(prev, now);
-                prev = now;
-                bool quiet = Quiet();
-                bool guard = GuardWatch.HoldPose().inPose;
-                if (!guard) { held = 0; latched = false; }
-                else if (!latched && (held += frames) >= ChargeFrames)
-                {
-                    latched = true;
-                    if (!PockleUnit.Up) pending = true;
-                    else Log("a pockle already stands — no summon");
-                }
-                if (pending && quiet) { pending = false; Summon(); }
-
-                PockleUnit.Tick();
-                Thread.Sleep(16);
+                Log("this disc has no native Pocklekul (patch it again) — nothing summoned");
+                while (InHand()) Thread.Sleep(250);
+                return;
             }
-            PockleUnit.Despawn("the Pocklekul left Ruby's hand");
+            uint seen = Memory.ReadUInt(CodeCaves.AllyEvent);
+            bool armed = false, wasUp = false;
+            while (InHand())
+            {
+                // armed only once the target redirect is (else the pockle's "player" would be Ruby)
+                if (!armed && TargetRedirectCaves.Armed) { Memory.WriteInt(CodeCaves.AllyArmed, 1); armed = true; }
+                uint ev = Memory.ReadUInt(CodeCaves.AllyEvent);
+                if (ev != seen) { seen = ev; Log(Describe((int)(ev & 0xFF))); }
+                bool up = ConfusionAlly.Up;
+                if (up) Confusion.Tick();
+                else if (wasUp) Confusion.EndAlly();   // it went: the enemies it provoked back on Ruby
+                wasUp = up;
+                Thread.Sleep(up ? 16 : 100);
+            }
+            Memory.WriteInt(CodeCaves.AllyArmed, 0);   // the brain ends a standing pockle on its next frame
+            Confusion.EndAlly();
         }
 
-        /// <summary>A random day's pockle loaded and stood in front of Ruby, facing her.</summary>
-        private static void Summon()
+        private static bool InHand()
+            => Player.InDungeonFloor() && Player.CurrentCharacterNum() == Player.RubyId && Player.Weapon.GetCurrentWeaponId() == Items.pocklekul;
+
+        private static string Describe(int code) => code switch
         {
-            int day = _rng.Next(PockleModel.Days.Length);
-            DateTime t0 = DateTime.UtcNow;
-            if (PockleUnit.Summon(day)) Log($"summoned in {(DateTime.UtcNow - t0).TotalMilliseconds:0} ms");
-        }
+            >= 0x10 and < 0x17 => $"{Days[code - 0x10]}'s pockle summoned",
+            2 => "the pockle fell",
+            3 => "the pockle went (the Pocklekul or Ruby left the hand)",
+            4 => "the pockle went (its floor changed, its block was overwritten, or an event took the floor)",
+            5 => "no summon: no pockle block (Ruby's character pool lacks it — a disc patched before the Pocklekul?)",
+            6 => "no summon: no VRAM room in the monsters' texture group",
+            7 => "no summon: the pockle's model did not load",
+            8 => "no summon: the pockle did not stand",
+            9 => "a pockle already stands — no summon",
+            _ => $"event {code}",
+        };
 
-        /// <summary>The floor walking, unpaused, no menu open or opening: the read buffer is the loader's and a native call is made.</summary>
-        private static bool Quiet()
-            => Player.CheckDunIsWalkingMode() && !Player.CheckDunIsPausedOrMenu()
-               && Memory.ReadInt(DriveStepHold) == 0 && Memory.ReadInt(FrameCapture) == 0;
-
-        private static void Log(string msg) => Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + msg);
+        private static void Log(string msg) => System.Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + msg);
     }
 }

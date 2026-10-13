@@ -28,10 +28,11 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException($"spearBlock.bin malformed ({b.Length} B) or stale — reassemble its .s (it must call MoveChecMonster).");
             WriteBytes(fs, ElfOff, cave, b, DebugIfCave.Host + DebugIfCave.HostSpan, "spearBlock.bin overruns DebugInfomationIF's span.");
             uint cur = RdU32(fs, ElfOff(HookAddr)), ours = Jal(cave);
-            if (cur != Jal(MoveChecMonster) && cur != ours)
+            bool ally = cur == Jal(DeadSifCave.AllyCollide);              // ElfAllyPatches' cave took the site over and calls this one
+            if (cur != Jal(MoveChecMonster) && cur != ours && !ally)
                 throw new IOException($"Step__12CMonstorUnit's site 0x{HookAddr:X} is not vanilla `jal MoveChecMonster` — unmodified Dark Cloud (USA) ISO expected.");
             if (RdU32(fs, ElfOff(HookAddr + 4)) != 0) throw new IOException("Step__12CMonstorUnit is not laid out as expected around MoveChecMonster (delay slot).");
-            WrU32(fs, ElfOff(HookAddr), ours);
+            if (!ally) WrU32(fs, ElfOff(HookAddr), ours);
 
             // The player's side (tools/stubs/player_spear_block.s): the cave here; its two hooks are in the overlay (DunPatches).
             const uint PlayerMoveCheck = 0x001DC820;

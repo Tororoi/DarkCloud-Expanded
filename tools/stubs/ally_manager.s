@@ -1,11 +1,11 @@
-# ally_manager.s — a summoned ally monster run by the game's own monster manager code: a PRIVATE CMonstorUnit (Pocklekul's pockle, its
-# unit 0) stepped, drawn and shadowed beside the floor's. Assembled at 0x0011EDC8 (DeadMcCave: the dead sceMcSetFileInfo and sceMcRename
-# bodies). DunPatches points the dungeon's three calls on the floor's manager here — motionDrive's `jal Step__12CMonstorUnitFi`
-# (0x1DB749C), the draw's `jal DrawMonstor__12CMonstorUnitFv` (0x1DAE7E8) and the shadow pass's `jal DrawShadowMonstor__12CMonstorUnitFv`
-# (0x1DADD44): each makes the call as before, then — while CodeCaves.AllyManager (0x01FAF7F8) holds a manager — makes it again on that
-# manager with NowMonstorUnit (gp−0x6320) pointing at it, since every script command reads NowMonstorUnit, and puts it back.
-# call_priv: a native call (Core/NativeCall) on the ally's manager — CodeCaves.AllyCallFunc (0x01FAF7FC) called with the request's
-# arguments and NowMonstorUnit pointing at the ally's manager around it (SetupBaseModel, SetupViewMonstor: label 1 runs inside).
+# ally_manager.s — a summoned ally monster run by the game's own monster manager code: a PRIVATE CMonstorUnit (the Pocklekul's pockle,
+# its unit 0) stepped, drawn and shadowed beside the floor's. Assembled at 0x0011EDC8 (DeadMcCave: the dead sceMcSetFileInfo body).
+# DunPatches points the dungeon's three calls on the floor's manager here — motionDrive's `jal Step__12CMonstorUnitFi` (0x1DB749C), the
+# draw's `jal DrawMonstor__12CMonstorUnitFv` (0x1DAE7E8) and the shadow pass's `jal DrawShadowMonstor__12CMonstorUnitFv` (0x1DADD44):
+# each makes the call as before; after the floor's Step the ally's brain runs (tools/stubs/ally_brain.s, once a frame: the guard charge,
+# the summon, its target, its end, its walk beside Ruby); then — while CodeCaves.AllyManager (0x01FAF7F8) holds a manager — the call is
+# made again on that manager with NowMonstorUnit (gp−0x6320) pointing at it, since every script command reads NowMonstorUnit. While
+# CodeCaves.AllyHold (0x01FAFFC4) is set the ally's Step is skipped (its draw and shadow go on, the draw stepping its clips).
 
 step_entry:
     lui   $t9, 0x001D
@@ -31,9 +31,30 @@ ride:
     sw    $t9, 0x08($sp)
     jalr  $t9                      # the floor's, as before
     nop
+    lw    $t3, 0x08($sp)
+    lui   $t4, 0x001D
+    ori   $t4, $t4, 0xD540
+    bne   $t3, $t4, rdraw          # a draw: no brain, never held
+    nop
+    lw    $a1, 0x04($sp)
+    jal   0x0010C7D0               # the ally's brain (ally_brain.s; a1 = the pause flag)
+    nop
     lui   $t0, 0x01FB
+    lw    $t5, -0x003C($t0)        # CodeCaves.AllyHold (0x01FAFFC4)
+    bne   $t5, $zero, done         # its Step held this frame
+    nop
+    b     rgo
+    nop
+rdraw:
+    lui   $t0, 0x01FB
+rgo:
     lw    $t1, -0x0808($t0)        # CodeCaves.AllyManager (0x01FAF7F8)
     beq   $t1, $zero, done
+    nop
+    lw    $t3, -0x00C0($t1)        # its block's magic (block + 0x40, the manager at + 0x100)
+    lui   $t4, 0x594C
+    ori   $t4, $t4, 0x4C41         # "ALLY": gone with Ruby's pool (a character change) → not ridden
+    bne   $t3, $t4, done
     nop
     lw    $t2, -0x6320($gp)        # NowMonstorUnit
     sw    $t2, 0x0C($sp)
@@ -46,24 +67,6 @@ ride:
     lw    $t2, 0x0C($sp)
     sw    $t2, -0x6320($gp)        # the floor's again
 done:
-    lw    $ra, 0x00($sp)
-    jr    $ra
-    addiu $sp, $sp, 0x20
-
-# a0..t3 = the call's arguments (left as they are); the function and the manager from CodeCaves.
-call_priv:
-    addiu $sp, $sp, -0x20
-    sw    $ra, 0x00($sp)
-    lw    $t8, -0x6320($gp)
-    sw    $t8, 0x04($sp)
-    lui   $t9, 0x01FB
-    lw    $t8, -0x0808($t9)        # CodeCaves.AllyManager
-    sw    $t8, -0x6320($gp)
-    lw    $t9, -0x0804($t9)        # CodeCaves.AllyCallFunc (0x01FAF7FC)
-    jalr  $t9
-    nop
-    lw    $t8, 0x04($sp)
-    sw    $t8, -0x6320($gp)
     lw    $ra, 0x00($sp)
     jr    $ra
     addiu $sp, $sp, 0x20

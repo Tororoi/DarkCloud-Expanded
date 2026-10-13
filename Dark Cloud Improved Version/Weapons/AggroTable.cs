@@ -5,7 +5,7 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>The one writer of the enemies' TARGET POINTER table (CodeCaves.PtrTable: per slot, the address the redirect caves
     /// (<see cref="TargetRedirectCaves"/>) make `_GET_POSITION`/`_GET_DISTANCE` read as "the player"; every write here is gated on
     /// <see cref="TargetRedirectCaves.Armed"/>). Weapon targeting effects — Mirage's decoy, the Angel Gear's shield
-    /// ring, the judgement blade's redirect, the Pocklekul's pockle (the enemies it has hit) — take the table whole (<see cref="Claim"/>, <see cref="Write"/>) and hand it back
+    /// ring, the judgement blade's redirect — take the table whole (<see cref="Claim"/>, <see cref="Write"/>) and hand it back
     /// with every slot on the live player (<see cref="Release"/>). Only one weapon is ever active, so only one holds it at a
     /// time; a second claim displaces the first and is logged. Confusion is the exception: it points single slots
     /// (<see cref="PointConfused"/>) only while no weapon effect holds the table, is superseded the moment one does, and re-points
@@ -13,28 +13,11 @@ namespace Dark_Cloud_Improved_Version
     internal static class AggroTable
     {
         private const string Tag = "[AggroTable] ";
-        internal enum Holder { None, MirageDecoy, ShieldRing, JudgementBlade, Pockle }
+        internal enum Holder { None, MirageDecoy, ShieldRing, JudgementBlade }
 
-        /// <summary>The first entry past the floor's 16: a unit of the ally's private monster manager reads entry AllySlot + its unit
-        /// (TargetRedirectCaves' helper). Never a floor slot's: the holders' writes and the resets leave it as <see cref="SetAlly"/> set it.</summary>
+        /// <summary>The first entry past the floor's 16: the unit of the ally's private monster manager reads it (TargetRedirectCaves'
+        /// helper). Native (tools/stubs/ally_brain.s writes it every frame the Pocklekul's pockle stands); nothing here writes it.</summary>
         internal const int AllySlot = 16;
-        private static uint _allyTarget;                      // the ally's target pointer (0 = the live player)
-
-        /// <summary>The ally's target pointer (a 16-byte-aligned vec4's guest address; 0 = the live player).</summary>
-        internal static void SetAlly(uint ptr)
-        {
-            lock (_lock)
-            {
-                _allyTarget = ptr;
-                if (TargetRedirectCaves.Armed || ptr == 0) Memory.WriteUInt(CodeCaves.PtrAddr(AllySlot), ptr != 0 ? ptr : StbExternCmd.PlayerPosGuest);
-            }
-        }
-
-        private static void KeepAlly(byte[] ptrs)
-        {
-            if (_allyTarget != 0 && ptrs.Length >= (AllySlot + 1) * CodeCaves.PtrStride)
-                BitConverter.GetBytes(_allyTarget).CopyTo(ptrs, AllySlot * CodeCaves.PtrStride);
-        }
 
         /// <summary>The weapon effect holding the table (None = nobody; confusion may point slots).</summary>
         internal static Holder Held { get; private set; }
@@ -57,7 +40,8 @@ namespace Dark_Cloud_Improved_Version
         internal static void Write(Holder who, byte[] ptrs)
         {
             if (!TargetRedirectCaves.Armed) return;
-            lock (_lock) { if (Held == who) { KeepAlly(ptrs); Memory.WriteBytesBatch(CodeCaves.PtrTable, ptrs); } }
+            if (ptrs.Length > AllySlot * CodeCaves.PtrStride) Array.Resize(ref ptrs, AllySlot * CodeCaves.PtrStride);   // the floor's slots only
+            lock (_lock) { if (Held == who) Memory.WriteBytesBatch(CodeCaves.PtrTable, ptrs); }
         }
 
         /// <summary>The holder lets go: every slot back on the live player. A release by a displaced holder changes nothing.</summary>
@@ -77,8 +61,8 @@ namespace Dark_Cloud_Improved_Version
         {
             var buf = new byte[CodeCaves.TableSlots * CodeCaves.PtrStride];
             for (int s = 0; s < CodeCaves.TableSlots; s++) BitConverter.GetBytes(StbExternCmd.PlayerPosGuest).CopyTo(buf, s * CodeCaves.PtrStride);
-            KeepAlly(buf);
-            Memory.WriteBytesBatch(CodeCaves.PtrTable, buf);
+            Memory.WriteBytesBatch(CodeCaves.PtrTable, buf[..(AllySlot * CodeCaves.PtrStride)]);   // around the ally's entry
+            Memory.WriteBytesBatch(CodeCaves.PtrAddr(AllySlot + 1), buf[((AllySlot + 1) * CodeCaves.PtrStride)..]);
         }
 
         /// <summary>Confusion's pointer for one slot, written (when it differs) only while no weapon effect holds the table; false

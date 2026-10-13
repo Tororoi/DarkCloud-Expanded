@@ -365,8 +365,8 @@ namespace Dark_Cloud_Improved_Version
         /// (tools/stubs/crystal_shots.s), 0 outside the impact. Written natively.</summary>
         internal const long IceArrowFired      = 0x21FAF7F0;   // 8 B → 0x21FAF7F8
         /// <summary>THE ALLY'S MANAGER (tools/stubs/ally_manager.s): the guest address of a private CMonstorUnit the dungeon steps, draws and
-        /// shadows after the floor's (0 = none), and the function its native call (call_priv) makes with NowMonstorUnit pointing at it.</summary>
-        internal const long AllyManager = 0x21FAF7F8, AllyCallFunc = 0x21FAF7FC;   // 4 B each → 0x21FAF800
+        /// shadows after the floor's (0 = none). Written natively (ally_brain.s, ally_despawn.s).</summary>
+        internal const long AllyManager = 0x21FAF7F8;   // 4 B (0x21FAF7FC..0x21FAF800 FREE)
         /// <summary>A bit a floor index (16 B, floors 0–127): set on the floors the randomizer staged, where tools/stubs/monster_bank.s
         /// builds the floor's monster bank from the species on it (MonsterSounds writes it).</summary>
         internal const long MonsterBankFloors      = 0x21FAF800;   // 16 B → 0x21FAF810
@@ -498,13 +498,13 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>A NATIVE CALL REQUEST (DebugIfCave.CallRequest, the tail of the camera-pin chain, once a dungeon frame):
         /// the mod fills the function and its arguments, writes the magic LAST, and the cave calls it from the camera pass's
-        /// epilogue — clearing the magic first, storing v0 and raising Done after. Up to eight integer arguments (a0–a3, then
-        /// t0–t3 as the EE ABI passes the fifth to eighth; the eighth's word sits just before the block) and one float in f12. Core/NativeCall drives it and waits on Done.
+        /// epilogue — clearing the magic first, storing v0 and raising Done after. Up to six integer arguments (a0–a3, then
+        /// t0/t1 as the EE ABI passes the fifth and sixth) and one float in f12. Core/NativeCall drives it and waits on Done.
         /// Only for routines that are themselves called from the dungeon's per-frame update (SetCashModel and its like).</summary>
         internal const long CallRequest      = 0x21FAF950;
         internal const uint CallRequestGuest = 0x01FAF950;
         internal const int  CallMagic = 0x00, CallFunc = 0x04, CallA0 = 0x08, CallA1 = 0x0C, CallA2 = 0x10, CallA3 = 0x14,
-                            CallA4 = 0x18, CallA5 = 0x1C, CallF12 = 0x20, CallV0 = 0x24, CallDone = 0x28, CallA6 = 0x2C, CallA7 = -0x04;
+                            CallA4 = 0x18, CallA5 = 0x1C, CallF12 = 0x20, CallV0 = 0x24, CallDone = 0x28;
         internal const uint CallMagicValue = 0x4C4C4143;   // "CALL"
 
         /// <summary>GLOW ON A PELLET (the cat glow draw cave, tools/stubs/cat_glow_draw.s): a player pellet's pool slot + 1, or 0.
@@ -581,11 +581,10 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>A real atla's root turn (w, x, y, z in QuatToMat's order: dun\etc\atr.mds's root record), which tools/stubs/atla_draw.s
         /// gives the atla model back after drawing a bouncing one. Baked (ElfSpeciesPatches.PatchDataPageDefaults, AtlaGemronBake's recipe).</summary>
         internal const long AtlaRootQuat       = 0x21FAFC90;   // 16 B → 0x21FAFCA0
-
-        /// <summary>THE POCKLE'S STEP (tools/stubs/pockle_move.s, once a dungeon frame): +0 frames left, +4 / +8 the step a frame on X and Y;
-        /// while frames are left the pockle's slot moves by the step. Zero at boot: still.</summary>
-        internal const long PockleMove = 0x21FAFCA0;   // 16 B → 0x21FAFCB0
-        internal const int  PockleMoveFrames = 0x0, PockleMoveX = 0x4, PockleMoveY = 0x8;
+        /// <summary>The summoned ally's textures (ally_brain.s writes, ally_despawn.s cleans): +0 the floor stamp it was summoned on, +4 / +8
+        /// the monsters' texture group's VRAM top / end before its load, +0xC (first entry &lt;&lt; 16) | entry end of what its load added
+        /// (0 = none). Outside its block, so a character change that overwrites the block leaves it. Written natively.</summary>
+        internal const long AllyTex = 0x21FAFCA0;   // 16 B → 0x21FAFCB0
 
         /// <summary>The guard gate's per-enemy window mask (DebugInfoCave.GuardMask, written by GuardGate): one byte per slot, bit w set =
         /// enemy window w blocks nothing (7 = none of its windows).</summary>
@@ -616,7 +615,19 @@ namespace Dark_Cloud_Improved_Version
         internal const float FlashSizeVanilla   = 5f;
         /// <summary>The machine-gun hit flash's alpha per slot, 16 bytes (Draw's set3DCellModel alpha through SmoothRestCave.FlashSlot):
         /// baked 0x80 (the engine's constant — Osmond's flashes); lower is fainter in the additive effects pass.</summary>
-        internal const long FlashAlphaTable    = 0x21FAFFB4;   // 16 B → 0x21FAFFC4 (0x21FAFFC4..0x21FAFFE0 free)
+        internal const long FlashAlphaTable    = 0x21FAFFB4;   // 16 B → 0x21FAFFC4
+        /// <summary>The ally's Step held (tools/stubs/ally_manager.s: non-zero = its script, AI, movement and hits wait; its draw goes on).
+        /// Written natively (ally_brain.s: held while it has no enemy and walks beside Ruby).</summary>
+        internal const long AllyHold = 0x21FAFFC4;     // 4 B
+        /// <summary>The Pocklekul armed (the weapon thread: non-zero while the ring is in Ruby's hand): ally_brain.s counts her guard
+        /// and summons only while it is set, and ends a standing pockle when it clears.</summary>
+        internal const long AllyArmed = 0x21FAFFC8;    // 4 B
+        /// <summary>ally_brain.s's own: the frames Ruby's guard has been held, and the latch that spends one guard's charge.</summary>
+        internal const long AllyGuard = 0x21FAFFCC, AllyLatch = 0x21FAFFD0;   // 4 B each
+        /// <summary>The ally's last event, ((count &lt;&lt; 8) | code), for the app's log: 0x10 + day stood (0 Sunday .. 6 Saturday), 2 fallen,
+        /// 3 disarmed or Ruby not in hand, 4 its block, floor or the floor's quiet gone, 5 no pockle block, 6 no VRAM room, 7 not loaded,
+        /// 8 not stood, 9 a guard charge while one stands.</summary>
+        internal const long AllyEvent = 0x21FAFFD4;    // 4 B (0x21FAFFD8..0x21FAFFE0 free)
         internal const byte FlashAlphaVanilla  = 0x80;
         /// <summary>The Confuse ability's procs (confuse_proc.s): a byte per enemy slot, 1 = the roll succeeded this hit; the mod
         /// (ConfuseAbility) confuses the slot and writes it back to 0.</summary>

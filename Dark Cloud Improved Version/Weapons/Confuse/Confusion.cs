@@ -9,7 +9,7 @@ namespace Dark_Cloud_Improved_Version
     /// from its loop and <see cref="End"/>s it. A confused slot's entry in the per-slot target table (<see cref="TargetRedirectCaves"/>) follows the nearest live
     /// enemy or the player, else its own wander spot; an enemy a confused one hits is PROVOKED and goes after it; the tint is the
     /// unit's ambient add. Its swings' and shots' friendly fire is <see cref="ConfusionFriendlyFire"/>, which shares this class's
-    /// members through using static (docs/confuse-ability.md).</summary>
+    /// members through using static (docs/confuse-ability.md); the Pocklekul's pockle's is <see cref="ConfusionAlly"/>.</summary>
     internal static class Confusion
     {
         private const string Tag = "[Confusion] ";
@@ -128,8 +128,15 @@ namespace Dark_Cloud_Improved_Version
             }
             RetireShells();
             if (any) { ContactHits(); ShotHits(); } else _shotLast.Clear();
+            ConfusionAlly.Tick();                                                // the Pocklekul's pockle, while one stands
             AggroTable.ConfusionActive = any && TargetRedirectCaves.Armed;
             if (DebugDiagnostics.Enabled && any && (GameClock.Now - _lastReport).TotalSeconds >= 1) { _lastReport = GameClock.Now; Report(); }
+        }
+
+        /// <summary>The enemies the Pocklekul's pockle provoked back on the player (its thread's exit).</summary>
+        internal static void EndAlly()
+        {
+            lock (_lock) ConfusionAlly.End();
         }
 
         /// <summary>Everything back: every confused or provoked slot released, every planted hit withdrawn, the table handed back.</summary>

@@ -42,13 +42,11 @@ namespace Dark_Cloud_Improved_Version
         internal const long Option3      = Base + 0x30; // ModWindow
         internal const long Option4      = Base + 0x34; // ModWindow
 
-        /// <summary>The dungeon character slots' gate, read every frame by the PNACH: 1 = decoy up (NOP the chara-loop
+        /// <summary>Mirage 3-state gate, read every frame by the PNACH: 1 = decoy up (NOP the chara-loop
         /// gates so the clone draws + steps), 2 = in a dungeon with no decoy (RESTORE the vanilla words —
-        /// PNACH conditionals do NOT auto-revert), 3 = decoy up but PAUSED (drawn, frozen), 0 = town; 4 = the Pocklekul's
-        /// pockle up (the gates of 1 with the vanilla ShadowStep and the shadow pass's NPC loop opened), 5 = it, PAUSED.
+        /// PNACH conditionals do NOT auto-revert), 3 = decoy up but PAUSED (drawn, frozen), 0 = town.
         /// Also gates the fire-raster tuning patches (sprite size / dist gate / distortion amplitude).</summary>
         internal const long MirageSceneGate = Base + 0x38;
-        internal const int  SceneGatePockle = 4, SceneGatePocklePaused = 5, SceneGateVanilla = 2;
 
         /// <summary>FISHING CAMERA HEIGHT (float). <c>EdMoveChara</c> hard-codes <c>SetHeight(40.0)</c> for
         /// fishing (`lui $2,0x4220` @0x16C2DC); <see cref="IsoPatcher"/>'s PatchFishingCameraHeight rewrites

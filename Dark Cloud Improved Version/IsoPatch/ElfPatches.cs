@@ -151,7 +151,7 @@ namespace Dark_Cloud_Improved_Version
             PatchSteelLevelUp(fs, ElfOff);                // the Steel Slingshot's level-ups: endurance and max WHP grow twice as much
             PatchCircleEffects(fs, ElfOff);               // the magic circles, every magnitude from CodeCaves.CircleTable (the cave in DebugInfomationIF's body; the dun hook is in DunPatches)
             PatchCallRequest(fs, ElfOff);                 // a native call the mod posts (CodeCaves.CallRequest), made from the camera pass once a frame (the chain's tail)
-            ElfAllyPatches.PatchAllyManager(fs, ElfOff);  // a summoned ally monster on a private monster manager, stepped / drawn / shadowed after the floor's
+            ElfAllyPatches.PatchAllyManager(fs, ElfOff);  // the Pocklekul's pockle, all native: a private monster manager stepped / drawn / shadowed after the floor's, its brain, summon, walk and end
             PatchFlameSpacing(fs, ElfOff);                // Osmond's flamethrower reach from a mailbox word (the Skunk doubles it)
             PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
             PatchCatGlowPalettes(fs, ElfOff);             // the six glow ramps (data) …

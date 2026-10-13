@@ -11,9 +11,9 @@ namespace Dark_Cloud_Improved_Version
     {
         private static readonly object _lock = new object();
 
-        /// <summary>Call <paramref name="func"/>(a0..a7, f12) on the next frame; false if the frame never came
+        /// <summary>Call <paramref name="func"/>(a0..a5, f12) on the next frame; false if the frame never came
         /// (<paramref name="timeoutMs"/>). <paramref name="v0"/> is the routine's return.</summary>
-        internal static bool Invoke(uint func, out uint v0, uint a0 = 0, uint a1 = 0, uint a2 = 0, uint a3 = 0, uint a4 = 0, uint a5 = 0, float f12 = 0f, int timeoutMs = 250, uint a6 = 0, uint a7 = 0)
+        internal static bool Invoke(uint func, out uint v0, uint a0 = 0, uint a1 = 0, uint a2 = 0, uint a3 = 0, uint a4 = 0, uint a5 = 0, float f12 = 0f, int timeoutMs = 250)
         {
             lock (_lock)
             {
@@ -24,7 +24,6 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUInt(t + CodeCaves.CallA0, a0); Memory.WriteUInt(t + CodeCaves.CallA1, a1);
                 Memory.WriteUInt(t + CodeCaves.CallA2, a2); Memory.WriteUInt(t + CodeCaves.CallA3, a3);
                 Memory.WriteUInt(t + CodeCaves.CallA4, a4); Memory.WriteUInt(t + CodeCaves.CallA5, a5);
-                Memory.WriteUInt(t + CodeCaves.CallA6, a6); Memory.WriteUInt(t + CodeCaves.CallA7, a7);
                 Memory.WriteFloat(t + CodeCaves.CallF12, f12);
                 Memory.WriteUInt(t + CodeCaves.CallMagic, CodeCaves.CallMagicValue);   // LAST: the cave acts on it
                 DateTime until = DateTime.UtcNow.AddMilliseconds(timeoutMs);

@@ -23,7 +23,7 @@ DEST = os.path.join(HERE, '..', '..', 'Dark Cloud Improved Version', 'Resources'
 # (source .s in tools/, dest .bin in Resources/isoPatch/, assemble base VA[, tail dest .bin, tail base VA])
 # A stub with a `#SPLIT` line is assembled as ONE image at its base with the gap up to the tail base blanked
 # (`.space`), then written as two .bins: the head (before the marker) and the tail (from the tail base on).
-# Count: every instruction line before the marker is one word (no pseudo-instructions that expand).
+# Count: every instruction line before the marker is one word (no pseudo-instructions that expand; one value per `.word`).
 # The 0x1FB0xxx stubs live in the mod's own ELF PT_LOAD segment (the hijacked phdr3 —
 # CodeCaveAddresses.ElfCave is the registry; ElfPatches.HijackPhdr3CaveSegment creates it). Their
 # bases MUST match the ElfCave constants, and the segment start must stay 16KB-aligned: its host
@@ -83,7 +83,10 @@ STUBS = [
     ('atla_collect.s',           'atlaCollect.bin',          0x10A690),    # main ELF: the dead sceCdReadIOPm body (ElfSpeciesPatches.PatchAtlaCollect): collecting the mod's atlas and Demon Shaft's high floors made safe
     ('atla_dungeon.s',           'atlaDungeon.bin',          0x10A750),    # main ELF: the dead sceCdReadIOPm body after atla_collect (ElfSpeciesPatches.PatchAtlaDungeon): Demon Shaft's atlas through Gallery of Time's tables
     ('ally_manager.s',           'allyManager.bin',          0x11EDC8),    # main ELF: the dead sceMcSetFileInfo + sceMcRename bodies (ElfAllyPatches.PatchAllyManager): a summoned ally monster run on a private monster manager
-    ('pockle_move.s',            'pockleMove.bin',           0x10A770),    # main ELF: the dead sceCdReadIOPm body after atla_dungeon (ElfFrameChainPatches.PatchCallRequest): the Pocklekul's pockle moved once a dungeon frame
+    ('ally_collide.s',           'allyCollide.bin',          0x118C88),    # main ELF: the dead sceSifLoadModuleBuffer body (ElfAllyPatches.PatchAllyManager): the ally and the floor's enemies block each other
+    ('ally_brain.s',             'allyBrain.bin',            0x10C7D0, 'allySummon.bin', 0x1203D0),   # main ELF: the dead sceDmaSendN..SendM bodies, its summon in the dead scePadInfoPressMode..GetSlotMax bodies (ElfAllyPatches): the Pocklekul's pockle once a frame
+    ('ally_follow.s',            'allyFollow.bin',           0x1176D8, 'allyTurn.bin', 0x11EEA0),     # main ELF: the dead sceSifSetRpcQueue..RemoveRpcQueue bodies, its turn after ally_manager.s (ElfAllyPatches): the ally walking beside Ruby
+    ('ally_despawn.s',           'allyDespawn.bin',          0x117080),    # main ELF: the dead sceSifGetOtherData body (ElfAllyPatches): the ally's end
     ('atla_draw.s',              'atlaDraw.bin',             0x10AAC0),    # main ELF: the dead sceCdSeek body after atla_shot, on into the dead sceCdStandby / Stop / Pause bodies (ElfSpeciesPatches.PatchAtlaDraw): the Atla Gemron's atla bouncing free
     ('crystal_shots.s',          'crystalShots.bin',         0x10BBD0),    # main ELF: the dead sceCdApplyNCmd body (ElfSpeciesPatches.PatchCrystalShots): the Crystal Gemron's ice arrow homing and ice prison    # main ELF: the dead sceCdReadChain body after bomb_tint (ElfSpeciesPatches.PatchEyeTint): the Crystal Gemron's eyes tinted white
     ('monster_bank.s',           'monsterBank.bin',          0x110848),    # main ELF: the dead soft-float routines' bodies (ElfSoundPatches.PatchMonsterBank): each randomized floor's monster bank
@@ -97,7 +100,7 @@ STUBS = [
 
 def _is_insn(line):
     t = line.split('#', 1)[0].strip()
-    return bool(t) and not t.endswith(':') and not t.startswith('.')
+    return bool(t) and not t.endswith(':') and (not t.startswith('.') or t.startswith('.word '))   # a hand-encoded `.word` is one too
 
 
 def _split_blobs(src_text, base, tail_base):
