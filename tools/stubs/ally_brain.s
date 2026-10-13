@@ -186,7 +186,7 @@ ptarget:
     lw    $t3, -0x3C($s0)          # (delay) AllyHold: it was idling
     beq   $t3, $zero, tpos
     sw    $zero, -0x3C($s0)        # (delay) its AI on the enemy
-    jal   0x001178B4               # ally_follow.s's release: label 100 afresh
+    jal   0x001178D0               # ally_follow.s's release: label 100 afresh
     or    $a0, $s1, $zero          # (delay)
 tpos:
     ori   $t0, $zero, 0x3510
@@ -199,7 +199,7 @@ tpos:
 idle:
     addiu $t3, $zero, 1
     sw    $t3, -0x3C($s0)          # AllyHold: its AI parked
-    jal   0x00117884               # ally_follow.s's park (each frame: Step resumes it there)
+    jal   0x001178A0               # ally_follow.s's park (each frame: Step resumes it there)
     or    $a0, $s1, $zero          # (delay)
     jal   0x001176D8               # ally_follow.s
     or    $a0, $s3, $zero          # (delay)
@@ -446,6 +446,8 @@ stab:
     mfhi  $s3                      # the pockle (0 Sunday .. 6 Saturday, 7 Hell Pockle)
     sw    $s3, 0x70($s1)
     sw    $zero, 0x74($s1)         # its frames (ally_grow.s)
+    jal   0x001191A0               # ally_shots.s before: the shot pack's empty slots noted
+    nop
     lui   $t0, 0x01C7
     ori   $t0, $t0, 0x5870
     lw    $t1, 0x4E3C($t0)         # the texture manager's buffer in use (16-byte units): EnterTexture copies every picture there
@@ -474,6 +476,8 @@ sday:
     ori   $t0, $t0, 0x5870
     lw    $t1, 0x4E3C($t0)
     sw    $t1, -0x24($t5)          # AllyTexBuf + 4: after it
+    jal   0x001191E0               # ally_shots.s after: the shot configs it entered, kept for its end
+    nop
     jal   stamp
     nop
     lui   $t5, 0x01FB

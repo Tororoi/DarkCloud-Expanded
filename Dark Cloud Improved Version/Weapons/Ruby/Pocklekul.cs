@@ -41,10 +41,12 @@ namespace Dark_Cloud_Improved_Version
                     seen = ev;
                     int code = (int)(ev & 0xFF);
                     long tm = TextureManager.Base;
-                    string took = code >= 0x10 && code < 0x18 ? $", its load took {Memory.ReadInt(CodeCaves.AllyTexBuf + 4) - Memory.ReadInt(CodeCaves.AllyTexBuf):N0}" : "";
+                    string took = code >= 0x10 && code < 0x18
+                        ? $", its load took {Memory.ReadInt(CodeCaves.AllyTexBuf + 4) - Memory.ReadInt(CodeCaves.AllyTexBuf):N0}; shot-pack slots it filled 0x{Memory.ReadInt(CodeCaves.AllyShots):X}" : "";
                     Log(Describe(code) + $" (texture buffer {Memory.ReadInt(tm + TextureManager.BufferUsed):N0} of {Memory.ReadInt(tm + TextureManager.BufferCap):N0} units{took})");
                     if (code >= 0x10 && code < 0x10 + Pockles.Length)
                     {
+                        ConfusionAlly.Summoned();                   // no drops but stolen gold, no kill ABS
                         string text = $"{Pockles[code - 0x10].Name} summoned";
                         DungeonMessages.DisplayMessage(text, 1, text.Length + 2, MessageMs);   // which pockle came
                     }

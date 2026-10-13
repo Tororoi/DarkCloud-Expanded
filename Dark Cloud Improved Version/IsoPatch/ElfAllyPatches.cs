@@ -37,7 +37,7 @@ namespace Dark_Cloud_Improved_Version
             byte[] brain = Embedded("allyBrain.bin"), summon = Embedded("allySummon.bin");
             Require(brain, "allyBrain.bin", "ally_brain.s", MipsAsm.Jal(DeadPadPressCave.AllySummon), MipsAsm.Jal(DeadSifRpcCave.AllyFollow),
                     MipsAsm.Jal(DeadSifDataCave.AllyDespawn), MipsAsm.Jal(DeadMcCave.AllyGrow), MipsAsm.Jal(DeadSifRpcCave.AllyPark), MipsAsm.Jal(DeadSifRpcCave.AllyRelease));
-            Require(summon, "allySummon.bin", "ally_brain.s", MipsAsm.Jal(DeadSifDataCave.AllyDespawn));
+            Require(summon, "allySummon.bin", "ally_brain.s", MipsAsm.Jal(DeadSifDataCave.AllyDespawn), MipsAsm.Jal(DeadSifElfCave.AllyShotsBefore), MipsAsm.Jal(DeadSifElfCave.AllyShotsAfter));
             Claim(fs, ElfOff, "sceDmaSendN", DeadDmaCave.Host, DeadDmaCave.VanillaWord0, brain, DeadDmaCave.End);
             Claim(fs, ElfOff, "scePadInfoPressMode", DeadPadPressCave.Host, DeadPadPressCave.VanillaWord0, summon, DeadPadPressCave.End);
 
@@ -64,7 +64,23 @@ namespace Dark_Cloud_Improved_Version
             WriteBytes(fs, ElfOff, DeadMcCave.AllyGrow, grow, DeadMcCave.End, "allyGrow.bin overruns the sceMcRename body");
 
             byte[] despawn = Embedded("allyDespawn.bin");
-            Require(despawn, "allyDespawn.bin", "ally_despawn.s");
+            Require(despawn, "allyDespawn.bin", "ally_despawn.s", MipsAsm.Jal(DeadSifElfCave.AllyShotsClear));
+            byte[] shots = Embedded("allyShots.bin");
+            Require(shots, "allyShots.bin", "ally_shots.s", MipsAsm.Jal(0x001AE440));   // Initialize__12CSHOT_EFFECTFv
+            foreach (var (entry, word) in new[] { (DeadSifElfCave.AllyShotsBefore, 0x8F889DE8u), (DeadSifElfCave.AllyShotsAfter, 0x3C0E01FBu), (DeadSifElfCave.AllyShotsClear, 0x3C0E01FBu) })
+                if (U32(shots, (int)(entry - DeadSifElfCave.Host)) != word)
+                    throw new IOException($"allyShots.bin's entry at 0x{entry:X} moved — reassemble ally_shots.s and check DeadSifElfCave.");
+            Claim(fs, ElfOff, "sceSifLoadElfPart", DeadSifElfCave.Host, DeadSifElfCave.VanillaWord0, shots, DeadSifElfCave.AllySwing);
+
+            // CMonstorUnit::CheckDmg's `jal Set__14CCollisionData` (the unit's open attack sphere into the pool) → ally_swing.s: the
+            // ally's goes in with mask 0, so it never hits the player.
+            byte[] swing = Embedded("allySwing.bin");
+            Require(swing, "allySwing.bin", "ally_swing.s", MipsAsm.J(SetCollisionData));
+            WriteBytes(fs, ElfOff, DeadSifElfCave.AllySwing, swing, DeadSifElfCave.End, "allySwing.bin overruns the sceSifLoadElfPart bodies");
+            uint cur = RdU32(fs, ElfOff(CheckDmgSwingSite)), toSwing = MipsAsm.Jal(DeadSifElfCave.AllySwing);
+            if (cur != MipsAsm.Jal(SetCollisionData) && cur != toSwing)
+                throw new IOException($"CheckDmg's attack-sphere call 0x{CheckDmgSwingSite:X} is 0x{cur:X8}, not vanilla — unmodified Dark Cloud (USA) ISO expected.");
+            WrU32(fs, ElfOff(CheckDmgSwingSite), toSwing);
             Claim(fs, ElfOff, "sceSifGetOtherData", DeadSifDataCave.Host, DeadSifDataCave.VanillaWord0, despawn, DeadSifDataCave.End);
 
             byte[] collide = Embedded("allyCollide.bin");
@@ -93,6 +109,7 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException($"the player-spear cave at 0x{DebugIfCave.PlayerSpearBlock:X} has {took} MoveCheck calls, not 1 — patch order changed?");
         }
 
+        private const uint CheckDmgSwingSite = 0x001DA098, SetCollisionData = 0x001B57A0;   // CheckDmg's `jal Set__14CCollisionDataFPfiiffiiii`
         private const uint PlayerMoveCheck = 0x001DC820, PlayerSpearBlockSpan = 240;   // MoveCheck__12CMonstorUnitFPfPfi; the player-spear cave's bytes
 
         /// <summary>A stub well-formed (whole words) and carrying each of <paramref name="calls"/>.</summary>

@@ -329,6 +329,9 @@ namespace Dark_Cloud_Improved_Version
                                                        //   multiplies by when a player-side entry's +0x50 holds ONLY status bits (element index 5
                                                        //   = one short past the resistance row) — a vanilla quirk; never plant status bits in +0x50.
         internal const int DropChance        = 0x038; // int   — item drop chance (0–100)
+        internal const int StolenGold        = 0x03C; // int   — gold this unit stole (BtCheckDamageProc: a hit flagged 0x40000, 20%, a fifth of the
+                                                       //   player's); the death block drops it as gold before anything else and then drops no gold of its own
+        internal const int DropsItems        = 0x0DA; // short — 0 = the death block drops no item and no gold of its own (stolen gold still drops)
 
         // ── Identity ─────────────────────────────────────────────────────────
         internal const int EnemySpeciesId    = 0x042; // ushort — enemy species ID; used to look up name, stats, and model data

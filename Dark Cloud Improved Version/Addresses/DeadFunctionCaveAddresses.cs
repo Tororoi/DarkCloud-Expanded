@@ -195,7 +195,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x0010C7D0, HostSpan = 1160, VanillaWord0 = 0x27BDFFA0;   // `addiu sp,sp,-0x60`
         /// <summary>tools/stubs/ally_brain.s (ElfAllyPatches): the Pocklekul's pockle once a frame — guard charge, target, end.</summary>
-        internal const uint AllyBrain = Host;   // 1,096 B → 0x10CC18
+        internal const uint AllyBrain = Host;   // 1,160 B → 0x10CC58 (full)
         internal const uint End = Host + HostSpan;
     }
 
@@ -205,7 +205,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x001203D0, HostSpan = 688, VanillaWord0 = 0x0080302D;   // `daddu a2,a0,zero`
         /// <summary>tools/stubs/ally_brain.s's tail (after #SPLIT): the summon.</summary>
-        internal const uint AllySummon = Host;   // 672 B → 0x120670
+        internal const uint AllySummon = Host;   // 688 B → 0x120680 (full)
         internal const uint End = Host + HostSpan;
     }
 
@@ -217,7 +217,19 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/ally_follow.s (ElfAllyPatches): the ally with no enemy walks beside Ruby.</summary>
         internal const uint AllyFollow = Host;   // 428 B → 0x117884
         /// <summary>…its park (the ally's script resumed on a YIELD while it idles) and release (its AI afresh).</summary>
-        internal const uint AllyPark = Host + 0x1AC, AllyRelease = Host + 0x1DC;   // 0x117884, 0x1178B4; 520 B in all → 0x1178E0
+        internal const uint AllyPark = Host + 0x1C8, AllyRelease = Host + 0x1F8;   // 0x1178A0, 0x1178D0; 548 B in all → 0x1178FC
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead sceSifLoadElfPart, sceSifLoadElf, sceSifGetIopAddr and sceSifSetIopAddr bodies (0x1191A0, 536 B) — unreferenced in
+    /// the loaded image, DUN.BIN and TITLE.BIN, nothing jumps into them (proved 2026-10-13).</summary>
+    internal static class DeadSifElfCave
+    {
+        internal const uint Host = 0x001191A0, HostSpan = 536, VanillaWord0 = 0x27BDFFF0;   // `addiu sp,sp,-0x10`
+        /// <summary>tools/stubs/ally_shots.s (ElfAllyPatches): before (+0) / after (+0x40) the summon's load, clear (+0xA4) at its end.</summary>
+        internal const uint AllyShotsBefore = Host, AllyShotsAfter = Host + 0x40, AllyShotsClear = Host + 0xA4;   // 324 B → 0x1192E4
+        /// <summary>tools/stubs/ally_swing.s: CheckDmg's attack-sphere entry for the ally's unit made with mask 0 (it never hits the player).</summary>
+        internal const uint AllySwing = Host + 0x144;   // 0x1192E4, 28 B → 0x119300
         internal const uint End = Host + HostSpan;
     }
 
@@ -227,7 +239,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x00117080, HostSpan = 344, VanillaWord0 = 0x27BDFF70;   // `addiu sp,sp,-0x90`
         /// <summary>tools/stubs/ally_despawn.s (ElfAllyPatches): the ally's end.</summary>
-        internal const uint AllyDespawn = Host;   // 232 B → 0x117168
+        internal const uint AllyDespawn = Host;   // 256 B → 0x117180
         internal const uint End = Host + HostSpan;
     }
 

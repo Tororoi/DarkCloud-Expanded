@@ -373,7 +373,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The last bank monster_bank.s built: samples' bytes, units taken, units left out, banks built so far, and its header's
         /// IOP address (midi_state.port[3].bank after the swap: while the port still holds it, the next floors' banks are built too).</summary>
         internal const long MonsterBankStats       = 0x21FAF810;   // 5 words → 0x21FAF824
-        // 0x21FAF824..0x21FAF830 FREE
+        /// <summary>The summoned ally's shot configs in the floor's shot pack (tools/stubs/ally_shots.s): +0 the pack slots its load filled
+        /// (a bit per slot), +4 / +8 the configs it put there — emptied again at its end. Written natively.</summary>
+        internal const long AllyShots = 0x21FAF824;   // 12 B → 0x21FAF830
 
         /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
         /// <c>ElfToanMeleePatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's

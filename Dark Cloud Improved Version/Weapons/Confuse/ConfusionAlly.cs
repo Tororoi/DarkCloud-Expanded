@@ -6,8 +6,10 @@ using static Dark_Cloud_Improved_Version.ConfusionFriendlyFire;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>The Pocklekul's pockle in the friendly fire (it is a monster on a private manager, tools/stubs/ally_brain.s; nothing native
-    /// tests a monster against monsters). Its unit 0 plants its swings as floor slot 0 does (owner 200) and stamps its shots as slot 0's, so
-    /// each is told apart by the unit it is nearer (<see cref="Its"/>). Each tick while it lives: its open swings and its flying shots are
+    /// tests a monster against monsters). It drops nothing when it falls but the gold its stealing swings took (<see cref="Summoned"/>,
+    /// <see cref="Steal"/>). Its unit 0 plants its swings as floor slot 0 does (owner 200) but with
+    /// mask 0 (tools/stubs/ally_swing.s: they never hit the player), which tells them apart; its shots are stamped slot 0's and told
+    /// apart by the unit they are first seen nearer (<see cref="Its"/>). Each tick while it lives: its open swings and its flying shots are
     /// tested against every live enemy, and a hit is planted on the one they reach as one of RUBY'S (<see cref="CollisionPool.PlayerHitEntry"/>:
     /// her kill, her ABS), its damage its own over her ranged distance factor (a shot then taken through the engine's own contact). An
     /// enemy whose HP that hit lowers is PROVOKED and goes after it until it falls or goes. Every enemy's open swing and every enemy shot
@@ -17,10 +19,12 @@ namespace Dark_Cloud_Improved_Version
     internal static class ConfusionAlly
     {
         private const string Tag = "[Confusion/ConfusionAlly] ";
-        private const int    SwingOwner = 200;                     // its unit 0's attack spheres: slot 0 × 5 + 200, as floor slot 0's
+        private const int    SwingOwner = 200;                     // its unit 0's attack spheres: slot 0 × 5 + 200, as floor slot 0's (theirs mask 1, its 0)
         private const long   Unit = 0x1E3D0, UnitState = 0x00, UnitHp = 0x24;   // its unit 0 (MONSTOR) in the manager
         private const long   Chara = 0x1FCD0, CharaPos = 0x10;    // its unit 0's CCharacter, and its position
         private const double ProvokeWindowSeconds = 0.3;          // a landed hit's HP loss looked for this long
+        private const int    StealGoldFlag = 0x40000, StealPercent = 20;   // a swing's +0x50 bit, and the engine's own chance (BtCheckDamageProc)
+        private static readonly Random _rng = new();
         private static readonly DateTime[] _lastOn = new DateTime[Slots];   // it → enemy
         private static readonly DateTime[] _lastBy = new DateTime[Slots];   // enemy → it
         private static readonly bool[]     _provoked = new bool[Slots];
@@ -86,19 +90,19 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < CollisionPool.Entries; i++)
             {
                 if (BitConverter.ToInt32(active, i * 4) == 0) continue;
-                long e = pool + i * CollisionPool.Stride;
-                if (Memory.ReadInt(e + CollisionPool.Owner) != SwingOwner) continue;
-                byte[] atk = Memory.ReadBytesBatch(e, CollisionPool.Stride);
-                if (atk == null || BitConverter.ToInt32(atk, CollisionPool.GateA) != BitConverter.ToInt32(atk, CollisionPool.GateB)) continue;
+                byte[] atk = Memory.ReadBytesBatch(pool + i * CollisionPool.Stride, CollisionPool.Stride);   // ONE read: entries are re-made each frame
+                if (atk == null || BitConverter.ToInt32(atk, CollisionPool.Owner) != SwingOwner || BitConverter.ToInt32(atk, CollisionPool.Mask) != 0) continue;   // its alone (ally_swing.s)
+                if (BitConverter.ToInt32(atk, CollisionPool.GateA) != BitConverter.ToInt32(atk, CollisionPool.GateB)) continue;
                 float ax = BitConverter.ToSingle(atk, 0x00), ay = BitConverter.ToSingle(atk, 0x08), ar = BitConverter.ToSingle(atk, CollisionPool.Radius);
                 int damage = BitConverter.ToInt32(atk, 0x34);
-                if (damage <= 0 || ar <= 0f || !Its(m, ax, ay)) continue;
+                if (damage <= 0 || ar <= 0f) continue;
                 for (int v = 0; v < Slots; v++)
                 {
                     if (!Enemies.IsLive(v) || (GameClock.Now - _lastOn[v]).TotalSeconds < ContactCooldown) continue;
                     if (EnemyBody.NearestHitSphereEdge(v, EnemyAddresses.FloorSlots.SlotAddr(v, 0), ax, ay) > ar) continue;
                     if (!HitEnemy(pool, v, damage, BitConverter.ToInt32(atk, 0x4C), atk)) return;
                     Log($"its swing lands on enemy slot {v} for {damage} before defence");
+                    if ((BitConverter.ToInt32(atk, 0x50) & StealGoldFlag) != 0 && _rng.Next(100) < StealPercent) Steal(m, v);
                 }
             }
         }
@@ -123,6 +127,31 @@ namespace Dark_Cloud_Improved_Version
             _lastOn[v] = GameClock.Now;
             if (!_provoked[v]) _landing.Add((v, hp, GameClock.Now.AddSeconds(ProvokeWindowSeconds)));
             return true;
+        }
+
+        /// <summary>A stealing swing (the pockles' melee, flagged 0x40000 as against the player) that landed and won the engine's 20%:
+        /// the enemy's gold — what it would drop — goes into the pockle's stolen gold, which the death block drops when it falls; the
+        /// enemy has none left to drop.</summary>
+        private static void Steal(long m, int v)
+        {
+            long gold = EnemyAddresses.FloorSlots.SlotAddr(v, EnemySlotOffsets.MinGoldDrop);
+            int amount = Memory.ReadInt(gold);
+            if (amount <= 0) return;
+            long stolen = m + Unit + EnemySlotOffsets.StolenGold;
+            Memory.WriteInt(stolen, Memory.ReadInt(stolen) + amount);
+            Memory.WriteInt(gold, 0);
+            Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(v, EnemySlotOffsets.DropChance), 0);
+            Log($"its swing steals {amount} gold from enemy slot {v} (it carries {Memory.ReadInt(stolen)})");
+        }
+
+        /// <summary>A pockle just summoned: no drops of its own and no kill ABS — only gold it steals falls when it does.</summary>
+        internal static void Summoned()
+        {
+            long m = Manager();
+            if (m == 0) return;
+            Memory.WriteUShort(m + Unit + EnemySlotOffsets.DropsItems, 0);
+            Memory.WriteInt(m + Unit + EnemySlotOffsets.Abs, 0);
+            Memory.WriteInt(m + Unit + EnemySlotOffsets.StolenGold, 0);
         }
 
         /// <summary>An enemy its hit took HP from goes after it.</summary>
@@ -153,16 +182,16 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < CollisionPool.Entries; i++)
             {
                 if (BitConverter.ToInt32(active, i * 4) == 0) continue;
-                long e = pool + i * CollisionPool.Stride;
-                int owner = Memory.ReadInt(e + CollisionPool.Owner);
-                if (owner < 200 || (owner - 200) % 5 != 0) continue;
+                byte[] atk = Memory.ReadBytesBatch(pool + i * CollisionPool.Stride, CollisionPool.Stride);   // ONE read: owner, mask and sphere of the same entry
+                if (atk == null) continue;
+                int owner = BitConverter.ToInt32(atk, CollisionPool.Owner);
+                if (owner < 200 || (owner - 200) % 5 != 0 || (BitConverter.ToInt32(atk, CollisionPool.Mask) & (int)CollisionPool.HurtsPlayerMask) == 0) continue;   // its own are mask 0
                 int attacker = (owner - 200) / 5;
                 if (attacker >= Slots || !Enemies.IsLive(attacker) || (GameClock.Now - _lastBy[attacker]).TotalSeconds < ContactCooldown) continue;
-                byte[] atk = Memory.ReadBytesBatch(e, CollisionPool.Stride);
-                if (atk == null || BitConverter.ToInt32(atk, CollisionPool.GateA) != BitConverter.ToInt32(atk, CollisionPool.GateB)) continue;
+                if (BitConverter.ToInt32(atk, CollisionPool.GateA) != BitConverter.ToInt32(atk, CollisionPool.GateB)) continue;
                 float ax = BitConverter.ToSingle(atk, 0x00), ah = BitConverter.ToSingle(atk, 0x04), ay = BitConverter.ToSingle(atk, 0x08), ar = BitConverter.ToSingle(atk, CollisionPool.Radius);
                 int damage = BitConverter.ToInt32(atk, 0x34);
-                if (damage <= 0 || ar <= 0f || (attacker == 0 && Its(m, ax, ay)) || Edge(m, (ax, ah, ay), (ax, ah, ay), out _) > ar) continue;
+                if (damage <= 0 || ar <= 0f || Edge(m, (ax, ah, ay), (ax, ah, ay), out _) > ar) continue;
                 if (!PlantOnIt(m, pool, damage, BitConverter.ToInt32(atk, 0x4C), 0, atk)) return;
                 _lastBy[attacker] = GameClock.Now;
                 Log($"enemy slot {attacker}'s swing lands on the pockle for {damage} before defence");

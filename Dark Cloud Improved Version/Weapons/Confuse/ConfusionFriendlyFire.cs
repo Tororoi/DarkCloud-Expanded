@@ -28,14 +28,13 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < CollisionPool.Entries; i++)
             {
                 if (BitConverter.ToInt32(active, i * 4) == 0) continue;
-                long e = pool + i * CollisionPool.Stride;
-                int owner = Memory.ReadInt(e + CollisionPool.Owner);
-                if (owner < 200 || (owner - 200) % 5 != 0) continue;
+                byte[] atk = Memory.ReadBytesBatch(pool + i * CollisionPool.Stride, CollisionPool.Stride);   // ONE read: entries are re-made each frame
+                if (atk == null) continue;
+                int owner = BitConverter.ToInt32(atk, CollisionPool.Owner);
+                if (owner < 200 || (owner - 200) % 5 != 0 || (BitConverter.ToInt32(atk, CollisionPool.Mask) & (int)CollisionPool.HurtsPlayerMask) == 0) continue;   // a floor enemy's (the ally's are mask 0)
                 int attacker = (owner - 200) / 5;
                 if (attacker >= Slots || !Attacks(attacker)) continue;
-                if (Memory.ReadInt(e + CollisionPool.GateA) != Memory.ReadInt(e + CollisionPool.GateB)) continue;   // not open this frame
-                byte[] atk = Memory.ReadBytesBatch(e, CollisionPool.Stride);
-                if (atk == null) continue;
+                if (BitConverter.ToInt32(atk, CollisionPool.GateA) != BitConverter.ToInt32(atk, CollisionPool.GateB)) continue;   // not open this frame
                 float ax = BitConverter.ToSingle(atk, 0x00), ay = BitConverter.ToSingle(atk, 0x08), ar = BitConverter.ToSingle(atk, CollisionPool.Radius);
                 int damage = BitConverter.ToInt32(atk, 0x34);
                 if (damage <= 0 || ar <= 0f) continue;
