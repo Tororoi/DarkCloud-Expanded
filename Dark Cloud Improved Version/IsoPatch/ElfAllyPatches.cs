@@ -10,7 +10,8 @@ namespace Dark_Cloud_Improved_Version
     /// dungeon's three calls on the floor's monster manager — each then made again on a private manager (CodeCaves.AllyManager) with
     /// NowMonstorUnit pointing at it, the brain run after the floor's Step; tools/stubs/ally_brain.s (<see cref="DeadDmaCave"/>, its summon in
     /// <see cref="DeadPadPressCave"/>) — the guard charge, the summon, the target, the end; tools/stubs/ally_follow.s
-    /// (<see cref="DeadSifRpcCave"/>, its turn after ally_manager.s) — the walk beside Ruby; tools/stubs/ally_despawn.s
+    /// (<see cref="DeadSifRpcCave"/>, its turn after ally_manager.s) — the walk beside Ruby; tools/stubs/ally_grow.s (after the turn) — its
+    /// growth as it appears; tools/stubs/ally_despawn.s
     /// (<see cref="DeadSifDataCave"/>) — the end; and tools/stubs/ally_collide.s in the dead sceSifLoadModuleBuffer body
     /// (<see cref="DeadSifCave"/>) at Step's monster-vs-monster check, so the two managers' units block each other.</summary>
     internal static class ElfAllyPatches
@@ -33,7 +34,8 @@ namespace Dark_Cloud_Improved_Version
             Claim(fs, ElfOff, "sceMcSetFileInfo", DeadMcCave.Host, DeadMcCave.VanillaWord0, stub, DeadMcCave.AllyTurn);
 
             byte[] brain = Embedded("allyBrain.bin"), summon = Embedded("allySummon.bin");
-            Require(brain, "allyBrain.bin", "ally_brain.s", MipsAsm.Jal(DeadPadPressCave.AllySummon), MipsAsm.Jal(DeadSifRpcCave.AllyFollow), MipsAsm.Jal(DeadSifDataCave.AllyDespawn));
+            Require(brain, "allyBrain.bin", "ally_brain.s", MipsAsm.Jal(DeadPadPressCave.AllySummon), MipsAsm.Jal(DeadSifRpcCave.AllyFollow),
+                    MipsAsm.Jal(DeadSifDataCave.AllyDespawn), MipsAsm.Jal(DeadMcCave.AllyGrow));
             Require(summon, "allySummon.bin", "ally_brain.s", MipsAsm.Jal(DeadSifDataCave.AllyDespawn));
             Claim(fs, ElfOff, "sceDmaSendN", DeadDmaCave.Host, DeadDmaCave.VanillaWord0, brain, DeadDmaCave.End);
             Claim(fs, ElfOff, "scePadInfoPressMode", DeadPadPressCave.Host, DeadPadPressCave.VanillaWord0, summon, DeadPadPressCave.End);
@@ -43,6 +45,15 @@ namespace Dark_Cloud_Improved_Version
             Require(turn, "allyTurn.bin", "ally_follow.s");
             Claim(fs, ElfOff, "sceSifSetRpcQueue", DeadSifRpcCave.Host, DeadSifRpcCave.VanillaWord0, follow, DeadSifRpcCave.End);
             WriteBytes(fs, ElfOff, DeadMcCave.AllyTurn, turn, DeadMcCave.End, "allyTurn.bin overruns the sceMcRename body");
+
+            // ally_grow.s builds its table's address by hand (lui 0x0012 / addiu): it must name where the table landed
+            byte[] grow = Embedded("allyGrow.bin");
+            Require(grow, "allyGrow.bin", "ally_grow.s", 0x3C0B0012u, 0x256B0000u | (uint)((int)DeadMcCave.AllyGrowTable - 0x120000 & 0xFFFF));
+            if (grow.Length != (int)(DeadMcCave.AllyGrowTable - DeadMcCave.AllyGrow) + 20 * 4)
+                throw new IOException($"allyGrow.bin is {grow.Length} B — its table moved; reassemble ally_grow.s and check DeadMcCave.AllyGrowTable.");
+            if (DeadMcCave.AllyTurn + (uint)turn.Length > DeadMcCave.AllyGrow)
+                throw new IOException("allyTurn.bin runs into ally_grow.s — move DeadMcCave.AllyGrow.");
+            WriteBytes(fs, ElfOff, DeadMcCave.AllyGrow, grow, DeadMcCave.End, "allyGrow.bin overruns the sceMcRename body");
 
             byte[] despawn = Embedded("allyDespawn.bin");
             Require(despawn, "allyDespawn.bin", "ally_despawn.s");

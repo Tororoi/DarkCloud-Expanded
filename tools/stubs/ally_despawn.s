@@ -2,7 +2,9 @@
 # calls it, a0 = the event code (2 fallen, 3 disarmed / Ruby not in hand, 4 its block or floor gone / an event, 8 not stood). The manager
 # word goes first (the game stops riding it), then the hold; its pointer-table entry (16) names the player again. On the floor it was
 # summoned on (CodeCaves.AllyTex's stamp) the texture entries its load added to the monsters' group 42 are emptied and the group's VRAM
-# top and end put back — kept outside its block, so a character change that overwrote the block still cleans them. t0..t9.
+# top and end put back — kept outside its block, so a character change that overwrote the block still cleans them — and the texture
+# manager's buffer fill (+0x4E3C, 16-byte units; EnterTexture copies every picture there and hangs once it is full) taken back to its
+# value before the load when nothing has entered pictures since (CodeCaves.AllyTexBuf). t0..t9.
 
 despawn:
     lui   $t0, 0x01FB
@@ -54,6 +56,11 @@ dskip:
     sw    $t1, 0xA10($t6)          # group 42's VRAM top
     lw    $t1, -0x358($t0)         # AllyTex + 8
     sw    $t1, 0xA14($t6)          #          VRAM end
+    lw    $t1, 0x4E3C($t6)         # the texture buffer in use
+    lw    $t2, -0x24($t0)          # AllyTexBuf + 4: just after its load
+    bne   $t1, $t2, dnote          # something entered pictures since: left as it is
+    lw    $t3, -0x28($t0)          # (delay) AllyTexBuf + 0: before it
+    sw    $t3, 0x4E3C($t6)         # its pictures' room given back (else each summon keeps it, and a full buffer hangs EnterTexture)
 dnote:
     lw    $t1, -0x2C($t0)          # AllyEvent = ((count + 1) << 8) | code
     srl   $t1, $t1, 8

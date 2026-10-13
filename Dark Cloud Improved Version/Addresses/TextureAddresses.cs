@@ -23,6 +23,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  Entries     = 0x10F8;
         internal const int  EntryStride = 0x50;
         internal const int  MaxEntries  = 0xC4;     // the table holds 196 entries and no more
+        internal const int  Buffer = 0x4E38, BufferUsed = 0x4E3C, BufferCap = 0x4E40;   // EnterTexture copies every picture here (16-byte units); full → printf + while(1)
         internal const int  EntryBlock  = 0x00;     // u16: the block the entry belongs to
         internal const int  EntryName   = 0x08;     // inline, NUL-terminated
         internal const int  EntryPixels = 0x38;     // native pointer

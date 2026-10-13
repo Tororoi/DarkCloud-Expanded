@@ -183,6 +183,8 @@ namespace Dark_Cloud_Improved_Version
         internal const uint AllyStep = Host, AllyDraw = Host + 0x10, AllyShadow = Host + 0x20;   // 216 B → 0x11EEA0
         /// <summary>tools/stubs/ally_follow.s's tail (after #SPLIT): the ally's turn and clip while it walks beside Ruby.</summary>
         internal const uint AllyTurn = Host + 0xD8;   // 0x11EEA0, 172 B → 0x11EF4C
+        /// <summary>tools/stubs/ally_grow.s: the ally's growth as it appears (its scale table at +0x48).</summary>
+        internal const uint AllyGrow = Host + 0x184, AllyGrowTable = AllyGrow + 0x48;   // 0x11EF4C, 152 B → 0x11EFE4
         internal const uint End = Host + HostSpan;
     }
 
@@ -192,7 +194,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x0010C7D0, HostSpan = 1160, VanillaWord0 = 0x27BDFFA0;   // `addiu sp,sp,-0x60`
         /// <summary>tools/stubs/ally_brain.s (ElfAllyPatches): the Pocklekul's pockle once a frame — guard charge, target, end.</summary>
-        internal const uint AllyBrain = Host;   // 1,068 B → 0x10CBFC
+        internal const uint AllyBrain = Host;   // 1,076 B → 0x10CC04
         internal const uint End = Host + HostSpan;
     }
 
@@ -202,7 +204,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x001203D0, HostSpan = 688, VanillaWord0 = 0x0080302D;   // `daddu a2,a0,zero`
         /// <summary>tools/stubs/ally_brain.s's tail (after #SPLIT): the summon.</summary>
-        internal const uint AllySummon = Host;   // 596 B → 0x120624
+        internal const uint AllySummon = Host;   // 672 B → 0x120670
         internal const uint End = Host + HostSpan;
     }
 
@@ -222,7 +224,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x00117080, HostSpan = 344, VanillaWord0 = 0x27BDFF70;   // `addiu sp,sp,-0x90`
         /// <summary>tools/stubs/ally_despawn.s (ElfAllyPatches): the ally's end.</summary>
-        internal const uint AllyDespawn = Host;   // 212 B → 0x117154
+        internal const uint AllyDespawn = Host;   // 232 B → 0x117168
         internal const uint End = Host + HostSpan;
     }
 

@@ -6,10 +6,11 @@
 #
 # The guard charge: Ruby (cur_chara 3) holding R1 in her guard pose (motion 9 or 33) counts frames (AllyGuard); at 60 the charge latches
 # (AllyLatch, until the guard drops) — a summon if none stands, on a quiet floor (walking mode, no menu opening, no event).
+# Its pockle is one of eight at random: the seven days' (table index 10 + day) and Hell Pockle (54).
 # The summon (into Ruby's pockle block: the end of her character pool, PockleBlock): the floor's manager copied to block + 0x100, its script
-# table pointed at the block's own arena (entry 0; the rest null, so CleanViewMonstor resets only it) and reset; a random day's pockle
-# (table index 10 + day) loaded by SetupBaseModel into the block's model allocator — its textures join the monsters' group 42, and the
-# entries it added and the group's VRAM ends before it are kept (CodeCaves.AllyTex) for its end — then stood 15 u in front of Ruby by
+# table pointed at the block's own arena (entry 0; the rest null, so CleanViewMonstor resets only it) and reset; the pockle loaded by SetupBaseModel into the block's model allocator — its textures join the monsters' group 42, and the
+# entries it added and the group's VRAM ends before it are kept (CodeCaves.AllyTex), with the texture manager's buffer fill before and
+# after it (CodeCaves.AllyTexBuf: every picture entered is copied there), for its end — then stood 15 u in front of Ruby by
 # SetupViewMonstor (both with NowMonstorUnit on its manager). Its block is stamped ("ALLY", the floor) and the manager word set: the game
 # rides it from then on.
 # While it stands: its end (ally_despawn.s) when its block is gone or another floor's, when it is disarmed or Ruby is not in hand, when
@@ -19,7 +20,8 @@
 # its entry naming the idle point there.
 #
 # The block: +0x00 model allocator, +0x10 script allocator, +0x20 spawn point, +0x30 idle point, +0x40 "ALLY", +0x44 floor stamp, +0x48
-# its target slot (−1 none), +0x54 the group-42 entry mask (7 words, the summon's own), +0x70 its day, +0x100 its manager (0x60750 B),
+# its target slot (−1 none), +0x54 the group-42 entry mask (7 words, the summon's own), +0x70 its pockle (0..7), +0x74 its frames
+# (ally_grow.s), +0x100 its manager (0x60750 B),
 # +0x60850 its script arena (1,875 units), +0x67D80 its model (0xBD20 units, to the block's end at +0x124F80).
 # Data words (lui 0x01FB): −0x808 AllyManager, −0x3C AllyHold, −0x38 AllyArmed, −0x34 AllyGuard, −0x30 AllyLatch, −0x2C AllyEvent;
 # CodeCaves.AllyTex 0x01FAFCA0: +0 floor stamp, +4 / +8 group 42's VRAM top / end, +0xC (first entry << 16) | entry end.
@@ -117,6 +119,8 @@ alive:
     addiu $t1, $zero, -1
     beq   $t0, $t1, gone
     addiu $a0, $zero, 2            # (delay) fallen
+    jal   0x0011EF4C               # ally_grow.s: its first frames' growth
+    or    $a0, $s3, $zero          # (delay)
     # ── its target
     lui   $t0, 0x01EA
     lwc1  $f0, 0x1D30($t0)         # Ruby x
@@ -334,7 +338,7 @@ snone:
     jr    $ra
     or    $v0, $zero, $zero
 #SPLIT
-# The summon (s0 = the data words). Events: 0x10 + day stood, 5 no block, 6 no VRAM room, 7 not loaded, 8 not stood.
+# The summon (s0 = the data words). Events: 0x10 + pockle stood, 5 no block, 6 no VRAM or texture-buffer room, 7 not loaded, 8 not stood.
 summon:
     addiu $sp, $sp, -0x30
     sw    $ra, 0x00($sp)
@@ -357,6 +361,12 @@ summon:
     addiu $t4, $t3, 0x180
     sltu  $t4, $t1, $t4
     bne   $t4, $zero, snote
+    addiu $a0, $zero, 6            # (delay)
+    lw    $t4, 0x4E40($t0)         # the texture buffer's room (16-byte units)…
+    lw    $t6, 0x4E3C($t0)         # …and what is in use: a pockle's picture takes ~16,400
+    subu  $t4, $t4, $t6
+    slti  $t4, $t4, 0x4800
+    bne   $t4, $zero, snote        # too little: EnterTexture would hang on it
     addiu $a0, $zero, 6            # (delay)
     lui   $t5, 0x01FB
     sw    $t2, -0x35C($t5)         # AllyTex + 4 (0x01FAFCA4)
@@ -402,20 +412,30 @@ stab:
     addiu $t0, $zero, -1
     sw    $t0, 0x94($s2)           # requested_event
     sw    $zero, 0x98($s2)         # paused
-    # the group-42 entries before, a random day, its load
+    # the group-42 entries before, a random pockle, its load
     jal   scan42
     or    $a0, $zero, $zero        # (delay) mark
     jal   0x001046F8               # rand
     nop
-    addiu $t0, $zero, 7
+    addiu $t0, $zero, 8
     .word 0x0048001B               # divu v0, t0
-    mfhi  $s3                      # the day (0 Sunday .. 6 Saturday)
+    mfhi  $s3                      # the pockle (0 Sunday .. 6 Saturday, 7 Hell Pockle)
     sw    $s3, 0x70($s1)
+    sw    $zero, 0x74($s1)         # its frames (ally_grow.s)
+    lui   $t0, 0x01C7
+    ori   $t0, $t0, 0x5870
+    lw    $t1, 0x4E3C($t0)         # the texture manager's buffer in use (16-byte units): EnterTexture copies every picture there
+    lui   $t5, 0x01FB
+    sw    $t1, -0x28($t5)          # AllyTexBuf + 0: before its load
     lw    $s4, -0x6320($gp)        # NowMonstorUnit
     sw    $s2, -0x6320($gp)
     or    $a0, $s2, $zero
     or    $a1, $zero, $zero
-    addiu $a2, $s3, 10             # its table index
+    slti  $t1, $s3, 7
+    bne   $t1, $zero, sday
+    addiu $a2, $s3, 10             # (delay) a day's table index (10 + day)
+    addiu $a2, $zero, 54           # Hell Pockle's
+sday:
     addiu $a3, $zero, 0x26
     jal   0x001DFE90               # SetupBaseModel
     or    $t0, $s1, $zero          # (delay) the block's model allocator
@@ -426,6 +446,10 @@ stab:
     addiu $a0, $zero, 1            # (delay) find the new
     lui   $t5, 0x01FB
     sw    $v0, -0x354($t5)         # AllyTex + 0xC: its entries
+    lui   $t0, 0x01C7
+    ori   $t0, $t0, 0x5870
+    lw    $t1, 0x4E3C($t0)
+    sw    $t1, -0x24($t5)          # AllyTexBuf + 4: after it
     jal   stamp
     nop
     lui   $t5, 0x01FB

@@ -624,10 +624,13 @@ namespace Dark_Cloud_Improved_Version
         internal const long AllyArmed = 0x21FAFFC8;    // 4 B
         /// <summary>ally_brain.s's own: the frames Ruby's guard has been held, and the latch that spends one guard's charge.</summary>
         internal const long AllyGuard = 0x21FAFFCC, AllyLatch = 0x21FAFFD0;   // 4 B each
-        /// <summary>The ally's last event, ((count &lt;&lt; 8) | code), for the app's log: 0x10 + day stood (0 Sunday .. 6 Saturday), 2 fallen,
-        /// 3 disarmed or Ruby not in hand, 4 its block, floor or the floor's quiet gone, 5 no pockle block, 6 no VRAM room, 7 not loaded,
+        /// <summary>The ally's last event, ((count &lt;&lt; 8) | code), for the app's log: 0x10 + pockle stood (0 Sunday .. 6 Saturday, 7 Hell Pockle), 2 fallen,
+        /// 3 disarmed or Ruby not in hand, 4 its block, floor or the floor's quiet gone, 5 no pockle block, 6 no VRAM or texture-buffer room, 7 not loaded,
         /// 8 not stood, 9 a guard charge while one stands.</summary>
-        internal const long AllyEvent = 0x21FAFFD4;    // 4 B (0x21FAFFD8..0x21FAFFE0 free)
+        internal const long AllyEvent = 0x21FAFFD4;    // 4 B
+        /// <summary>The texture manager's buffer fill (TextureManager +0x4E3C, 16-byte units) just before and just after the pockle's load
+        /// (ally_brain.s writes, ally_despawn.s gives the room back when nothing entered pictures since). Written natively.</summary>
+        internal const long AllyTexBuf = 0x21FAFFD8;   // 8 B → 0x21FAFFE0
         internal const byte FlashAlphaVanilla  = 0x80;
         /// <summary>The Confuse ability's procs (confuse_proc.s): a byte per enemy slot, 1 = the roll succeeded this hit; the mod
         /// (ConfuseAbility) confuses the slot and writes it back to 0.</summary>

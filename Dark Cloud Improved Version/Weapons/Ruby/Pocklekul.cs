@@ -2,17 +2,23 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Pocklekul — a guard held for a second summons a random day-of-the-week pockle: a real monster on a private monster manager
-    /// the game steps beside the floor's, its own script running natively, going for the locked-on enemy or the one nearest Ruby, walking
-    /// beside her when there is none; guarding again summons nothing while one stands. All of it is native (tools/stubs/ally_brain.s and its
-    /// fellows, ElfAllyPatches): this thread arms it while the ring is in Ruby's hand (CodeCaves.AllyArmed — disarming ends a standing
-    /// pockle), logs what it reports (CodeCaves.AllyEvent), and while one stands ticks its friendly fire (<see cref="ConfusionAlly"/>:
-    /// its swings on the enemies, theirs and their shots on it).</summary>
+    /// <summary>Pocklekul — a guard held for a second summons a random pockle (a day of the week's, or Hell Pockle), growing in as it
+    /// appears: a real monster on a private monster manager the game steps beside the floor's, its own script running natively, going for
+    /// the locked-on enemy or the one nearest Ruby, walking beside her when there is none; guarding again summons nothing while one
+    /// stands. All of it is native (tools/stubs/ally_brain.s and its fellows, ElfAllyPatches): this thread arms it while the ring is in
+    /// Ruby's hand (CodeCaves.AllyArmed — disarming ends a standing pockle), logs what it reports (CodeCaves.AllyEvent) and names the
+    /// pockle that came on screen ("Sunday summoned"), and while one stands ticks its friendly fire (<see cref="ConfusionAlly"/>: its
+    /// swings and shots on the enemies, theirs on it).</summary>
     internal static class Pocklekul
     {
         private const string Tag = "[Pocklekul] ";
         private const uint BrainVanillaWord0 = 0x27BDFFA0;   // sceDmaSendN's first word: a disc patched before the native Pocklekul
-        private static readonly string[] Days = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+        private const int MessageMs = 2500;
+        private static readonly EnemyDefaults[] Pockles =   // ally_brain.s's pockle order (event 0x10 + index)
+        {
+            EnemySpecies.Sunday, EnemySpecies.Monday, EnemySpecies.Tuesday, EnemySpecies.Wednesday, EnemySpecies.Thursday,
+            EnemySpecies.Friday, EnemySpecies.Saturday, EnemySpecies.HellPockle,
+        };
 
         /// <summary>The Pocklekul's thread: runs while the ring is in Ruby's hand on a dungeon floor.</summary>
         public static void PockleSummonEffect()
@@ -30,7 +36,19 @@ namespace Dark_Cloud_Improved_Version
                 // armed only once the target redirect is (else the pockle's "player" would be Ruby)
                 if (!armed && TargetRedirectCaves.Armed) { Memory.WriteInt(CodeCaves.AllyArmed, 1); armed = true; }
                 uint ev = Memory.ReadUInt(CodeCaves.AllyEvent);
-                if (ev != seen) { seen = ev; Log(Describe((int)(ev & 0xFF))); }
+                if (ev != seen)
+                {
+                    seen = ev;
+                    int code = (int)(ev & 0xFF);
+                    long tm = TextureManager.Base;
+                    Log(Describe(code) + $" (texture buffer {Memory.ReadInt(tm + TextureManager.BufferUsed):N0} of {Memory.ReadInt(tm + TextureManager.BufferCap):N0} units)");
+                    if (code >= 0x10 && code < 0x10 + Pockles.Length)
+                    {
+                        string text = $"{Pockles[code - 0x10].Name} summoned";
+                        DungeonMessages.DisplayMessage(text, 1, text.Length + 2, MessageMs);   // which pockle came
+                    }
+                }
+                FreezeProbe.Tick();                    // DIAGNOSTIC: a frozen floor's state into the log (the King Mimic freeze)
                 bool up = ConfusionAlly.Up;
                 if (up) Confusion.Tick();
                 else if (wasUp) Confusion.EndAlly();   // it went: the enemies it provoked back on Ruby
@@ -46,12 +64,12 @@ namespace Dark_Cloud_Improved_Version
 
         private static string Describe(int code) => code switch
         {
-            >= 0x10 and < 0x17 => $"{Days[code - 0x10]}'s pockle summoned",
+            >= 0x10 and < 0x18 => $"{Pockles[code - 0x10].Name} summoned",
             2 => "the pockle fell",
             3 => "the pockle went (the Pocklekul or Ruby left the hand)",
             4 => "the pockle went (its floor changed, its block was overwritten, or an event took the floor)",
             5 => "no summon: no pockle block (Ruby's character pool lacks it — a disc patched before the Pocklekul?)",
-            6 => "no summon: no VRAM room in the monsters' texture group",
+            6 => "no summon: no room for its picture (the monsters' VRAM group or the texture buffer)",
             7 => "no summon: the pockle's model did not load",
             8 => "no summon: the pockle did not stand",
             9 => "a pockle already stands — no summon",

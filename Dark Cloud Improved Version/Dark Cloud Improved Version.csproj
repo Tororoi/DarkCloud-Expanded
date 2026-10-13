@@ -64,6 +64,9 @@
     <EmbeddedResource Include="Resources\isoPatch\allyTurn.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.allyTurn.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\allyGrow.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.allyGrow.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\allyDespawn.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.allyDespawn.bin</LogicalName>
     </EmbeddedResource>
