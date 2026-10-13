@@ -130,7 +130,7 @@ namespace Dark_Cloud_Improved_Version
         /// (+0x54 == 100) detonates, SetBombEffect(size +0x58, the position, the config's victim mask +0x48, +0x5C) — as it would
         /// have anywhere. An impact KEY: the shot's object restarts on it (its first frame from the object's frame table, motion flags
         /// 6, the KEY's own rate) and its velocity becomes the phase's speed (+0x18 + phase × 4). The phase is written last.</summary>
-        private static void ShotContact(long fx, long cfg, int i, long obj)
+        internal static void ShotContact(long fx, long cfg, int i, long obj)
         {
             const int Phase = 2, CfgPhaseKeys = 0x4C, CfgPhaseSpeeds = 0x18, CfgBombKind = 0x54, CfgBombSize = 0x58, CfgBombArg = 0x5C, BombKind = 100;
             uint SetBombEffect = 0x001D5940;

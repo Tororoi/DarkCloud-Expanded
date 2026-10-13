@@ -136,15 +136,27 @@ namespace Dark_Cloud_Improved_Version
             return pack.Rebuild();
         }
 
+        /// <summary>The first byte a mod species' name may use in the dungeon name bank: the app writes the floor-clear notice over message
+        /// <see cref="DungeonMessageBank.FloorClearId"/>'s text in place (DungeonMessages, 212 bytes) and gives back only that message's own
+        /// words, so names laid out right after it lost their text for the rest of the floor. They go <see cref="FloorClearSpan"/> past it.</summary>
+        internal static int NameFloor(byte[] mes)
+        {
+            int cnt = IsoBytes.U16(mes, 0);
+            for (int i = 0; i < cnt; i++)
+                if (IsoBytes.U16(mes, 4 + i * 4) == DungeonMessageBank.FloorClearId) return 2 * (cnt + IsoBytes.U16(mes, 4 + i * 4 + 2) + 1) + FloorClearSpan;
+            return 0;
+        }
+        private const int FloorClearSpan = 0x200;
+
         /// <summary>The name bank with message <paramref name="id"/> reading <paramref name="words"/>, or null when it already does. The
         /// bank has no entry for a new species' id (its index runs to 3320, the Bomb Gemron's, then 3999), so one is added
         /// (MesTextBaker.AppendMes: the index stays id-sorted, every message keeps its text) with the text just past the bank's own, and
         /// the file is padded back to its size: what the engine loads after it does not move.</summary>
         internal static byte[] WithName(byte[] mes, int id, ushort[] words)
         {
-            int cnt = IsoBytes.U16(mes, 0);
-            for (int i = 0; i < cnt; i++) if (IsoBytes.U16(mes, 4 + i * 4) == id) return MesTextBaker.SetMes(mes, id, words);
-            byte[] grown = MesTextBaker.AppendMes(mes, true, (id, words));
+            int cnt = IsoBytes.U16(mes, 0), floor = NameFloor(mes);
+            for (int i = 0; i < cnt; i++) if (IsoBytes.U16(mes, 4 + i * 4) == id) return MesTextBaker.SetMes(mes, id, words, floor);
+            byte[] grown = MesTextBaker.AppendMes(mes, true, floor, (id, words));
             if (grown.Length > mes.Length) throw new IOException($"message {id} does not fit the name bank's padding");
             var o = new byte[mes.Length];
             grown.CopyTo(o, 0);

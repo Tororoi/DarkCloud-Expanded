@@ -109,7 +109,7 @@ namespace Dark_Cloud_Improved_Version
                 || !NativeCall.Invoke(CharacterLoad.SetFrameAttr, out _, frame, 1))
                 Log($"{code}: its frame attributes were not set (no dungeon frame took the call)");
             Memory.WriteInt(Slot + DungeonCharaDraw.CharaTexBlock, PockleBlock.TexBlock);
-            _day = day; _block = block; _floorKey = FloorKey(); _texCount = -1; _effectPeak = 0;
+            _day = day; _block = block; _floorKey = FloorKey(); _texCount = -1; _effectPeak = 0; _scaleNoted = false;
             if (_windowEnd > cursor) Log($"WARNING: its textures reach 0x{_windowEnd:X}, past the cursor they were given (0x{cursor:X})");
             Log($"{Days[day].day}'s pockle ({code}) loaded: {units + PockleBlock.Data / 16:N0} of {PockleBlock.Units:N0} units, model 0x{frame:X}; " + PoolLine());
             return true;
@@ -155,22 +155,97 @@ namespace Dark_Cloud_Improved_Version
             int tex = TextureEntries();
             if (tex != _texCount) { Log($"texture group 0x{PockleBlock.TexBlock:X}: {tex} entries"); _texCount = tex; }
             if (tex == 0 && quiet) EnterTextures();
-            Watch();
+            KeepScale();
         }
 
-        // PHASE 0 diagnostics: the slot's draw state and its group's record, logged whenever one of them changes.
-        private static string _watched = "";
-        private static void Watch()
+        private const int FrameScale = 0x210, FrameLocal = 0x1D0;     // CFrame: its scale (Draw sets it from the slot's), its local matrix
+        private static bool _scaleNoted;
+        /// <summary>The slot's scale held at 1 (Draw copies it onto the model every frame). A pockle once drew stretched sideways: anything
+        /// found off — the slot's scale, the model root's, or a root local matrix whose rows are not unit length — is logged once per
+        /// pockle with its values, and the scales put back.</summary>
+        private static void KeepScale()
         {
-            long s = Slot, r = GroupRecord;
-            string now = $"opacity {Memory.ReadFloat(s + CCharacter.NpcOpacity):0.#} dim {Memory.ReadFloat(s + CCharacter.DimFactor):0.##}/{Memory.ReadInt(s + CCharacter.DimOn)} "
-                + $"active {Memory.ReadInt(s + DungeonCharaDraw.CharaActive)} near {Memory.ReadInt(s + DungeonCharaDraw.CharaMotionA)} hidden {Memory.ReadInt(s + DungeonCharaDraw.CharaMotionB)} "
-                + $"ramp {Memory.ReadInt(s + DungeonCharaDraw.CharaRampA)}/{Memory.ReadInt(s + DungeonCharaDraw.CharaRampB)} motion {Memory.ReadInt(s + CCharacter.MotionId)} flags {Memory.ReadInt(s + CCharacter.MotionFlags)} "
-                + $"model 0x{Memory.ReadGuestPtr(s + CCharacter.CharModel):X} scale {Memory.ReadFloat(s + CCharacter.CharScale):0.##} "
-                + $"registry {Memory.ReadInt(DungeonCharaDraw.CharaRegistry + PockleBlock.CharaSlot * 4)}/{Memory.ReadInt(DungeonCharaDraw.ShadowRegistry + PockleBlock.CharaSlot * 4)} skip {Memory.ReadInt(DungeonCharaDraw.StepSkipTable + PockleBlock.CharaSlot * 4)} "
-                + $"gate {Memory.ReadInt(Mailbox.MirageSceneGate)} group vram 0x{Memory.ReadUInt(r + TextureManager.BlkBase):X}..0x{Memory.ReadUInt(r + TextureManager.BlkTop):X} loaded {Memory.ReadInt(r + TextureManager.BlkLoaded)} dirty 0x{Memory.ReadUInt(r + TextureManager.BlkDirty):X} "
-                + $"cursor 0x{Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor):X} event {Memory.ReadInt(DungeonScriptEvent.BtEventMode)}";
-            if (now != _watched) { Log("state: " + now); _watched = now; }
+            long s = Slot;
+            float sx = Memory.ReadFloat(s + CCharacter.CharScale), sy = Memory.ReadFloat(s + CCharacter.CharScale + 4), sz = Memory.ReadFloat(s + CCharacter.CharScale + 8);
+            uint root = Memory.ReadGuestPtr(s + CCharacter.CharModel);
+            float fx = 1f, fy = 1f, fz = 1f; string rows = "";
+            if (Memory.IsValidGuest(root))
+            {
+                long r = Memory.ToMmu(root);
+                fx = Memory.ReadFloat(r + FrameScale); fy = Memory.ReadFloat(r + FrameScale + 4); fz = Memory.ReadFloat(r + FrameScale + 8);
+                for (int row = 0; row < 3; row++)
+                {
+                    float a = Memory.ReadFloat(r + FrameLocal + row * 16), b = Memory.ReadFloat(r + FrameLocal + row * 16 + 4), c = Memory.ReadFloat(r + FrameLocal + row * 16 + 8);
+                    float len = MathF.Sqrt(a * a + b * b + c * c);
+                    if (MathF.Abs(len - 1f) > 0.05f) rows += $" row{row} {len:0.###}";
+                }
+            }
+            bool off(float v) => MathF.Abs(v - 1f) > 0.01f;
+            if (!off(sx) && !off(sy) && !off(sz) && !off(fx) && !off(fy) && !off(fz) && rows.Length == 0) return;
+            if (!_scaleNoted)
+            {
+                _scaleNoted = true;
+                Log($"{Days[_day].day}'s pockle off scale: slot ({sx:0.###}, {sy:0.###}, {sz:0.###}), root ({fx:0.###}, {fy:0.###}, {fz:0.###})"
+                    + (rows.Length > 0 ? $", root local{rows}" : "") + " — scales put back to 1");
+            }
+            if (off(sx) || off(sy) || off(sz)) Memory.WriteVec3(s + CCharacter.CharScale, 1f, 1f, 1f);
+        }
+
+        // ───────────────────────────── the pockle as a character ─────────────────────────────
+        /// <summary>The standing day's species record (its HP, melee damage and defence are the pockle's).</summary>
+        internal static EnemyDefaults Species => DaySpecies[Math.Max(_day, 0)];
+        private static readonly EnemyDefaults[] DaySpecies =
+            { EnemySpecies.Sunday, EnemySpecies.Monday, EnemySpecies.Tuesday, EnemySpecies.Wednesday, EnemySpecies.Thursday, EnemySpecies.Friday, EnemySpecies.Saturday };
+        /// <summary>Its position's guest address: a 16-byte-aligned vec4 the redirected scripts can read as their "player".</summary>
+        internal static uint PosGuest => SlotGuest + (uint)CCharacter.CharPos;
+        internal static (float x, float h, float y) Position
+            => (Memory.ReadFloat(Slot + CCharacter.CharPos), Memory.ReadFloat(Slot + CCharacter.CharPos + 4), Memory.ReadFloat(Slot + CCharacter.CharPos + 8));
+        internal static float Yaw => Memory.ReadFloat(Slot + CCharacter.CharRotY);
+        internal static float MotionFrame => Memory.ReadFloat(Slot + CCharacter.MotionFrame);
+        internal static int Motion => Memory.ReadInt(Slot + CCharacter.MotionId);
+
+        internal static void Place(float x, float h, float y, float yaw)
+        {
+            Memory.WriteVec3(Slot + CCharacter.CharPos, x, h, y);
+            Memory.WriteFloat(Slot + CCharacter.CharRotY, yaw);
+        }
+        internal static void SetYaw(float yaw) => Memory.WriteFloat(Slot + CCharacter.CharRotY, yaw);
+        internal static void SetHeight(float h) => Memory.WriteFloat(Slot + CCharacter.CharPos + 4, h);
+        /// <summary>The playing clip's rate (an absolute frames-a-step override; −1 = the clip's own).</summary>
+        internal static void SetRate(float rate) => Memory.WriteFloat(Slot + CharacterMotion.MotionSpeedOffset, rate);
+
+        /// <summary>The pockle's step a frame for the next <paramref name="frames"/> dungeon frames (tools/stubs/pockle_move.s moves it): the
+        /// step first, the frames last; 0 frames = still.</summary>
+        internal static void Step(float stepX, float stepY, int frames)
+        {
+            Memory.WriteFloat(CodeCaves.PockleMove + CodeCaves.PockleMoveX, stepX);
+            Memory.WriteFloat(CodeCaves.PockleMove + CodeCaves.PockleMoveY, stepY);
+            Memory.WriteInt(CodeCaves.PockleMove + CodeCaves.PockleMoveFrames, frames);
+        }
+
+        /// <summary>The clip restarted from its first frame, once and held (a cycle of a repeated attack).</summary>
+        internal static void RestartClip(int id)
+        {
+            Memory.WriteInt(Slot + CCharacter.MotionId, id);
+            Memory.WriteUInt(Slot + CCharacter.MotionFlags, (uint)(CCharacter.MotionRestart | CCharacter.MotionPlayOnce));
+        }
+
+        /// <summary>Clip <paramref name="id"/> played from its first frame (a blend from the pose it leaves), looping, or once and held
+        /// on its last frame; the same clip again is left running.</summary>
+        internal static void SetMotion(int id, bool once = false)
+        {
+            if (Motion == id) return;
+            Memory.WriteInt(Slot + CCharacter.MotionId, id);
+            Memory.WriteUInt(Slot + CCharacter.MotionFlags, (uint)(CCharacter.MotionRestart | (once ? CCharacter.MotionPlayOnce : 0)));
+        }
+
+        /// <summary>Clip <paramref name="id"/>'s first and last frames from the model's motion list.</summary>
+        internal static (float start, float end) ClipRange(int id)
+        {
+            uint list = Memory.ReadGuestPtr(Slot + CCharacter.MotionList);
+            if (!Memory.IsValidGuest(list)) return (0f, 0f);
+            long e = Memory.ToMmu(list) + (long)id * CCharacter.MotionEntryStride;
+            return (Memory.ReadInt(e + CCharacter.MotionEntryStart), Memory.ReadInt(e + CCharacter.MotionEntryEnd));
         }
 
         /// <summary>Take it out of the draw and forget it.</summary>
@@ -184,18 +259,21 @@ namespace Dark_Cloud_Improved_Version
 
         private static void Unshow()
         {
+            Step(0f, 0f, 0);
             Memory.WriteInt(DungeonCharaDraw.CharaRegistry + PockleBlock.CharaSlot * 4, 0);
             Memory.WriteInt(DungeonCharaDraw.ShadowRegistry + PockleBlock.CharaSlot * 4, 0);
             Memory.WriteInt(DungeonCharaDraw.StepSkipTable + PockleBlock.CharaSlot * 4, 1);
             Memory.WriteInt(Slot + DungeonCharaDraw.CharaActive, 0);
-            if (Player.InDungeonFloor()) Memory.WriteInt(Mailbox.MirageSceneGate, Mailbox.SceneGateVanilla);   // Mirage's loop drives the gate again once Up is false
+            // Mirage's loop drives the gate again once Up is false; off a floor the town's 0 at once (the PNACH keeps applying a mode
+            // every frame, and the town overlay lives at the same addresses)
+            Memory.WriteInt(Mailbox.MirageSceneGate, Player.InDungeonFloor() ? Mailbox.SceneGateVanilla : 0);
         }
 
         private static void Forget()
         {
             if (_window != 0 && Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor) == _window)
                 Memory.WriteUInt(TextureManager.Base + TextureManager.Cursor, _cursorSaved);          // the window given back
-            _day = -1; _block = 0; _floorKey = -1; _texCount = -1; _window = 0; _windowEnd = 0; _cursorSaved = 0; _watched = "";
+            _day = -1; _block = 0; _floorKey = -1; _texCount = -1; _window = 0; _windowEnd = 0; _cursorSaved = 0;
         }
 
         private static long GroupRecord => TextureManager.Base + TextureManager.Blocks + (long)PockleBlock.TexBlock * TextureManager.BlockStride;
@@ -243,7 +321,9 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The pockle's texture bank entered again into its group from its copy in the block (images[0]), into the same
-        /// window (the model's packets name those addresses), the cursor put back under it if a rebuild raised it.</summary>
+        /// window (the model's packets name those addresses), and the cursor put back under it if a rebuild raised it — AFTER the
+        /// entry: EndEnterTextureBlock spins forever ("fix texture over") on a group ending above the cursor. Skipped when the
+        /// rebuilt manager has handed the window to something else.</summary>
         private static void EnterTextures()
         {
             uint img = Memory.ReadGuestPtr(Slot + CharacterLoad.Images);
@@ -252,15 +332,15 @@ namespace Dark_Cloud_Improved_Version
             var info = new byte[0x18];
             BitConverter.GetBytes(img).CopyTo(info, 0);
             BitConverter.GetBytes(PockleBlock.TexBlock).CopyTo(info, 4);
+            uint cursor = Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor), highest = HighestBlockEnd();
+            if (cursor < _windowEnd || highest > _window)
+            { Log($"textures not entered again: the window 0x{_window:X}..0x{_windowEnd:X} is taken (cursor 0x{cursor:X}, highest group 0x{highest:X})"); _window = 0; return; }
             Memory.WriteBytesBatch(_block + PockleBlock.TexInfo, info);
             PresetWindow(_window);
-            uint cursor = Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor);
+            if (!NativeCall.Invoke(CharacterLoad.LoadTextureBlockEX, out _, CharacterLoad.TexManagerGuest, PockleBlock.TexBlock, g + PockleBlock.TexInfo)) return;
             if (cursor > _window) { _cursorSaved = cursor; Memory.WriteUInt(TextureManager.Base + TextureManager.Cursor, _window); }
-            if (NativeCall.Invoke(CharacterLoad.LoadTextureBlockEX, out _, CharacterLoad.TexManagerGuest, PockleBlock.TexBlock, g + PockleBlock.TexInfo))
-            {
-                uint end = Memory.ReadUInt(GroupRecord + TextureManager.BlkTop);
-                Log($"textures entered again into group 0x{PockleBlock.TexBlock:X}: VRAM 0x{_window:X}..0x{end:X}" + (end != _windowEnd ? $" (WARNING: the load's ended at 0x{_windowEnd:X})" : ""));
-            }
+            uint end = Memory.ReadUInt(GroupRecord + TextureManager.BlkTop);
+            Log($"textures entered again into group 0x{PockleBlock.TexBlock:X}: VRAM 0x{_window:X}..0x{end:X}" + (end != _windowEnd ? $" (WARNING: the load's ended at 0x{_windowEnd:X})" : ""));
         }
 
         private static int TextureEntries()

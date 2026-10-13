@@ -46,6 +46,12 @@
     <EmbeddedResource Include="Resources\isoPatch\atlaDungeon.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaDungeon.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\allyManager.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.allyManager.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\pockleMove.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.pockleMove.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\atlaDraw.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaDraw.bin</LogicalName>
     </EmbeddedResource>

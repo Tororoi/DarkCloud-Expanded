@@ -365,7 +365,7 @@ namespace Dark_Cloud_Improved_Version
     /// the cfg name, a LOADTEXTURE_INFO2 pair and the pockle's texture-animation records; the pockle loads into the rest.</summary>
     internal static class PockleBlock
     {
-        internal const int  Units = 48000;                      // 768,000 B: the largest pockle (Thursday, 45,935 units as a monster)
+        internal const int  Units = 75000;                      // 1.2 MB: the ally's private monster manager, its script arena, and the largest pockle (Thursday, 45,935 units as a monster)
         internal const long RubyEffectCopyPtr = 0x202A35DC;     // ozumond_default_effect (gp−0x6214): Ruby's c05_f03.chr copy, right below
         internal const int  Alloc = 0x00, CfgName = 0x10, TexInfo = 0x20, TexAnime = 0x40, TexAnimeCount = 32, TexAnimeStride = 0x58;
         internal const int  Data = TexAnime + TexAnimeCount * TexAnimeStride;   // 0xB40: the pockle's own allocations from here

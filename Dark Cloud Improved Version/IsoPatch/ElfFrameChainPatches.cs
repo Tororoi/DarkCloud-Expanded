@@ -250,7 +250,7 @@ namespace Dark_Cloud_Improved_Version
                 0x8FBF0010u,                                        // 25 lw    ra,0x10(sp)
                 0x8FB00014u,                                        // 26 lw    s0,0x14(sp)
                 0x27BD0020u,                                        // 27 addiu sp,sp,0x20
-                0x03E00008u,                                        // 28 ret: jr ra
+                MipsAsm.J(DeadReadIopmCave.PockleMove),             // 28 ret: j PockleMove (the pockle's step, which returns through ra)
                 0x00000000u,                                        // 29   nop
             };
             if (cave + (uint)words.Length * 4 > DebugIfCave.PelletSprite)
@@ -258,6 +258,11 @@ namespace Dark_Cloud_Improved_Version
             if (RdU32(fs, ElfOff(DebugIfCave.Host)) != 0x03E00008u)
                 throw new IOException("PatchCallRequest must follow ElfDeadFunctionPatches.PatchClaimDeadFunctionHosts (the host's `jr ra`).");
             WriteWords(fs, ElfOff, cave, words);
+            byte[] move = Embedded("pockleMove.bin");
+            if (move.Length == 0 || (move.Length & 3) != 0 || U32(move, 0) != 0x3C0801FBu
+                || DungeonCharaDraw.CharaArray + PockleBlock.CharaSlot * DungeonCharaDraw.CharaStride + CCharacter.CharPos != 0x21EAADB0)
+                throw new IOException($"pockleMove.bin malformed ({move.Length} B), stale, or its slot moved — reassemble pockle_move.s.");
+            WriteBytes(fs, ElfOff, DeadReadIopmCave.PockleMove, move, DeadReadIopmCave.End, "pockleMove.bin overruns the sceCdReadIOPm body");
         }
     }
 }

@@ -39,13 +39,22 @@ namespace Dark_Cloud_Improved_Version
         // the per-slot target (the live player global itself for an un-fooled slot, so the mod is not in that enemy's loop).
         // It then jumps back into the copy at the sceVu0CopyVector jal. Explicit-coordinate queries are untouched.
         private const int FnCopySize = 0xF0;    // both functions fit in this
+        private const uint AllyWordGuest = (uint)(CodeCaves.AllyManager & 0x1FFFFFFF);
+        private const uint AllyWordHi = ((AllyWordGuest + 0x8000) >> 16) & 0xFFFF, AllyWordLo = AllyWordGuest & 0xFFFF;   // lui/lw pair (signed low half)
         private const int HelperOff  = 0x100;   // helper sits after the copied body
 
+        // A unit of the ALLY'S private manager (CodeCaves.AllyManager, stepped with NowMonstorUnit pointing at it) reads the entries past the
+        // floor's 16 (AggroTable.AllySlot + its unit): its unit 0 is not the floor's slot 0.
         private static uint[] PerSlotTargetHelper(uint caveGuest, int jalOff) => new[]
         {
-            0x8F889CE0u,                                     // lw   t0, -0x6320(gp)   ; NowMonstorUnit
-            0x8D080090u,                                     // lw   t0, 0x90(t0)      ; current enemy slot
-            0x00084080u,                                     // sll  t0, t0, 2         ; slot*4
+            // v0, a1 and t0 only: the two instructions the detour replaced set v0 and a1, and the original helper spent t0.
+            0x8F829CE0u,                                     // lw   v0, -0x6320(gp)   ; NowMonstorUnit
+            0x8C480090u,                                     // lw   t0, 0x90(v0)      ; current enemy slot
+            0x3C050000u | AllyWordHi,                        // lui  a1, HI(AllyManager)
+            0x8CA50000u | AllyWordLo,                        // lw   a1, LO(AllyManager)(a1) ; the ally's manager, or 0
+            0x14450002u,                                     // bne  v0, a1, +2        ; not the ally's manager: its own slot
+            0x00084080u,                                     // sll  t0, t0, 2         ; (delay) slot*4
+            0x25080000u | (uint)(AggroTable.AllySlot * 4),   // addiu t0, t0, AllySlot*4 ; the ally's: past the floor's
             // PtrTable's FULL 32-bit address: lui sets the high half, ori (zero-extended, unlike addiu) the low half, so the
             // table may sit at any address, low half >= 0x8000 included. (docs/aggro-redirect.md, Lessons.)
             0x3C050000u | (CodeCaves.PtrTableGuest >> 16),      // lui  a1, HI(PtrTable)

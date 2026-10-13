@@ -177,6 +177,16 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>The body of <c>sceCdReadIOPm</c> (328 B from 0x10A690, main ELF, right before <see cref="DeadCdCave"/>'s host): never reached,
     /// as <see cref="DeadIoctlCave"/> (no jal, j, stored pointer or lui/addiu|ori pair in the ELF's loaded image, the dungeon or the title
     /// overlay).</summary>
+    /// <summary>The dead sceMcSetFileInfo (0x11EDC8, 0x154 B) and sceMcRename (0x11EF20, 0xFC B) bodies — no jal, j, pointer or lui/lo pair
+    /// reaches either in the ELF's loaded image, DUN.BIN or TITLE.BIN (proved 2026-10-12): 596 contiguous bytes.</summary>
+    internal static class DeadMcCave
+    {
+        internal const uint Host = 0x0011EDC8, HostSpan = 0x254, VanillaWord0 = 0x27BDFFB0;   // `addiu sp,sp,-0x50`
+        /// <summary>tools/stubs/ally_manager.s (ElfAllyPatches): the ally's private monster manager ridden beside the floor's.</summary>
+        internal const uint AllyStep = Host, AllyDraw = Host + 0x10, AllyShadow = Host + 0x20, AllyCallPriv = Host + 0x8C;   // 200 B → 0x11EE90
+        internal const uint End = Host + HostSpan;
+    }
+
     internal static class DeadReadIopmCave
     {
         internal const uint Host = 0x0010A690, HostSpan = 0x148, VanillaWord0 = 0x27BDFF90;   // `addiu sp,sp,-0x70`
@@ -185,6 +195,8 @@ namespace Dark_Cloud_Improved_Version
         internal const uint AtlaCollect = Host;   // 180 B → 0x10A744
         /// <summary>tools/stubs/atla_dungeon.s (ElfSpeciesPatches.PatchAtlaDungeon): Demon Shaft's atla ceremony on Gallery of Time's tables.</summary>
         internal const uint AtlaDungeon = Host + 0xC0;   // 0x10A750, 24 B → 0x10A768
+        /// <summary>tools/stubs/pockle_move.s (ElfFrameChainPatches.PatchCallRequest): the Pocklekul's pockle moved once a dungeon frame.</summary>
+        internal const uint PockleMove = Host + 0xE0;    // 0x10A770, 68 B → 0x10A7B4
         internal const uint End = Host + HostSpan;
     }
 

@@ -114,6 +114,11 @@ namespace Dark_Cloud_Improved_Version
             new(0x01DBA870, 0x24420001, 0x24420000u | (uint)(1 + PockleBlock.Units / 4), "Ruby's pockle block (c05_f03 copy rounding, addiu)"),
             new(0x01DBA874, 0x00021180, 0x00021080, "Ruby's pockle block (c05_f03 copy rounding, sll 6 → 2)"),
             new(0x01DBA878, 0x00021103, 0x00000000, "Ruby's pockle block (c05_f03 copy rounding, sra 4 → nop)"),
+            // The ALLY'S MANAGER (Pocklekul): the dungeon's three calls on the floor's monster manager go through ally_manager.s, which makes
+            // each again on a private manager (CodeCaves.AllyManager) while one is set (ElfAllyPatches writes the cave).
+            new(0x01DB749C, 0x0C077550, MipsAsm.Jal(DeadMcCave.AllyStep), "ally manager: motionDrive's jal Step__12CMonstorUnitFi → cave"),
+            new(0x01DAE7E8, 0x0C076334, MipsAsm.Jal(DeadMcCave.AllyDraw), "ally manager: the draw's jal DrawMonstor__12CMonstorUnitFv → cave"),
+            new(0x01DADD44, 0x0C076600, MipsAsm.Jal(DeadMcCave.AllyShadow), "ally manager: the shadow pass's jal DrawShadowMonstor__12CMonstorUnitFv → cave"),
             new(0x01DAC460, 0x3C020004, 0x3C020003, "dungeon read buffer 280000 → 250000 units (lui)"),
             new(0x01DAC464, 0x344545C0, 0x3445D090, "dungeon read buffer 280000 → 250000 units (ori)"),
             // Divine Beast cat: the dungeon step loop's once-per-frame `jal step__5CSHOT` (a0 = player shot pool)

@@ -364,7 +364,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>A byte per monster-pack sub-shot: 1 once an ice arrow in its impact has asked its Gemron for the ice prison
         /// (tools/stubs/crystal_shots.s), 0 outside the impact. Written natively.</summary>
         internal const long IceArrowFired      = 0x21FAF7F0;   // 8 B → 0x21FAF7F8
-        // 0x21FAF7F8..0x21FAF800 FREE
+        /// <summary>THE ALLY'S MANAGER (tools/stubs/ally_manager.s): the guest address of a private CMonstorUnit the dungeon steps, draws and
+        /// shadows after the floor's (0 = none), and the function its native call (call_priv) makes with NowMonstorUnit pointing at it.</summary>
+        internal const long AllyManager = 0x21FAF7F8, AllyCallFunc = 0x21FAF7FC;   // 4 B each → 0x21FAF800
         /// <summary>A bit a floor index (16 B, floors 0–127): set on the floors the randomizer staged, where tools/stubs/monster_bank.s
         /// builds the floor's monster bank from the species on it (MonsterSounds writes it).</summary>
         internal const long MonsterBankFloors      = 0x21FAF800;   // 16 B → 0x21FAF810
@@ -579,7 +581,11 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>A real atla's root turn (w, x, y, z in QuatToMat's order: dun\etc\atr.mds's root record), which tools/stubs/atla_draw.s
         /// gives the atla model back after drawing a bouncing one. Baked (ElfSpeciesPatches.PatchDataPageDefaults, AtlaGemronBake's recipe).</summary>
         internal const long AtlaRootQuat       = 0x21FAFC90;   // 16 B → 0x21FAFCA0
-        // 0x21FAFCA0..0x21FAFCB0 FREE
+
+        /// <summary>THE POCKLE'S STEP (tools/stubs/pockle_move.s, once a dungeon frame): +0 frames left, +4 / +8 the step a frame on X and Y;
+        /// while frames are left the pockle's slot moves by the step. Zero at boot: still.</summary>
+        internal const long PockleMove = 0x21FAFCA0;   // 16 B → 0x21FAFCB0
+        internal const int  PockleMoveFrames = 0x0, PockleMoveX = 0x4, PockleMoveY = 0x8;
 
         /// <summary>The guard gate's per-enemy window mask (DebugInfoCave.GuardMask, written by GuardGate): one byte per slot, bit w set =
         /// enemy window w blocks nothing (7 = none of its windows).</summary>
