@@ -4,7 +4,7 @@
 # check, then the spear's): the checks as before, then — while CodeCaves.AllyManager (0x01FAF7F8) holds a manager — the
 # same rule against the OTHER manager's live units (the floor's enemies against the ally's unit, the ally's unit against the floor's):
 # the moving unit's next place within both collision radii of one, below its top (height + 2 × radius), and moving toward it stops it
-# (movement and speed zeroed, as MoveChecMonster does; a floor unit so stopped is noted in CodeCaves.AllyBlocked by ally_swing.s's
+# (movement and speed zeroed, as MoveChecMonster does; a floor unit so stopped is noted in CodeCaves.AllyBlocked by ally_hooks.s's
 # blocked, which comes back to cdone). Caller-saved registers only. pblock (+0x1A0) blocks the player at it.
 
 collide:
@@ -103,7 +103,7 @@ cloop:
     sw    $zero, 0x64($t6)
     sw    $zero, 0x68($t6)
     sw    $zero, 0x80($t6)         # stopped, as MoveChecMonster stops it
-    j     0x00119320               # ally_swing.s's blocked: a floor unit the ally stopped noted, then back to cdone
+    j     0x00119320               # ally_hooks.s's blocked: a floor unit the ally stopped noted, then back to cdone
     nop
 cnext:
     addiu $t5, $t5, 0x190

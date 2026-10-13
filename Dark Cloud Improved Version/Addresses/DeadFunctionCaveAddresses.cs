@@ -215,7 +215,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x001203D0, HostSpan = 688, VanillaWord0 = 0x0080302D;   // `daddu a2,a0,zero`
         /// <summary>tools/stubs/ally_brain.s's tail (after #SPLIT): the summon.</summary>
-        internal const uint AllySummon = Host;   // 652 B → 0x12065C
+        internal const uint AllySummon = Host;   // 628 B → 0x120644
         internal const uint End = Host + HostSpan;
     }
 
@@ -238,12 +238,12 @@ namespace Dark_Cloud_Improved_Version
         internal const uint Host = 0x001191A0, HostSpan = 536, VanillaWord0 = 0x27BDFFF0;   // `addiu sp,sp,-0x10`
         /// <summary>tools/stubs/ally_shots.s (ElfAllyPatches): before (+0) / after (+0x40) the summon's load, clear (+0xA4) at its end.</summary>
         internal const uint AllyShotsBefore = Host, AllyShotsAfter = Host + 0x40, AllyShotsClear = Host + 0xA4;   // 324 B → 0x1192E4
-        /// <summary>tools/stubs/ally_swing.s: CheckDmg's attack-sphere entry for the ally's unit made with mask 0 (it never hits the player).</summary>
-        internal const uint AllySwing = Host + 0x144, AllyMask = AllySwing + 0x1C;   // 0x1192E4 / 0x119300
-        /// <summary>…and blocked (ally_collide.s's stop comes here): a floor unit the ally's body stopped noted in CodeCaves.AllyBlocked.</summary>
-        internal const uint AllyBlocked = AllySwing + 0x3C;   // 0x119320
-        /// <summary>…and pin (ally_brain.s each frame): the ally's position copied to CodeCaves.AllyPin's (the summon smoke kept on it).</summary>
-        internal const uint AllyPinCopy = AllySwing + 0x64;   // 0x119348; 152 B in all → 0x11937C
+        /// <summary>tools/stubs/ally_hooks.s (ElfAllyPatches), the ally's hooks into the monster code: swing (CheckDmg's attack sphere
+        /// for the ally's unit made with mask 0 — it never hits the player), mask (what the ally's unit takes), blocked (ally_collide.s's
+        /// stop: a floor unit the ally's body stopped noted in CodeCaves.AllyBlocked), pin (ally_brain.s each frame: its position copied to
+        /// CodeCaves.AllyPin's).</summary>
+        internal const uint AllyHooks = Host + 0x144;   // 0x1192E4, 152 B → 0x11937C
+        internal const uint AllySwing = AllyHooks, AllyMask = AllyHooks + 0x1C, AllyBlocked = AllyHooks + 0x3C, AllyPinCopy = AllyHooks + 0x64;
         internal const uint End = Host + HostSpan;
     }
 

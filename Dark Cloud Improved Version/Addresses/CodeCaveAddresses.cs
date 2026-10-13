@@ -367,7 +367,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>THE ALLY'S MANAGER (tools/stubs/ally_manager.s): the guest address of a private CMonstorUnit the dungeon steps, draws and
         /// shadows after the floor's (0 = none). Written natively (ally_brain.s, ally_despawn.s).</summary>
         internal const long AllyManager = 0x21FAF7F8;   // 4 B
-        /// <summary>A bit per floor slot the ally's body stopped (ally_collide.s → ally_swing.s's blocked): the mod reads it, clears it, and
+        /// <summary>A bit per floor slot the ally's body stopped (ally_collide.s → ally_hooks.s's blocked): the mod reads it, clears it, and
         /// sends each such enemy after the ally (ConfusionAlly). Written natively.</summary>
         internal const long AllyBlocked = 0x21FAF7FC;   // 4 B → 0x21FAF800
         /// <summary>A bit a floor index (16 B, floors 0–127): set on the floors the randomizer staged, where tools/stubs/monster_bank.s
@@ -630,10 +630,10 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>ally_brain.s's own: the frames Ruby's guard has been held, and the latch that spends one guard's charge.</summary>
         internal const long AllyGuard = 0x21FAFFCC, AllyLatch = 0x21FAFFD0;   // 4 B each
         /// <summary>The ally's last event, ((count &lt;&lt; 8) | code), for the app's log: 0x10 + pockle stood (0 Sunday .. 6 Saturday, 7 Hell Pockle), 2 fallen,
-        /// 3 disarmed or Ruby not in hand, 4 its block, floor or the floor's quiet gone, 5 no pockle block, 6 no VRAM or texture-buffer room, 7 not loaded,
+        /// 3 disarmed or Ruby not in hand, 4 its block, floor or the floor's quiet gone, 5 no pockle block, 6 no VRAM room, 7 not loaded,
         /// 8 not stood, 9 a guard charge while one stands, 11 left behind (Ruby over 300 u from it).</summary>
         internal const long AllyEvent = 0x21FAFFD4;    // 4 B
-        /// <summary>The position the ally's unit is copied to each frame (tools/stubs/ally_swing.s pin; guest address, 0 = none): the summon
+        /// <summary>The position the ally's unit is copied to each frame (tools/stubs/ally_hooks.s pin; guest address, 0 = none): the summon
         /// smoke's sub-shot while the pockle appears in it (Pocklekul sets and clears it).</summary>
         internal const long AllyPin = 0x21FAFFD8;      // 4 B (0x21FAFFDC..0x21FAFFE0 free)
         internal const byte FlashAlphaVanilla  = 0x80;

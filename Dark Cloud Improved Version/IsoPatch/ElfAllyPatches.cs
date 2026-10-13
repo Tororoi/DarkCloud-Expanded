@@ -74,20 +74,20 @@ namespace Dark_Cloud_Improved_Version
             foreach (var (entry, word) in new[] { (DeadSifElfCave.AllyShotsBefore, 0x8F889DE8u), (DeadSifElfCave.AllyShotsAfter, 0x3C0E01FBu), (DeadSifElfCave.AllyShotsClear, 0x3C0E01FBu) })
                 if (U32(shots, (int)(entry - DeadSifElfCave.Host)) != word)
                     throw new IOException($"allyShots.bin's entry at 0x{entry:X} moved — reassemble ally_shots.s and check DeadSifElfCave.");
-            Claim(fs, ElfOff, "sceSifLoadElfPart", DeadSifElfCave.Host, DeadSifElfCave.VanillaWord0, shots, DeadSifElfCave.AllySwing);
+            Claim(fs, ElfOff, "sceSifLoadElfPart", DeadSifElfCave.Host, DeadSifElfCave.VanillaWord0, shots, DeadSifElfCave.AllyHooks);
 
-            // CMonstorUnit::CheckDmg's `jal Set__14CCollisionData` (the unit's open attack sphere into the pool) → ally_swing.s: the
+            // CMonstorUnit::CheckDmg's `jal Set__14CCollisionData` (the unit's open attack sphere into the pool) → ally_hooks.s: the
             // ally's goes in with mask 0, so it never hits the player.
-            byte[] swing = Embedded("allySwing.bin");
-            Require(swing, "allySwing.bin", "ally_swing.s", MipsAsm.J(SetCollisionData), MipsAsm.J(DeadSifCave.AllyCollideDone));   // blocked returns to ally_collide.s's exit
-            WriteBytes(fs, ElfOff, DeadSifElfCave.AllySwing, swing, DeadSifElfCave.End, "allySwing.bin overruns the sceSifLoadElfPart bodies");
+            byte[] hooks = Embedded("allyHooks.bin");
+            Require(hooks, "allyHooks.bin", "ally_hooks.s", MipsAsm.J(SetCollisionData), MipsAsm.J(DeadSifCave.AllyCollideDone));   // blocked returns to ally_collide.s's exit
+            WriteBytes(fs, ElfOff, DeadSifElfCave.AllyHooks, hooks, DeadSifElfCave.End, "allyHooks.bin overruns the sceSifLoadElfPart bodies");
             uint cur = RdU32(fs, ElfOff(CheckDmgSwingSite)), toSwing = MipsAsm.Jal(DeadSifElfCave.AllySwing);
             if (cur != MipsAsm.Jal(SetCollisionData) && cur != toSwing)
                 throw new IOException($"CheckDmg's attack-sphere call 0x{CheckDmgSwingSite:X} is 0x{cur:X8}, not vanilla — unmodified Dark Cloud (USA) ISO expected.");
             WrU32(fs, ElfOff(CheckDmgSwingSite), toSwing);
             // …and its incoming-hit mask test (the load moves into the hook's delay slot): the ally's unit also takes bit 8.
-            if (U32(swing, (int)(DeadSifElfCave.AllyMask - DeadSifElfCave.AllySwing)) != 0x3C1901FBu)
-                throw new IOException("allySwing.bin has no mask entry at DeadSifElfCave.AllyMask — reassemble ally_swing.s.");
+            if (U32(hooks, (int)(DeadSifElfCave.AllyMask - DeadSifElfCave.AllyHooks)) != 0x3C1901FBu)
+                throw new IOException("allyHooks.bin has no mask entry at DeadSifElfCave.AllyMask — reassemble ally_hooks.s.");
             Hook(fs, ElfOff, CheckDmgMaskSite, LoadMask, MipsAsm.Jal(DeadSifElfCave.AllyMask));
             Hook(fs, ElfOff, CheckDmgMaskSite + 4, AndMaskPlayerHits, LoadMask);
             Claim(fs, ElfOff, "sceSifGetOtherData", DeadSifDataCave.Host, DeadSifDataCave.VanillaWord0, despawn, DeadSifDataCave.End);
@@ -95,7 +95,7 @@ namespace Dark_Cloud_Improved_Version
             byte[] collide = Embedded("allyCollide.bin");
             if (collide.Length == 0 || (collide.Length & 3) != 0 || U32(collide, 0) != 0x27BDFFE0u || !ContainsWord(collide, MipsAsm.Jal(DebugIfCave.SpearBlock))
                 || !ContainsWord(collide, MipsAsm.J(DeadSifElfCave.AllyBlocked)) || U32(collide, (int)(DeadSifCave.AllyCollideDone - DeadSifCave.Host)) != 0x8FBF0000u)
-                throw new IOException($"allyCollide.bin malformed ({collide.Length} B) or stale — reassemble ally_collide.s (it must call the spear-block cave, stop through ally_swing.s's blocked, exit where DeadSifCave says).");
+                throw new IOException($"allyCollide.bin malformed ({collide.Length} B) or stale — reassemble ally_collide.s (it must call the spear-block cave, stop through ally_hooks.s's blocked, exit where DeadSifCave says).");
             Claim(fs, ElfOff, "sceSifLoadModuleBuffer", DeadSifCave.Host, DeadSifCave.VanillaWord0, collide, DeadSifCave.End);
             // ElfWeaponPatches.PatchSpearBlock (earlier) points the site at its cave; this takes it over and calls that cave in turn.
             uint site = RdU32(fs, ElfOff(StepMoveCheckSite)), ours = MipsAsm.Jal(DeadSifCave.AllyCollide);

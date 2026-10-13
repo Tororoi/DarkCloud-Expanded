@@ -4,21 +4,35 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>Where an enemy's body is, read off the live unit: its largest hurt sphere posed this frame
     /// (<see cref="BodyCentre"/>), how far a ground point is from the nearest hurt-sphere edge
-    /// (<see cref="NearestHitSphereEdge"/>), its own world height (<see cref="UnitHeight"/>), the species' authored
+    /// (<see cref="NearestHitSphereEdge"/>), how near a shot's path comes to it (<see cref="SegmentEdge"/>), where an attacker is to
+    /// go for it (<see cref="AimPoint"/>) — a floor enemy's or the summoned ally's (<see cref="Body"/>) — its own world height (<see cref="UnitHeight"/>), the species' authored
     /// head height scaled with the unit (<see cref="HeadHeight"/>), whether it still has HP (<see cref="HasHp"/>), and
     /// whether another live unit draws through the same model root (<see cref="RootShared"/>). Shared by the falloff
-    /// blast, the judgement blade, EnemyHit, PelletWatch, Confusion and Ungaga's props — everything that plants a hit
+    /// blast, the judgement blade, EnemyHit, PelletWatch, Confusion's friendly fire and Ungaga's props — everything that plants a hit
     /// on, hangs over, or measures against an enemy.</summary>
     internal static class EnemyBody
     {
+        /// <summary>A monster's body as the helpers read it: its hit-sphere block (BodyCollision's arrays from here: its manager plus
+        /// its unit × BodyCollision.SlotStride) and its position (its CCharacter's, x, h, y). A floor enemy's (<see cref="Of"/>) or the
+        /// summoned ally's, unit 0 of its private manager (<see cref="Ally"/>).</summary>
+        internal readonly record struct Body(long Spheres, long Pos)
+        {
+            internal static Body Of(int slot) => new(BodyCollision.SlotBase(slot), EnemyAddresses.CharObjects.PosAddr(slot));
+            internal static Body Ally(long manager) => new(manager, manager + AllyChara + 0x10);
+        }
+        private const long AllyChara = 0x1FCD0;   // a manager's chara[0] (its unit 0's CCharacter)
+
         /// <summary>The enemy's largest live body sphere placed this frame (centre and radius), the surest thing a hit sphere of the
         /// same size at the same place will touch; its root and a plain radius where none is (a sphere left far from its unit —
         /// not posed this frame — would put the hit where the enemy no longer is).</summary>
         internal static void BodyCentre(int slot, long a, out float cx, out float ch, out float cy, out float cr)
+            => BodyCentre(Body.Of(slot), out cx, out ch, out cy, out cr);
+
+        internal static void BodyCentre(Body body, out float cx, out float ch, out float cy, out float cr)
         {
-            long b = BodyCollision.SlotBase(slot);
-            cx = Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(slot)); cy = Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(slot) + 8);
-            ch = UnitHeight(slot) + BodyRadiusFallback;
+            long b = body.Spheres;
+            cx = Memory.ReadFloat(body.Pos); cy = Memory.ReadFloat(body.Pos + 8);
+            ch = Memory.ReadFloat(body.Pos + 4) + BodyRadiusFallback;
             cr = BodyRadiusFallback;
             float ux = cx, uy = cy, best = 0f;
             for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
@@ -38,10 +52,12 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>How far (x, y) is from the nearest edge of the enemy's active hit spheres, in the ground plane (0 = inside one);
         /// with none active (or none posed — a sphere the frame has not placed sits far from its unit), from its own position
         /// less the fallback radius.</summary>
-        internal static float NearestHitSphereEdge(int slot, long a, float x, float y)
+        internal static float NearestHitSphereEdge(int slot, long a, float x, float y) => NearestHitSphereEdge(Body.Of(slot), x, y);
+
+        internal static float NearestHitSphereEdge(Body body, float x, float y)
         {
-            long b = BodyCollision.SlotBase(slot), up = EnemyAddresses.CharObjects.PosAddr(slot);
-            float ux = Memory.ReadFloat(up), uy = Memory.ReadFloat(up + 8);
+            long b = body.Spheres;
+            float ux = Memory.ReadFloat(body.Pos), uy = Memory.ReadFloat(body.Pos + 8);
             float best = float.MaxValue;
             for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
             {
@@ -62,6 +78,29 @@ namespace Dark_Cloud_Improved_Version
         }
         private const float UnposedSphere = 80f;   // a hit sphere farther than this from its own unit has not been placed this frame
 
+        /// <summary>How near the segment <paramref name="a"/>→<paramref name="b"/> (a shot's path since the last tick) comes to the body:
+        /// the least distance from it to the surface of any of its posed hit spheres, and the segment's point there (<paramref name="at"/>).
+        /// MaxValue with none.</summary>
+        internal static float SegmentEdge(Body body, (float x, float h, float y) a, (float x, float h, float y) b, out (float x, float h, float y) at)
+        {
+            at = b;
+            long bc = body.Spheres;
+            float ux = Memory.ReadFloat(body.Pos), uy = Memory.ReadFloat(body.Pos + 8), best = float.MaxValue;
+            float dx = b.x - a.x, dh = b.h - a.h, dy = b.y - a.y, len2 = dx * dx + dh * dh + dy * dy;
+            for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
+            {
+                if (Memory.ReadInt(bc + BodyCollision.ActiveArray + part * BodyCollision.BodyPartStride) == 0) continue;
+                long c = bc + BodyCollision.CentreArray + part * BodyCollision.CentreStride;
+                float cx = Memory.ReadFloat(c), ch = Memory.ReadFloat(c + 4), cy = Memory.ReadFloat(c + 8);
+                if (Math.Abs(cx - ux) > UnposedSphere || Math.Abs(cy - uy) > UnposedSphere) continue;
+                float t = len2 > 1e-6f ? Math.Clamp(((cx - a.x) * dx + (ch - a.h) * dh + (cy - a.y) * dy) / len2, 0f, 1f) : 0f;
+                float qx = a.x + dx * t, qh = a.h + dh * t, qy = a.y + dy * t, px = qx - cx, ph = qh - ch, py = qy - cy;
+                float edge = (float)Math.Sqrt(px * px + ph * ph + py * py) - Memory.ReadFloat(bc + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride);
+                if (edge < best) { best = edge; at = (qx, qh, qy); }
+            }
+            return best;
+        }
+
         /// <summary>Where an attacker at (x, y) is to go for the enemy in <paramref name="slot"/> — what its script reads as "the player":
         /// a point inside the enemy's posed hit sphere nearest it (by distance less radius), <see cref="AimDepth"/> in from its surface
         /// toward the attacker (its centre for a sphere smaller than that, or an attacker already that deep), at the unit's height. A
@@ -69,8 +108,9 @@ namespace Dark_Cloud_Improved_Version
         /// enough to swing; this puts the mark as deep as an ordinary enemy's root sits. No posed sphere: the root.</summary>
         internal static (float x, float h, float y) AimPoint(int slot, float x, float y)
         {
-            long b = BodyCollision.SlotBase(slot), up = EnemyAddresses.CharObjects.PosAddr(slot);
-            float ux = Memory.ReadFloat(up), uh = Memory.ReadFloat(up + 4), uy = Memory.ReadFloat(up + 8);
+            var body = Body.Of(slot);
+            long b = body.Spheres;
+            float ux = Memory.ReadFloat(body.Pos), uh = Memory.ReadFloat(body.Pos + 4), uy = Memory.ReadFloat(body.Pos + 8);
             float best = float.MaxValue, bx = ux, by = uy, br = 0f;
             for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
             {

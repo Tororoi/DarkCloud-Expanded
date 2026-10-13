@@ -293,7 +293,7 @@ Abilities marked come from the upstream mod; everything else is this fork's.
 **Ruby**
 - **Gold Ring** — TBD.
 - **Platinum Ring** — TBD.
-- **Pocklekul** — TBD.
+- **Pocklekul ("Pockle Call")** — Hold guard for a second to summon a random pockle — one of the seven day-of-the-week pockles or Hell Pockle — in a puff of smoke, with a notice naming which one came. It grows in, tinted pink, and from then on is a real pockle running its own AI with its own HP and attacks. It goes for the locked-on enemy, else the one nearest Ruby, aiming into a large enemy's body rather than its centre. With no enemy near it walks, or runs while Ruby runs, at her right side. Its kills and their ABS are Ruby's. Its stealing swings take an enemy's gold, which it drops when it falls, and it drops nothing else. An enemy it hits or blocks turns on it, and enemy attacks and shots hurt it. Its melee never hits Ruby, though her attacks can hurt it. One at a time: it leaves when it falls, when Ruby gets 300 units away, when the ring leaves her hand, or with the floor.
 - **Bandit's Ring ("Steal Shot")** — The Bandit Slingshot's stolen projectile for Ruby's quick fire only; her charged shot stays her own. **Super Steve's sphere**: the stolen shot.
 - **Fairy's Ring** — TBD.
 - **Crystal Ring** — TBD.

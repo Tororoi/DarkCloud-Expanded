@@ -16,44 +16,31 @@ namespace Dark_Cloud_Improved_Version
         private const string Tag = "[Confusion/ConfusionFriendlyFire] ";
         private static readonly DateTime[,] _lastContact = new DateTime[Slots, Slots];
         internal static readonly List<(int idx, DateTime until)> _shells = new();
-        internal static readonly Dictionary<int, (float x, float h, float y)> _shotLast = new();   // each tracked sub-shot's position last tick
+        internal static readonly ShotSweep _shotSweep = new();   // the confused enemies' shots, each with its path since the last tick
 
         /// <summary>An attacking enemy's open attack sphere touching an enemy it may hit: a hit planted on that body.</summary>
         internal static void ContactHits()
         {
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
-            byte[] active = Memory.ReadBytesBatch(pool + CollisionPool.ActiveOff, CollisionPool.Entries * 4);
-            if (active == null) return;
-            for (int i = 0; i < CollisionPool.Entries; i++)
+            foreach (var (_, atk) in AttackScan.OpenEntries(pool))
             {
-                if (BitConverter.ToInt32(active, i * 4) == 0) continue;
-                byte[] atk = Memory.ReadBytesBatch(pool + i * CollisionPool.Stride, CollisionPool.Stride);   // ONE read: entries are re-made each frame
-                if (atk == null) continue;
-                int owner = BitConverter.ToInt32(atk, CollisionPool.Owner);
-                if (owner < 200 || (owner - 200) % 5 != 0 || (BitConverter.ToInt32(atk, CollisionPool.Mask) & (int)CollisionPool.HurtsPlayerMask) == 0) continue;   // a floor enemy's (the ally's are mask 0)
-                int attacker = (owner - 200) / 5;
-                if (attacker >= Slots || !Attacks(attacker)) continue;
-                if (BitConverter.ToInt32(atk, CollisionPool.GateA) != BitConverter.ToInt32(atk, CollisionPool.GateB)) continue;   // not open this frame
-                float ax = BitConverter.ToSingle(atk, 0x00), ay = BitConverter.ToSingle(atk, 0x08), ar = BitConverter.ToSingle(atk, CollisionPool.Radius);
-                int damage = BitConverter.ToInt32(atk, 0x34);
+                int attacker = AttackScan.EnemyOwner(atk);
+                if (attacker < 0 || !Attacks(attacker)) continue;
+                var (ax, _, ay) = AttackScan.Centre(atk);
+                float ar = AttackScan.Radius(atk);
+                int damage = AttackScan.Damage(atk);
                 if (damage <= 0 || ar <= 0f) continue;
                 for (int v = 0; v < Slots; v++)
                 {
                     if (!Enemies.IsLive(v) || !MayHit(attacker, v)) continue;
                     if ((GameClock.Now - _lastContact[attacker, v]).TotalSeconds < ContactCooldown) continue;
-                    if (EnemyBody.NearestHitSphereEdge(v, EnemyAddresses.FloorSlots.SlotAddr(v, 0), ax, ay) > ar) continue;   // no contact
-                    if (CollisionPool.FreeCount(pool) <= ShellPoolReserve) return;
-                    int idx = CollisionPool.TakeFreeSlot(pool);
+                    if (EnemyBody.NearestHitSphereEdge(EnemyBody.Body.Of(v), ax, ay) > ar) continue;   // no contact
+                    byte[] hit = NobodysHit(EnemyBody.Body.Of(v), damage);
+                    BitConverter.GetBytes(AttackScan.Reaction(atk)).CopyTo(hit, 0x4C);              // the attack's reaction…
+                    AttackScan.CopyKick(atk, hit);                                                   // …and its kick words
+                    int idx = PlantShell(pool, hit);
                     if (idx < 0) return;
-                    EnemyBody.BodyCentre(v, EnemyAddresses.FloorSlots.SlotAddr(v, 0), out float cx, out float ch, out float cy, out _);
-                    byte[] hit = CollisionPool.PlayerHitEntry(cx, ch, cy, ContactRadius, damage, 0);
-                    void I(int o, int val) => BitConverter.GetBytes(val).CopyTo(hit, o);
-                    I(CollisionPool.Owner, -1); I(0x60, -1); I(0x64, 0); I(0x68, -1); I(0x6C, 0);        // nobody's: damage − defence, no weapon, no drain, no credit
-                    Array.Copy(atk, 0x4C, hit, 0x4C, 4);                                                // the attack's reaction…
-                    Array.Copy(atk, CollisionPool.KickOriginOff, hit, CollisionPool.KickOriginOff, CollisionPool.KickWordsSize);   // …and its kick words (+0x80..+0x98), as they stand
-                    CollisionPool.Plant(pool, idx, hit);
-                    _shells.Add((idx, GameClock.Now.AddSeconds(ShellLifeSeconds)));
                     _lastContact[attacker, v] = GameClock.Now;
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"enemy slot {attacker}'s swing lands on enemy slot {v} for {damage} before defence (entry {idx})");
                     Landed(attacker, v);
@@ -62,66 +49,63 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>An attacking enemy's SHOT reaching an enemy it may hit (the engine tests the monster shot pack's sub-shots against
-        /// the player alone — the config's victim mask): each tick, every live flying sub-shot fired by such a slot (OffA060, stamped
-        /// by SetUserID2) is swept along the path it moved since the last tick against the other live enemies' hit spheres, widened by
-        /// the shot's flying radius. On contact a hit is planted on the victim — the shot's damage, the config's reaction and element,
-        /// its statuses applied as data (owner −1; the element and statuses as the Angel Gear's reflected shots carry them) — and the
-        /// shot put where its path met the enemy and taken through the engine's own CONTACT (<see cref="ShotContact"/>: its impact
-        /// motion, or a bomb's detonation). Its burst plants its own damage as it would anywhere: the player is not sheltered.</summary>
+        /// the player alone — the config's victim mask): each tick, every live flying sub-shot fired by such a slot is swept along the path
+        /// it moved since the last tick (<see cref="ShotSweep"/>) against the other live enemies' hit spheres, widened by the shot's flying
+        /// radius. On contact a hit is planted on the victim — the shot's damage, the config's reaction and element, its statuses applied as
+        /// data (owner −1; the element and statuses as the Angel Gear's reflected shots carry them) — and the shot put where its path met
+        /// the enemy and taken through the engine's own CONTACT (<see cref="ShotContact"/>: its impact motion, or a bomb's detonation).
+        /// Its burst plants its own damage as it would anywhere: the player is not sheltered.</summary>
         internal static void ShotHits()
         {
-            uint packG = Memory.ReadUInt(ShotEffectPack.NowShotEffectPtr);
-            if (!Memory.IsValidGuest(packG)) return;
-            long pack = Memory.ToMmu(packG);
             long pool = CollisionPool.Resolve();
-            for (int p = 0; p < ShotEffectPack.PackSlots; p++)
+            foreach (var shot in _shotSweep.Live(Attacks))
             {
-                long fx = pack + (long)p * ShotEffectPack.SlotStride;
-                uint cfgG = Memory.ReadUInt(fx + ShotEffectPack.OffCfg);
-                if (!Memory.IsValidGuest(cfgG)) continue;
-                long cfg = Memory.ToMmu(cfgG);
-                for (int i = 0; i < ShotEffectPack.SubShots; i++)
+                for (int v = 0; v < Slots; v++)
                 {
-                    int key = p * ShotEffectPack.SubShots + i;
-                    bool live = Memory.ReadUShort(fx + ShotEffectPack.OffActive + i * 2) != 0 && Memory.ReadUShort(fx + ShotEffectPack.OffPhase + i * 2) <= 1;
-                    int owner = Memory.ReadShort(fx + ShotEffectPack.OffA060 + i * 2);
-                    if (!live || owner < 0 || owner >= Slots || !Attacks(owner)) { _shotLast.Remove(key); continue; }
-                    long o = fx + ShotEffectPack.OffObj + (long)i * ShotEffectPack.ObjStride + ShotEffectPack.ObjPos;
-                    var now = (Memory.ReadFloat(o), Memory.ReadFloat(o + 4), Memory.ReadFloat(o + 8));
-                    var from = _shotLast.TryGetValue(key, out var was) ? was : now;
-                    _shotLast[key] = now;
-                    float reach = Math.Max(1f, Memory.ReadFloat(cfg + ShotEffectPack.CfgRadiusFlying));
-                    for (int v = 0; v < Slots; v++)
-                    {
-                        if (!Enemies.IsLive(v) || !MayHit(owner, v)) continue;
-                        if (SegmentEdge3D(v, from, now, out var at) > reach) continue;
-                        if (pool == 0 || CollisionPool.FreeCount(pool) <= ShellPoolReserve) return;
-                        int idx = CollisionPool.TakeFreeSlot(pool);
-                        if (idx < 0) return;
-                        int damage = Math.Max(1, Memory.ReadInt(fx + ShotEffectPack.OffDamage + i * 4));
-                        EnemyBody.BodyCentre(v, EnemyAddresses.FloorSlots.SlotAddr(v, 0), out float cx, out float ch, out float cy, out _);
-                        byte[] hit = CollisionPool.PlayerHitEntry(cx, ch, cy, ContactRadius, damage, 0);
-                        void I(int off, int val) => BitConverter.GetBytes(val).CopyTo(hit, off);
-                        I(CollisionPool.Owner, -1); I(0x60, -1); I(0x64, 0); I(0x68, -1); I(0x6C, 0);    // nobody's: damage − defence, no weapon, no drain, no credit
-                        I(0x4C, Memory.ReadInt(cfg + ShotEffectPack.CfgReaction));                        // the shot's reaction
-                        // Its element as the Angel Gear's reflected shots carry it: +0x50 a PURE element bit (a status bit there sends CheckDmg's
-                        // element branch through the wrong column), the statuses applied as data with CheckDmg's own rules.
-                        uint flags = Memory.ReadUInt(cfg + ShotEffectPack.CfgFlags);
-                        uint elem = flags & EnemyStatus.ShotElementMask, stat = flags & EnemyStatus.ShotEnemyStatusMask;
-                        I(CollisionPool.Element, (int)(elem != 0 && (flags & 0xFF00) == 0 ? elem : 0u));
-                        string statusNote = stat != 0 ? EnemyStatus.ApplyShotStatus(v, stat) : "";
-                        CollisionPool.Plant(pool, idx, hit);
-                        _shells.Add((idx, GameClock.Now.AddSeconds(ShellLifeSeconds)));
-                        long obj = fx + ShotEffectPack.OffObj + (long)i * ShotEffectPack.ObjStride;
-                        Memory.WriteVec3(obj + ShotEffectPack.ObjPos, at.x, at.h, at.y);                    // the burst where the path met the enemy
-                        ShotContact(fx, cfg, i, obj);
-                        _shotLast.Remove(key);
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"enemy slot {owner}'s shot hits enemy slot {v} for {damage} before defence (entry {idx}){statusNote}");
-                        Landed(owner, v);
-                        break;
-                    }
+                    if (!Enemies.IsLive(v) || !MayHit(shot.Owner, v)) continue;
+                    if (EnemyBody.SegmentEdge(EnemyBody.Body.Of(v), shot.From, shot.Now, out var at) > shot.Reach) continue;
+                    int damage = shot.Damage;
+                    byte[] hit = NobodysHit(EnemyBody.Body.Of(v), damage);
+                    BitConverter.GetBytes(shot.Reaction).CopyTo(hit, 0x4C);                         // the shot's reaction
+                    // Its element as the Angel Gear's reflected shots carry it: +0x50 a PURE element bit (a status bit there sends CheckDmg's
+                    // element branch through the wrong column), the statuses applied as data with CheckDmg's own rules.
+                    uint flags = shot.CfgFlags;
+                    uint elem = flags & EnemyStatus.ShotElementMask, stat = flags & EnemyStatus.ShotEnemyStatusMask;
+                    BitConverter.GetBytes((int)(elem != 0 && (flags & 0xFF00) == 0 ? elem : 0u)).CopyTo(hit, CollisionPool.Element);
+                    int idx = PlantShell(pool, hit);
+                    if (idx < 0) return;
+                    string statusNote = stat != 0 ? EnemyStatus.ApplyShotStatus(v, stat) : "";
+                    Memory.WriteVec3(shot.Obj + ShotEffectPack.ObjPos, at.x, at.h, at.y);              // the burst where the path met the enemy
+                    ShotContact(shot.Fx, shot.Cfg, shot.Sub, shot.Obj);
+                    _shotSweep.Forget(shot.Key);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"enemy slot {shot.Owner}'s shot hits enemy slot {v} for {damage} before defence (entry {idx}){statusNote}");
+                    Landed(shot.Owner, v);
+                    break;
                 }
             }
+        }
+
+        /// <summary>A hit on <paramref name="body"/>'s largest posed sphere that is nobody's — damage − defence, no weapon stats, no WHP
+        /// drain, no kill credit (owner −1) — for the caller to finish (reaction, element, kick) and <see cref="PlantShell"/>.</summary>
+        internal static byte[] NobodysHit(EnemyBody.Body body, int damage)
+        {
+            EnemyBody.BodyCentre(body, out float cx, out float ch, out float cy, out _);
+            byte[] hit = CollisionPool.PlayerHitEntry(cx, ch, cy, ContactRadius, damage, 0);
+            void I(int o, int val) => BitConverter.GetBytes(val).CopyTo(hit, o);
+            I(CollisionPool.Owner, -1); I(0x60, -1); I(0x64, 0); I(0x68, -1); I(0x6C, 0);
+            return hit;
+        }
+
+        /// <summary>A friendly-fire hit planted (ShellPoolReserve entries always left to the engine) and withdrawn after ShellLifeSeconds
+        /// (<see cref="RetireShells"/>): its entry, or −1 with no room.</summary>
+        internal static int PlantShell(long pool, byte[] hit)
+        {
+            if (pool == 0 || CollisionPool.FreeCount(pool) <= ShellPoolReserve) return -1;
+            int idx = CollisionPool.TakeFreeSlot(pool);
+            if (idx < 0) return -1;
+            CollisionPool.Plant(pool, idx, hit);
+            _shells.Add((idx, GameClock.Now.AddSeconds(ShellLifeSeconds)));
+            return idx;
         }
 
         /// <summary>The engine's own contact, as Step__12CSHOT_EFFECT (0x1AC180) does it when checkCollision meets something in flight:
@@ -153,29 +137,6 @@ namespace Dark_Cloud_Improved_Version
             float speed = Memory.ReadFloat(cfg + CfgPhaseSpeeds + Phase * 4);
             if (len > 1e-6f) Memory.WriteVec3(d, dx / len * speed, dh / len * speed, dy / len * speed);
             Memory.WriteUShort(fx + ShotEffectPack.OffPhase + i * 2, Phase);
-        }
-
-        /// <summary>How near the segment <paramref name="a"/>→<paramref name="b"/> comes to an enemy's body: the least distance from it
-        /// to the surface of any of the enemy's active hit spheres placed this frame (within 80 of its unit across the ground), and the
-        /// segment's point there (<paramref name="at"/>). MaxValue with none.</summary>
-        internal static float SegmentEdge3D(int slot, (float x, float h, float y) a, (float x, float h, float y) b, out (float x, float h, float y) at)
-        {
-            at = b;
-            long bc = BodyCollision.SlotBase(slot), up = EnemyAddresses.CharObjects.PosAddr(slot);
-            float ux = Memory.ReadFloat(up), uy = Memory.ReadFloat(up + 8), best = float.MaxValue;
-            float dx = b.x - a.x, dh = b.h - a.h, dy = b.y - a.y, len2 = dx * dx + dh * dh + dy * dy;
-            for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
-            {
-                if (Memory.ReadInt(bc + BodyCollision.ActiveArray + part * BodyCollision.BodyPartStride) == 0) continue;
-                long c = bc + BodyCollision.CentreArray + part * BodyCollision.CentreStride;
-                float cx = Memory.ReadFloat(c), ch = Memory.ReadFloat(c + 4), cy = Memory.ReadFloat(c + 8);
-                if (Math.Abs(cx - ux) > 80f || Math.Abs(cy - uy) > 80f) continue;
-                float t = len2 > 1e-6f ? Math.Clamp(((cx - a.x) * dx + (ch - a.h) * dh + (cy - a.y) * dy) / len2, 0f, 1f) : 0f;
-                float qx = a.x + dx * t, qh = a.h + dh * t, qy = a.y + dy * t, px = qx - cx, ph = qh - ch, py = qy - cy;
-                float edge = (float)Math.Sqrt(px * px + ph * ph + py * py) - Memory.ReadFloat(bc + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride);
-                if (edge < best) { best = edge; at = (qx, qh, qy); }
-            }
-            return best;
         }
 
         /// <summary>Planted hits the engine has not consumed within their life are withdrawn.</summary>

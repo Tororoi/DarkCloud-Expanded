@@ -88,7 +88,7 @@ STUBS = [
     ('ally_follow.s',            'allyFollow.bin',           0x1176D8, 'allyTurn.bin', 0x11EEA0),     # main ELF: the dead sceSifSetRpcQueue..RemoveRpcQueue bodies, its turn after ally_manager.s (ElfAllyPatches): the ally walking beside Ruby
     ('ally_despawn.s',           'allyDespawn.bin',          0x117080),    # main ELF: the dead sceSifGetOtherData body (ElfAllyPatches): the ally's end
     ('ally_shots.s',             'allyShots.bin',            0x1191A0),    # main ELF: the dead sceSifLoadElfPart..sceSifSetIopAddr bodies (ElfAllyPatches): the ally's shot configs taken back out of the pack
-    ('ally_swing.s',             'allySwing.bin',            0x1192E4),    # main ELF: the dead sceSifLoadElfPart..SetIopAddr bodies after ally_shots (ElfAllyPatches): the ally's attack spheres never hit the player
+    ('ally_hooks.s',             'allyHooks.bin',            0x1192E4),    # main ELF: the dead sceSifLoadElfPart..SetIopAddr bodies after ally_shots (ElfAllyPatches): the ally's hooks into the monster code (swing/hit masks, blocked enemies, the smoke pin)
     ('ally_aim.s',               'allyAim.bin',              0x10CD20),    # main ELF: the dead sceDmaWatch..sceDmaCallback bodies (ElfAllyPatches): where the ally's AI goes for its enemy
     ('ally_grow.s',              'allyGrow.bin',             0x11EF4C),    # main ELF: the dead sceMcRename body after ally_follow.s's turn (ElfAllyPatches): the ally's growth as it appears
     ('atla_draw.s',              'atlaDraw.bin',             0x10AAC0),    # main ELF: the dead sceCdSeek body after atla_shot, on into the dead sceCdStandby / Stop / Pause bodies (ElfSpeciesPatches.PatchAtlaDraw): the Atla Gemron's atla bouncing free

@@ -122,7 +122,7 @@ alive:
     addiu $a0, $zero, 2            # (delay) fallen
     jal   0x0011EF4C               # ally_grow.s: its first frames' growth
     or    $a0, $s3, $zero          # (delay)
-    jal   0x00119348               # ally_swing.s's pin: the summon smoke kept on it
+    jal   0x00119348               # ally_hooks.s's pin: the summon smoke kept on it
     or    $a0, $s1, $zero          # (delay)
     lui   $t0, 0x0002
     addu  $t0, $s1, $t0
@@ -361,7 +361,7 @@ snone:
     jr    $ra
     or    $v0, $zero, $zero
 #SPLIT
-# The summon (s0 = the data words). Events: 0x10 + pockle stood, 5 no block, 6 no VRAM or texture-buffer room, 7 not loaded, 8 not stood.
+# The summon (s0 = the data words). Events: 0x10 + pockle stood, 5 no block, 6 no VRAM room, 7 not loaded, 8 not stood.
 summon:
     addiu $sp, $sp, -0x30
     sw    $ra, 0x00($sp)
@@ -384,12 +384,6 @@ summon:
     addiu $t4, $t3, 0x180
     sltu  $t4, $t1, $t4
     bne   $t4, $zero, snote
-    addiu $a0, $zero, 6            # (delay)
-    lw    $t4, 0x4E40($t0)         # the texture buffer's room (16-byte units)…
-    lw    $t6, 0x4E3C($t0)         # …and what is in use (a monster's pictures load in place: its entries' small copies only)
-    subu  $t4, $t4, $t6
-    slti  $t4, $t4, 0x100
-    bne   $t4, $zero, snote        # full: EnterTexture would hang on it
     addiu $a0, $zero, 6            # (delay)
     lui   $t5, 0x01FB
     sw    $t2, -0x35C($t5)         # AllyTex + 4 (0x01FAFCA4)

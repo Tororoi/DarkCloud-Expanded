@@ -56,7 +56,6 @@ namespace Dark_Cloud_Improved_Version
                         DungeonMessages.DisplayMessage(text, 1, text.Length + 2, MessageMs);   // which pockle came
                     }
                 }
-                FreezeProbe.Tick();                    // DIAGNOSTIC: a frozen floor's state into the log (the King Mimic freeze)
                 bool up = ConfusionAlly.Up;
                 if (up) Confusion.Tick();
                 else if (wasUp) Confusion.EndAlly();   // it went: the enemies it provoked back on Ruby
@@ -78,7 +77,7 @@ namespace Dark_Cloud_Improved_Version
             => Player.CurrentCharacterNum() == Player.RubyId && Player.Weapon.GetCurrentWeaponId() == Items.pocklekul ? SummonSmoke.Effect() : null;
 
         /// <summary>The pockle appears in Cactus' poof: at its spawn point (its block's +0x20 — the manager's −0xE0), turned to Ruby's facing,
-        /// and pinned to it natively (CodeCaves.AllyPin: ally_swing.s copies its position to the smoke's every frame) so it stays in the smoke
+        /// and pinned to it natively (CodeCaves.AllyPin: ally_hooks.s copies its position to the smoke's every frame) so it stays in the smoke
         /// as it walks off.</summary>
         private static void Poof()
         {
@@ -123,7 +122,7 @@ namespace Dark_Cloud_Improved_Version
             3 => "the pockle went (the Pocklekul or Ruby left the hand)",
             4 => "the pockle went (its floor changed, its block was overwritten, or an event took the floor)",
             5 => "no summon: no pockle block (Ruby's character pool lacks it — a disc patched before the Pocklekul?)",
-            6 => "no summon: no room for its picture (the monsters' VRAM group or the texture buffer)",
+            6 => "no summon: no VRAM room for its picture in the monsters' texture group",
             7 => "no summon: the pockle's model did not load",
             8 => "no summon: the pockle did not stand",
             9 => "a pockle already stands — no summon",

@@ -127,7 +127,7 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
             RetireShells();
-            if (any) { ContactHits(); ShotHits(); } else _shotLast.Clear();
+            if (any) { ContactHits(); ShotHits(); } else _shotSweep.Clear();
             ConfusionAlly.Tick();                                                // the Pocklekul's pockle, while one stands
             AggroTable.ConfusionActive = any && TargetRedirectCaves.Armed;
             if (DebugDiagnostics.Enabled && any && (GameClock.Now - _lastReport).TotalSeconds >= 1) { _lastReport = GameClock.Now; Report(); }
@@ -149,7 +149,7 @@ namespace Dark_Cloud_Improved_Version
         {
             long pool = CollisionPool.Resolve();
             foreach (var (idx, _) in _shells) if (pool != 0) CollisionPool.Deactivate(pool, idx);
-            _shells.Clear(); _shotLast.Clear();
+            _shells.Clear(); _shotSweep.Clear();
             for (int s = 0; s < Slots; s++)
             {
                 if (_until[s] != default) Release(s);

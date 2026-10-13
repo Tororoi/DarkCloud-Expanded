@@ -67,8 +67,8 @@
     <EmbeddedResource Include="Resources\isoPatch\allyAim.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.allyAim.bin</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\allySwing.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.allySwing.bin</LogicalName>
+    <EmbeddedResource Include="Resources\isoPatch\allyHooks.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.allyHooks.bin</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\allyShots.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.allyShots.bin</LogicalName>
