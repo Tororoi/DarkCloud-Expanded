@@ -19,6 +19,7 @@ namespace Dark_Cloud_Improved_Version
     internal static class ConfusionAlly
     {
         private const string Tag = "[Confusion/ConfusionAlly] ";
+        private const int    AllyHitMask = 0x100;                  // what the hits planted on it carry: the ally's unit takes it, no floor unit does
         private const int    SwingOwner = 200;                     // its unit 0's attack spheres: slot 0 × 5 + 200, as floor slot 0's (theirs mask 1, its 0)
         private const long   Unit = 0x1E3D0, UnitState = 0x00, UnitHp = 0x24;   // its unit 0 (MONSTOR) in the manager
         private const long   Chara = 0x1FCD0, CharaPos = 0x10;    // its unit 0's CCharacter, and its position
@@ -265,6 +266,7 @@ namespace Dark_Cloud_Improved_Version
             byte[] hit = CollisionPool.PlayerHitEntry(cx, ch, cy, ContactRadius, damage, 0);
             void I(int o, int val) => BitConverter.GetBytes(val).CopyTo(hit, o);
             I(CollisionPool.Owner, -1); I(0x60, -1); I(0x64, 0); I(0x68, -1); I(0x6C, 0);            // nobody's: damage − defence, no weapon, no drain, no credit
+            I(CollisionPool.Mask, AllyHitMask);                                                       // its CheckDmg alone takes it (ally_swing.s mask)
             I(0x4C, reaction); I(CollisionPool.Element, (int)element);
             if (kickFrom != null) Array.Copy(kickFrom, CollisionPool.KickOriginOff, hit, CollisionPool.KickOriginOff, CollisionPool.KickWordsSize);
             CollisionPool.Plant(pool, idx, hit);

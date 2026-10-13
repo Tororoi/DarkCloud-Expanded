@@ -1,7 +1,7 @@
 # ally_follow.s — the summoned ally with no enemy to fight walks beside Ruby. Assembled at 0x001176D8 (DeadSifRpcCave: the dead
 # sceSifSetRpcQueue..sceSifRemoveRpcQueue bodies), its turn and clip (after #SPLIT) at 0x0011EEA0 (DeadMcCave, after ally_manager.s).
 # ally_brain.s calls it once a frame while its script is parked (CodeCaves.AllyHold, park below), a0 = its block (the manager at + 0x100, its unit 0's
-# CCharacter at + 0x1FDD0). The point 14 u to Ruby's right is written to the block's idle point (+0x30, what its pointer-table entry names
+# CCharacter at + 0x1FDD0). The point 16 u to Ruby's right is written to the block's idle point (+0x30, what its pointer-table entry names
 # while it idles); its height is the floor's (Step's ground keeps it). Farther than 3 u it walks there (clip 1, its rate 0.68 × its speed:
 # d × 0.08 held to 0.5..2.4 u a frame, a step no longer than a sixth of the way; clip 16, its run, at its own rate while Ruby runs —
 # her motion 1), facing the point; there, it idles (clip 0 at its own
@@ -27,16 +27,16 @@ follow:
     mov.s $f21, $f0
     jal   0x0011D8A0               # sinf
     mov.s $f12, $f20
-    lui   $t0, 0x4160
-    mtc1  $t0, $f1                 # 14.0
+    lui   $t0, 0x4180
+    mtc1  $t0, $f1                 # 16.0
     lui   $t0, 0x01EA
     lwc1  $f2, 0x1D30($t0)         # Ruby x
     lwc1  $f3, 0x1D34($t0)         #      height
     lwc1  $f4, 0x1D38($t0)         #      y
     mul.s $f5, $f21, $f1
-    sub.s $f5, $f2, $f5            # x − cos·14
+    sub.s $f5, $f2, $f5            # x − cos·16
     mul.s $f6, $f0, $f1
-    add.s $f6, $f4, $f6            # y + sin·14: her right (facing is (sin, cos))
+    add.s $f6, $f4, $f6            # y + sin·16: her right (facing is (sin, cos))
     swc1  $f5, 0x30($s0)           # the idle point
     swc1  $f3, 0x34($s0)
     swc1  $f6, 0x38($s0)

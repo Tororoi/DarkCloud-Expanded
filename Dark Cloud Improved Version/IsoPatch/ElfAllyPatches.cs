@@ -85,6 +85,11 @@ namespace Dark_Cloud_Improved_Version
             if (cur != MipsAsm.Jal(SetCollisionData) && cur != toSwing)
                 throw new IOException($"CheckDmg's attack-sphere call 0x{CheckDmgSwingSite:X} is 0x{cur:X8}, not vanilla — unmodified Dark Cloud (USA) ISO expected.");
             WrU32(fs, ElfOff(CheckDmgSwingSite), toSwing);
+            // …and its incoming-hit mask test (the load moves into the hook's delay slot): the ally's unit also takes bit 8.
+            if (U32(swing, (int)(DeadSifElfCave.AllyMask - DeadSifElfCave.AllySwing)) != 0x3C1901FBu)
+                throw new IOException("allySwing.bin has no mask entry at DeadSifElfCave.AllyMask — reassemble ally_swing.s.");
+            Hook(fs, ElfOff, CheckDmgMaskSite, LoadMask, MipsAsm.Jal(DeadSifElfCave.AllyMask));
+            Hook(fs, ElfOff, CheckDmgMaskSite + 4, AndMaskPlayerHits, LoadMask);
             Claim(fs, ElfOff, "sceSifGetOtherData", DeadSifDataCave.Host, DeadSifDataCave.VanillaWord0, despawn, DeadSifDataCave.End);
 
             byte[] collide = Embedded("allyCollide.bin");
@@ -114,6 +119,16 @@ namespace Dark_Cloud_Improved_Version
         }
 
         private const uint CheckDmgSwingSite = 0x001DA098, SetCollisionData = 0x001B57A0;   // CheckDmg's `jal Set__14CCollisionDataFPfiiffiiii`
+        private const uint CheckDmgMaskSite = 0x001DAA7C, LoadMask = 0x8CA20048, AndMaskPlayerHits = 0x30420002;   // lw v0,0x48(a1) / andi v0,v0,2
+
+        /// <summary>A word that holds <paramref name="vanilla"/> (or <paramref name="ours"/> already) made <paramref name="ours"/>.</summary>
+        private static void Hook(FileStream fs, Func<uint, long> ElfOff, uint at, uint vanilla, uint ours)
+        {
+            uint cur = RdU32(fs, ElfOff(at));
+            if (cur != vanilla && cur != ours)
+                throw new IOException($"0x{at:X} is 0x{cur:X8}, not vanilla 0x{vanilla:X8} — unmodified Dark Cloud (USA) ISO expected.");
+            WrU32(fs, ElfOff(at), ours);
+        }
         private const uint PlayerMoveCheck = 0x001DC820, PlayerSpearBlockSpan = 240;   // MoveCheck__12CMonstorUnitFPfPfi; the player-spear cave's bytes
 
         /// <summary>A stub well-formed (whole words) and carrying each of <paramref name="calls"/>.</summary>

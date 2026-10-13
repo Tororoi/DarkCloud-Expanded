@@ -239,7 +239,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/ally_shots.s (ElfAllyPatches): before (+0) / after (+0x40) the summon's load, clear (+0xA4) at its end.</summary>
         internal const uint AllyShotsBefore = Host, AllyShotsAfter = Host + 0x40, AllyShotsClear = Host + 0xA4;   // 324 B → 0x1192E4
         /// <summary>tools/stubs/ally_swing.s: CheckDmg's attack-sphere entry for the ally's unit made with mask 0 (it never hits the player).</summary>
-        internal const uint AllySwing = Host + 0x144;   // 0x1192E4, 28 B → 0x119300
+        internal const uint AllySwing = Host + 0x144, AllyMask = AllySwing + 0x1C;   // 0x1192E4 / 0x119300, 60 B → 0x119320
         internal const uint End = Host + HostSpan;
     }
 

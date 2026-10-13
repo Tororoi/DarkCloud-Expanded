@@ -7,13 +7,14 @@ namespace Dark_Cloud_Improved_Version
     /// the locked-on enemy or the one nearest Ruby, walking beside her when there is none; guarding again summons nothing while one
     /// stands. All of it is native (tools/stubs/ally_brain.s and its fellows, ElfAllyPatches): this thread arms it while the ring is in
     /// Ruby's hand (CodeCaves.AllyArmed — disarming ends a standing pockle), logs what it reports (CodeCaves.AllyEvent) and names the
-    /// pockle that came on screen ("Sunday summoned"), and while one stands ticks its friendly fire (<see cref="ConfusionAlly"/>: its
-    /// swings and shots on the enemies, theirs on it).</summary>
+    /// pockle that came on screen ("Sunday summoned") as it appears in Cactus' smoke (<see cref="SummonSmoke"/>), and while one stands
+    /// ticks its friendly fire (<see cref="ConfusionAlly"/>: its swings and shots on the enemies, theirs on it).</summary>
     internal static class Pocklekul
     {
         private const string Tag = "[Pocklekul] ";
         private const uint BrainVanillaWord0 = 0x27BDFFA0;   // sceDmaSendN's first word: a disc patched before the native Pocklekul
         private const int MessageMs = 2500;
+        private const float SmokeScale = 0.3f;   // the summon smoke's size for a pockle (Cactus' copy rises in 0.5)
         private static readonly EnemyDefaults[] Pockles =   // ally_brain.s's pockle order (event 0x10 + index)
         {
             EnemySpecies.Sunday, EnemySpecies.Monday, EnemySpecies.Tuesday, EnemySpecies.Wednesday, EnemySpecies.Thursday,
@@ -47,6 +48,7 @@ namespace Dark_Cloud_Improved_Version
                     if (code >= 0x10 && code < 0x10 + Pockles.Length)
                     {
                         ConfusionAlly.Summoned();                   // no drops but stolen gold, no kill ABS
+                        Poof();
                         string text = $"{Pockles[code - 0x10].Name} summoned";
                         DungeonMessages.DisplayMessage(text, 1, text.Length + 2, MessageMs);   // which pockle came
                     }
@@ -54,12 +56,30 @@ namespace Dark_Cloud_Improved_Version
                 FreezeProbe.Tick();                    // DIAGNOSTIC: a frozen floor's state into the log (the King Mimic freeze)
                 bool up = ConfusionAlly.Up;
                 if (up) Confusion.Tick();
-                else if (wasUp) Confusion.EndAlly();   // it went: the enemies it provoked back on Ruby
+                else if (wasUp) { Confusion.EndAlly(); SummonSmoke.Unpin(); }   // it went: the enemies it provoked back on Ruby, the smoke left where it was
                 wasUp = up;
-                Thread.Sleep(up ? 16 : 100);
+                SummonSmoke.Drive();
+                Thread.Sleep(16);
             }
             Memory.WriteInt(CodeCaves.AllyArmed, 0);   // the brain ends a standing pockle on its next frame
             Confusion.EndAlly();
+            SummonSmoke.End();
+        }
+
+        /// <summary>The effect this ring wants in Ruby's SECOND main-character instance (idle but for the Bandit's Ring's stolen shots):
+        /// the summon smoke, whenever the Pocklekul is in her hand.</summary>
+        internal static BorrowedEffect WantedShot()
+            => Player.CurrentCharacterNum() == Player.RubyId && Player.Weapon.GetCurrentWeaponId() == Items.pocklekul ? SummonSmoke.Effect() : null;
+
+        /// <summary>The pockle appears in Cactus' poof: at its spawn point (its block's +0x20 — the manager's −0xE0), turned to Ruby's facing,
+        /// and pinned to it (its unit 0's position, the manager's +0x1FCE0) so it stays in the smoke as it walks off.</summary>
+        private static void Poof()
+        {
+            uint m = Memory.ReadUInt(CodeCaves.AllyManager);
+            if (m == 0 || !Memory.IsValidGuest(m)) return;
+            long mgr = Memory.ToMmu(m), spawn = mgr - 0x100 + 0x20;
+            SummonSmoke.Start(Memory.ReadFloat(spawn), Memory.ReadFloat(spawn + 4), Memory.ReadFloat(spawn + 8), Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY),
+                              SmokeScale, "pockle", pinTo: mgr + 0x1FCE0);
         }
 
         private static bool InHand()

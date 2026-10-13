@@ -7,7 +7,7 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>Cactus — "Desert Bloom": the guard pose held Mirage.GuardChargeMs raises a giant copy of the
     /// cactus out of the floor <see cref="AheadDistance"/> ahead of the wielder, one per hold (a new hold while one stands moves it),
     /// on Babel's Spear's pieces (<see cref="BabelsSpear"/>: the blade-fall, blade-spin and spear-block caves, <see cref="BladeProp"/>).
-    /// It rises in a poof of smoke (e228ex on the dead dun/effect/zibaku_t, in the second main-character instance), grows from
+    /// It rises in a poof of smoke (<see cref="SummonSmoke"/>), grows from
     /// <see cref="SpawnScale"/> through <see cref="PeakScale"/> to <see cref="Scale"/> on the clip's frames (<see cref="Drive"/>), stands
     /// solid to enemies, the player and enemy shots (<see cref="Solid"/>), pricks every enemy touching it at Babel's spike rate
     /// (<see cref="Hit"/>, no weapon HP), and after <see cref="StandSeconds"/> fades out over <see cref="FadeSeconds"/>.
@@ -125,17 +125,15 @@ namespace Dark_Cloud_Improved_Version
         private static float PeakScale  => F.Scale * PeakRatio;
         private static float Scale      => F.Scale;
         private static float Exposed    => F.ExposedModel * F.Scale;
-        // e228ex's one KEY (its cfg): frames 1–50 at 0.2.
-        private const float  FxStart = 1f, FxEnd = 50f, FxRate = 0.6f, FxFadeFrom = 32f;   // played at 0.6, three times its own speed
-        private const float  FxScale = 0.5f;
+        // Timed on the smoke's frames (SummonSmoke: e228ex's one KEY, frames 1–50, played at 0.6).
+        private const float  FxStart = SummonSmoke.ClipStart, FxRate = SummonSmoke.ClipRate;
+        private const float  SmokeScale = 0.5f;
         private const float  FxEmergedFrame = 6.5f;                                 // the clip's frame the small cactus is fully out at…
         private const float  FxPeakFrame    = 10.6f;                                // …at PeakScale at (game frame 16 at 0.6: the settle then spans ~2⅓ game frames)…
         private const float  FxRisenFrame   = 12f;                                  // …and settled to Scale at
         private const float  EmergeSeconds  = (FxEmergedFrame - FxStart) / FxRate / 60f;   // 0.153 s (9.2 engine frames)
         private const float  PeakSeconds    = (FxPeakFrame - FxStart) / FxRate / 60f;      // 0.267 s (16 engine frames)
         private const float  RisenSeconds   = (FxRisenFrame - FxStart) / FxRate / 60f;     // 0.306 s (18.3 engine frames)
-        private const int    FxTemplate     = 5;       // a stock config's shape; the name and motions are replaced
-        private const string FxName         = "zibaku_t";
         private const float  StandSeconds   = 10f;
         private const float  FadeSeconds    = 0.5f;
         private static float BlockRadius => F.BlockRadius;
@@ -151,22 +149,13 @@ namespace Dark_Cloud_Improved_Version
         private static float    _sx, _sy, _ground, _yaw;
         private static bool     _guardLatched; private static DateTime _guardSince;
         private static readonly PlantedHits _shells = new(clearMark: true);   // its hits carry the no-drain mark: zeroed as they are withdrawn
-        private static BorrowedEffect _fx;
-        private static int _sub = -1;                  // the sub-shot playing the smoke (−1 = none)
 
         /// <summary>Desert Bloom's wielder: Ungaga with the Cactus, or Xiao with Super Steve and a Cactus sphere.</summary>
         internal static bool Wielded() => UngagaWeapon.WieldsOrSphere(Items.cactus);
 
-        /// <summary>The effect this weapon wants in the SECOND main-character instance: the smoke, whenever Desert Bloom is
-        /// wielded (<see cref="Wielded"/>). Every phase radius zeroed: it is the visual only. Its one clip is the muzzle motion: the engine
-        /// retires the sub-shot at the clip's last frame (49–50), where the mod's fade has already reached nothing.</summary>
-        internal static BorrowedEffect WantedShot()
-        {
-            if (!Wielded()) return null;
-            _fx ??= BorrowedShots.VisualOnly(FxTemplate, FxName, muzzleMotion: 0, flyMotion: -1, impactMotion: -1, expireMotion: -1,
-                                             dir: BorrowedShots.EffectDir, instance: ShotEffectPack.CharaMainEffectCrash);
-            return _fx;
-        }
+        /// <summary>The effect this weapon wants in the SECOND main-character instance: the smoke (<see cref="SummonSmoke"/>), whenever
+        /// Desert Bloom is wielded (<see cref="Wielded"/>).</summary>
+        internal static BorrowedEffect WantedShot() => Wielded() ? SummonSmoke.Effect() : null;
 
         public static void DesertBloomEffect()
         {
@@ -225,7 +214,7 @@ namespace Dark_Cloud_Improved_Version
             // The rise, on the engine's frames (Babel's): the blade-fall cave's ease from buried to out, at the spawn size.
             VerticalDrive.StartEase(RootHeight(0f, SpawnScale), RootHeight(1f, SpawnScale), EmergeSeconds * 60f);
             _up = true; _summoned = GameClock.Now; _lastHit = default;
-            FxStartPlay();
+            SummonSmoke.Start(_sx, _ground, _sy, _yaw, SmokeScale, F.Name);
             Player.FlashChargeComplete();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"a {F.Name} rises at ({_sx:F0},{_sy:F0}) floor {_ground:F1} (the wielder at {ph:F1})");
         }
@@ -262,7 +251,7 @@ namespace Dark_Cloud_Improved_Version
             if (!BladeProp.Maintain()) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the copy did not maintain — down"); TakeDown(); return; }
             double age = (GameClock.Now - _summoned).TotalSeconds;
             if (age >= StandSeconds + FadeSeconds) { TakeDown(); return; }
-            FxDrive();
+            SummonSmoke.Drive();
             if (!_emerged && age >= EmergeSeconds)
             {   // out at its small size: the integrator off, the height the mod's from here
                 Memory.WriteInt(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveFlag, CodeCaves.VerticalDriveOff);
@@ -334,64 +323,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Planted hits the engine has not consumed within their life are withdrawn.</summary>
         private static void RetireShells() => _shells.Expire();
 
-        // ── the smoke ──
-        private static long FxObj => _fx.Instance + ShotEffectPack.OffObj + _sub * ShotEffectPack.ObjStride;
-
-        private static void FxStartPlay()
-        {
-            _sub = -1;
-            if (_fx == null || !BorrowedShots.Entered(_fx)) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "smoke not entered on this floor — the cactus rises without it"); return; }
-            if (!BorrowedShots.Burst(_fx, _sx, _ground, _sy, 0, FxScale)) return;
-            _sub = Memory.ReadInt(_fx.Instance + ShotEffectPack.OffLastIdx);
-            long o = FxObj;
-            SubShotFade.Set(o, 1f);                                                   // a sub-shot a previous smoke faded, back to full
-            ShotEffects.SetClip(o, 0, FxStart, FxRate);                               // the rate absolute (its own KEY is 0.2)
-            TurnRoot(o);
-            Memory.WriteInt(CodeCaves.SecondEffectLive, 1);                           // the second instance stepped and drawn (the second-effect caves)
-        }
-
-        /// <summary>The smoke turned to the wielder's facing about the vertical through its model's ROOT frame (null7: no motion track
-        /// touches it), its local 3×3 set to the engine's RotMatrixY — row 0 = (cos, 0, −sin), row 2 = (sin, 0, cos), so its local +Z faces
-        /// (sin, cos), the forward the summon steps along — and its world
-        /// cache dropped, as BladeProp bakes its copies upright. An absolute write: the sub-shot's model is reused burst to burst.
-        /// (The sub-shot object's own Euler angles, +0x60, do not reach a shot effect's draw.)</summary>
-        private static void TurnRoot(long obj)
-        {
-            uint root = Memory.ReadGuestPtr(obj + CCharacter.CharModel);
-            if (!Memory.IsValidGuest(root)) return;
-            long r = Memory.ToMmu(root);
-            float c = (float)Math.Cos(_yaw), sn = (float)Math.Sin(_yaw);                  // the wielder's facing, the one the cactus is summoned along
-            float[] m = { c, 0f, -sn,  0f, 1f, 0f,  sn, 0f, c };
-            for (int i = 0; i < 9; i++) Memory.WriteFloat(r + CFrameVu1.LocalMatrix + (i / 3) * 0x10 + (i % 3) * 4, m[i]);
-            Memory.WriteInt(r + CFrameVu1.WorldCacheA, 0);
-        }
-
-        /// <summary>The smoke each tick: held at the cactus, faded from frame FxFadeFrom to nothing at FxEnd; the engine retires it.</summary>
-        private static void FxDrive()
-        {
-            if (_sub < 0 || !Player.CheckDunIsWalkingMode()) return;
-            long o = FxObj;
-            if (Memory.ReadUShort(_fx.Instance + ShotEffectPack.OffActive + _sub * 2) == 0) { FxEnd_(); return; }
-            Memory.WriteVec3(o + ShotEffectPack.ObjPos, _sx, _ground, _sy);
-            Memory.WriteFloat(o + ShotEffectPack.ObjMotSpd, FxRate);                   // held: nothing resets it mid-clip, but a phase change would
-            float frame = Memory.ReadFloat(o + ShotEffectPack.ObjFrame);
-            if (frame >= FxFadeFrom) SubShotFade.Set(o, 1f - Math.Clamp((frame - FxFadeFrom) / (FxEnd - FxFadeFrom), 0f, 1f));
-        }
-
-        private static void FxEnd_()
-        {
-            if (_sub >= 0 && _fx != null)
-            {
-                Memory.WriteUShort(_fx.Instance + ShotEffectPack.OffActive + _sub * 2, 0);
-                SubShotFade.Set(FxObj, 1f);                                           // handed back at full
-            }
-            _sub = -1;
-            Memory.WriteInt(CodeCaves.SecondEffectLive, 0);
-        }
-
         private static void TakeDown()
         {
-            FxEnd_();
+            SummonSmoke.End();
             if (!_up) return;
             Memory.WriteInt(CodeCaves.VerticalDrive + CodeCaves.VerticalDriveFlag, CodeCaves.VerticalDriveOff);
             SpearBlock.Disarm();                                                            // passable again

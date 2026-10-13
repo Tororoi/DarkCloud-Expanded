@@ -44,7 +44,7 @@ namespace Dark_Cloud_Improved_Version
             Mirage.Start();   // Ungaga's Mirage: watches for charge-release, drives the decoy via data writes
             CatCape.Start();   // the cat's cape off Xiao's own cloth list the moment her pack builds it (whatever weapon she holds)
             HeapWatch.Start();   // DIAGNOSTIC (DebugDiagnostics.Enabled): the character heap and its pools logged as they change
-            BorrowedShots.Start(DragonsY.WantedShot, BanditSlingshot.WantedShot, BigBang.WantedShot, SwordOfZeus.WantedShot, BigBangShot.WantedShot, ZeusShot.WantedShot, BabelsSpear.WantedShot, HerculesWrath.WantedShot, Cactus.WantedShot, TerraSword.WantedShot);
+            BorrowedShots.Start(DragonsY.WantedShot, BanditSlingshot.WantedShot, BigBang.WantedShot, SwordOfZeus.WantedShot, BigBangShot.WantedShot, ZeusShot.WantedShot, BabelsSpear.WantedShot, HerculesWrath.WantedShot, Cactus.WantedShot, TerraSword.WantedShot, Pocklekul.WantedShot);
             ConfuseAbility.Start();   // the Confuse ability's procs, the confusion's ticks and the stars over the confused, on every floor
             //   ↑ shot effects borrowed for Xiao's abilities, entered on every floor; each ability names the one it wants
             SharedShots.Start();         // the monster shot pack's five slots shared among every config a floor needs (the cave does it; the mod arms and reports)
