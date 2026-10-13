@@ -2,7 +2,7 @@
 # 1/30 of its size to 9.2 frames, 1.133× at 16, 1× at 18.3). Assembled at 0x0011EF4C (DeadMcCave, after ally_follow.s's turn).
 # ally_brain.s calls it once an unpaused frame while the ally stands, a0 = its block: the block's frame count (+0x74, zeroed by the
 # summon) picks the frame's scale from the table, written to its unit 0's render scale (CCharacter +0x90 x/y/z: the manager's
-# +0x1FD60, the block's +0x1FE60); from frame 20 on nothing is written. t0..t5.
+# +0x1FD60, the block's +0x1FE60); from frame 20 on nothing is written. t0..t5. Then the YIELD records ally_follow.s parks its script on.
 
 grow:
     lw    $t0, 0x74($a0)          # its frames since the summon
@@ -15,8 +15,8 @@ grow:
     addiu $t3, $t3, -0x106C       # the table (0x0011EF94)
     addu  $t3, $t3, $t0
     lw    $t4, 0x00($t3)
-    lui   $t5, 0x0002
-    ori   $t5, $t5, 0xFE60
+    lui   $t5, 0x0001
+    ori   $t5, $t5, 0xFE60         # (ori is zero-extended: the plain upper half)
     addu  $t5, $a0, $t5          # its render scale
     sw    $t4, 0x00($t5)
     sw    $t4, 0x04($t5)
@@ -47,3 +47,15 @@ table:
     .word 0x3F89C09C               # frame 17: 1.0762
     .word 0x3F827027               # frame 18: 1.0190
     .word 0x3F800000               # frame 19: 1.0000
+
+# Three YIELD records (vmcode_t {op 23, 0, 0}): ally_follow.s's park points the ally's script here each frame while it idles.
+yield:
+    .word 0x00000017
+    .word 0x00000000
+    .word 0x00000000
+    .word 0x00000017
+    .word 0x00000000
+    .word 0x00000000
+    .word 0x00000017
+    .word 0x00000000
+    .word 0x00000000

@@ -4,7 +4,7 @@
 # check, then the spear's): the checks as before, then — while CodeCaves.AllyManager (0x01FAF7F8) holds a manager — the
 # same rule against the OTHER manager's live units (the floor's enemies against the ally's unit, the ally's unit against the floor's):
 # the moving unit's next place within both collision radii of one, below its top (height + 2 × radius), and moving toward it stops it
-# (movement and speed zeroed, as MoveChecMonster does). Caller-saved registers only.
+# (movement and speed zeroed, as MoveChecMonster does). Caller-saved registers only. pblock (+0x1A0) blocks the player at it.
 
 collide:
     addiu $sp, $sp, -0x20
@@ -112,6 +112,28 @@ cnext:
     bne   $t9, $zero, cloop
     nop
 cdone:
+    lw    $ra, 0x00($sp)
+    jr    $ra
+    addiu $sp, $sp, 0x20
+
+# The player's move (a0 = the floor's manager, a1 = &her position, a2 = &her velocity, a3 = a flag — MoveCheck__12CMonstorUnitFPfPfi's
+# arguments; the player_spear_block.s cave's call comes here, ElfAllyPatches): the engine's own player-against-unit block on the floor's
+# units, as before, then on the ally's manager while one stands (MoveCheck reads `this` alone), so Ruby cannot walk through it.
+pblock:
+    addiu $sp, $sp, -0x20
+    sw    $ra, 0x00($sp)
+    sw    $a1, 0x04($sp)
+    sw    $a2, 0x08($sp)
+    jal   0x001DC820               # MoveCheck__12CMonstorUnitFPfPfi: the floor's units
+    sw    $a3, 0x0C($sp)           # (delay)
+    lui   $t0, 0x01FB
+    lw    $a0, -0x0808($t0)        # CodeCaves.AllyManager
+    beq   $a0, $zero, pdone
+    lw    $a1, 0x04($sp)           # (delay)
+    lw    $a2, 0x08($sp)
+    jal   0x001DC820               # the ally's unit
+    lw    $a3, 0x0C($sp)           # (delay)
+pdone:
     lw    $ra, 0x00($sp)
     jr    $ra
     addiu $sp, $sp, 0x20

@@ -13,7 +13,8 @@ namespace Dark_Cloud_Improved_Version
     /// (<see cref="DeadSifRpcCave"/>, its turn after ally_manager.s) — the walk beside Ruby; tools/stubs/ally_grow.s (after the turn) — its
     /// growth as it appears; tools/stubs/ally_despawn.s
     /// (<see cref="DeadSifDataCave"/>) — the end; and tools/stubs/ally_collide.s in the dead sceSifLoadModuleBuffer body
-    /// (<see cref="DeadSifCave"/>) at Step's monster-vs-monster check, so the two managers' units block each other.</summary>
+    /// (<see cref="DeadSifCave"/>) at Step's monster-vs-monster check, so the two managers' units block each other, and at the player's
+    /// move (through the player-spear cave), so Ruby is blocked by it as by any monster.</summary>
     internal static class ElfAllyPatches
     {
         private const uint StepFn = 0x001DD540, DrawFn = 0x001D8CD0, ShadowFn = 0x001D9800;   // the floor manager's Step / DrawMonstor / DrawShadowMonstor
@@ -35,22 +36,29 @@ namespace Dark_Cloud_Improved_Version
 
             byte[] brain = Embedded("allyBrain.bin"), summon = Embedded("allySummon.bin");
             Require(brain, "allyBrain.bin", "ally_brain.s", MipsAsm.Jal(DeadPadPressCave.AllySummon), MipsAsm.Jal(DeadSifRpcCave.AllyFollow),
-                    MipsAsm.Jal(DeadSifDataCave.AllyDespawn), MipsAsm.Jal(DeadMcCave.AllyGrow));
+                    MipsAsm.Jal(DeadSifDataCave.AllyDespawn), MipsAsm.Jal(DeadMcCave.AllyGrow), MipsAsm.Jal(DeadSifRpcCave.AllyPark), MipsAsm.Jal(DeadSifRpcCave.AllyRelease));
             Require(summon, "allySummon.bin", "ally_brain.s", MipsAsm.Jal(DeadSifDataCave.AllyDespawn));
             Claim(fs, ElfOff, "sceDmaSendN", DeadDmaCave.Host, DeadDmaCave.VanillaWord0, brain, DeadDmaCave.End);
             Claim(fs, ElfOff, "scePadInfoPressMode", DeadPadPressCave.Host, DeadPadPressCave.VanillaWord0, summon, DeadPadPressCave.End);
 
             byte[] follow = Embedded("allyFollow.bin"), turn = Embedded("allyTurn.bin");
-            Require(follow, "allyFollow.bin", "ally_follow.s");
+            // its CCharacter is block + 0x1FDD0 and its render scale block + 0x1FE60: lui 1 / ori (ori is zero-extended, so lui 2 there
+            // lands 0x10000 past — writing an unused unit's data while the pockle stood frozen and never grew)
+            Require(follow, "allyFollow.bin", "ally_follow.s", 0x3C080001u, 0x3508FDD0u);
+            foreach (uint entry in new[] { DeadSifRpcCave.AllyPark, DeadSifRpcCave.AllyRelease })   // each opens with `lui t0, 5`
+                if (U32(follow, (int)(entry - DeadSifRpcCave.Host)) != 0x3C080005u)
+                    throw new IOException($"allyFollow.bin has no park / release at 0x{entry:X} — reassemble ally_follow.s and check DeadSifRpcCave.");
             Require(turn, "allyTurn.bin", "ally_follow.s");
             Claim(fs, ElfOff, "sceSifSetRpcQueue", DeadSifRpcCave.Host, DeadSifRpcCave.VanillaWord0, follow, DeadSifRpcCave.End);
             WriteBytes(fs, ElfOff, DeadMcCave.AllyTurn, turn, DeadMcCave.End, "allyTurn.bin overruns the sceMcRename body");
 
             // ally_grow.s builds its table's address by hand (lui 0x0012 / addiu): it must name where the table landed
             byte[] grow = Embedded("allyGrow.bin");
-            Require(grow, "allyGrow.bin", "ally_grow.s", 0x3C0B0012u, 0x256B0000u | (uint)((int)DeadMcCave.AllyGrowTable - 0x120000 & 0xFFFF));
-            if (grow.Length != (int)(DeadMcCave.AllyGrowTable - DeadMcCave.AllyGrow) + 20 * 4)
-                throw new IOException($"allyGrow.bin is {grow.Length} B — its table moved; reassemble ally_grow.s and check DeadMcCave.AllyGrowTable.");
+            Require(grow, "allyGrow.bin", "ally_grow.s", 0x3C0D0001u, 0x35ADFE60u, 0x3C0B0012u, 0x256B0000u | (uint)((int)DeadMcCave.AllyGrowTable - 0x120000 & 0xFFFF));
+            // park builds the YIELD records' address by hand (lui t1, 0x0012 / addiu t1): it must name where they landed
+            Require(follow, "allyFollow.bin", "ally_follow.s", 0x3C090012u, 0x25290000u | (uint)((int)DeadMcCave.AllyYield - 0x120000 & 0xFFFF));
+            if (grow.Length != (int)(DeadMcCave.AllyYield - DeadMcCave.AllyGrow) + 3 * 12 || U32(grow, (int)(DeadMcCave.AllyYield - DeadMcCave.AllyGrow)) != 23u)
+                throw new IOException($"allyGrow.bin is {grow.Length} B — its table or YIELD records moved; reassemble ally_grow.s and check DeadMcCave.AllyGrowTable / AllyYield.");
             if (DeadMcCave.AllyTurn + (uint)turn.Length > DeadMcCave.AllyGrow)
                 throw new IOException("allyTurn.bin runs into ally_grow.s — move DeadMcCave.AllyGrow.");
             WriteBytes(fs, ElfOff, DeadMcCave.AllyGrow, grow, DeadMcCave.End, "allyGrow.bin overruns the sceMcRename body");
@@ -69,7 +77,23 @@ namespace Dark_Cloud_Improved_Version
             if (site != MipsAsm.Jal(DebugIfCave.SpearBlock) && site != ours)
                 throw new IOException($"CMonstorUnit::Step's site 0x{StepMoveCheckSite:X} is 0x{site:X8}, not the spear-block cave's jal — patch order changed?");
             WrU32(fs, ElfOff(StepMoveCheckSite), ours);
+
+            // The player's move: ElfWeaponPatches.PatchSpearBlock (earlier) wrote the player-spear cave, which makes the move's
+            // MoveCheck call; that call now comes to AllyPlayerBlock, which makes it and then makes it again on the ally's manager.
+            if (U32(collide, (int)(DeadSifCave.AllyPlayerBlock - DeadSifCave.Host)) != 0x27BDFFE0u)
+                throw new IOException("allyCollide.bin has no player block at DeadSifCave.AllyPlayerBlock — reassemble ally_collide.s.");
+            uint moveCheck = MipsAsm.Jal(PlayerMoveCheck), toAlly = MipsAsm.Jal(DeadSifCave.AllyPlayerBlock);
+            int took = 0;
+            for (uint a = DebugIfCave.PlayerSpearBlock; a < DebugIfCave.PlayerSpearBlock + PlayerSpearBlockSpan; a += 4)
+            {
+                uint w = RdU32(fs, ElfOff(a));
+                if (w == moveCheck || w == toAlly) { WrU32(fs, ElfOff(a), toAlly); took++; }
+            }
+            if (took != 1)
+                throw new IOException($"the player-spear cave at 0x{DebugIfCave.PlayerSpearBlock:X} has {took} MoveCheck calls, not 1 — patch order changed?");
         }
+
+        private const uint PlayerMoveCheck = 0x001DC820, PlayerSpearBlockSpan = 240;   // MoveCheck__12CMonstorUnitFPfPfi; the player-spear cave's bytes
 
         /// <summary>A stub well-formed (whole words) and carrying each of <paramref name="calls"/>.</summary>
         private static void Require(byte[] b, string bin, string src, params uint[] calls)

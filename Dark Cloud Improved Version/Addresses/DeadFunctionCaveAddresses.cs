@@ -180,11 +180,12 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x0011EDC8, HostSpan = 0x254, VanillaWord0 = 0x27BDFFB0;   // `addiu sp,sp,-0x50`
         /// <summary>tools/stubs/ally_manager.s (ElfAllyPatches): the ally's private monster manager ridden beside the floor's.</summary>
-        internal const uint AllyStep = Host, AllyDraw = Host + 0x10, AllyShadow = Host + 0x20;   // 216 B → 0x11EEA0
+        internal const uint AllyStep = Host, AllyDraw = Host + 0x10, AllyShadow = Host + 0x20;   // 192 B → 0x11EE88
         /// <summary>tools/stubs/ally_follow.s's tail (after #SPLIT): the ally's turn and clip while it walks beside Ruby.</summary>
         internal const uint AllyTurn = Host + 0xD8;   // 0x11EEA0, 172 B → 0x11EF4C
-        /// <summary>tools/stubs/ally_grow.s: the ally's growth as it appears (its scale table at +0x48).</summary>
-        internal const uint AllyGrow = Host + 0x184, AllyGrowTable = AllyGrow + 0x48;   // 0x11EF4C, 152 B → 0x11EFE4
+        /// <summary>tools/stubs/ally_grow.s: the ally's growth as it appears (its scale table at +0x48), then the YIELD records its
+        /// idle park points the ally's script at (+0x98, three vmcode_t).</summary>
+        internal const uint AllyGrow = Host + 0x184, AllyGrowTable = AllyGrow + 0x48, AllyYield = AllyGrowTable + 20 * 4;   // 0x11EF4C, 188 B → 0x11F008
         internal const uint End = Host + HostSpan;
     }
 
@@ -194,7 +195,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x0010C7D0, HostSpan = 1160, VanillaWord0 = 0x27BDFFA0;   // `addiu sp,sp,-0x60`
         /// <summary>tools/stubs/ally_brain.s (ElfAllyPatches): the Pocklekul's pockle once a frame — guard charge, target, end.</summary>
-        internal const uint AllyBrain = Host;   // 1,076 B → 0x10CC04
+        internal const uint AllyBrain = Host;   // 1,096 B → 0x10CC18
         internal const uint End = Host + HostSpan;
     }
 
@@ -215,6 +216,8 @@ namespace Dark_Cloud_Improved_Version
         internal const uint Host = 0x001176D8, HostSpan = 552, VanillaWord0 = 0x3C030001;   // `lui v1,0x1`
         /// <summary>tools/stubs/ally_follow.s (ElfAllyPatches): the ally with no enemy walks beside Ruby.</summary>
         internal const uint AllyFollow = Host;   // 428 B → 0x117884
+        /// <summary>…its park (the ally's script resumed on a YIELD while it idles) and release (its AI afresh).</summary>
+        internal const uint AllyPark = Host + 0x1AC, AllyRelease = Host + 0x1DC;   // 0x117884, 0x1178B4; 520 B in all → 0x1178E0
         internal const uint End = Host + HostSpan;
     }
 
@@ -235,6 +238,8 @@ namespace Dark_Cloud_Improved_Version
         internal const uint Host = 0x00118C88, HostSpan = 0x1EC, VanillaWord0 = 0x27BDFF80;   // `addiu sp,sp,-0x80`
         /// <summary>tools/stubs/ally_collide.s (ElfAllyPatches): the ally and the floor's enemies block each other.</summary>
         internal const uint AllyCollide = Host;   // 416 B → 0x118E28
+        /// <summary>…and the player's move blocked at the ally (the player-spear cave's MoveCheck call comes here).</summary>
+        internal const uint AllyPlayerBlock = Host + 0x1A0;   // 0x118E28, 64 B → 0x118E68
         internal const uint End = Host + HostSpan;
     }
 

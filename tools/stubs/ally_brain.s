@@ -14,10 +14,12 @@
 # SetupViewMonstor (both with NowMonstorUnit on its manager). Its block is stamped ("ALLY", the floor) and the manager word set: the game
 # rides it from then on.
 # While it stands: its end (ally_despawn.s) when its block is gone or another floor's, when it is disarmed or Ruby is not in hand, when
-# an event takes the floor, when its script has killed it (unit 0 back to state −1). Else its target: the locked-on enemy within 200 u
-# of Ruby, else the one it had while it lives within 200 u, else the live enemy nearest her within 150 u. An enemy: its pointer-table
-# entry (16) names that enemy's position and its Step runs. None: its Step is held (AllyHold) and it walks beside Ruby (ally_follow.s),
-# its entry naming the idle point there.
+# an event takes the floor, when its script has killed it (unit 0 back to state −1), when Ruby is more than 300 u from it. Else its
+# target: the locked-on enemy within 200 u of Ruby, else the one it had while it lives within 200 u, else the live enemy nearest her
+# within 150 u. An enemy: its pointer-table
+# entry (16) names that enemy's position and its AI runs (from label 100's top when it was idling). None: its AI is parked (AllyHold:
+# its script resumed on a YIELD each frame while Step goes on moving, animating and hitting it) and it walks beside Ruby
+# (ally_follow.s), its entry naming the idle point there. Falling (HP 0): left to its death label.
 #
 # The block: +0x00 model allocator, +0x10 script allocator, +0x20 spawn point, +0x30 idle point, +0x40 "ALLY", +0x44 floor stamp, +0x48
 # its target slot (−1 none), +0x54 the group-42 entry mask (7 words, the summon's own), +0x70 its pockle (0..7), +0x74 its frames
@@ -121,10 +123,31 @@ alive:
     addiu $a0, $zero, 2            # (delay) fallen
     jal   0x0011EF4C               # ally_grow.s: its first frames' growth
     or    $a0, $s3, $zero          # (delay)
+    lui   $t0, 0x0002
+    addu  $t0, $s1, $t0
+    lw    $t0, -0x1C0C($t0)        # its unit 0's HP (manager + 0x1E3F4)
+    blez  $t0, bdone               # falling: its death label plays out untouched (no park, no restart, no walk)
+    nop
     # ── its target
     lui   $t0, 0x01EA
     lwc1  $f0, 0x1D30($t0)         # Ruby x
     lwc1  $f1, 0x1D38($t0)         #      y
+    lui   $t1, 0x47AF
+    ori   $t1, $t1, 0xC800
+    mtc1  $t1, $f4                 # 300²: past this from Ruby it is left behind (out of the game's view of it)
+    lui   $t0, 0x0002
+    addu  $t0, $s1, $t0
+    lwc1  $f2, -0x0320($t0)        # its x (manager + 0x1FCE0: unit 0's CCharacter + 0x10)
+    lwc1  $f3, -0x0318($t0)        #     y
+    sub.s $f2, $f2, $f0
+    sub.s $f3, $f3, $f1
+    mul.s $f2, $f2, $f2
+    mul.s $f3, $f3, $f3
+    add.s $f2, $f2, $f3
+    .word 0x46022034               # c.olt.s f4, f2: farther than 300
+    nop
+    bc1t  gone
+    addiu $a0, $zero, 11           # (delay) left behind
     lui   $t0, 0x471C
     ori   $t0, $t0, 0x4000
     mtc1  $t0, $f12                # 200²
@@ -160,23 +183,24 @@ picked:
 ptarget:
     sw    $s2, 0x48($s3)
     bltz  $s2, idle
-    ori   $t0, $zero, 0x3510       # (delay)
+    lw    $t3, -0x3C($s0)          # (delay) AllyHold: it was idling
+    beq   $t3, $zero, tpos
+    sw    $zero, -0x3C($s0)        # (delay) its AI on the enemy
+    jal   0x001178B4               # ally_follow.s's release: label 100 afresh
+    or    $a0, $s1, $zero          # (delay)
+tpos:
+    ori   $t0, $zero, 0x3510
     mult  $s2, $t0
     mflo  $t0
     lui   $t1, 0x01E1
     ori   $t1, $t1, 0x84B0         # the floor's chara[s][0] positions (0x01E184B0)
-    addu  $t2, $t0, $t1
-    lw    $t3, -0x3C($s0)
-    beq   $t3, $zero, setp
-    sw    $zero, -0x3C($s0)        # (delay) its Step runs
-    lui   $t3, 0xBF80              # coming off the hold: its clips at their own rate again
-    lui   $t4, 0x0002
-    addu  $t4, $s1, $t4
     b     setp
-    sw    $t3, 0x0930($t4)         # (delay) unit 0's CCharacter + 0xC60 (manager + 0x1FCD0 + 0xC60 = + 0x20930)
+    addu  $t2, $t0, $t1            # (delay)
 idle:
     addiu $t3, $zero, 1
-    sw    $t3, -0x3C($s0)          # its Step held
+    sw    $t3, -0x3C($s0)          # AllyHold: its AI parked
+    jal   0x00117884               # ally_follow.s's park (each frame: Step resumes it there)
+    or    $a0, $s1, $zero          # (delay)
     jal   0x001176D8               # ally_follow.s
     or    $a0, $s3, $zero          # (delay)
     addiu $t2, $s3, 0x30           # the idle point
@@ -363,10 +387,10 @@ summon:
     bne   $t4, $zero, snote
     addiu $a0, $zero, 6            # (delay)
     lw    $t4, 0x4E40($t0)         # the texture buffer's room (16-byte units)…
-    lw    $t6, 0x4E3C($t0)         # …and what is in use: a pockle's picture takes ~16,400
+    lw    $t6, 0x4E3C($t0)         # …and what is in use (a monster's pictures load in place: its entries' small copies only)
     subu  $t4, $t4, $t6
-    slti  $t4, $t4, 0x4800
-    bne   $t4, $zero, snote        # too little: EnterTexture would hang on it
+    slti  $t4, $t4, 0x100
+    bne   $t4, $zero, snote        # full: EnterTexture would hang on it
     addiu $a0, $zero, 6            # (delay)
     lui   $t5, 0x01FB
     sw    $t2, -0x35C($t5)         # AllyTex + 4 (0x01FAFCA4)

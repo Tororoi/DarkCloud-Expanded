@@ -4,8 +4,7 @@
 # draw's `jal DrawMonstor__12CMonstorUnitFv` (0x1DAE7E8) and the shadow pass's `jal DrawShadowMonstor__12CMonstorUnitFv` (0x1DADD44):
 # each makes the call as before; after the floor's Step the ally's brain runs (tools/stubs/ally_brain.s, once a frame: the guard charge,
 # the summon, its target, its end, its walk beside Ruby); then — while CodeCaves.AllyManager (0x01FAF7F8) holds a manager — the call is
-# made again on that manager with NowMonstorUnit (gp−0x6320) pointing at it, since every script command reads NowMonstorUnit. While
-# CodeCaves.AllyHold (0x01FAFFC4) is set the ally's Step is skipped (its draw and shadow go on, the draw stepping its clips).
+# made again on that manager with NowMonstorUnit (gp−0x6320) pointing at it, since every script command reads NowMonstorUnit.
 
 step_entry:
     lui   $t9, 0x001D
@@ -39,15 +38,8 @@ ride:
     lw    $a1, 0x04($sp)
     jal   0x0010C7D0               # the ally's brain (ally_brain.s; a1 = the pause flag)
     nop
-    lui   $t0, 0x01FB
-    lw    $t5, -0x003C($t0)        # CodeCaves.AllyHold (0x01FAFFC4)
-    bne   $t5, $zero, done         # its Step held this frame
-    nop
-    b     rgo
-    nop
 rdraw:
     lui   $t0, 0x01FB
-rgo:
     lw    $t1, -0x0808($t0)        # CodeCaves.AllyManager (0x01FAF7F8)
     beq   $t1, $zero, done
     nop

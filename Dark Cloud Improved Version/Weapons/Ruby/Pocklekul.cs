@@ -41,7 +41,8 @@ namespace Dark_Cloud_Improved_Version
                     seen = ev;
                     int code = (int)(ev & 0xFF);
                     long tm = TextureManager.Base;
-                    Log(Describe(code) + $" (texture buffer {Memory.ReadInt(tm + TextureManager.BufferUsed):N0} of {Memory.ReadInt(tm + TextureManager.BufferCap):N0} units)");
+                    string took = code >= 0x10 && code < 0x18 ? $", its load took {Memory.ReadInt(CodeCaves.AllyTexBuf + 4) - Memory.ReadInt(CodeCaves.AllyTexBuf):N0}" : "";
+                    Log(Describe(code) + $" (texture buffer {Memory.ReadInt(tm + TextureManager.BufferUsed):N0} of {Memory.ReadInt(tm + TextureManager.BufferCap):N0} units{took})");
                     if (code >= 0x10 && code < 0x10 + Pockles.Length)
                     {
                         string text = $"{Pockles[code - 0x10].Name} summoned";
@@ -73,6 +74,7 @@ namespace Dark_Cloud_Improved_Version
             7 => "no summon: the pockle's model did not load",
             8 => "no summon: the pockle did not stand",
             9 => "a pockle already stands — no summon",
+            11 => "the pockle was left behind (Ruby more than 300 u from it)",
             _ => $"event {code}",
         };
 

@@ -616,8 +616,8 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The machine-gun hit flash's alpha per slot, 16 bytes (Draw's set3DCellModel alpha through SmoothRestCave.FlashSlot):
         /// baked 0x80 (the engine's constant — Osmond's flashes); lower is fainter in the additive effects pass.</summary>
         internal const long FlashAlphaTable    = 0x21FAFFB4;   // 16 B → 0x21FAFFC4
-        /// <summary>The ally's Step held (tools/stubs/ally_manager.s: non-zero = its script, AI, movement and hits wait; its draw goes on).
-        /// Written natively (ally_brain.s: held while it has no enemy and walks beside Ruby).</summary>
+        /// <summary>The ally idling (ally_brain.s: non-zero while it has no enemy — its script parked on a YIELD each frame by ally_follow.s's
+        /// park while Step goes on, and it walks beside Ruby; an enemy releases it, its AI from label 100's top). Written natively.</summary>
         internal const long AllyHold = 0x21FAFFC4;     // 4 B
         /// <summary>The Pocklekul armed (the weapon thread: non-zero while the ring is in Ruby's hand): ally_brain.s counts her guard
         /// and summons only while it is set, and ends a standing pockle when it clears.</summary>
@@ -626,7 +626,7 @@ namespace Dark_Cloud_Improved_Version
         internal const long AllyGuard = 0x21FAFFCC, AllyLatch = 0x21FAFFD0;   // 4 B each
         /// <summary>The ally's last event, ((count &lt;&lt; 8) | code), for the app's log: 0x10 + pockle stood (0 Sunday .. 6 Saturday, 7 Hell Pockle), 2 fallen,
         /// 3 disarmed or Ruby not in hand, 4 its block, floor or the floor's quiet gone, 5 no pockle block, 6 no VRAM or texture-buffer room, 7 not loaded,
-        /// 8 not stood, 9 a guard charge while one stands.</summary>
+        /// 8 not stood, 9 a guard charge while one stands, 11 left behind (Ruby over 300 u from it).</summary>
         internal const long AllyEvent = 0x21FAFFD4;    // 4 B
         /// <summary>The texture manager's buffer fill (TextureManager +0x4E3C, 16-byte units) just before and just after the pockle's load
         /// (ally_brain.s writes, ally_despawn.s gives the room back when nothing entered pictures since). Written natively.</summary>

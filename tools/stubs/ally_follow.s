@@ -1,10 +1,10 @@
 # ally_follow.s — the summoned ally with no enemy to fight walks beside Ruby. Assembled at 0x001176D8 (DeadSifRpcCave: the dead
 # sceSifSetRpcQueue..sceSifRemoveRpcQueue bodies), its turn and clip (after #SPLIT) at 0x0011EEA0 (DeadMcCave, after ally_manager.s).
-# ally_brain.s calls it once a frame while the ally's Step is held (CodeCaves.AllyHold), a0 = its block (the manager at + 0x100, its unit 0's
+# ally_brain.s calls it once a frame while its script is parked (CodeCaves.AllyHold, park below), a0 = its block (the manager at + 0x100, its unit 0's
 # CCharacter at + 0x1FDD0). The point 14 u to Ruby's right is written to the block's idle point (+0x30, what its pointer-table entry names
-# while it idles); its height is Ruby's. Farther than 3 u it walks there (clip 1, its rate 0.68 × its speed: d × 0.08 held to 0.5..2.4 u a
-# frame, a step no longer than a sixth of the way), turning to its path; there, it idles (clip 0 at its own rate) turning to Ruby's way.
-# Its turn takes 0.3 of what is left each frame.
+# while it idles); its height is the floor's (Step's ground keeps it). Farther than 3 u it walks there (clip 1, its rate 0.68 × its speed:
+# d × 0.08 held to 0.5..2.4 u a frame, a step no longer than a sixth of the way), facing the point; there, it idles (clip 0 at its own
+# rate) facing Ruby's way. The facing is its unit's own turn (Step's, as _SET_ROTATION asks it), never a write to the model.
 
 follow:
     addiu $sp, $sp, -0x40
@@ -16,9 +16,9 @@ follow:
     swc1  $f22, 0x18($sp)
     swc1  $f23, 0x1C($sp)
     or    $s0, $a0, $zero
-    lui   $t0, 0x0002
-    ori   $t0, $t0, 0xFDD0
-    addu  $s1, $s0, $t0            # its CCharacter
+    lui   $t0, 0x0001
+    ori   $t0, $t0, 0xFDD0         # (ori is zero-extended: the plain upper half)
+    addu  $s1, $s0, $t0            # its CCharacter (block + 0x1FDD0)
     lui   $t0, 0x01EA
     lwc1  $f20, 0x1D84($t0)        # Ruby's yaw
     jal   0x0011D6B0               # cosf
@@ -39,7 +39,6 @@ follow:
     swc1  $f5, 0x30($s0)           # the idle point
     swc1  $f3, 0x34($s0)
     swc1  $f6, 0x38($s0)
-    swc1  $f3, 0x14($s1)           # its height is Ruby's
     lwc1  $f7, 0x10($s1)
     sub.s $f22, $f5, $f7           # dx
     lwc1  $f8, 0x18($s1)
@@ -55,20 +54,20 @@ follow:
     nop
     bc1t  walk
     nop
+    lui   $t0, 0x4120
+    mtc1  $t0, $f9                 # 10.0
     lui   $t0, 0xBF80
     mtc1  $t0, $f12                # its clip's own rate
+    mul.s $f10, $f0, $f9
+    add.s $f13, $f7, $f10          # it faces Ruby's way: a point 10 u ahead of it along her facing (x + sin·10…
+    mul.s $f10, $f21, $f9
+    add.s $f14, $f8, $f10          # …y + cos·10)
     or    $a0, $zero, $zero        # clip 0 (idle)
     bal   clip
-    mov.s $f13, $f20               # (delay) turning to Ruby's way
+    nop
     b     turn
     nop
 walk:
-    swc1  $f10, 0x20($sp)
-    mov.s $f12, $f22
-    jal   0x0011DD40               # atan2f(dx, dy): its path's yaw
-    mov.s $f13, $f23
-    swc1  $f0, 0x24($sp)
-    lwc1  $f10, 0x20($sp)
     lui   $t0, 0x3DA3
     ori   $t0, $t0, 0xD70A
     mtc1  $t0, $f1                 # 0.08
@@ -115,41 +114,54 @@ stok:
     mul.s $f12, $f2, $f1
     addiu $a0, $zero, 1            # clip 1 (walk)
     bal   clip
-    lwc1  $f13, 0x24($sp)          # (delay) turning to its path
+    lwc1  $f13, 0x30($s0)          # (delay) it faces where it is going: the idle point
+    lwc1  $f14, 0x38($s0)
     b     turn
     nop
+
+# a0 = its manager: its unit 0's script parked on a YIELD (ally_grow.s's records, 0x0011EFE4) and resumed there, not restarted
+# (ScriptRunning 1), so Step goes on moving, animating and hitting it while its AI waits; its own movement stopped.
+park:
+    lui   $t0, 0x0005
+    ori   $t0, $t0, 0x4E00         # unit 0's CRunScript PC (manager + 0x54DD0 + 0x30)
+    addu  $t0, $a0, $t0
+    lui   $t1, 0x0012
+    addiu $t1, $t1, -0x101C        # the YIELD records (0x0011EFE4)
+    sw    $t1, 0x00($t0)
+    addiu $t1, $zero, 1
+    sw    $t1, 0x50($a0)           # ScriptRunning[0]
+    lui   $t2, 0x0002
+    addu  $t2, $a0, $t2
+    jr    $ra
+    sw    $zero, -0x1BB0($t2)      # (delay) unit 0's movement_speed (manager + 0x1E450)
+
+# a0 = its manager: its AI back — label 100 from the top on its next Step — and its clips at their own rate.
+release:
+    lui   $t0, 0x0005
+    ori   $t0, $t0, 0x4E00
+    addu  $t0, $a0, $t0
+    sw    $zero, 0x00($t0)         # nothing to resume
+    sw    $zero, 0x08($t0)         # no command outstanding (+0x38)
+    sw    $zero, 0x50($a0)         # ScriptRunning[0]: run afresh
+    lui   $t1, 0xBF80
+    lui   $t2, 0x0002
+    addu  $t2, $a0, $t2
+    jr    $ra
+    sw    $t1, 0x0930($t2)         # (delay) unit 0's rate override off (CCharacter + 0xC60 = manager + 0x20930)
 #SPLIT
+# f13 / f14 = the point it is to face: its unit's own turn (MONSTOR +0x70 the point, +0x84 the rate — what _SET_ROTATION sets; Step
+# turns the model toward it through the model's own rotation and clears the rate once it faces it), 0.3 a frame.
 turn:
-    lwc1  $f1, 0x64($s1)           # its yaw
-    sub.s $f2, $f13, $f1           # what is left
-    lui   $t0, 0x4049
-    ori   $t0, $t0, 0x0FDB
-    mtc1  $t0, $f3                 # π
-    addiu $t1, $zero, 4            # wraps at most (a bad yaw never spins here)
-    add.s $f4, $f3, $f3            # 2π
-    neg.s $f5, $f3
-wrap:
-    .word 0x46021834               # c.olt.s f3, f2: past π
-    nop
-    bc1f  wlow
-    nop
-    sub.s $f2, $f2, $f4
-wlow:
-    .word 0x46051034               # c.olt.s f2, f5: past −π
-    nop
-    bc1f  wnext
-    nop
-    add.s $f2, $f2, $f4
-wnext:
-    addiu $t1, $t1, -1
-    bne   $t1, $zero, wrap
-    lui   $t0, 0x3E99              # (delay)
-    ori   $t0, $t0, 0x999A
-    mtc1  $t0, $f6                 # 0.3
-    nop
-    mul.s $f2, $f2, $f6
-    add.s $f1, $f1, $f2
-    swc1  $f1, 0x64($s1)
+    lui   $t0, 0x0001
+    ori   $t0, $t0, 0xE540         # its unit's turn point (block + 0x1E540 = manager + 0x1E440)
+    addu  $t0, $s0, $t0
+    swc1  $f13, 0x00($t0)
+    lwc1  $f1, 0x14($s1)
+    swc1  $f1, 0x04($t0)           # (its own height: the turn reads x and y)
+    swc1  $f14, 0x08($t0)
+    lui   $t1, 0x3E99
+    ori   $t1, $t1, 0x999A
+    sw    $t1, 0x14($t0)           # the rate (+0x84), re-armed each frame
     lw    $ra, 0x00($sp)
     lw    $s0, 0x04($sp)
     lw    $s1, 0x08($sp)
@@ -160,11 +172,11 @@ wnext:
     jr    $ra
     addiu $sp, $sp, 0x40
 
-# a0 = the clip (restarted when it changes), f12 = its rate (−1 = its own).
+# a0 = the clip (switched with the engine's blend when it changes), f12 = its rate (−1 = its own).
 clip:
     lw    $t0, 0xC68($s1)
     beq   $t0, $a0, csame
-    addiu $t1, $zero, 4            # (delay) a restart
+    or    $t1, $zero, $zero        # (delay) looped, blended in as any clip change
     sw    $a0, 0xC68($s1)
     sw    $t1, 0xC64($s1)
 csame:
