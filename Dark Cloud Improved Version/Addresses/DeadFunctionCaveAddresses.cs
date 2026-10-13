@@ -195,7 +195,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x0010C7D0, HostSpan = 1160, VanillaWord0 = 0x27BDFFA0;   // `addiu sp,sp,-0x60`
         /// <summary>tools/stubs/ally_brain.s (ElfAllyPatches): the Pocklekul's pockle once a frame — guard charge, target, end.</summary>
-        internal const uint AllyBrain = Host;   // 1,152 B → 0x10CC50
+        internal const uint AllyBrain = Host;   // 1,160 B → 0x10CC58 (full)
         internal const uint End = Host + HostSpan;
     }
 
@@ -215,7 +215,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x001203D0, HostSpan = 688, VanillaWord0 = 0x0080302D;   // `daddu a2,a0,zero`
         /// <summary>tools/stubs/ally_brain.s's tail (after #SPLIT): the summon.</summary>
-        internal const uint AllySummon = Host;   // 688 B → 0x120680 (full)
+        internal const uint AllySummon = Host;   // 652 B → 0x12065C
         internal const uint End = Host + HostSpan;
     }
 
@@ -241,7 +241,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/ally_swing.s: CheckDmg's attack-sphere entry for the ally's unit made with mask 0 (it never hits the player).</summary>
         internal const uint AllySwing = Host + 0x144, AllyMask = AllySwing + 0x1C;   // 0x1192E4 / 0x119300
         /// <summary>…and blocked (ally_collide.s's stop comes here): a floor unit the ally's body stopped noted in CodeCaves.AllyBlocked.</summary>
-        internal const uint AllyBlocked = AllySwing + 0x3C;   // 0x119320; 100 B in all → 0x119348
+        internal const uint AllyBlocked = AllySwing + 0x3C;   // 0x119320
+        /// <summary>…and pin (ally_brain.s each frame): the ally's position copied to CodeCaves.AllyPin's (the summon smoke kept on it).</summary>
+        internal const uint AllyPinCopy = AllySwing + 0x64;   // 0x119348; 152 B in all → 0x11937C
         internal const uint End = Host + HostSpan;
     }
 

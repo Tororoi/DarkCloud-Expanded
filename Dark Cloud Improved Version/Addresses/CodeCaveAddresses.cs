@@ -633,9 +633,9 @@ namespace Dark_Cloud_Improved_Version
         /// 3 disarmed or Ruby not in hand, 4 its block, floor or the floor's quiet gone, 5 no pockle block, 6 no VRAM or texture-buffer room, 7 not loaded,
         /// 8 not stood, 9 a guard charge while one stands, 11 left behind (Ruby over 300 u from it).</summary>
         internal const long AllyEvent = 0x21FAFFD4;    // 4 B
-        /// <summary>The texture manager's buffer fill (TextureManager +0x4E3C, 16-byte units) just before and just after the pockle's load
-        /// (ally_brain.s writes, ally_despawn.s gives the room back when nothing entered pictures since). Written natively.</summary>
-        internal const long AllyTexBuf = 0x21FAFFD8;   // 8 B → 0x21FAFFE0
+        /// <summary>The position the ally's unit is copied to each frame (tools/stubs/ally_swing.s pin; guest address, 0 = none): the summon
+        /// smoke's sub-shot while the pockle appears in it (Pocklekul sets and clears it).</summary>
+        internal const long AllyPin = 0x21FAFFD8;      // 4 B (0x21FAFFDC..0x21FAFFE0 free)
         internal const byte FlashAlphaVanilla  = 0x80;
         /// <summary>The Confuse ability's procs (confuse_proc.s): a byte per enemy slot, 1 = the roll succeeded this hit; the mod
         /// (ConfuseAbility) confuses the slot and writes it back to 0.</summary>

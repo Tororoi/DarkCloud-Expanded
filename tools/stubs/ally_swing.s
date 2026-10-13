@@ -45,3 +45,22 @@ blocked:
 bdone:
     j     0x00118E1C               # ally_collide.s cdone
     nop
+
+# ally_brain.s each frame while the ally stands, a0 = its manager: while CodeCaves.AllyPin (0x01FAFFD8) names a position — the summon
+# smoke's sub-shot, set by the mod as the pockle appears in it and cleared when it is gone — its unit 0's position (the manager's
+# +0x1FCE0) is copied there, the smoke kept on it frame by frame. t0..t5.
+pin:
+    lui   $t0, 0x01FB
+    lw    $t1, -0x0028($t0)        # AllyPin
+    beq   $t1, $zero, pdone
+    lui   $t2, 0x0002              # (delay)
+    addu  $t2, $a0, $t2
+    lw    $t3, -0x0320($t2)        # x
+    lw    $t4, -0x031C($t2)        # height
+    lw    $t5, -0x0318($t2)        # y
+    sw    $t3, 0x00($t1)
+    sw    $t4, 0x04($t1)
+    sw    $t5, 0x08($t1)
+pdone:
+    jr    $ra
+    nop

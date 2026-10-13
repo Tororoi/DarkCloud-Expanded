@@ -9,8 +9,7 @@
 # Its pockle is one of eight at random: the seven days' (table index 10 + day) and Hell Pockle (54).
 # The summon (into Ruby's pockle block: the end of her character pool, PockleBlock): the floor's manager copied to block + 0x100, its script
 # table pointed at the block's own arena (entry 0; the rest null, so CleanViewMonstor resets only it) and reset; the pockle loaded by SetupBaseModel into the block's model allocator — its textures join the monsters' group 42, and the
-# entries it added and the group's VRAM ends before it are kept (CodeCaves.AllyTex), with the texture manager's buffer fill before and
-# after it (CodeCaves.AllyTexBuf: every picture entered is copied there), for its end — then stood 15 u in front of Ruby by
+# entries it added and the group's VRAM ends before it are kept (CodeCaves.AllyTex) for its end — then stood 15 u in front of Ruby by
 # SetupViewMonstor (both with NowMonstorUnit on its manager). Its block is stamped ("ALLY", the floor) and the manager word set: the game
 # rides it from then on.
 # While it stands: its end (ally_despawn.s) when its block is gone or another floor's, when it is disarmed or Ruby is not in hand, when
@@ -123,6 +122,8 @@ alive:
     addiu $a0, $zero, 2            # (delay) fallen
     jal   0x0011EF4C               # ally_grow.s: its first frames' growth
     or    $a0, $s3, $zero          # (delay)
+    jal   0x00119348               # ally_swing.s's pin: the summon smoke kept on it
+    or    $a0, $s1, $zero          # (delay)
     lui   $t0, 0x0002
     addu  $t0, $s1, $t0
     lw    $t0, -0x1C0C($t0)        # its unit 0's HP (manager + 0x1E3F4)
@@ -446,11 +447,6 @@ stab:
     sw    $zero, 0x74($s1)         # its frames (ally_grow.s)
     jal   0x001191A0               # ally_shots.s before: the shot pack's empty slots noted
     nop
-    lui   $t0, 0x01C7
-    ori   $t0, $t0, 0x5870
-    lw    $t1, 0x4E3C($t0)         # the texture manager's buffer in use (16-byte units): EnterTexture copies every picture there
-    lui   $t5, 0x01FB
-    sw    $t1, -0x28($t5)          # AllyTexBuf + 0: before its load
     lw    $s4, -0x6320($gp)        # NowMonstorUnit
     sw    $s2, -0x6320($gp)
     or    $a0, $s2, $zero
@@ -470,10 +466,6 @@ sday:
     addiu $a0, $zero, 1            # (delay) find the new
     lui   $t5, 0x01FB
     sw    $v0, -0x354($t5)         # AllyTex + 0xC: its entries
-    lui   $t0, 0x01C7
-    ori   $t0, $t0, 0x5870
-    lw    $t1, 0x4E3C($t0)
-    sw    $t1, -0x24($t5)          # AllyTexBuf + 4: after it
     jal   0x001191E0               # ally_shots.s after: the shot configs it entered, kept for its end
     nop
     jal   stamp
