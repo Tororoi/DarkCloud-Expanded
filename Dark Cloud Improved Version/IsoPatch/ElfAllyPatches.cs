@@ -36,7 +36,11 @@ namespace Dark_Cloud_Improved_Version
 
             byte[] brain = Embedded("allyBrain.bin"), summon = Embedded("allySummon.bin");
             Require(brain, "allyBrain.bin", "ally_brain.s", MipsAsm.Jal(DeadPadPressCave.AllySummon), MipsAsm.Jal(DeadSifRpcCave.AllyFollow),
-                    MipsAsm.Jal(DeadSifDataCave.AllyDespawn), MipsAsm.Jal(DeadMcCave.AllyGrow), MipsAsm.Jal(DeadSifRpcCave.AllyPark), MipsAsm.Jal(DeadSifRpcCave.AllyRelease));
+                    MipsAsm.Jal(DeadSifDataCave.AllyDespawn), MipsAsm.Jal(DeadMcCave.AllyGrow), MipsAsm.Jal(DeadSifRpcCave.AllyPark), MipsAsm.Jal(DeadSifRpcCave.AllyRelease),
+                    MipsAsm.Jal(DeadDmaWatchCave.AllyAim));
+            byte[] aim = Embedded("allyAim.bin");
+            Require(aim, "allyAim.bin", "ally_aim.s", 0x3C0A0001u, 0x354AFDE0u);   // the pockle's position: lui t2, 1 / ori t2, 0xFDE0
+            Claim(fs, ElfOff, "sceDmaWatch", DeadDmaWatchCave.Host, DeadDmaWatchCave.VanillaWord0, aim, DeadDmaWatchCave.End);
             Require(summon, "allySummon.bin", "ally_brain.s", MipsAsm.Jal(DeadSifDataCave.AllyDespawn), MipsAsm.Jal(DeadSifElfCave.AllyShotsBefore), MipsAsm.Jal(DeadSifElfCave.AllyShotsAfter));
             Claim(fs, ElfOff, "sceDmaSendN", DeadDmaCave.Host, DeadDmaCave.VanillaWord0, brain, DeadDmaCave.End);
             Claim(fs, ElfOff, "scePadInfoPressMode", DeadPadPressCave.Host, DeadPadPressCave.VanillaWord0, summon, DeadPadPressCave.End);

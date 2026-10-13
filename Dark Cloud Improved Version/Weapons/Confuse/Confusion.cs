@@ -114,7 +114,7 @@ namespace Dark_Cloud_Improved_Version
                     any = true;
                     int victim = Nearest(s);
                     if (victim != _victim[s]) { _victim[s] = victim; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"enemy slot {s} → after {Whom(victim)}"); }
-                    Point(s, victim >= 0 ? (uint)(EnemyAddresses.CharObjects.PosAddr(victim) - Memory.Pcsx2Base) : victim == -1 ? StbExternCmd.PlayerPosGuest : Wander(s));
+                    Point(s, victim >= 0 ? Aim(s, victim) : victim == -1 ? StbExternCmd.PlayerPosGuest : Wander(s));
                     if (_tint != null) Memory.WriteVec3(EnemyAddresses.CharObjects.CharAddr(s) + CCharacter.CharaTint, _tint[0] * TintScale, _tint[1] * TintScale, _tint[2] * TintScale);
                 }
                 else
@@ -123,7 +123,7 @@ namespace Dark_Cloud_Improved_Version
                     if (by < 0) { if (_provoked[s]) EndProvocation(s); continue; }
                     if (!_provoked[s]) { _provoked[s] = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"enemy slot {s} provoked: after enemy slot {by}"); }
                     any = true;
-                    Point(s, (uint)(EnemyAddresses.CharObjects.PosAddr(by) - Memory.Pcsx2Base));
+                    Point(s, Aim(s, by));
                 }
             }
             RetireShells();
@@ -211,6 +211,21 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteBytesBatch(q, b);
                 _wanderSet[slot] = GameClock.Now;
             }
+            return (uint)(q - Memory.Pcsx2Base);
+        }
+
+        /// <summary>Slot <paramref name="slot"/>'s mark on enemy <paramref name="victim"/>: a point inside the victim's hit sphere nearest it
+        /// (<see cref="EnemyBody.AimPoint"/> — a large enemy's root is deeper in its body than an attacker's approach reaches), kept in
+        /// the slot's own vec (the wander spot's: never in use while it has a victim; the next wander picks afresh). Its guest address.</summary>
+        private static uint Aim(int slot, int victim)
+        {
+            long me = EnemyAddresses.CharObjects.PosAddr(slot);
+            var (x, h, y) = EnemyBody.AimPoint(victim, Memory.ReadFloat(me), Memory.ReadFloat(me + 8));
+            long q = CodeCaves.BabelWander + (long)slot * CodeCaves.BabelWanderStride;
+            var b = new byte[16];
+            BitConverter.GetBytes(x).CopyTo(b, 0); BitConverter.GetBytes(h).CopyTo(b, 4); BitConverter.GetBytes(y).CopyTo(b, 8); BitConverter.GetBytes(1f).CopyTo(b, 12);
+            Memory.WriteBytesBatch(q, b);
+            _wanderSet[slot] = default;
             return (uint)(q - Memory.Pcsx2Base);
         }
 

@@ -195,7 +195,17 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x0010C7D0, HostSpan = 1160, VanillaWord0 = 0x27BDFFA0;   // `addiu sp,sp,-0x60`
         /// <summary>tools/stubs/ally_brain.s (ElfAllyPatches): the Pocklekul's pockle once a frame — guard charge, target, end.</summary>
-        internal const uint AllyBrain = Host;   // 1,160 B → 0x10CC58 (full)
+        internal const uint AllyBrain = Host;   // 1,152 B → 0x10CC50
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead sceDmaWatch, sceDmaSyncN, sceDmaLastSyncTime, sceDmaPause, sceDmaRestart and sceDmaCallback bodies (0x10CD20, 368 B
+    /// to __divdi3) — unreferenced in the loaded image, DUN.BIN and TITLE.BIN (proved 2026-10-12).</summary>
+    internal static class DeadDmaWatchCave
+    {
+        internal const uint Host = 0x0010CD20, HostSpan = 368, VanillaWord0 = 0x27BDFFB0;   // `addiu sp,sp,-0x50`
+        /// <summary>tools/stubs/ally_aim.s (ElfAllyPatches): the point inside its enemy's nearest hit sphere the ally's AI goes for.</summary>
+        internal const uint AllyAim = Host;   // 332 B → 0x10CE6C
         internal const uint End = Host + HostSpan;
     }
 

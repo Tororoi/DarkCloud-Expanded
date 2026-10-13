@@ -17,7 +17,7 @@
 # an event takes the floor, when its script has killed it (unit 0 back to state −1), when Ruby is more than 300 u from it. Else its
 # target: the locked-on enemy within 200 u of Ruby, else the one it had while it lives within 200 u, else the live enemy nearest her
 # within 150 u. An enemy: its pointer-table
-# entry (16) names that enemy's position and its AI runs (from label 100's top when it was idling). None: its AI is parked (AllyHold:
+# entry (16) names a point inside that enemy's nearest hit sphere (ally_aim.s) and its AI runs (from label 100's top when it was idling). None: its AI is parked (AllyHold:
 # its script resumed on a YIELD each frame while Step goes on moving, animating and hitting it) and it walks beside Ruby
 # (ally_follow.s), its entry naming the idle point there. Falling (HP 0): left to its death label.
 #
@@ -189,13 +189,11 @@ ptarget:
     jal   0x001178D0               # ally_follow.s's release: label 100 afresh
     or    $a0, $s1, $zero          # (delay)
 tpos:
-    ori   $t0, $zero, 0x3510
-    mult  $s2, $t0
-    mflo  $t0
-    lui   $t1, 0x01E1
-    ori   $t1, $t1, 0x84B0         # the floor's chara[s][0] positions (0x01E184B0)
+    or    $a0, $s2, $zero
+    jal   0x0010CD20               # ally_aim.s: the point in its body the AI goes for
+    or    $a1, $s3, $zero          # (delay)
     b     setp
-    addu  $t2, $t0, $t1            # (delay)
+    or    $t2, $v0, $zero          # (delay)
 idle:
     addiu $t3, $zero, 1
     sw    $t3, -0x3C($s0)          # AllyHold: its AI parked

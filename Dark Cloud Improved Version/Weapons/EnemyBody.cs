@@ -62,6 +62,33 @@ namespace Dark_Cloud_Improved_Version
         }
         private const float UnposedSphere = 80f;   // a hit sphere farther than this from its own unit has not been placed this frame
 
+        /// <summary>Where an attacker at (x, y) is to go for the enemy in <paramref name="slot"/> — what its script reads as "the player":
+        /// a point inside the enemy's posed hit sphere nearest it (by distance less radius), <see cref="AimDepth"/> in from its surface
+        /// toward the attacker (its centre for a sphere smaller than that, or an attacker already that deep), at the unit's height. A
+        /// large enemy's root lies deep in its body, where the attacker's approach (and the block against the body) never got it near
+        /// enough to swing; this puts the mark as deep as an ordinary enemy's root sits. No posed sphere: the root.</summary>
+        internal static (float x, float h, float y) AimPoint(int slot, float x, float y)
+        {
+            long b = BodyCollision.SlotBase(slot), up = EnemyAddresses.CharObjects.PosAddr(slot);
+            float ux = Memory.ReadFloat(up), uh = Memory.ReadFloat(up + 4), uy = Memory.ReadFloat(up + 8);
+            float best = float.MaxValue, bx = ux, by = uy, br = 0f;
+            for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
+            {
+                if (Memory.ReadInt(b + BodyCollision.ActiveArray + part * BodyCollision.BodyPartStride) == 0) continue;
+                long c = b + BodyCollision.CentreArray + part * BodyCollision.CentreStride;
+                float cx = Memory.ReadFloat(c), cy = Memory.ReadFloat(c + 8);
+                if (Math.Abs(cx - ux) > UnposedSphere || Math.Abs(cy - uy) > UnposedSphere) continue;
+                float r = Memory.ReadFloat(b + BodyCollision.RadiusArray + part * BodyCollision.BodyPartStride);
+                float edge = (float)Math.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) - r;
+                if (edge < best) { best = edge; bx = cx; by = cy; br = r; }
+            }
+            if (best == float.MaxValue) return (ux, uh, uy);
+            float dx = x - bx, dy = y - by, d = (float)Math.Sqrt(dx * dx + dy * dy), depth = br - AimDepth;
+            if (depth > 0f && d > depth) { bx += dx / d * depth; by += dy / d * depth; }
+            return (bx, uh, by);
+        }
+        internal const float AimDepth = 8f;   // as deep in its nearest sphere as an ordinary enemy's root sits (tools/stubs/ally_aim.s: the same)
+
         /// <summary>The unit's own world height: its CCharacter position (per slot — the model root's world matrix is
         /// the SPECIES' tree, posed for whichever unit drew last, and the slot's LocationZ is floor-relative).</summary>
         internal static float UnitHeight(int slot) => Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(slot) + 4);
