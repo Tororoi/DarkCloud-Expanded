@@ -3,7 +3,7 @@
 #   make dev                       ->  dev mode (developer tabs)
 #   make sandbox                   ->  sandbox mode (user UI + the "Sandbox" tab: roster editor, fish farmer)
 #   make build                     ->  compile only, no launch
-#   make stubs                     ->  reassemble all EE cave stubs (tools/stubs/*.s) into Resources/isoPatch/
+#   make stubs                     ->  reassemble all EE cave stubs (tools/stubs/*.s) into Resources/isoPatch/stubs/
 #   make stubs-check               ->  verify the committed stub .bins match their .s sources
 #
 # These wrap the dotnet-native launch profiles in Dark Cloud Improved Version/Properties/launchSettings.json,

@@ -1,7 +1,7 @@
 # prop_pellet_follow.s — a chara-slot prop rides one of Xiao's pellets: the Matador's charged shot, a copy of the slingshot
 # (SlingshotProp in projectile mode, chara slot 3) placed on the pellet every frame. Assembled at 0x01FB1E30
 # (ElfCave.PropPelletFollow). Takes the dungeon step loop's `jal step__5CSHOT` (dun 0x1DB874C, DunPatches) in front of the
-# cat's chain: it calls ElfCave.CatCopyQueue — which services the cat's copy queue and jumps on to CatPelletFollow, where
+# cat's chain: it calls ElfCave.CatLoad — which answers the cat loader's requests and jumps on to CatPelletFollow, where
 # the displaced step__5CSHOT is performed — with a0 (the pool) passed straight through, then does its own work.
 #
 # Mailbox (0x01F10000 + …): +0xC0 PropFollowSlot int, the pellet slot + 1 (mod, written LAST; 0 = off)
@@ -12,7 +12,7 @@
 
     addiu $sp, $sp, -0x20
     sw    $ra, 0x0010($sp)
-    jal   0x01FB2480               # CatCopyQueue → CatPelletFollow → step__5CSHOT(pool), as before
+    jal   0x01FB2480               # CatLoad → CatPelletFollow → step__5CSHOT(pool), as before
     nop
     lui   $t0, 0x01F1
     lw    $t1, 0x00C0($t0)         # PropFollowSlot

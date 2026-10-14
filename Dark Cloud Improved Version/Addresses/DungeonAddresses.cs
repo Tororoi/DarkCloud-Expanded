@@ -245,6 +245,39 @@ namespace Dark_Cloud_Improved_Version
         internal const long TickCounter = 0x202A3684;   // int, gp-0x616C
     }
 
+    /// <summary>The summoned ally's block: room that LoadChara2 sets aside at the end of the character pool — for Ruby, DunPatches grows the
+    /// allocation of her c05_f03.chr copy by <see cref="Units"/>; for Xiao it is the end of her region (<see cref="XiaoRegion"/>) — so it ends
+    /// where the weapons begin. The weapon and effect
+    /// counters start after it and reload without touching it; the next LoadChara2 (a party switch, a floor) makes it again. The summoned
+    /// pockle lives in it: its private monster manager, script arena and model (tools/stubs/ally_brain.s lays it out).</summary>
+    internal static class AllyBlock
+    {
+        /// <summary>996,096 B: the head (0x100), the manager (0x60750 B — its unused slots hold the script arena, the textures and the script
+        /// copy) and the model room (37,547 units: the largest trimmed pockle's meshes, motions and shot data, from the floor footprints).
+        /// A multiple of 4 (DunPatches' rounding).</summary>
+        internal const int Units = 62256;
+        /// <summary>The block's allocators (CDataAlloc2 {base, base, used, cap}, used and cap in 16-byte units): the model room, the script
+        /// arena, the side room.</summary>
+        internal const int ModelAlloc = 0x00, ScriptAlloc = 0x10, SideAlloc = 0x90, AllocUsed = 0x08, AllocCap = 0x0C;
+    }
+
+    /// <summary>Xiao's room at the end of the character pool, made by LoadChara2 whenever she is the character loaded (ElfCave.CatLoad's
+    /// reserve entry, hooked at dun 0x1DBA894): the weapon and effect counters start after it, so it lasts until the next LoadChara2 (a floor
+    /// or a party switch). The Divine Beast cat loads into it on demand (CatSlot, through the same cave's step entry). Its size is
+    /// <see cref="Units"/>, or what the pool has left past <see cref="Spare"/> when that is less (the cave records it).</summary>
+    internal static class XiaoRegion
+    {
+        /// <summary>At most 1,100,000 B. ⚠ Baked into tools/stubs/cat_load.s as `lui t1,1; ori t1,t1,0x0C8E` — ElfCatPatches checks the two words.</summary>
+        internal const int Units = 68750;
+        /// <summary>The weapons' and effects' allowance the region leaves after it: 448,000 B against their measured peaks with Xiao
+        /// (weapons 239,328 + effects 190,256 B), whose overrun is a silent spin. ⚠ Baked into cat_load.s as `addiu a1,a1,-28000`.</summary>
+        internal const int Spare = 28000;
+        /// <summary>The least region the cat is loaded into: its load measured 983,248 B (61,453 units) before the pack carried its own
+        /// glow disc (5,184 B of pixels and palette more). A load that outgrows the region is a silent spin in the region's allocator, so
+        /// a smaller region is refused instead.</summary>
+        internal const int CatMinUnits = 62000;
+    }
+
     /// <summary>The dungeon's CDataAlloc2 bump pools — each {base +0, used +8, cap +0xC}, the last two in 16-byte units —
     /// carved in <see cref="InCarveOrder"/> by GameInit (dun 0x1DAC1C0) from the 27 MB global buffer (GlobalDataBuffer
     /// @0x2AB080, whose bump counter sits at the array's end). Chara, weapons and effects share ONE pool: the chara cap is

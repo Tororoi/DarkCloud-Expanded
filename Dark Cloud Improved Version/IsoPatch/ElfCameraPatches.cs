@@ -186,7 +186,7 @@ namespace Dark_Cloud_Improved_Version
             // written into the flagged word slots after this literal (PutVal/PutEase, indices guarded). Regenerate this
             // array via mips_asm.py only if the CODE changes. R5900 quirks: c.OLT.s / sqrt.s are .word-encoded; a nop
             // follows every mtc1 and every FP compare.
-            uint[] pullIn = LoadWordsResource("townCameraCollision.bin", 0x27BDFF60);   // Resources/isoPatch/townCameraCollision.bin (embedded) —
+            uint[] pullIn = LoadWordsResource("townCameraCollision.bin", 0x27BDFF60);   // Resources/isoPatch/stubs/camera/townCameraCollision.bin (embedded) —
                                                       // assembled from tools/stubs/town_camera_collision.s @0x14B838
             // Inject the tunables above into the template's constant-load slots (indices auto-located from
             // tools/stubs/town_camera_collision.s; guards trip loudly if the array drifts). PutVal = single `lui $t0` (float low16 must

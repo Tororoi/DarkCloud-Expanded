@@ -174,6 +174,118 @@ namespace Dark_Cloud_Improved_Version
 
     /// <summary>The dead <c>SmoothRest</c> body (262 zero words from 0x27D084, in the main ELF): the camera-height cave takes its head
     /// (ElfCameraPatches, 0x27D090, 408 B → 0x27D228), the rest is free zero words up to 0x27D49C.</summary>
+    /// <summary>The dead sceMcSetFileInfo (0x11EDC8, 0x154 B) and sceMcRename (0x11EF20, 0xFC B) bodies — no jal, j, pointer or lui/lo pair
+    /// reaches either in the ELF's loaded image, DUN.BIN or TITLE.BIN (proved 2026-10-12): 596 contiguous bytes.</summary>
+    internal static class DeadMcCave
+    {
+        internal const uint Host = 0x0011EDC8, HostSpan = 0x254, VanillaWord0 = 0x27BDFFB0;   // `addiu sp,sp,-0x50`
+        /// <summary>tools/stubs/ally_manager.s (ElfAllyPatches): the ally's private monster manager ridden beside the floor's.</summary>
+        internal const uint AllyStep = Host, AllyDraw = Host + 0x10, AllyShadow = Host + 0x20;   // 192 B → 0x11EE88
+        /// <summary>tools/stubs/ally_follow.s's tail (after #SPLIT): the ally's turn and clip while it walks beside Ruby.</summary>
+        internal const uint AllyTurn = Host + 0xD8;   // 0x11EEA0, 172 B → 0x11EF4C
+        /// <summary>tools/stubs/ally_grow.s: the ally's growth as it appears (its scale table at +0x48), then the YIELD records its
+        /// idle park points the ally's script at (+0x98, three vmcode_t).</summary>
+        internal const uint AllyGrow = Host + 0x184, AllyGrowTable = AllyGrow + 0x48, AllyYield = AllyGrowTable + 20 * 4;   // 0x11EF4C, 188 B → 0x11F008
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead sceDmaSendN, sceDmaSendI, sceDmaRecv, sceDmaRecvN, sceDmaRecvI and sceDmaSendM bodies (0x10C7D0, 1,160 B to the live
+    /// sceDmaSync) — no jal, j, pointer or lui/lo pair reaches any of them in the ELF's loaded image, DUN.BIN or TITLE.BIN (proved 2026-10-12).</summary>
+    internal static class DeadDmaCave
+    {
+        internal const uint Host = 0x0010C7D0, HostSpan = 1160, VanillaWord0 = 0x27BDFFA0;   // `addiu sp,sp,-0x60`
+        /// <summary>tools/stubs/ally_brain.s (ElfAllyPatches): the summoned pockle once a frame — guard charge, target, end.</summary>
+        internal const uint AllyBrain = Host;   // 1,160 B → 0x10CC58 (full)
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead sceCdGetDiskType and sceCdGetDiskStatus bodies (0x10B5A8, 336 B) — unreferenced in the loaded image, DUN.BIN
+    /// and TITLE.BIN (no jal, j, stored word or lui/addiu|ori pair reaches them; proved 2026-10-13).</summary>
+    internal static class DeadCdTypeCave
+    {
+        internal const uint Host = 0x0010B5A8, HostSpan = 336, VanillaWord0 = 0x27BDFFD0;   // `addiu sp,sp,-0x30`
+        /// <summary>tools/stubs/ally_settle.s (ElfAllyPatches): the ally's last move finished before it idles.</summary>
+        internal const uint AllySettle = Host;   // 160 B → 0x10B648
+        /// <summary>tools/stubs/ally_record.s (ElfAllyPatches): every attack sphere CheckDmg places while an ally stands, recorded per
+        /// frame into the ally's swing ring (entered from ally_hooks.s swing).</summary>
+        internal const uint AllyRecord = Host + 0xA0;   // 136 B → 0x10B6D0
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead sceDmaWatch, sceDmaSyncN, sceDmaLastSyncTime, sceDmaPause, sceDmaRestart and sceDmaCallback bodies (0x10CD20, 368 B
+    /// to __divdi3) — unreferenced in the loaded image, DUN.BIN and TITLE.BIN (proved 2026-10-12).</summary>
+    internal static class DeadDmaWatchCave
+    {
+        internal const uint Host = 0x0010CD20, HostSpan = 368, VanillaWord0 = 0x27BDFFB0;   // `addiu sp,sp,-0x50`
+        /// <summary>tools/stubs/ally_aim.s (ElfAllyPatches): the point inside its enemy's nearest hit sphere the ally's AI goes for.</summary>
+        internal const uint AllyAim = Host;   // 332 B → 0x10CE6C
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead scePadInfoPressMode, scePadEnterPressMode, scePadExitPressMode, scePadSetVrefParam, scePadGetPortMax and
+    /// scePadGetSlotMax bodies (0x1203D0, 688 B) — unreferenced in the loaded image, DUN.BIN and TITLE.BIN (proved 2026-10-12).</summary>
+    internal static class DeadPadPressCave
+    {
+        internal const uint Host = 0x001203D0, HostSpan = 688, VanillaWord0 = 0x0080302D;   // `daddu a2,a0,zero`
+        /// <summary>tools/stubs/ally_brain.s's tail (after #SPLIT): the summon.</summary>
+        internal const uint AllySummon = Host;   // 664 B → 0x120668
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead sceSifSetRpcQueue, sceSifRegisterRpc, sceSifRemoveRpc and sceSifRemoveRpcQueue bodies (0x1176D8, 552 B) —
+    /// unreferenced in the loaded image, DUN.BIN and TITLE.BIN (proved 2026-10-12).</summary>
+    internal static class DeadSifRpcCave
+    {
+        internal const uint Host = 0x001176D8, HostSpan = 552, VanillaWord0 = 0x3C030001;   // `lui v1,0x1`
+        /// <summary>tools/stubs/ally_follow.s (ElfAllyPatches): the ally with no enemy walks beside the summoner.</summary>
+        internal const uint AllyFollow = Host;   // 428 B → 0x117884
+        /// <summary>…its park (the ally's script resumed on a YIELD while it idles) and release (its AI afresh).</summary>
+        internal const uint AllyPark = Host + 0x1C8, AllyRelease = Host + 0x1F8;   // 0x1178A0, 0x1178D0; 548 B in all → 0x1178FC
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead sceSifLoadElfPart, sceSifLoadElf, sceSifGetIopAddr and sceSifSetIopAddr bodies (0x1191A0, 536 B) — unreferenced in
+    /// the loaded image, DUN.BIN and TITLE.BIN, nothing jumps into them (proved 2026-10-13).</summary>
+    internal static class DeadSifElfCave
+    {
+        internal const uint Host = 0x001191A0, HostSpan = 536, VanillaWord0 = 0x27BDFFF0;   // `addiu sp,sp,-0x10`
+        /// <summary>tools/stubs/ally_shots.s (ElfAllyPatches): before (+0) / after (+0x40) the summon's load, clear (+0xA4) at its end.</summary>
+        internal const uint AllyShotsBefore = Host, AllyShotsAfter = Host + 0x40, AllyShotsClear = Host + 0xA4;   // 324 B → 0x1192E4
+        /// <summary>tools/stubs/ally_hooks.s (ElfAllyPatches), the ally's hooks into the monster code: swing (CheckDmg's attack sphere
+        /// for the ally's unit made with mask 0 — it never hits the player), mask (what the ally's unit takes), blocked (ally_collide.s's
+        /// stop: a floor unit the ally's body stopped noted in CodeCaves.AllyBlocked), pin (ally_brain.s each frame: its position copied to
+        /// CodeCaves.AllyPin's), full (a full event's start, dun 0x1DB4A30: a standing ally ends before the event empties the monsters' textures and shot pack).</summary>
+        internal const uint AllyHooks = Host + 0x144;   // 0x1192E4, 184 B → 0x11939C
+        internal const uint AllySwing = AllyHooks, AllyMask = AllyHooks + 0x1C, AllyBlocked = AllyHooks + 0x3C, AllyPinCopy = AllyHooks + 0x64,
+                            AllyFullEvent = AllyHooks + 0x98;
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead sceSifGetOtherData body (0x117080, 344 B) — unreferenced in the loaded image, DUN.BIN and TITLE.BIN, nothing jumps
+    /// into it (proved 2026-10-12).</summary>
+    internal static class DeadSifDataCave
+    {
+        internal const uint Host = 0x00117080, HostSpan = 344, VanillaWord0 = 0x27BDFF70;   // `addiu sp,sp,-0x90`
+        /// <summary>tools/stubs/ally_despawn.s (ElfAllyPatches): the ally's end.</summary>
+        internal const uint AllyDespawn = Host;   // 256 B → 0x117180
+        /// <summary>tools/stubs/ally_load.s (ElfAllyPatches): SetupBaseModel's three hooks that spread the ally's load over its block —
+        /// img (its textures' allocator), stb (its script copy's), back (the model allocator again for its shot data).</summary>
+        internal const uint AllyLoadImg = Host + 0x100, AllyLoadStb = AllyLoadImg + 0x18, AllyLoadBack = AllyLoadImg + 0x34;   // 76 B → 0x1171CC
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead sceSifLoadModuleBuffer body (0x118C88, 0x1EC B) — unreferenced in the loaded image, DUN.BIN and TITLE.BIN, nothing
+    /// jumps into it (proved 2026-10-12).</summary>
+    internal static class DeadSifCave
+    {
+        internal const uint Host = 0x00118C88, HostSpan = 0x1EC, VanillaWord0 = 0x27BDFF80;   // `addiu sp,sp,-0x80`
+        /// <summary>tools/stubs/ally_collide.s (ElfAllyPatches): the ally and the floor's enemies block each other.</summary>
+        internal const uint AllyCollide = Host, AllyCollideDone = Host + 0x194;   // 416 B → 0x118E28; its exit (cdone) 0x118E1C
+        /// <summary>…and the player's move blocked at the ally (the player-spear cave's MoveCheck call comes here).</summary>
+        internal const uint AllyPlayerBlock = Host + 0x1A0;   // 0x118E28, 64 B → 0x118E68
+        internal const uint End = Host + HostSpan;
+    }
+
     /// <summary>The body of <c>sceCdReadIOPm</c> (328 B from 0x10A690, main ELF, right before <see cref="DeadCdCave"/>'s host): never reached,
     /// as <see cref="DeadIoctlCave"/> (no jal, j, stored pointer or lui/addiu|ori pair in the ELF's loaded image, the dungeon or the title
     /// overlay).</summary>
@@ -315,6 +427,8 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/flash_slot.s (ElfSpeciesPatches.PatchFlashSlot): the machine-gun hit flash's size and alpha per slot, and a
         /// pinned slot's whole spark (alight, cells, burst requests, the blast cutoff, the bone placement), timed in game frames.</summary>
         internal const uint FlashSlot     = 0x0027D320;   // 316 B → 0x27D45C
+        /// <summary>tools/stubs/ally_stamp.s (ElfAllyPatches): the summoned pockle's floor stamp, called from ally_brain.s's brain and summon.</summary>
+        internal const uint AllyStamp     = 0x0027D460;   // 40 B → 0x27D488
         internal const uint End          = 0x0027D49C;
     }
 }

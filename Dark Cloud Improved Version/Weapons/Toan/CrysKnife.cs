@@ -26,16 +26,42 @@ namespace Dark_Cloud_Improved_Version
         private const int GemFactor = 2;
         private const int TickMs = 250;
 
+        private static bool _on;
+        private static long _due;            // the next assert (Environment.TickCount64): one every TickMs, however often it is called
+
+        /// <summary>Keeps CodeCaves.GemDamageFactor at <see cref="GemFactor"/>, re-asserted every <see cref="TickMs"/> (fresh memory reads 0).
+        /// A hold changes nothing: the factor only matters when a gem is thrown.</summary>
+        internal static void Drive()
+        {
+            if (!_on)
+            {
+                _on = true;
+                bool native = (uint)Memory.ReadInt(0x20000000L + 0x001D52D4) == (0x0C000000u | (DebugIfCave.GemDamage >> 2));
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (native ? $"crystal affinity: thrown gems do ×{GemFactor} damage" : "crystal affinity: the gem-damage cave is not in this ISO — gems do vanilla damage (re-patch the ISO)"));
+            }
+            long now = Environment.TickCount64;
+            if (now < _due) return;
+            _due = now + TickMs;
+            if (Memory.ReadInt(CodeCaves.GemDamageFactor) != GemFactor) Memory.WriteInt(CodeCaves.GemDamageFactor, GemFactor);
+        }
+
+        /// <summary>Put away, the sphere changed, or off the floor: vanilla gem damage.</summary>
+        internal static void Stop()
+        {
+            if (!_on) return;
+            _on = false; _due = 0;
+            Memory.WriteInt(CodeCaves.GemDamageFactor, 0);
+        }
+
+        /// <summary>Toan's Crysknife thread: hands every tick to <see cref="Drive"/> while it is in hand (Super Steve's loop drives its sphere's).</summary>
         public static void CrystalAffinityEffect()
         {
-            bool native = (uint)Memory.ReadInt(0x20000000L + 0x001D52D4) == (0x0C000000u | (DebugIfCave.GemDamage >> 2));
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (native ? $"crystal affinity: thrown gems do ×{GemFactor} damage" : "crystal affinity: the gem-damage cave is not in this ISO — gems do vanilla damage (re-patch the ISO)"));
             while (Wielded() && Player.InDungeonFloor())
             {
-                if (Memory.ReadInt(CodeCaves.GemDamageFactor) != GemFactor) Memory.WriteInt(CodeCaves.GemDamageFactor, GemFactor);   // re-asserted: fresh memory reads 0
+                Drive();
                 Thread.Sleep(TickMs);
             }
-            Memory.WriteInt(CodeCaves.GemDamageFactor, 0);                            // put away, or off the floor: vanilla
+            Stop();
         }
 
         // ── Circle Amplifier (the Crysknife's and the Magical Hammer's ownership passive) ──

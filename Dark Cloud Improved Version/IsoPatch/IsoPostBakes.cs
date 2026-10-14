@@ -46,6 +46,9 @@ namespace Dark_Cloud_Improved_Version
             // Hurt-sphere fixes baked into the monster scripts (dun\monstor\*.stb): Blizzard takes Titan's four spheres, Sam and
             // Billy take Mr. Blare's two, and Minotaur Joe's face admits the Divine Beast cat's kick at 100 %
             // (ElfCatPatches.PatchCatSpherePercent reads the armed spare table). Idempotent (appended marker).
+            // The pockles' motions trimmed to their KEY windows (and the brackets): every clip plays as before, ~46 KB less per pockle
+            // on a floor and in the summoned ally's block. Idempotent.
+            new() { Name = "pockle-motions",   Progress = "Trimming the pockles' motions …",                Run = PockleMotionBake.Run },
             new() { Name = "monster-scripts",  Progress = "Baking monster script fixes (hurt spheres, mimic wake guard) …", Run = MonsterScriptBakes.Run },
             // Effect containers the shot-effect pack can load under the dead dun\effect names (BorrowedShots): each a copy with the
             // cfg record the pack's loader asks for by name appended; the sources untouched.

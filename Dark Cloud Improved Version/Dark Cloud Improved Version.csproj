@@ -25,209 +25,13 @@
     <EmbeddedResource Include="Resources\Font\DarkCloud_Speech-Thin.ttf" />
     <!-- Town-camera collision/controller EE function (assembled from tools/town_camera_collision.s @0x14B838).
          IsoPatcher reads this at patch time; regenerate = reassemble + copy the .bin here + refresh slot indices. -->
-    <EmbeddedResource Include="Resources\isoPatch\baitKeep.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.baitKeep.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\speciesLookup.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.speciesLookup.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\fuseCapture.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.fuseCapture.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\bombGemronLook.json">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.bombGemronLook.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\crystalGemronLook.json">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.crystalGemronLook.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\atlaCollect.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaCollect.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\atlaDungeon.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaDungeon.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\atlaDraw.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaDraw.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\atlaShot.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaShot.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\atlaGemronLook.json">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaGemronLook.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\atlaGemronRecipe.json">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.atlaGemronRecipe.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\bombTint.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.bombTint.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\eyeTint.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.eyeTint.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\freezeBreak.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.freezeBreak.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\crystalShots.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.crystalShots.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\crystalHome.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.crystalHome.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\crystalPrison.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.crystalPrison.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\bombRadius.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.bombRadius.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\blowDir.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.blowDir.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\flashSlot.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.flashSlot.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\monsterBank.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.monsterBank.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\monsterBankIo.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.monsterBankIo.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\elementMenu.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.elementMenu.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\elementMenuTail.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.elementMenuTail.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\elementMenuRuby.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.elementMenuRuby.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\stiltsHeal.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.stiltsHeal.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\spearBlock.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.spearBlock.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\playerSpearBlock.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.playerSpearBlock.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\shotSpearBlock.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.shotSpearBlock.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\rockShadow.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.rockShadow.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\fallDrive.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.fallDrive.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\guardCrush.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.guardCrush.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\guardMask.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.guardMask.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\confuseName.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.confuseName.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\confuseProc.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.confuseProc.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\confuse_icon.png">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.confuse_icon.png</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\follow.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.follow.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\circleEffects.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.circleEffects.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\catPelletFollow.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catPelletFollow.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\xiaoMeleeFlinch.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.xiaoMeleeFlinch.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\catGlowDraw.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowDraw.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\catSpherePercent.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catSpherePercent.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\borrowedShotsEnter.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.borrowedShotsEnter.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\borrowedShotsEnterTail.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.borrowedShotsEnterTail.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\sharedShots.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.sharedShots.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\steelLevelUp.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.steelLevelUp.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\propPelletFollow.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.propPelletFollow.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\catGuardBypass.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGuardBypass.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\catCapeTint.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catCapeTint.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\catMaskTint.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catMaskTint.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\catPalette.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catPalette.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\catGlowPalette.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowPalette.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\mirageHazeDraw.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.mirageHazeDraw.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\superSteveIconDraw.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconDraw.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\superSteveIconCopy.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconCopy.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\catGlowPalettes.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowPalettes.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\catCopyQueue.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catCopyQueue.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\waterOrderGate.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.waterOrderGate.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\cameraHeight.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.cameraHeight.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\townCameraCollision.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.townCameraCollision.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\canalEvictFadeHook.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.canalEvictFadeHook.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\queensSprayCave.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.queensSprayCave.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\sprayBiasShim.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.sprayBiasShim.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\capeEarlyDraw.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.capeEarlyDraw.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\fishlineSplitCaves.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.fishlineSplitCaves.bin</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Resources\isoPatch\fishlineUncastGate.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.fishlineUncastGate.bin</LogicalName>
+    <!-- Every ISO-patch resource (Resources/isoPatch: stubs/<group>/, data/, assets/), embedded under its BARE file name — the name
+         ElfCaveWriter.Embedded looks up — so the folders are only where a file lives on disk. Two files sharing a name would collide. -->
+    <EmbeddedResource Include="Resources\isoPatch\**\*.bin;Resources\isoPatch\**\*.json;Resources\isoPatch\**\*.png">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
     <!-- Winding-agnostic camera normal-side pass (tools/camera_norm_side.s @0x228F00): called by the
          town-camera cave at entry; flips gathered CCPoly normals to the ref's side. -->
-    <EmbeddedResource Include="Resources\isoPatch\cameraNormSide.bin">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.cameraNormSide.bin</LogicalName>
-    </EmbeddedResource>
     <EmbeddedResource Include="Resources\PNACH\A5C05C78.pnach">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </EmbeddedResource>
@@ -236,11 +40,9 @@
     <Content Include="ModIcon.ico" />
     <AvaloniaResource Include="Resources\d06o_out_result.png" />
   </ItemGroup>
-  <!-- The embedded binaries above are GENERATED from sources in tools/ (the EE cave stubs' .s files, and the glow
-       ramp tables from build_cat_pack.GLOW_ELEMENTS). Editing a source without re-running its generator embeds stale
-       bytes and fails SILENTLY — the glow kept its old colours through a whole patch-and-test cycle that way
-       (2026-09-16) — so the build regenerates them first. Missing prerequisites skip with a message rather than
-       failing, which keeps a checkout without the extracted disc buildable. -->
+  <!-- The embedded stub binaries above are GENERATED from the EE cave stubs' .s files in tools/stubs. Editing a source
+       without re-running its generator embeds stale bytes and fails SILENTLY, so the build regenerates them first. A missing
+       assembler skips with a message rather than failing, which keeps a checkout without it buildable. -->
   <Target Name="RegenerateGeneratedResources" BeforeTargets="BeforeBuild">
     <Exec Command="python3 &quot;$(MSBuildProjectDirectory)/../tools/build_resources.py&quot;"
           StandardOutputImportance="high" />

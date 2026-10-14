@@ -179,6 +179,12 @@ namespace Dark_Cloud_Improved_Version
                 // Defensive Legacy (Aga's Sword): +15 Xiao defense.
                 AgasSwordSphere.Drive(active && sphere == Items.agassword);
 
+                // Jacket Hunter (Gladius): Master Jackets worth four times their ABS.
+                if (sphere == Items.gladius) Gladius.Drive(active); else Gladius.Stop();
+
+                // Crystal Affinity (Crysknife): thrown gems do twice their damage.
+                if (sphere == Items.crystalknife) CrysKnife.Drive(); else CrysKnife.Stop();
+
                 // The attached sphere's weapon icon over Steve on the dungeon HUD.
                 SuperSteve.DriveSphereIcon(sphere);
 
@@ -298,6 +304,15 @@ namespace Dark_Cloud_Improved_Version
 
                 // Ungaga Effects
 
+                // DeSanga: every kill heals Super Steve 5 WHP.
+                if (sphere == Items.desanga) DeSanga.Drive(active && !Player.CheckDunIsPausedOrMenu()); else DeSanga.Stop();
+
+                // Javelin: marine enemies lose their defense and are worth double ABS.
+                if (sphere == Items.javelin) Javelin.Drive(active); else Javelin.Stop();
+
+                // Scorpion's venom: its poison landing cures Xiao's and feeds Super Steve half the enemy's ABS.
+                if (sphere == Items.scorpion) Scorpion.Drive(active && !Player.CheckDunIsPausedOrMenu()); else Scorpion.Stop();
+
                 // Absorb (Cactus): pellet hits restore Xiao's thirst scaled by damage (rock/metal/undead immune).
                 Cactus.CactusDrive(active && sphere == Items.cactus, Player.XiaoId,
                                                 Player.Xiao.thirst, Player.Xiao.thirstMax, ssCactus);
@@ -347,6 +362,11 @@ namespace Dark_Cloud_Improved_Version
             BanditSlingshot.Stop();
             SteelSlingshot.Stop();
             Hardshooter.Stop();
+            Gladius.Stop();      // the Master Jackets' and marine enemies' own values back
+            Javelin.Stop();
+            CrysKnife.Stop();    // vanilla gem damage
+            DeSanga.Stop();
+            Scorpion.Stop();
         }
 
     }

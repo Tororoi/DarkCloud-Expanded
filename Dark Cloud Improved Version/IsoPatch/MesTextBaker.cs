@@ -73,6 +73,11 @@ namespace Dark_Cloud_Improved_Version
         /// allocates by its file size (the system bank: what follows it in its allocator must not move), so the file grows by
         /// exactly the new entries.</summary>
         internal static byte[] AppendMes(byte[] orig, bool trimPadding, params (int id, ushort[] words)[] add)
+            => AppendMes(orig, trimPadding, 0, add);
+
+        /// <summary><see cref="AppendMes(byte[], bool, (int, ushort[])[])"/> with the new text no earlier than byte <paramref name="minTextByte"/>
+        /// of the original file (0 = right after its real text): room kept clear of a message the app rewrites at runtime with a longer one.</summary>
+        internal static byte[] AppendMes(byte[] orig, bool trimPadding, int minTextByte, params (int id, ushort[] words)[] add)
         {
             int cnt = U16(orig, 0), f2 = U16(orig, 2), n = add.Length, newCount = cnt + n;
             int idxEnd = 4 + cnt * 4;                       // byte where the original text blob starts
@@ -84,6 +89,7 @@ namespace Dark_Cloud_Improved_Version
             const int Gap = 16;                                             // zero words kept as a terminator margin
             int raw = (blobEnd - idxEnd) + Gap; raw += raw & 1;             // word-align
             int blobLen = trimPadding ? Math.Min(orig.Length - idxEnd, raw) : orig.Length - idxEnd;
+            if (minTextByte > 0) { int floor = minTextByte - idxEnd; floor += floor & 1; blobLen = Math.Min(orig.Length - idxEnd, Math.Max(blobLen, floor)); }
 
             var ents = new List<(int id, int off)>(newCount);
             for (int i = 0; i < cnt; i++)                  // existing: +n absorbs the index-growth shift; text unmoved
@@ -113,7 +119,11 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Message <paramref name="id"/>'s text set in place: its index entry re-pointed at the end of the real text (the bank's
         /// trailing padding absorbs the words; the file keeps its size, so the pool it is carved into is unchanged). Null when the
         /// message already reads so.</summary>
-        internal static byte[] SetMes(byte[] mes, int id, ushort[] words)
+        internal static byte[] SetMes(byte[] mes, int id, ushort[] words) => SetMes(mes, id, words, 0);
+
+        /// <summary><see cref="SetMes(byte[], int, ushort[])"/> with the text no earlier than byte <paramref name="minTextByte"/> (0 = right after
+        /// the real text); a text already reading so but lying below it is moved.</summary>
+        internal static byte[] SetMes(byte[] mes, int id, ushort[] words, int minTextByte)
         {
             int cnt = IsoBytes.U16(mes, 0), idxEnd = 4 + cnt * 4, entry = -1;
             for (int i = 0; i < cnt; i++) if (IsoBytes.U16(mes, 4 + i * 4) == id) entry = 4 + i * 4;
@@ -121,10 +131,10 @@ namespace Dark_Cloud_Improved_Version
             int cur = 2 * (cnt + IsoBytes.U16(mes, entry + 2) + 1);
             bool same = true;
             for (int i = 0; i < words.Length && same; i++) same = cur + i * 2 + 1 < mes.Length && IsoBytes.U16(mes, cur + i * 2) == words[i];
-            if (same) return null;
+            if (same && cur >= minTextByte) return null;
             int blobEnd = mes.Length;
             while (blobEnd > idxEnd && mes[blobEnd - 1] == 0) blobEnd--;
-            int at = blobEnd + 16; at += at & 1;
+            int at = Math.Max(blobEnd + 16, minTextByte); at += at & 1;
             if (at + words.Length * 2 > mes.Length) throw new IOException($"no room for message {id} in the bank's padding");
             var o = (byte[])mes.Clone();
             IsoBytes.U16(o, entry + 2, (ushort)(at / 2 - cnt - 1));

@@ -1,5 +1,5 @@
 # cat_glow_palette.s — the Divine Beast cat's GLOW takes the equipped weapon's element colour, natively.
-# Assembled at 0x01FB3A80 (ElfCave.CatGlowPalette); the copy-queue cave calls it once per dungeon frame, right after
+# Assembled at 0x01FB3A80 (ElfCave.CatGlowPalette); the loader cave (cat_load.s) calls it once per dungeon frame, right after
 # cat_palette.s does the same job for the cape and mask.
 #
 # WHY A PALETTE AND NOT MORE DISCS. A 64x64 RGBA32 glow disc is 16,448 B inside Xiao's character pack, and the weapons
@@ -9,13 +9,13 @@
 #
 # WHY THE TABLE IS COPIED STRAIGHT DOWN. The GS reads a PSMT8 palette in CSM1 order, which exchanges bits 3 and 4 of the
 # index — and nothing de-swizzles it on the way: EnterTexture (0x1313B0) memcpy's the file's 1024 B to CTexture+0x48 and
-# ReloadTexture blits them to VRAM verbatim (qwc 0x40). So build_cat_pack gives the disc only indices the permutation
+# ReloadTexture blits them to VRAM verbatim (qwc 0x40). So GlowDisc (the C# bake) gives the disc only indices the permutation
 # LEAVES ALONE — the 128 whose bits 3 and 4 match — and the 128 words of each table land at those same CLUT words:
 # eight words, skip sixteen, eight words, repeated eight times. The disc needs 115 levels, so they all fit.
 #
 # THE TABLES are NINE 512-byte blocks at 0x01FB2880 (ElfCave.CatGlowPalTables) — rows 0-5 the elements, 6-8 the Divine
 # Beast Title / Angel Shooter / Angel Gear looks — written at PATCH time by
-# ElfPatches.PatchCatGlowPalettes from a blob build_cat_pack --palettes bakes off the same index map as the disc itself.
+# ElfCatPatches.PatchCatGlowPalettes from GlowDisc.PalettesFrom the user's disc, off the same index map as the disc itself.
 # Patch-time data in a code page is fine; a RUNTIME write here would SIGBUS PCSX2 (see the Mailbox note).
 #
 # INPUTS — static addresses, clear of the dungeon pools that move with the character heap (see DungeonPools):
@@ -24,18 +24,14 @@
 #               05 None (Player.Xiao.WeaponSlot0.elementHUD)
 #   0x01C75870  CTextureManager: last entry index at +0, entries at +0x10F8 stride 0x50, name +8, palette ptr +0x48
 #   0x01FB42A0  the cat mailbox word caching the CTexture entry we found (verified by name every frame)
-#
-# ⚠ THE NAME WORDS ARE LITTLE-ENDIAN. "catglowp" sits at entry+8 as the bytes 63 61 74 67 6C 6F 77 70, so the two words
-# to compare are 0x67746163 ("catg") and 0x70776F6C ("lowp") — the LAST byte of each group is the HIGH half of the word.
-# Getting the second one wrong costs nothing visible: the scan matches "catg", fails, finds no entry and returns, and the
-# glow just stays the colour it was baked with. It was written 0x706F776C ("lwop") first time and did exactly that
-# ElfPatches.PatchCatGlowPalette refuses a stub that does not contain the right word.
+#   0x01FB4258  CatGlowName — the disc the glow draws (the cat's own `catglowc`, or Xiao's `catglowp` for Matador, Big Bang and the
+#               Solar Shot): its first eight bytes are compared, as two words, with each entry's name at +8. Empty = nothing painted.
 #
 # ONE PALETTE WORD IS THE STATE, the way the cape cave uses its first. It cannot BE the first here: word 0 is the disc's
 # transparent rim and is identical in all six ramps, so this reads the BRIGHTEST level instead — table slot 114, which the
 # index map puts at CLUT index 226. Holding the element's core colour already means there is nothing to do, and an entry
 # rebuilt by a script-event wipe comes back carrying the baked "None" ramp and repaints itself. ⚠ Both offsets are baked
-# into the two `lw`s below; build_cat_pack.glow_palettes asserts the level count and the six colours that make them valid.
+# into the two `lw`s below; GlowDisc.Palettes asserts the level count and the distinct brightest colours that make them valid.
 #
 # Leaf routine — calls nothing, touches only $t registers, returns through $ra, so it needs no frame.
 
@@ -71,17 +67,15 @@ none:
     addiu $t4, $zero, 5
 resolve:
     lui   $t5, 0x01FB
-    lw    $t6, 0x42A0($t5)       # the cached CTexture entry
+    lw    $t8, 0x4258($t5)       # CatGlowName's first four bytes: no disc named, nothing to paint
+    beq   $t8, $zero, ret
+    lw    $t6, 0x42A0($t5)       # (delay) the cached CTexture entry
     beq   $t6, $zero, search
     nop
-    lw    $t7, 0x8($t6)          # still named catglowp?
-    lui   $t8, 0x6774
-    ori   $t8, $t8, 0x6163       # "catg"
+    lw    $t7, 0x8($t6)          # still the disc the glow binds?
     bne   $t7, $t8, search
-    nop
+    lw    $t8, 0x425C($t5)       # (delay) the name's next four bytes
     lw    $t7, 0xC($t6)
-    lui   $t8, 0x7077
-    ori   $t8, $t8, 0x6F6C       # "lowp"
     beq   $t7, $t8, paint
     nop
 search:
@@ -97,13 +91,11 @@ capped:
     or    $t3, $zero, $zero      # i
 scan:
     lw    $t7, 0x8($t6)
-    lui   $t8, 0x6774
-    ori   $t8, $t8, 0x6163
+    lw    $t8, 0x4258($t5)
     bne   $t7, $t8, scan_next
     nop
     lw    $t7, 0xC($t6)
-    lui   $t8, 0x7077
-    ori   $t8, $t8, 0x6F6C
+    lw    $t8, 0x425C($t5)
     beq   $t7, $t8, found
     nop
 scan_next:

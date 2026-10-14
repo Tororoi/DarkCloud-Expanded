@@ -15,6 +15,10 @@ namespace Dark_Cloud_Improved_Version
         private const string Tag = "[AggroTable] ";
         internal enum Holder { None, MirageDecoy, ShieldRing, JudgementBlade }
 
+        /// <summary>The first entry past the floor's 16: the unit of the ally's private monster manager reads it (TargetRedirectCaves'
+        /// helper). Native (tools/stubs/ally_brain.s writes it every frame the Pocklekul's pockle stands); nothing here writes it.</summary>
+        internal const int AllySlot = 16;
+
         /// <summary>The weapon effect holding the table (None = nobody; confusion may point slots).</summary>
         internal static Holder Held { get; private set; }
         /// <summary>Set by Confusion each tick: a confused or provoked enemy is being pointed somewhere.</summary>
@@ -36,6 +40,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void Write(Holder who, byte[] ptrs)
         {
             if (!TargetRedirectCaves.Armed) return;
+            if (ptrs.Length > AllySlot * CodeCaves.PtrStride) Array.Resize(ref ptrs, AllySlot * CodeCaves.PtrStride);   // the floor's slots only
             lock (_lock) { if (Held == who) Memory.WriteBytesBatch(CodeCaves.PtrTable, ptrs); }
         }
 
@@ -56,7 +61,8 @@ namespace Dark_Cloud_Improved_Version
         {
             var buf = new byte[CodeCaves.TableSlots * CodeCaves.PtrStride];
             for (int s = 0; s < CodeCaves.TableSlots; s++) BitConverter.GetBytes(StbExternCmd.PlayerPosGuest).CopyTo(buf, s * CodeCaves.PtrStride);
-            Memory.WriteBytesBatch(CodeCaves.PtrTable, buf);
+            Memory.WriteBytesBatch(CodeCaves.PtrTable, buf[..(AllySlot * CodeCaves.PtrStride)]);   // around the ally's entry
+            Memory.WriteBytesBatch(CodeCaves.PtrAddr(AllySlot + 1), buf[((AllySlot + 1) * CodeCaves.PtrStride)..]);
         }
 
         /// <summary>Confusion's pointer for one slot, written (when it differs) only while no weapon effect holds the table; false

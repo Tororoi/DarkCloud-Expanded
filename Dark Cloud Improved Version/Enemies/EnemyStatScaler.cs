@@ -124,15 +124,28 @@ namespace Dark_Cloud_Improved_Version
         internal static void ScaleMelee(int slot, int[] meleeDamage, float factor)
         {
             if (meleeDamage == null || meleeDamage.Length == 0 || factor == 1f) return;
-
-            var map = new Dictionary<int, int>();                 // native value -> scaled value
-            foreach (int nativeDmg in meleeDamage)
-                if (nativeDmg > 0 && !map.ContainsKey(nativeDmg)) map[nativeDmg] = ScaleRound(nativeDmg, factor);
-            var produced = new HashSet<int>(map.Values);          // anti-cascade
-
             long addr = DmgParaCache.ArrayAddr(slot);
             byte[] d = Memory.ReadByteArray(addr, DmgParaCache.ReadLength);
             if (d == null) return;
+            // The values to match: what this slot's cache was last scaled to on this floor (a miniboss buff and the normalizer both
+            // scale it, in either order — each matching the native values alone missed whatever the other had written), else the
+            // species' native ones; the latter too when the cache holds none of the former (a fresh spawn in the slot).
+            int key = FloorKey();
+            int[] from = _meleeNow.TryGetValue(slot, out var was) && was.floor == key ? was.values : meleeDamage;
+            int hits = ScaleMeleeFrom(slot, addr, d, from, factor, out int[] now);
+            if (hits == 0 && from != meleeDamage) hits = ScaleMeleeFrom(slot, addr, d, from = meleeDamage, factor, out now);
+            if (hits > 0) _meleeNow[slot] = (key, now);
+            if (Verbose && hits == 0)
+                Console.WriteLine($"[StatScale]   slot {slot} melee: ×{factor:F2} but none of [{string.Join(",", from)}] found in cache @0x{addr:X8}");
+        }
+
+        private static int ScaleMeleeFrom(int slot, long addr, byte[] d, int[] from, float factor, out int[] now)
+        {
+            var map = new Dictionary<int, int>();                 // value now -> scaled value
+            foreach (int v0 in from)
+                if (v0 > 0 && !map.ContainsKey(v0)) map[v0] = ScaleRound(v0, factor);
+            var produced = new HashSet<int>(map.Values);          // anti-cascade
+            now = Array.ConvertAll(from, v0 => map.TryGetValue(v0, out int nv0) ? nv0 : v0);
             int hits = 0;
             for (int i = 0; i + 4 <= d.Length; i += 4)
             {
@@ -144,9 +157,14 @@ namespace Dark_Cloud_Improved_Version
                     if (Verbose) Console.WriteLine($"[StatScale]   slot {slot} melee +0x{i:X}: {v} -> {nv} (×{factor:F2})");
                 }
             }
-            if (Verbose && hits == 0)
-                Console.WriteLine($"[StatScale]   slot {slot} melee: ×{factor:F2} but none of [{string.Join(",", meleeDamage)}] found in cache @0x{addr:X8}");
+            return hits;
         }
+
+        // Per slot: the floor its melee cache was last scaled on and the values it holds now (ScaleMelee composes on them).
+        private static readonly Dictionary<int, (int floor, int[] values)> _meleeNow = new();
+
+        private static int FloorKey()
+            => (Memory.ReadByte(Addresses.checkDungeon) << 16) | (Memory.ReadByte(Addresses.checkFloor) << 8) | (Memory.ReadByte(Addresses.dunBackFloorFlag) != 0 ? 1 : 0);
 
         // ── Projectile (per-SPECIES — shared STB; affects all enemies of the species) ─────────────────────
         /// <summary>

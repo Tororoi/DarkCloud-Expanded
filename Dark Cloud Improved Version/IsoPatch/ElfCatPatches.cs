@@ -7,7 +7,7 @@ using static Dark_Cloud_Improved_Version.ElfCaveWriter;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>Divine Beast cat: the ELF patches behind the cat shot — its pellet follower, glow, sphere percentage, guard bypass, cape and mask tints, copy queue and palettes. Called in order from ElfPatches.ElfPatchAndCrc.</summary>
+    /// <summary>Divine Beast cat: the ELF patches behind the cat shot — its pellet follower, glow, sphere percentage, guard bypass, cape and mask tints, loader and palettes. Called in order from ElfPatches.ElfPatchAndCrc.</summary>
     internal static class ElfCatPatches
     {
         // ── Divine Beast cat: native pellet follower ─────────────────────────────────────────────────────
@@ -159,7 +159,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The Super Steve cat's MASK under the cape's ambient. Unlike every other cave here this one patches NO hook
         /// site: a mesh draws through a C++ virtual call, so there is no `jal` to take. The bytes just have to exist, and
-        /// CatCopy.MaskTint reaches them at runtime by giving the mask's own copied CVisualMDT a private vtable whose
+        /// CatSlot.MaskTint reaches them at runtime by giving the mask's own copied CVisualMDT a private vtable whose
         /// two DrawVu1 slots point in here. Nothing else in the game can arrive at it.</summary>
         internal static void PatchCatMaskTint(FileStream fs, Func<uint, long> ElfOff)
         {
@@ -171,22 +171,26 @@ namespace Dark_Cloud_Improved_Version
             WriteBytes(fs, ElfOff, CaveAddr, b, ElfCave.NextFree, "catMaskTint.bin overruns its cave — move ElfCave.NextFree.");
         }
 
-        /// <summary>The cat's mesh-copy queue. Like the mask's cave this patches NO hook site of its own: DunPatches already
-        /// aims the dungeon step loop's once-per-frame call at the cat, and that aim now lands here instead of straight on
-        /// CatPelletFollow — this cave services the queue when there is one and jumps on to the follower either way.</summary>
-        internal static void PatchCatCopyQueue(FileStream fs, Func<uint, long> ElfOff)
+        /// <summary>The cat's native loader (tools/stubs/cat_load.s). Like the mask's cave its step entry patches NO hook site of its own:
+        /// the once-per-frame chain (PropPelletFollow) calls it and it jumps on to CatPelletFollow. Its reserve entry is DunPatches'
+        /// LoadChara2 hook, and it carries <see cref="XiaoRegion.Units"/> and <see cref="XiaoRegion.Spare"/> as immediates.</summary>
+        internal static void PatchCatLoad(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint CaveAddr = ElfCave.CatCopyQueue;
-            byte[] b = Embedded("catCopyQueue.bin");
-            // Shape: opens by materialising the queue address and ends `j CatPelletFollow` (its tail calls CatPalette and
-            // CatGlowPalette first — the cape's colour, then the glow's).
-            if (b.Length != 592 || U32(b, 0) != 0x3C0801FAu || U32(b, b.Length - 8) != J(ElfCave.CatPelletFollow))
-                throw new IOException($"catCopyQueue.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            WriteBytes(fs, ElfOff, CaveAddr, b, ElfCave.NextFree, "catCopyQueue.bin overruns its cave — move ElfCave.NextFree.");
+            const uint CaveAddr = ElfCave.CatLoad;
+            byte[] b = Embedded("catLoad.bin");
+            int r = (int)(ElfCave.CatLoadReserve - CaveAddr);
+            // Shape: opens `lui t0,0x01FB` (the request block's base), jumps on to CatPelletFollow, the reserve entry opens its frame and
+            // calls the release, and the region's size is the one this build allocates.
+            bool units = ContainsWord(b, Lui(9, (uint)XiaoRegion.Units >> 16)) && ContainsWord(b, Ori(9, 9, (uint)XiaoRegion.Units & 0xFFFF))
+                      && ContainsWord(b, 0x24A50000u | (uint)(-XiaoRegion.Spare & 0xFFFF));                 // addiu a1,a1,−Spare
+            if (b.Length != 620 || U32(b, 0) != 0x3C0801FBu || !ContainsWord(b, J(ElfCave.CatPelletFollow))
+                || U32(b, r) != 0x27BDFFF0u || U32(b, r + 4) != 0xAFBF0000u || (U32(b, r + 8) >> 26) != 3 || U32(b, b.Length - 4) != 0x8C246668u || !units)
+                throw new IOException($"catLoad.bin malformed ({b.Length} B) or stale — reassemble its .s (and check XiaoRegion.Units and Spare against its immediates).");
+            WriteBytes(fs, ElfOff, CaveAddr, b, ElfCave.CatPalette, "catLoad.bin overruns its cave — it must end before CatPalette.");
         }
 
         /// <summary>The cape/mask element colour, repainted in the machine (tools/stubs/cat_palette.s). Called once per
-        /// dungeon frame from the copy-queue cave's tail; the first six words are the colour table, so the code — and the
+        /// dungeon frame from the loader cave's tail; the first six words are the colour table, so the code — and the
         /// call target — start at +0x18.</summary>
         internal static void PatchCatPalette(FileStream fs, Func<uint, long> ElfOff)
         {
@@ -198,21 +202,20 @@ namespace Dark_Cloud_Improved_Version
             WriteBytes(fs, ElfOff, CaveAddr, b, ElfCave.NextFree, "catPalette.bin overruns its cave — move ElfCave.NextFree.");
         }
 
-        /// <summary>The GLOW disc's six per-element palettes: pure DATA, 512 B each in element order (00 Fire … 05 None).
-        /// Baked by `build_cat_pack.py --palettes` off the SAME luminance index map as the disc it colours, so the two are
-        /// regenerated together — a table built against a different map paints the right colours onto the wrong levels.</summary>
-        internal static void PatchCatGlowPalettes(FileStream fs, Func<uint, long> ElfOff)
+        /// <summary>The GLOW disc's nine palettes: pure DATA, 512 B each in row order (00 Fire … 05 None, then the three weapon looks).
+        /// <paramref name="palettes"/> is GlowDisc.PalettesFrom the user's own disc — built off the SAME luminance index map as the disc it
+        /// colours, which the bakes build from the same picture, so the two always match.</summary>
+        internal static void PatchCatGlowPalettes(FileStream fs, Func<uint, long> ElfOff, byte[] palettes)
         {
             const uint CaveAddr = ElfCave.CatGlowPalTables;
             const int Expected = 9 * 128 * 4;         // nine rows (6 elements + 3 weapon looks) x the 128 permutation-safe CLUT words
-            byte[] b = Embedded("catGlowPalettes.bin", "Embedded data missing: catGlowPalettes.bin (run build_cat_pack.py --palettes and rebuild)");
-            if (b.Length != Expected)
-                throw new IOException($"catGlowPalettes.bin is {b.Length} B, expected {Expected} — re-run build_cat_pack.py --palettes.");
-            WriteBytes(fs, ElfOff, CaveAddr, b, ElfCave.CatGlowPalette, "catGlowPalettes.bin overruns its table cave — the stub starts right after it.");
+            if (palettes == null || palettes.Length != Expected)
+                throw new IOException($"the glow palettes are {palettes?.Length ?? 0} B, expected {Expected}.");
+            WriteBytes(fs, ElfOff, CaveAddr, palettes, ElfCave.CatGlowPalette, "the glow palettes overrun their table cave — the stub starts right after it.");
         }
 
         /// <summary>The element GLOW's palette, repainted in the machine (tools/stubs/cat_glow_palette.s). Rides the same
-        /// once-per-frame call from the copy-queue cave's tail that the cape's palette does.</summary>
+        /// once-per-frame call from the loader cave's tail that the cape's palette does.</summary>
         internal static void PatchCatGlowPalette(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint CaveAddr = ElfCave.CatGlowPalette;
@@ -221,13 +224,13 @@ namespace Dark_Cloud_Improved_Version
             // data table, unlike CatPalette.
             if (b.Length < 8 || U32(b, 0) != 0x3C0D01FBu)
                 throw new IOException($"catGlowPalette.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            // The by-name scan is the one part of this cave that fails INVISIBLY: a mistyped name word matches nothing, the
-            // cave returns, and the glow silently keeps its baked colour (0x706F776C spells "lwop", which
-            // spells "lwop"). So require the compare's own immediate to be present, twice: cached-entry check and scan loop.
-            int nameWords = 0;
-            for (int i = 0; i + 4 <= b.Length; i += 4) if (U32(b, i) == 0x37186F6Cu) nameWords++;
-            if (nameWords < 2)
-                throw new IOException("catGlowPalette.bin does not spell \"lowp\" (0x70776F6C) — its by-name scan would match nothing.");
+            // The by-name scan is the one part of this cave that fails INVISIBLY: compared with anything but the glow's own name, it
+            // matches nothing, the cave returns, and the glow silently keeps its baked colour. So require both name words to be read from
+            // CatGlowName (`lw t8,0x4258(t5)` / `lw t8,0x425C(t5)`), in the cached-entry check and in the scan loop.
+            int first = 0, second = 0;
+            for (int i = 0; i + 4 <= b.Length; i += 4) { if (U32(b, i) == 0x8DB84258u) first++; if (U32(b, i) == 0x8DB8425Cu) second++; }
+            if (first < 2 || second < 2)
+                throw new IOException("catGlowPalette.bin does not compare entry names with CatGlowName — its by-name scan would match nothing.");
             WriteBytes(fs, ElfOff, CaveAddr, b, ElfCave.NextFree, "catGlowPalette.bin overruns its cave — move ElfCave.NextFree.");
         }
     }

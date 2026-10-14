@@ -177,19 +177,17 @@ namespace Dark_Cloud_Improved_Version
         // The feature is dormant (EnemyModelInjector.Enabled == false) and must be given a
         // scanner-verified cave from this file before it is ever switched on.
 
-        // ── MeshCave / PropCat: the clone's software-skinned meshes, shared between the cat and the prop (0x21F56400 .. 0x21FAE400) ──
+        // ── MeshCave: software-skinned meshes (0x21F56400 .. 0x21FAE400) — the Mirage clone's from the bottom, the slingshot prop's at the top ──
         /// <summary>Software-skinned meshes. Sized for the WORST CASE character — GORO at 0x57B30 — so ALL SIX
         /// are clonable.</summary>
         internal const long MeshCave       = 0x21F56400;
         internal const long MeshCaveGuest  = 0x01F56400;
         internal const int  MeshCaveSize   = 0x58000;    // → ends 0x21FAE400, 0x5F00 clear of the band top (0x1FB4300)
 
-        // ── The Divine Beast cat and the Angel Gear slingshot prop are up TOGETHER (both arm on the Angel Gear):
-        //    the cat keeps the BOTTOM of the motion / FrameInf / BoneMtx / mesh caves, the prop the TOP (under the prop's own
-        //    0x1000 track cave at the very top of the MeshCave). Sizes: the prop is ≤ 8 nodes (WeaponCave), the cat 47 + 1. ──
+        // ── The slingshot prop (SlingshotProp, BladeProp) keeps the TOP of the motion / FrameInf / BoneMtx / mesh caves: its meshes
+        //    under its own 0x1000 track cave at the very top of the MeshCave. It is ≤ 8 nodes (WeaponCave). ──
         internal const int  PropMeshReserve       = 0xC000;                                             // the prop's mesh region
-        internal const long CatMeshCaveEnd        = MeshCave + MeshCaveSize - 0x1000 - PropMeshReserve;  // the cat's meshes end here
-        internal const long PropMeshCave          = CatMeshCaveEnd;
+        internal const long PropMeshCave          = MeshCave + MeshCaveSize - 0x1000 - PropMeshReserve;
         /// <summary>Inside the prop's 0x1000 track cave at the top of the MeshCave (its cloned tracks below +0x800, their key table at
         /// +0x800): 20 × vec4 (x, height, y, w) at +0xC00 — the Angel Gear shield ring's per-enemy "where the player is" positions,
         /// referenced by the AI redirect <see cref="PtrTable"/> (16-byte aligned: sceVu0CopyVector copies a quadword).</summary>
@@ -198,19 +196,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int  PropFrameInfCaveSize  = 0x800;                                              // 9 × 0xD0 = 0x750
         internal const long PropFrameInfCave      = FrameInfCave + FrameInfCaveSize - PropFrameInfCaveSize;
         internal const long PropFrameInfCaveGuest = FrameInfCaveGuest + FrameInfCaveSize - PropFrameInfCaveSize;
-        internal const int  CatFrameInfCaveSize   = FrameInfCaveSize - PropFrameInfCaveSize;              // 0x4800 → 88 bones
         internal const int  PropBoneMtxCaveSize   = 0x280;                                              // 10 × 0x40
         internal const long PropBoneMtxCave       = BoneMtxCave + BoneMtxCaveSize - PropBoneMtxCaveSize;
-        internal const int  CatBoneMtxCaveSize    = BoneMtxCaveSize - PropBoneMtxCaveSize;                // 0x1680 → 90 bones
         internal const int  PropMotionSlot0       = 4;                                                  // the prop's channels sit at MotionCave slots 4..7
-        // ── The cat's OVERFLOW mesh space: with the wings the cat's copies need ~407 KB (skin 0x30 + 2×0x180E0 +
-        //    0xB2B0, each wing 0x30 + 2×0x7B60 + ~0x3300, + 16 B/vertex of skin sources) — more than the whole MeshCave. The
-        //    cat borrows CharacterClone's cloth caves (ClothObjCave .. MotionCave, 0x23F00 B) for SECOND VU buffers and the
-        //    skin sources: a cloth clone (the town ally switch, Mirage's Ungaga clone) can never be up while Xiao's cat is —
-        //    the cat exists only while Xiao is the active dungeon character, and Mirage tears down on a party swap. ──
-        internal const long CatOverflowCave      = ClothObjCave;
-        internal const long CatOverflowCaveGuest = ClothObjCave - 0x20000000;
-        internal const int  CatOverflowCaveSize  = (int)(MotionCave - ClothObjCave);                        // 0x23F00
 
         // ── 0x21FB4000 .. 0x21FB4300 (guest 0x01FB4000, 0x300 B, top of the MeshCave margin) ─────────────
         // +0x00 (4 B) holds the shallow-fishing bobber-anchor global (FishLineShallow.BobberPtr, FishingAddresses.cs):
@@ -228,21 +216,19 @@ namespace Dark_Cloud_Improved_Version
         // already carry runtime-written words (WaterRedraw, the blocks below), so a PINE write here cannot
         // fault the way one into a code page does. Inside the ModReserved heap-tail claim, so it stays clean.
         //
-        // ── CatCopyQueue / CatCopyPairs: the cat's mesh-copy job queue (0x21FAE620, 0x910 B; its pair table sits at 0x21FAFCC0) ──
-        /// <summary>The cat's mesh-copy QUEUE (ElfCave.CatCopyQueue reads it). Data, not code, in the runtime-data span.
-        /// +0x00 job count (0 = idle), jobs from +0x10, 0x30 B each: src, dst, size, then two (src, size, dst) rebase specs.</summary>
-        internal const long CatCopyQueue      = 0x21FAE620;
-        internal const uint CatCopyQueueGuest = 0x01FAE620;
-        internal const int  CatCopyQueueJobs  = 48;            // 48 × 0x30 + 0x10 = 0x910 B of the span below — the
-                                                               // texture relocation needs one job per block per moved texture
-        internal const int  CatCopyJobStride  = 0x30;
-        // The jobs end at +0x910 (0x21FAEF30), just short of BorrowedShotBlock (0x21FAEF40). A find/replace job's old→new pair
-        // table is NOT after them: the job names it (+0x10), and it lives at CatCopyPairs.
-        /// <summary>How many old→new pairs a sweep can carry. MUST cover every name in CatTextures.CatTextureNames —
-        /// there are TEN. A name that does not fit is silently dropped, and a dropped name's register keeps pointing into her
-        /// old block (catcape is one the MASK draws with: dropped, the mask draws black). The count is checked against this
-        /// rather than truncated.</summary>
-        internal const int  CatCopyMaxPairs   = 16;                                           // × 16 B at CatCopyPairs
+        // ── CatLoad: the cat loader's request block (0x21FAE620, 0x80 B; 0x21FAE6A0 .. 0x21FAEF40 free) ──
+        /// <summary>The request block ElfCave.CatLoad answers (tools/stubs/cat_load.s). The mod writes the pack path and S, then the
+        /// request; the cave writes everything else. The reserve entry (LoadChara2) clears the status, W and the region on every load.</summary>
+        internal const long CatLoad        = 0x21FAE620;
+        internal const int  CatLoadStatus  = 0x00;   // mod: 1 = load, 3 = unload; cave: 2 = loaded, 0 = unloaded / nothing, −1 = refused
+        internal const int  CatLoadRegion  = 0x04;   // reserve: the region's base (0 = Xiao is not the character loaded)
+        internal const int  CatLoadUnits   = 0x08;   // reserve: its size in 16-byte units
+        internal const int  CatLoadVram    = 0x0C;   // cave: W, block 0x21's base (0 = no VRAM held)
+        internal const int  CatLoadAlloc   = 0x10;   // cave: the region's CDataAlloc2 {base, —, used, max}; used = the units the load took
+        internal const int  CatLoadCursor  = 0x20;   // cave: the texture cursor before W
+        internal const int  CatLoadBlocks  = 0x24;   // mod: S, the pack's VRAM blocks (CatPackBakes.CatVramBlocks)
+        internal const int  CatLoadRoot    = 0x28;   // cave: the cat's root as loaded (0 = none) — slot 1 is the cat's only while it holds this
+        internal const int  CatLoadPath    = 0x40;   // mod: the pack's path, NUL-terminated (≤ 0x40 B)
 
         // ── BorrowedShotBlock: the borrowed shot config and its carve state (0x21FAEF40, 0x2C0 B) ──
         /// <summary>The borrowed shot config in use (ElfCave.BorrowedShotsEnter keeps it entered in the main-character effect
@@ -364,14 +350,21 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>A byte per monster-pack sub-shot: 1 once an ice arrow in its impact has asked its Gemron for the ice prison
         /// (tools/stubs/crystal_shots.s), 0 outside the impact. Written natively.</summary>
         internal const long IceArrowFired      = 0x21FAF7F0;   // 8 B → 0x21FAF7F8
-        // 0x21FAF7F8..0x21FAF800 FREE
+        /// <summary>THE ALLY'S MANAGER (tools/stubs/ally_manager.s): the guest address of a private CMonstorUnit the dungeon steps, draws and
+        /// shadows after the floor's (0 = none). Written natively (ally_brain.s, ally_despawn.s).</summary>
+        internal const long AllyManager = 0x21FAF7F8;   // 4 B
+        /// <summary>A bit per floor slot the ally's body stopped (ally_collide.s → ally_hooks.s's blocked): the mod reads it, clears it, and
+        /// sends each such enemy after the ally (ConfusionAlly). Written natively.</summary>
+        internal const long AllyBlocked = 0x21FAF7FC;   // 4 B → 0x21FAF800
         /// <summary>A bit a floor index (16 B, floors 0–127): set on the floors the randomizer staged, where tools/stubs/monster_bank.s
         /// builds the floor's monster bank from the species on it (MonsterSounds writes it).</summary>
         internal const long MonsterBankFloors      = 0x21FAF800;   // 16 B → 0x21FAF810
         /// <summary>The last bank monster_bank.s built: samples' bytes, units taken, units left out, banks built so far, and its header's
         /// IOP address (midi_state.port[3].bank after the swap: while the port still holds it, the next floors' banks are built too).</summary>
         internal const long MonsterBankStats       = 0x21FAF810;   // 5 words → 0x21FAF824
-        // 0x21FAF824..0x21FAF830 FREE
+        /// <summary>The summoned ally's shot configs in the floor's shot pack (tools/stubs/ally_shots.s): +0 the pack slots its load filled
+        /// (a bit per slot), +4 / +8 the configs it put there — emptied again at its end. Written natively.</summary>
+        internal const long AllyShots = 0x21FAF824;   // 12 B → 0x21FAF830
 
         /// <summary>Toan's CHARGE-ATTACK hit radii, turned from baked immediates into DATA by
         /// <c>ElfToanMeleePatches.PatchChargeHitRadius</c>: +0x00 the lunge's (vanilla 6.0), +0x04 the whirlwind's
@@ -579,15 +572,16 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>A real atla's root turn (w, x, y, z in QuatToMat's order: dun\etc\atr.mds's root record), which tools/stubs/atla_draw.s
         /// gives the atla model back after drawing a bouncing one. Baked (ElfSpeciesPatches.PatchDataPageDefaults, AtlaGemronBake's recipe).</summary>
         internal const long AtlaRootQuat       = 0x21FAFC90;   // 16 B → 0x21FAFCA0
-        // 0x21FAFCA0..0x21FAFCB0 FREE
+        /// <summary>The summoned ally's textures (ally_brain.s writes, ally_despawn.s cleans): +0 the floor stamp it was summoned on, +4 / +8
+        /// the monsters' texture group's VRAM top / end before its load, +0xC (first entry &lt;&lt; 16) | entry end of what its load added
+        /// (0 = none). Outside its block, so a character change that overwrites the block leaves it. Written natively.</summary>
+        internal const long AllyTex = 0x21FAFCA0;   // 16 B → 0x21FAFCB0
 
         /// <summary>The guard gate's per-enemy window mask (DebugInfoCave.GuardMask, written by GuardGate): one byte per slot, bit w set =
         /// enemy window w blocks nothing (7 = none of its windows).</summary>
         internal const long GuardMask   = 0x21FAFCB0;   // 16 B
 
-        /// <summary>The cat copy queue's old→new pair table (16 B each, CatCopyMaxPairs of them): a find/replace job names it.</summary>
-        internal const long CatCopyPairs      = 0x21FAFCC0;   // 0x100 B
-        internal const uint CatCopyPairsGuest = 0x01FAFCC0;
+        // 0x21FAFCC0 .. 0x21FAFDC0 (0x100 B) free
 
         /// <summary>The points the engine carries with units (DebugInfoCave.Follow, every frame): FollowCount entries of FollowStride,
         /// each +0 the source (guest address of a position: x, height, y; 0 = off), +4 the destination (guest), +8/+0xC/+0x10 the
@@ -610,7 +604,25 @@ namespace Dark_Cloud_Improved_Version
         internal const float FlashSizeVanilla   = 5f;
         /// <summary>The machine-gun hit flash's alpha per slot, 16 bytes (Draw's set3DCellModel alpha through SmoothRestCave.FlashSlot):
         /// baked 0x80 (the engine's constant — Osmond's flashes); lower is fainter in the additive effects pass.</summary>
-        internal const long FlashAlphaTable    = 0x21FAFFB4;   // 16 B → 0x21FAFFC4 (0x21FAFFC4..0x21FAFFE0 free)
+        internal const long FlashAlphaTable    = 0x21FAFFB4;   // 16 B → 0x21FAFFC4
+        /// <summary>The ally idling (ally_brain.s: non-zero while it has no enemy — its script parked on a YIELD each frame by ally_follow.s's
+        /// park while Step goes on, and it walks beside the summoner; an enemy releases it, its AI from label 100's top). Written natively.</summary>
+        internal const long AllyHold = 0x21FAFFC4;     // 4 B
+        /// <summary>The Pocklekul armed (the weapon thread: the summoner's character id + 1 while the ring is in hand — Ruby's, 4): ally_brain.s
+        /// counts that character's guard and summons only while it is set, and ends a standing pockle when it clears or another character is in
+        /// hand.</summary>
+        internal const long AllyArmed = 0x21FAFFC8;    // 4 B
+        /// <summary>ally_brain.s's own: the frames the summoner's guard has been held, and the latch that spends one guard's charge (set at
+        /// 60 frames: the charge complete).</summary>
+        internal const long AllyGuard = 0x21FAFFCC, AllyLatch = 0x21FAFFD0;   // 4 B each
+        /// <summary>The ally's last event, ((count &lt;&lt; 8) | code), for the app's log: 0x10 + pockle stood (0 Sunday .. 6 Saturday, 7 Hell Pockle), 2 fallen,
+        /// 3 disarmed or the summoner not in hand, 4 its block, floor or the floor's quiet gone (or a full event), 5 no room for its block in
+        /// the summoner's character pool, 6 no VRAM room, 7 not loaded, 8 not stood, 9 a guard charge while one stands, 11 left behind (the summoner over
+        /// 300 u from it).</summary>
+        internal const long AllyEvent = 0x21FAFFD4;    // 4 B
+        /// <summary>The position the ally's unit is copied to each frame (tools/stubs/ally_hooks.s pin; guest address, 0 = none): the summon
+        /// smoke's sub-shot while the pockle appears in it (Pocklekul sets and clears it).</summary>
+        internal const long AllyPin = 0x21FAFFD8;      // 4 B (0x21FAFFDC..0x21FAFFE0 free)
         internal const byte FlashAlphaVanilla  = 0x80;
         /// <summary>The Confuse ability's procs (confuse_proc.s): a byte per enemy slot, 1 = the roll succeeded this hit; the mod
         /// (ConfuseAbility) confuses the slot and writes it back to 0.</summary>

@@ -9,7 +9,7 @@ namespace Dark_Cloud_Improved_Version
         /// (page isolation, docs/code-caves.md).</summary>
         internal const long CatBase = 0x21FB4000;
         /// <summary>Divine Beast cat ↔ the native pellet catcher/follower (ElfCave.CatPelletFollow; DivineBeastTitle.cs).
-        /// The cat copy sits resident and hidden in chara slot 1. At the charge threshold the mod writes the growth
+        /// The cat sits resident and hidden in chara slot 1. At the charge threshold the mod writes the growth
         /// reciprocal and the head rest offset (cat space × cat scale), zeroes frames/slot, and sets state 3 (waiting);
         /// the cave then binds the next NEW pellet on its birth frame (slot+1, state 1, opacity 128) and owns slot 1's
         /// position and scale every frame until that pellet ends (slot 0, state 2 → the mod fades and re-hides).</summary>

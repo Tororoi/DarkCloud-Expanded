@@ -91,7 +91,7 @@ below the ELF segment is carved from it, in address order (`CodeCaveAddresses.cs
 | `0x1F18300 / 0x1F18400` | Queens waterfall spray bias + emitter table (town only) | `CodeCaves.QueensSpray*` |
 | `0x1F19000 – 0x1F1A800` | Mirage decoy redirect: per-slot target pointer table, decoy position, and the two cold-copied engine functions (`_GET_DISTANCE`, `_GET_POSITION`) reached through the STB dispatch table | `CodeCaves.PtrTable`, `DistCave`, `PosCave` |
 | `0x1F19500 – 0x1FAE400` | CharacterClone: root CFrame, node pool (96 bones), cloth list/objects/buffers/anchors/bounds, motion channels, per-bone skinning and animation matrices, the weapon tree, and the software-skinned MeshCave (0x58000, sized for Goro). The Divine Beast cat and the Angel Gear prop share these caves top/bottom while Xiao is up; the cat also borrows the cloth caves as overflow. | `CodeCaves.*Cave`, docs/character-clone-footprints.md |
-| `0x1FAE600 – 0x1FB0000` | **the runtime-data span** under the ELF segment: the water-redraw words, the cat copy queue and pair table, the borrowed-shot and shared-shot blocks, the lock-on factor table, and the per-feature words the dead-function caves read (charge radii, bomb reaction, camera pin, blade fall, WHP bill, magic-circle table, call request, pellet contacts, spear column, follow table, stars gate …). Pages that already carry runtime-written words, so PINE writes here are safe. | `WaterRedrawAddresses.cs`, `CodeCaves` (from `CatCopyQueue` on) |
+| `0x1FAE600 – 0x1FB0000` | **the runtime-data span** under the ELF segment: the water-redraw words, the cat loader's request block, the borrowed-shot and shared-shot blocks, the lock-on factor table, and the per-feature words the dead-function caves read (charge radii, bomb reaction, camera pin, blade fall, WHP bill, magic-circle table, call request, pellet contacts, spear column, follow table, stars gate …). Pages that already carry runtime-written words, so PINE writes here are safe. | `WaterRedrawAddresses.cs`, `CodeCaves` (from `CatLoad` on) |
 | `0x1FB0000 – 0x1FB4000` | **the ELF cave segment** — ISO-baked code, loader-loaded, 16 KB-aligned. No runtime write may touch these pages. FULL. | `ElfCaveAddresses.cs` |
 | `0x1FB4000 – 0x1FB4300` | **the cat block** — `BobberPtr` at +0 (the cold-patched FishLineStep reads it), the Divine Beast cat's runtime words from +0x94 to +0x2A8; the page ends at +0x300 | `CatBlockAddresses.cs` |
 
@@ -146,7 +146,7 @@ tables read mid-frame) go through the batch writers: a per-byte round trip spans
 ## Address-ordered tables with size and end
 
 Every registry (`ElfCave`, the dead-function hosts, `CodeCaves`) lists its caves in **address order**, each with its
-size and end address on the line. Bin-backed sizes are the `.bin` file's byte size (`Resources/isoPatch`); hand-built
+size and end address on the line. Bin-backed sizes are the `.bin` file's byte size (`Resources/isoPatch/stubs/<group>/`); hand-built
 sizes are the instruction-word count × 4. A multi-entry bin occupies its whole span, not just the labelled entries
 (`CameraNormSideBank`, 2,128 B). Overlap checks run against a **patched** ELF — a vanilla ELF does not yet contain the
 neighbouring bins, so a check against it proves nothing.
@@ -222,10 +222,10 @@ and grew past +0x100 — which is `AiStubBase`. Clip frames, range, hit slot and
 by, the AI stubs. The words moved as a block (same offsets, new base) to the spare span at `0x1FB4000`
 (`CatBlock.CatBase`). A feature that needs more than a few words gets its own block, never a bigger mailbox.
 
-**The pair table over the shot block.** The cat copy queue's find/replace pair table once sat directly after its jobs,
-which end at `0x21FAEF30` — 16 bytes short of `BorrowedShotBlock`. Every cat build wrote the texture pairs over the
-borrowed shot's config: Babel's shockwave never entered, and a re-request built the effect from the trashed config and
-crashed. The table lives at `CatCopyPairs`, named by the job.
+**A table placed "just after" its neighbour.** A job queue's pair table was once placed directly after the jobs, 16 bytes
+short of `BorrowedShotBlock`, and every build wrote it over the borrowed shot's config: Babel's shockwave never entered,
+and a re-request built the effect from the trashed config and crashed. Every block here gets its own named constant and
+its size, never an address computed from the end of another.
 
 **Unbounded growth inside the band.** Two silent overruns shaped the "capacity lives with the cave" rule: HarderEnemyAI's
 stubs grew unbounded toward `PtrTable` (now capped at 32 slots), and the clone's per-bone buffers, sized for Ungaga's

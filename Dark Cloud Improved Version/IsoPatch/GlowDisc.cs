@@ -10,7 +10,8 @@ namespace Dark_Cloud_Improved_Version
     /// a PSMT8 palette in CSM1 order (bits 3 and 4 of the index exchanged) and nothing de-swizzles it, so the disc only uses the 128
     /// indices the permutation leaves alone (bits 3 and 4 equal) and the cave copies its table straight down. CatPackBakes bakes the
     /// cat's disc (resting on the "None" ramp) and refuses a stale palette blob; ToanGlowBakes bakes Toan's three discs on the gold,
-    /// blue and Zeus ramps; ElfCatPatches.PatchCatGlowPalettes writes the nine palettes into the ELF.</summary>
+    /// blue and Zeus ramps; ElfCatPatches.PatchCatGlowPalettes writes the nine palettes into the ELF, computed at patch time from the
+    /// user's own disc (<see cref="PalettesFrom"/>). Every glow colour is tuned here, nowhere else.</summary>
     internal static class GlowDisc
     {
         internal const string SourcePack = @"dun\mpd_pack\d06main_a.mpd";       // the Gallery of Time map pack: its fire.img holds the purple torch glow disc
@@ -115,8 +116,14 @@ namespace Dark_Cloud_Improved_Version
             return outp;
         }
 
-        /// <summary>All nine palettes back to back — the blob the mod embeds (Resources/isoPatch/catGlowPalettes.bin) and writes into the ELF's
-        /// table cave. The cave tells "already painted" from ONE word, the brightest level (table slot 114, CLUT index 226 — offsets baked into
+        /// <summary>The nine palettes from the source pack (<see cref="SourcePack"/>'s fire.img), as the patch writes them into the ELF.</summary>
+        internal static byte[] PalettesFrom(byte[] sourcePack)
+        {
+            var img = ChrPack.Parse(sourcePack).Find("fire.img") ?? throw new IOException($"{SourcePack} lacks fire.img — the glow source");
+            return Palettes(new ImgBank(img.Payload).Block(SourcePicture));
+        }
+
+        /// <summary>All nine palettes back to back — what the patch writes into the ELF's table cave. The cave tells "already painted" from ONE word, the brightest level (table slot 114, CLUT index 226 — offsets baked into
         /// the palette stub), so both facts are asserted here.</summary>
         internal static byte[] Palettes(byte[] lightling)
         {

@@ -1,24 +1,18 @@
 #!/usr/bin/env python3
-"""Regenerate the binaries the mod EMBEDS, so they always match the sources they are generated from.
+"""Regenerate the binaries the mod EMBEDS, so they always match the sources they are generated from:
+  tools/stubs/build_ee_stubs.py   — every EE cave stub (.s -> Resources/isoPatch/stubs/<group>/*.bin)
 
-Two generators, so neither is a manual step a person has to remember:
-  tools/stubs/build_ee_stubs.py   — every EE cave stub (.s -> Resources/isoPatch/*.bin)
-  build_cat_pack.glow_palettes()  — the six element glow ramps (GLOW_ELEMENTS -> catGlowPalettes.bin)
+WHY THE BUILD DOES THIS. Editing a source and forgetting its generator ships stale bytes, and the failure is SILENT: the cave
+faithfully runs whatever the .bin holds and every diagnostic reports success. The csproj runs this before each build so the
+embedded resources cannot drift from the code that defines them.
 
-WHY THE BUILD DOES THIS. Editing a source and forgetting its generator ships stale bytes, and the failure is SILENT: the
-glow palette kept its previous colours through an entire patch-and-test cycle that way, because the
-cave faithfully paints whatever the tables hold and every diagnostic reports success. The csproj runs this before each
-build so the embedded resources cannot drift from the code that defines them.
-
-Absent prerequisites are reported and SKIPPED, never fatal — a checkout without the extracted disc still builds, and
-CatPackBakes.RefuseIfPaletteBlobStale (the C# bake) refuses the ISO bake as the backstop. Only a generator that actually FAILS
-is fatal, because that means a source no longer assembles.
+An absent assembler is reported and SKIPPED, never fatal — the committed .bins still build. Only a generator that actually
+FAILS is fatal, because that means a source no longer assembles. (The glow palettes are no longer embedded: the patch computes
+them from the user's own disc, IsoPatch/GlowDisc.cs.)
 """
 import os, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(HERE)
-RES  = os.path.join(REPO, "Dark Cloud Improved Version", "Resources", "isoPatch")
 TAG  = "[resources]"
 
 
@@ -41,45 +35,5 @@ def stubs():
     print(f"{TAG} stubs: {'regenerated ' + ', '.join(wrote) if wrote else 'all up to date'}")
 
 
-def palettes():
-    """Rebuild the glow ramp tables from GLOW_ELEMENTS, writing only when they differ."""
-    dc = os.environ.get("DC1_DATA_DIR") or os.path.join(REPO, "dc_extracted")
-    dest = os.path.join(RES, "catGlowPalettes.bin")
-    if not os.path.isdir(dc):
-        print(f"{TAG} no extracted disc at {dc} — glow palettes left as committed"); return
-    sys.path[:0] = [os.path.join(HERE, "iso_patch"), os.path.join(HERE, "lib"), os.path.join(HERE, "analysis")]
-    try:
-        import build_cat_pack as B
-    except Exception as e:
-        print(f"{TAG} cannot import build_cat_pack ({e}) — glow palettes left as committed"); return
-    try:
-        _, glow = B.mc.load_pack(B.GLOW_SRC, dc)
-        blob = B.glow_palettes(B.Bank(glow.find("fire.img").payload).block("lightling"))
-    except SystemExit as e:
-        raise SystemExit(f"{TAG} glow palettes REFUSED: {e}")        # e.g. two elements sharing a state colour
-    except Exception as e:
-        print(f"{TAG} could not read the glow source ({e}) — palettes left as committed"); return
-    old = open(dest, "rb").read() if os.path.exists(dest) else None
-    if old == blob:
-        print(f"{TAG} glow palettes: up to date")
-    else:
-        open(dest, "wb").write(blob)
-        # ⚠ Name EVERY row, including the three weapon looks — a message that cannot name what it changed is worse than
-        # none, and this listed "()" the day rows 6-8 were added because the name list stopped at the six elements.
-        names = ["Fire", "Ice", "Thunder", "Wind", "Holy", "None",
-                 "DivineBeastTitle", "AngelShooter", "AngelGear"]
-        rows = len(blob) // 512
-        if old is None:
-            what = f"all {rows} rows"
-        elif len(old) != len(blob):
-            what = f"table resized, {len(old) // 512} -> {rows} rows"
-        else:
-            changed = [names[i] if i < len(names) else f"row {i}" for i in range(rows)
-                       if old[i * 512:(i + 1) * 512] != blob[i * 512:(i + 1) * 512]]
-            what = ", ".join(changed) if changed else "content identical, rewritten"
-        print(f"{TAG} glow palettes: REGENERATED from GLOW_ROWS ({what})")
-
-
 if __name__ == "__main__":
     stubs()
-    palettes()

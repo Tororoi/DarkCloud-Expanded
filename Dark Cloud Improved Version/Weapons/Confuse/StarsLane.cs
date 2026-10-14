@@ -7,7 +7,9 @@ namespace Dark_Cloud_Improved_Version
     /// once per floor, constructed by the stars step cave (CodeCaves.StarsConstruct), entered with the spinning stars
     /// (ConfusionStars.Effect, 8 sub-shots) through the ISO's loader cave (ElfCave.BorrowedShotsEnter) by borrowing BorrowedShots'
     /// request block, and stepped and drawn every dungeon frame by the second-effect caves' continuation
-    /// (ElfConfusePatches.StarsTail) behind CodeCaves.StarsGate. Leaving the floor closes the gate.
+    /// (ElfConfusePatches.StarsTail) behind CodeCaves.StarsGate. Leaving the floor closes the gate. The instance is carved from the app,
+    /// not the step loop, so only once the pool is this floor's — set up since the last floor's carve, its species loaded and still — and
+    /// a floor is its number and its back-floor flag; a pool reloaded under the instance (the same floor entered again) counts as new.
     /// </summary>
     internal static class StarsLane
     {
@@ -33,6 +35,11 @@ namespace Dark_Cloud_Improved_Version
         private const double QuietSeconds = 0.5;      // the dungeon plain and unheld this long before a request goes in
         private const long DriveStepHold = 0x202A3564, FrameCapture = 0x202A3568;   // set at a menu's opening (the quick character select: BtMiniChrSelect_Loop sled 0)
         private static DateTime _quietSince;
+        private const double PoolSettleSeconds = 1.0;  // the monster pool unchanged this long (its species loaded) before the instance is carved
+        private static (uint pbase, int used, int cap) _poolSeen;
+        private static DateTime _poolSince;
+        private static (uint pbase, int cap, int end)? _carved;   // the pool as the instance was carved from it: its base, cap and the instance's end
+        private static (uint pbase, int cap, int used)? _stale;   // the pool the floor's load must replace before a carve (null: none known)
         private const int  TexBlock = 0x10;           // the texture block the cave enters every instance into (the main effect's)
         private static readonly byte[] TexName = System.Text.Encoding.ASCII.GetBytes("e114ex\0");
         private static byte[] _snapshot;
@@ -66,15 +73,9 @@ namespace Dark_Cloud_Improved_Version
             {
                 try
                 {
-                    if (floor != _floor)
-                    {
-                        if (_requesting) Abort("the floor changed");
-                        Memory.WriteInt(CodeCaves.StarsGate + CodeCaves.StarsGateLive, 0);
-                        Memory.WriteUInt(CodeCaves.StarsConstruct, 0);
-                        _live = false; _tries = 0; _retryAt = default; _floor = floor; _instance = 0; _constructed = false;
-                        _region = null; _texEntry = 0;
-                        ConfusionStars.StopAll();
-                    }
+                    if (Memory.ReadByte(Addresses.dunBackFloorFlag) != 0) floor |= 0x10000;           // the back floor is a floor of its own
+                    if (floor != _floor) NewFloor(floor, "the floor changed", reloaded: false);
+                    else if (_instance != 0 && PoolReloaded()) NewFloor(floor, "the monster pool reloaded under the instance", reloaded: true);
                     if (_requesting) return Progress();
                     if (_live && TexturesLost())
                     {   // a main-effect entry cleared texture block 0x10 — the stars' textures with it: entered again (same instance, same region)
@@ -91,6 +92,7 @@ namespace Dark_Cloud_Improved_Version
                     if ((GameClock.Now - _quietSince).TotalSeconds < QuietSeconds) return false;
                     // Never while another request is in flight (the cave reads the block across frames).
                     if (Memory.ReadUInt(CodeCaves.BorrowedShotBlock) == CodeCaves.BorrowedShotMagic && Memory.ReadInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotState) == 0) return false;
+                    if (_instance == 0 && !PoolSettled()) return false;                                 // never into a pool the floor's species are still loading into
                     if (!Constructed()) return false;                                                   // carved between requests: the cave is the pool's other mid-floor allocator
                     var fx = ConfusionStars.Effect();
                     if (fx == null) return false;
@@ -99,6 +101,50 @@ namespace Dark_Cloud_Improved_Version
                 }
                 catch (Exception e) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "tick failed: " + e.Message); return _requesting; }
             }
+        }
+
+        /// <summary>A new floor (or the same one loaded again): the gate closed, the instance and region forgotten, the waits begun again.
+        /// The pool the floor's load must replace first: the one there now (a floor's number changes before its load), or — when the
+        /// reload is already under way — the one the instance was carved from. Fresh (no floor seen since the app started or the
+        /// dungeon was entered): none, the settle alone.</summary>
+        private static void NewFloor(int floor, string why, bool reloaded)
+        {
+            long pool = DataPools.Monstor;
+            _stale = reloaded ? (_carved is var (cb, cc, ce) ? (cb, cc, ce) : null)
+                   : _floor == -1 ? null
+                   : (Memory.ReadUInt(pool), Memory.ReadInt(pool + DataPools.Cap), Memory.ReadInt(pool + DataPools.Used));
+            if (_requesting) Abort(why);
+            else if (_instance != 0) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + why + " — the stars start over");
+            Memory.WriteInt(CodeCaves.StarsGate + CodeCaves.StarsGateLive, 0);
+            Memory.WriteUInt(CodeCaves.StarsConstruct, 0);
+            _live = false; _tries = 0; _retryAt = default; _floor = floor; _instance = 0; _constructed = false;
+            _region = null; _texEntry = 0; _quietSince = default; _poolSeen = default;
+            ConfusionStars.StopAll();
+        }
+
+        /// <summary>The monster pool is this floor's and its species are in: the stale pool replaced (a new base or cap, or emptied below
+        /// where it stood), something in it, and unchanged for <see cref="PoolSettleSeconds"/>.</summary>
+        private static bool PoolSettled()
+        {
+            long pool = DataPools.Monstor;
+            var now = (pbase: Memory.ReadUInt(pool), used: Memory.ReadInt(pool + DataPools.Used), cap: Memory.ReadInt(pool + DataPools.Cap));
+            if (_stale is var (sb, sc, su))
+            {
+                if (now.pbase == sb && now.cap == sc && now.used >= su) return false;   // the last floor's pool still: its load is to come
+                _stale = null;                                                       // replaced: from here the settle alone
+            }
+            if (now != _poolSeen) { _poolSeen = now; _poolSince = GameClock.Now; return false; }
+            return now.used > 0 && (GameClock.Now - _poolSince).TotalSeconds >= PoolSettleSeconds;
+        }
+
+        /// <summary>The pool the instance was carved from has been set up again (a new base or cap, emptied below the instance's end) or
+        /// the instance's vtable is gone: the floor's species are loading over it.</summary>
+        private static bool PoolReloaded()
+        {
+            if (_carved is not var (b, c, end)) return false;
+            long pool = DataPools.Monstor;
+            if (Memory.ReadUInt(pool) != b || Memory.ReadInt(pool + DataPools.Cap) != c || Memory.ReadInt(pool + DataPools.Used) < end) return true;
+            return _constructed && Memory.ReadUInt(_instance + ShotEffectPack.OffObj + CCharacterVtable) == 0;
         }
 
         private static void Start(BorrowedEffect fx)
@@ -244,6 +290,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteBytesBatch(inst, new byte[ShotEffectPack.SlotStride]);
             Memory.WriteInt(pool + DataPools.Used, used + InstanceUnits);
             _instance = inst;
+            _carved = (poolBase, cap, used + InstanceUnits);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"instance carved at 0x{inst - 0x20000000L:X} (monster pool {used + InstanceUnits:N0} of {cap:N0} units)");
             return true;
         }

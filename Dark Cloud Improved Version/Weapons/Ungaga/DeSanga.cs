@@ -16,28 +16,46 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Ungaga with DeSanga, or Xiao with Super Steve and a DeSanga sphere.</summary>
         internal static bool Wielded() => UngagaWeapon.WieldsOrSphere(Items.desanga);
 
+        private static int[] _prevHp;   // each floor slot's HP last tick (null = not running)
+
+        /// <summary>One tick: every death crossing since the last one that is the wielder's kill heals the weapon. The first tick only
+        /// takes each slot's HP, so an enemy already dying when it came out is not counted. <paramref name="active"/> false holds.</summary>
+        internal static void Drive(bool active)
+        {
+            if (!active) return;
+            int n = EnemyAddresses.FloorSlots.Count;
+            if (_prevHp == null)
+            {
+                _prevHp = new int[n];
+                for (int s = 0; s < n; s++) _prevHp[s] = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"every kill heals the weapon {HealPerKill:F0} WHP");
+                return;
+            }
+            int ch = Player.CurrentCharacterNum(), kills = 0;
+            for (int s = 0; s < n; s++)
+            {
+                int hp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
+                int prev = _prevHp[s]; _prevHp[s] = hp;
+                if (prev <= 0 || hp > 0) continue;                                                            // no death crossing
+                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) < 1) continue;   // not a death on the floor
+                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.KillerCharId)) != ch) continue; // not the wielder's kill
+                kills++;
+            }
+            if (kills > 0) Heal(ch, kills * HealPerKill);
+        }
+
+        /// <summary>The weapon, the sphere or the floor went.</summary>
+        internal static void Stop() => _prevHp = null;
+
+        /// <summary>Ungaga's DeSanga thread: hands every tick to <see cref="Drive"/> while it is in hand (Super Steve's loop drives its sphere's).</summary>
         public static void VampireEffect()
         {
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"every kill heals the weapon {HealPerKill:F0} WHP");
-            int n = EnemyAddresses.FloorSlots.Count;
-            var prevHp = new int[n];
-            for (int s = 0; s < n; s++) prevHp[s] = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
             while (Wielded() && Player.InDungeonFloor())
             {
                 Thread.Sleep(TickMs);
-                if (Player.CheckDunIsPausedOrMenu()) continue;
-                int ch = Player.CurrentCharacterNum(), kills = 0;
-                for (int s = 0; s < n; s++)
-                {
-                    int hp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
-                    int prev = prevHp[s]; prevHp[s] = hp;
-                    if (prev <= 0 || hp > 0) continue;                                                            // no death crossing
-                    if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) < 1) continue;   // not a death on the floor
-                    if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.KillerCharId)) != ch) continue; // not the wielder's kill
-                    kills++;
-                }
-                if (kills > 0) Heal(ch, kills * HealPerKill);
+                Drive(!Player.CheckDunIsPausedOrMenu());
             }
+            Stop();
         }
 
         private static void Heal(int ch, float amount)

@@ -38,6 +38,7 @@ namespace Dark_Cloud_Improved_Version
         private static Thread doubleImpactThread = new Thread(new ThreadStart(DoubleImpact.DoubleImpactEffect));
         private static Thread banditSlingshotThread = new Thread(new ThreadStart(BanditSlingshot.StealShotEffect));
         private static Thread banditsRingThread = new Thread(new ThreadStart(BanditsRing.StealShotEffect));
+        private static Thread pocklekulThread = new Thread(new ThreadStart(Pocklekul.PockleSummonEffect));
         private static Thread steelSlingshotThread = new Thread(new ThreadStart(SteelSlingshot.EnduranceUpEffect));
         private static Thread hardshooterThread = new Thread(new ThreadStart(Hardshooter.RicochetEffect));
         private static Thread lockOnReachThread = new Thread(new ThreadStart(Flamingo.LockOnDistanceEffect));
@@ -320,17 +321,13 @@ namespace Dark_Cloud_Improved_Version
 
                 case Items.supersteve:
                     Ensure(ref superSteveThread, SuperSteve.SphereInheritanceEffect);
-                    Ensure(ref deSangaThread, DeSanga.Wielded, DeSanga.VampireEffect);   // every kill heals the weapon 5 WHP, for a DeSanga sphere
-                    Ensure(ref javelinThread, Javelin.Wielded, Javelin.MarineEffect);   // marine enemies defenseless and worth double ABS, for a Javelin sphere
-                    Ensure(ref scorpionVenomThread, Scorpion.Wielded, Scorpion.VenomEffect);   // Scorpion's venom, for a Scorpion sphere
                     Ensure(ref babelSpearThread, BabelsSpear.Wielded, BabelsSpear.CurseOfBabelEffect);   // Curse of Babel, for a Babel's Spear sphere (Super Steve itself rises)
                     Ensure(ref cactusThread, Cactus.Wielded, Cactus.DesertBloomEffect);   // Desert Bloom, for a Cactus sphere (Queens' trees)
                     Ensure(ref terraSwordThread, TerraSword.Wielded, TerraSword.BigRockEffect);   // the nutfall, for a Terra Sword sphere
                     Ensure(ref herculesWrathThread, HerculesWrath.Wielded, HerculesWrath.AirStrikeEffect);   // Hercules' Wrath's ultimate, for its sphere
                     Ensure(ref boneNoRevivalThread, BoneRapier.GravediggerEffect);   // the bone key's no-revival, for a Bone Rapier / Bone Slingshot sphere (the thread checks)
                     if (CrossHinder.CrossHinderWielded()) Ensure(ref crossHinderThread, CrossHinder.SanctifierEffect);   // Sanctifier, for a Cross Hinder sphere
-                    Ensure(ref gladiusThread, Gladius.Wielded, Gladius.JacketHunterEffect);   // Jacket Hunter, for a Gladius sphere
-                    Ensure(ref crysKnifeThread, CrysKnife.Wielded, CrysKnife.CrystalAffinityEffect);   // Crystal Affinity, for a Crysknife sphere (its circle passive is ownership's, not the sphere's)
+                    Ensure(ref pocklekulThread, Pocklekul.Wielded, Pocklekul.PockleSummonEffect);   // the pockle summon, for a Pocklekul sphere (its block in Xiao's region)
                     break;
 
                 case Items.matador:
@@ -404,6 +401,10 @@ namespace Dark_Cloud_Improved_Version
                 case Items.banditsring:
 
                     Ensure(ref banditsRingThread, BanditsRing.StealShotEffect);
+                    break;
+                case Items.pocklekul:
+
+                    Ensure(ref pocklekulThread, Pocklekul.PockleSummonEffect);
                     break;
                 default:
                     break;

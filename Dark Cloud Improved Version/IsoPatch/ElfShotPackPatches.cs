@@ -13,14 +13,14 @@ namespace Dark_Cloud_Improved_Version
     internal static class ElfShotPackPatches
     {
         /// <summary>The prop-on-a-pellet cave (tools/stubs/prop_pellet_follow.s): the cat follower hook's new first stop. It must
-        /// call CatCopyQueue (the cat's chain performs the displaced step__5CSHOT) and read the shot pool.</summary>
+        /// call CatLoad (the cat's chain performs the displaced step__5CSHOT) and read the shot pool.</summary>
         internal static void PatchPropPelletFollow(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint CaveAddr = ElfCave.PropPelletFollow;
             byte[] b = Embedded("propPelletFollow.bin");
-            bool chained = ContainsWord(b, Jal(ElfCave.CatCopyQueue)), pool = ContainsWord(b, 0x8D4A35D4u);
+            bool chained = ContainsWord(b, Jal(ElfCave.CatLoad)), pool = ContainsWord(b, 0x8D4A35D4u);
             if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u || !chained || !pool)
-                throw new IOException("propPelletFollow.bin malformed or stale — it must call CatCopyQueue and read the shot pool.");
+                throw new IOException("propPelletFollow.bin malformed or stale — it must call CatLoad and read the shot pool.");
             WriteBytes(fs, ElfOff, CaveAddr, b, 0x01FB2000u, "propPelletFollow.bin overruns its gap — it must end before 0x1FB2000 (the first band's end).");
         }
 

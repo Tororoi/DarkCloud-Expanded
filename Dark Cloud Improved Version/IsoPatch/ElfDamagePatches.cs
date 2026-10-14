@@ -12,6 +12,10 @@ namespace Dark_Cloud_Improved_Version
     /// ElfPatches.ElfPatchAndCrc.</summary>
     internal static class ElfDamagePatches
     {
+        /// <summary>The word a patched ISO leaves at CheckDmg's guard-window hook (main 0x1DAC78): `j` the guard-crush cave, which goes on to
+        /// the guard-mask cave and then the cat's. What the runtime checks to know the guard chain is in.</summary>
+        internal static uint GuardHookWord => MipsAsm.J(DebugInfoCave.GuardCrush);
+
         /// <summary>The GUARD CRUSH cave (tools/stubs/guard_crush.s, see DebugInfoCave.GuardCrush): CheckDmg's guard-window hook
         /// (main 0x1DAC78, ElfCatPatches.PatchCatGuardBypass's site) is re-aimed here; the cave goes on to the guard-mask cave, then the cat's.</summary>
         internal static void PatchGuardCrush(FileStream fs, Func<uint, long> ElfOff)
@@ -24,7 +28,7 @@ namespace Dark_Cloud_Improved_Version
             uint site = ElfCatPatches.GuardBypassHookAddr, cur = RdU32(fs, ElfOff(site));
             if (cur != MipsAsm.J(DunCave.CatGuardBypass) && cur != MipsAsm.J(cave) && cur != MipsAsm.J(DebugIfCave.GuardCrushFirst) || RdU32(fs, ElfOff(site + 4)) != 0)
                 throw new IOException($"The guard-window hook 0x{site:X} is not the cat cave's — PatchCatGuardBypass must run first.");
-            WrU32(fs, ElfOff(site), MipsAsm.J(cave));
+            WrU32(fs, ElfOff(site), GuardHookWord);
         }
 
         /// <summary>A hit breaks the player's freeze (tools/stubs/freeze_break.s in the dead sceCdReadChain body): BtCheckDamageProc's one

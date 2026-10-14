@@ -57,7 +57,7 @@ namespace Dark_Cloud_Improved_Version
             log($"{ShotPack}: the apple shot wearing the bomb, {shot.Length:N0} B");
             int id = DungeonMessageBank.NameBase + EnemySpecies.BombGemron.Id;
             byte[] mes = arc.Read(NameBank);
-            byte[] named = MesTextBaker.SetMes(mes, id, WeaponDescriptions.Encode(Name).Concat(new ushort[] { 0xFF01 }).ToArray());
+            byte[] named = MesTextBaker.SetMes(mes, id, WeaponDescriptions.Encode(Name).Concat(new ushort[] { 0xFF01 }).ToArray(), CrystalGemronBake.NameFloor(mes));
             if (named == null) log($"name: message {id} already reads '{Name}'");
             else { arc.Redirect(NameBank, named); log($"name: message {id} = '{Name}'"); }
         }

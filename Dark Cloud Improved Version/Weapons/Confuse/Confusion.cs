@@ -9,7 +9,7 @@ namespace Dark_Cloud_Improved_Version
     /// from its loop and <see cref="End"/>s it. A confused slot's entry in the per-slot target table (<see cref="TargetRedirectCaves"/>) follows the nearest live
     /// enemy or the player, else its own wander spot; an enemy a confused one hits is PROVOKED and goes after it; the tint is the
     /// unit's ambient add. Its swings' and shots' friendly fire is <see cref="ConfusionFriendlyFire"/>, which shares this class's
-    /// members through using static (docs/confuse-ability.md).</summary>
+    /// members through using static (docs/confuse-ability.md); the Pocklekul's pockle's is <see cref="ConfusionAlly"/>.</summary>
     internal static class Confusion
     {
         private const string Tag = "[Confusion] ";
@@ -114,7 +114,7 @@ namespace Dark_Cloud_Improved_Version
                     any = true;
                     int victim = Nearest(s);
                     if (victim != _victim[s]) { _victim[s] = victim; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"enemy slot {s} → after {Whom(victim)}"); }
-                    Point(s, victim >= 0 ? (uint)(EnemyAddresses.CharObjects.PosAddr(victim) - Memory.Pcsx2Base) : victim == -1 ? StbExternCmd.PlayerPosGuest : Wander(s));
+                    Point(s, victim >= 0 ? Aim(s, victim) : victim == -1 ? StbExternCmd.PlayerPosGuest : Wander(s));
                     if (_tint != null) Memory.WriteVec3(EnemyAddresses.CharObjects.CharAddr(s) + CCharacter.CharaTint, _tint[0] * TintScale, _tint[1] * TintScale, _tint[2] * TintScale);
                 }
                 else
@@ -123,13 +123,20 @@ namespace Dark_Cloud_Improved_Version
                     if (by < 0) { if (_provoked[s]) EndProvocation(s); continue; }
                     if (!_provoked[s]) { _provoked[s] = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _owner + $"enemy slot {s} provoked: after enemy slot {by}"); }
                     any = true;
-                    Point(s, (uint)(EnemyAddresses.CharObjects.PosAddr(by) - Memory.Pcsx2Base));
+                    Point(s, Aim(s, by));
                 }
             }
             RetireShells();
-            if (any) { ContactHits(); ShotHits(); } else _shotLast.Clear();
+            if (any) { ContactHits(); ShotHits(); } else _shotSweep.Clear();
+            ConfusionAlly.Tick();                                                // the Pocklekul's pockle, while one stands
             AggroTable.ConfusionActive = any && TargetRedirectCaves.Armed;
             if (DebugDiagnostics.Enabled && any && (GameClock.Now - _lastReport).TotalSeconds >= 1) { _lastReport = GameClock.Now; Report(); }
+        }
+
+        /// <summary>The enemies the Pocklekul's pockle provoked back on the player (its thread's exit).</summary>
+        internal static void EndAlly()
+        {
+            lock (_lock) ConfusionAlly.End();
         }
 
         /// <summary>Everything back: every confused or provoked slot released, every planted hit withdrawn, the table handed back.</summary>
@@ -142,7 +149,7 @@ namespace Dark_Cloud_Improved_Version
         {
             long pool = CollisionPool.Resolve();
             foreach (var (idx, _) in _shells) if (pool != 0) CollisionPool.Deactivate(pool, idx);
-            _shells.Clear(); _shotLast.Clear();
+            _shells.Clear(); _shotSweep.Clear();
             for (int s = 0; s < Slots; s++)
             {
                 if (_until[s] != default) Release(s);
@@ -204,6 +211,21 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteBytesBatch(q, b);
                 _wanderSet[slot] = GameClock.Now;
             }
+            return (uint)(q - Memory.Pcsx2Base);
+        }
+
+        /// <summary>Slot <paramref name="slot"/>'s mark on enemy <paramref name="victim"/>: a point inside the victim's hit sphere nearest it
+        /// (<see cref="EnemyBody.AimPoint"/> — a large enemy's root is deeper in its body than an attacker's approach reaches), kept in
+        /// the slot's own vec (the wander spot's: never in use while it has a victim; the next wander picks afresh). Its guest address.</summary>
+        private static uint Aim(int slot, int victim)
+        {
+            long me = EnemyAddresses.CharObjects.PosAddr(slot);
+            var (x, h, y) = EnemyBody.AimPoint(victim, Memory.ReadFloat(me), Memory.ReadFloat(me + 8));
+            long q = CodeCaves.BabelWander + (long)slot * CodeCaves.BabelWanderStride;
+            var b = new byte[16];
+            BitConverter.GetBytes(x).CopyTo(b, 0); BitConverter.GetBytes(h).CopyTo(b, 4); BitConverter.GetBytes(y).CopyTo(b, 8); BitConverter.GetBytes(1f).CopyTo(b, 12);
+            Memory.WriteBytesBatch(q, b);
+            _wanderSet[slot] = default;
             return (uint)(q - Memory.Pcsx2Base);
         }
 

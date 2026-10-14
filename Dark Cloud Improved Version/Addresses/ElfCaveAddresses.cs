@@ -27,7 +27,7 @@ namespace Dark_Cloud_Improved_Version
     /// Placement: claim <see cref="NextFree"/>, keep this table in ADDRESS ORDER with the cave's SIZE and END,
     /// never place a cave from a patch-local literal, and check overlaps against a PATCHED ELF (a vanilla ELF
     /// does not contain the neighbouring bins). Bin-backed sizes are the .bin file's byte size
-    /// (Resources/isoPatch); hand-built sizes are the instruction-word count × 4.
+    /// (Resources/isoPatch/stubs/<group>/); hand-built sizes are the instruction-word count × 4.
     ///
     ///   0x1FB0000  CanalEvictFadeHook   64 B → 0x1FB0040   canalEvictFadeHook.bin
     ///   0x1FB0050  QueensSpray         180 B → 0x1FB0104   queensSprayCave.bin
@@ -91,7 +91,7 @@ namespace Dark_Cloud_Improved_Version
         /// then places it every frame (head on the pellet, growth scale, sprite fade) until that pellet ends.</summary>
         internal const uint CatPelletFollow    = 0x01FB0D90;   // 4256 B → 0x1FB1E30 (PropPelletFollow follows directly) (frame 0x80, sq/lq saves)
         /// <summary>A chara-slot prop on one of Xiao's pellets (tools/stubs/prop_pellet_follow.s): the Matador's charged shot.
-        /// The hook's target (DunPatches.CatFollowHookNew): calls CatCopyQueue — the cat's chain, which performs the
+        /// The hook's target (DunPatches.CatFollowHookNew): calls CatLoad — the cat's chain, which performs the
         /// displaced step__5CSHOT — then places chara slot 3 on the pellet Mailbox.PropFollowSlot names.</summary>
         internal const uint PropPelletFollow   = 0x01FB1E30;   // 156 B → 0x1FB1ECC
         /// <summary>Keeps the borrowed shot config in BorrowedShotBlock entered in the MAIN-CHARACTER effect instance
@@ -128,15 +128,18 @@ namespace Dark_Cloud_Improved_Version
         // 0x01FB22A8..0x1FB22C0 (24 B) FREE — the band's last gap
         internal const uint CatCapeTint        = 0x01FB22C0;   // 176 B → 0x1FB2370: the cape's cloth draws under its own ambient
         internal const uint CatMaskTint        = 0x01FB2370;   // 228 B → 0x1FB2454: the mask's MESH does too, via a private vtable
-        internal const uint CatCopyQueue       = 0x01FB2480;   // 584 B → 0x1FB26C8: the cat's mesh copy, done inside the machine; its tail also calls CatPalette
+        /// <summary>The cat's native loader (tools/stubs/cat_load.s): its step entry rides the once-per-frame chain and loads or
+        /// unloads the cat pack into chara slot 1 on CodeCaves.CatLoad's request (its tail also calls CatPalette and CatGlowPalette);
+        /// its reserve entry (<see cref="CatLoadReserve"/>) is LoadChara2's hook that makes Xiao's region.</summary>
+        internal const uint CatLoad            = 0x01FB2480;   // 620 B → 0x1FB26EC
+        internal const uint CatLoadReserve     = CatLoad + 0x1F8;
         /// <summary>The cape/mask element colour, repainted in the machine (cat_palette.s). The six colours are the
-        /// cave's first six words and the CODE starts at +0x18 — that offset is what the copy-queue cave calls.</summary>
+        /// cave's first six words and the CODE starts at +0x18 — that offset is what the loader cave (CatLoad) calls.</summary>
         internal const uint CatPalette         = 0x01FB2700;   // 344 B → 0x1FB2858: the colour table, then the code
         internal const uint CatPaletteEntry    = CatPalette + 0x18;   // the entry point, past the colour table
-        /// <summary>The GLOW disc's six per-element palettes: 512 B each, in element order (00 Fire … 05 None). Pure
-        /// DATA, written at patch time by ElfCatPatches.PatchCatGlowPalettes from the blob `build_cat_pack.py --palettes`
-        /// bakes off the same index map as the disc — regenerate BOTH together, or the ramp will not match the
-        /// pixels. Patch-time data in a code page is fine; a RUNTIME write here would SIGBUS PCSX2.</summary>
+        /// <summary>The GLOW disc's nine palettes: 512 B each, in row order (00 Fire … 05 None, then the three weapon looks). Pure
+        /// DATA, written at patch time by ElfCatPatches.PatchCatGlowPalettes from GlowDisc.PalettesFrom the user's disc, off the same
+        /// index map as the discs the bakes build. Patch-time data in a code page is fine; a RUNTIME write here would SIGBUS PCSX2.</summary>
         internal const uint CatGlowPalTables   = 0x01FB2880;   // 4608 B → 0x1FB3A80 (9 rows: 6 elements + 3 weapon looks)
         internal const uint CatGlowPalette     = 0x01FB3A80;   // the cave that copies one table into the disc's CLUT
         internal const uint MirageHazeDraw     = 0x01FB3C40;   // 152 B → 0x1FB3CD8: one more raster, at the Mirage clone (dun hook in DunPatches)

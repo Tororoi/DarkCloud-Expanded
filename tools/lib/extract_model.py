@@ -40,7 +40,7 @@ motion with forward kinematics (see the .mot format notes sec.10 for the format 
       (ordinal) is what the town engine hard-wires (idle=0, run=1, walk=2, fall=8, land=9); we surface
       the decoded Japanese name + an English gloss + the [start,end] window + baked speed.
 
-This is the codec: the bakes (cat_wings.py, wing_bake.py) import it for the skeleton, mesh, weight and track readers.
+This is the codec: the cat viewer's bakes (cat_wings.py, wing_bake.py, beside it in game_data/viewers/model) import it for the skeleton, mesh, weight and track readers.
 The WebGL viewers that display what it reads are dev tools outside the repo (a page baker builds every model from
 enumerate_models + build_model into a template's `/*__MODEL_DATA__*/` placeholder).
 

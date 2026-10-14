@@ -411,22 +411,13 @@ namespace Dark_Cloud_Improved_Version
             // DFS over child/sibling to find the tree's address SPAN (the bones form a contiguous 0x270 array
             // rooted at the model root, so min == rootPhys and the block is [min, max+0x270)).
             uint min = rootPhys, max = rootPhys;
-            // Xiao's pack bakes the Divine Beast cat into her model: the cat subtree under `catroot`, and after it the
-            // cape's cloth frame `cat_cape`, parented into HER tree. None of it is hers to clone — each such node is
-            // left out (its subtree with it) and the link that reached it is re-pointed past it.
-            var skip = new System.Collections.Generic.Dictionary<uint, uint>();   // skipped node → its next sibling
             var seen = new System.Collections.Generic.HashSet<uint>();
             var work = new System.Collections.Generic.Stack<uint>();
             work.Push(rootPhys);
             while (work.Count > 0)
             {
                 uint n = work.Pop();
-                if (!Memory.IsValidGuest(n) || seen.Contains(n) || skip.ContainsKey(n)) continue;
-                if (IsCatNode(n))
-                {
-                    skip[n] = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.RootSibling);
-                    continue;
-                }
+                if (!Memory.IsValidGuest(n) || seen.Contains(n)) continue;
                 seen.Add(n);
                 if (n < min) min = n; if (n > max) max = n;
                 if (seen.Count > CodeCaves.MaxNodes)
@@ -454,15 +445,6 @@ namespace Dark_Cloud_Improved_Version
             for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
             {
                 bool isRoot = (uint)o == rootOff;
-                if (skip.Count > 0)                                 // link PAST every skipped node, through runs of them
-                {
-                    foreach (int lo in new[] { CFrameVu1.RootChild, CFrameVu1.RootSibling })
-                    {
-                        uint link = (uint)BitConverter.ToInt32(block, o + lo) & Memory.PhysAddrMask, orig = link;
-                        while (skip.TryGetValue(link, out uint next)) link = next;
-                        if (link != orig) BitConverter.GetBytes(link).CopyTo(block, o + lo);
-                    }
-                }
                 if (!seen.Contains(min + (uint)o))                  // in the span but not in the tree: no geometry, so
                 {                                                   // CopyMeshNodes leaves its meshes alone too
                     BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.GeomPtr);
@@ -478,17 +460,8 @@ namespace Dark_Cloud_Improved_Version
 
             _cloneNodeCount = nodeCount;
             _cloneRootGuest = (uint)(CodeCaves.NodePoolGuest + rootOff);   // clone root = pool + root offset
-            Console.WriteLine($"[Clone] contiguous {nodeCount}-node clone tree (0x270 stride) → root 0x{_cloneRootGuest:X}" + (skipped > 0 ? $" ({skipped} in the skipped cat subtree)" : ""));
+            Console.WriteLine($"[Clone] contiguous {nodeCount}-node clone tree (0x270 stride) → root 0x{_cloneRootGuest:X}" + (skipped > 0 ? $" ({skipped} in the span but not the tree)" : ""));
             return true;
-        }
-
-        /// <summary>A node the cat pack added to Xiao's model: `catroot`, or any `cat_` name (build_cat_pack prefixes
-        /// every grafted node so; her own rig has no such names).</summary>
-        private static bool IsCatNode(uint node)
-        {
-            byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(node) + CFrameVu1.Name, 8);
-            if (b == null || b[0] != (byte)'c' || b[1] != (byte)'a' || b[2] != (byte)'t') return false;
-            return b[3] == (byte)'_' || (b[3] == (byte)'r' && b[4] == (byte)'o' && b[5] == (byte)'o' && b[6] == (byte)'t' && b[7] == 0);
         }
 
         /// <summary>Give the clone its own copy of every SOFTWARE-SKINNED mesh (CVisualMDTVu1). Those are the
