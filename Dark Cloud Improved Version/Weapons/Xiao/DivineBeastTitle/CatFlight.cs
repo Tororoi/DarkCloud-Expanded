@@ -53,7 +53,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CatBlock.CatGlowPull, GlowPull);
             Memory.WriteFloat(CatBlock.CatGlowLift, GlowLift);
             Memory.WriteFloat(CatBlock.CatBlendDefault, BlendDefault);
-            Memory.WriteFloat(CodeCaves.MotionCave + MotionType.StateSpeed, BlendDefault);   // the copy's channel: a hit mid-fall can leave the slow fade armed
+            Memory.WriteFloat(_chan + MotionType.StateSpeed, BlendDefault);   // the copy's channel: a hit mid-fall can leave the slow fade armed
             Memory.WriteInt  (CatBlock.CatSitKey, KeySit);
             Memory.WriteFloat(CatBlock.CatProbeUp, ProbeUp);
             Memory.WriteFloat(CatBlock.CatProbeDown, ProbeDown);
@@ -125,7 +125,7 @@ namespace Dark_Cloud_Improved_Version
             WriteHitStamps();                                         // the entry the cave will plant: pellet + attack, the weapon's element
             ApplyFlightTime();
             _phase = Phase.Flying; _phaseStart = GameClock.Now; _hitDone = false; _boundAt = GameClock.Now; _gaitLogged = false; _blockedLogged = false; _pounceLogged = false; _pounceKind = 0; _sitLogged = false; _retargetTick = 0;
-            _flightFrame0 = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
+            _flightFrame0 = Memory.ReadFloat(_chan + MotionType.StateFrame);
             Memory.WriteFloat(CatBlock.CatFloorH, _floor);
             WriteTargetAim();
             Log(
@@ -212,7 +212,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         _phase = Phase.Landing; _phaseStart = GameClock.Now;
                         long lp = SlotAddr() + CCharacter.CharPos;
-                        Log($"land clip started at ({Memory.ReadFloat(lp):F1},{Memory.ReadFloat(lp + 4):F1},{Memory.ReadFloat(lp + 8):F1}), {Memory.ReadFloat(lp + 4) - Memory.ReadFloat(CatBlock.CatFloorH):F2} above the floor, motion frame {Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1}");
+                        Log($"land clip started at ({Memory.ReadFloat(lp):F1},{Memory.ReadFloat(lp + 4):F1},{Memory.ReadFloat(lp + 8):F1}), {Memory.ReadFloat(lp + 4) - Memory.ReadFloat(CatBlock.CatFloorH):F2} above the floor, motion frame {Memory.ReadFloat(_chan + MotionType.StateFrame):F1}");
                     }
                     break;
                 case 6:                                                          // running (cave moves it); face along its direction, decide the end
@@ -276,7 +276,7 @@ namespace Dark_Cloud_Improved_Version
                     long sp = SlotAddr() + CCharacter.CharPos;                       // hold the last placed spot through the fade
                     _x = Memory.ReadFloat(sp); _h = Memory.ReadFloat(sp + 4); _y = Memory.ReadFloat(sp + 8);
                     int frames = Memory.ReadInt(CatBlock.CatGrowFrames);
-                    float mf = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
+                    float mf = Memory.ReadFloat(_chan + MotionType.StateFrame);
                     _scale = 1f; _pelletSlot = -1;
                     Memory.WriteInt(CatBlock.CatState, 0);
                     _caveOwns = false;

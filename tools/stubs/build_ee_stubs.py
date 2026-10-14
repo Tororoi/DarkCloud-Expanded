@@ -49,7 +49,7 @@ STUBS = [
     ('cat_sphere_percent.s',     'cat/catSpherePercent.bin',     0x1FB21E0),
     ('cat_cape_tint.s',          'cat/catCapeTint.bin',          0x1FB22C0),
     ('cat_mask_tint.s',          'cat/catMaskTint.bin',          0x1FB2370),
-    ('cat_copy_queue.s',         'cat/catCopyQueue.bin',         0x1FB2480),
+    ('cat_load.s',               'cat/catLoad.bin',              0x1FB2480),
     ('cat_palette.s',            'cat/catPalette.bin',           0x1FB2700),
     ('cat_glow_palette.s',       'cat/catGlowPalette.bin',       0x1FB3A80),
     ('mirage_haze_draw.s',       'weapons/mirageHazeDraw.bin',       0x1FB3C40),

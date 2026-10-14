@@ -118,6 +118,11 @@ namespace Dark_Cloud_Improved_Version
             new(0x01DBA870, 0x24420001, 0x24420000u | (uint)(1 + AllyBlock.Units / 4), "Ruby's ally block (c05_f03 copy rounding, addiu)"),
             new(0x01DBA874, 0x00021180, 0x00021080, "Ruby's ally block (c05_f03 copy rounding, sll 6 → 2)"),
             new(0x01DBA878, 0x00021103, 0x00000000, "Ruby's ally block (c05_f03 copy rounding, sra 4 → nop)"),
+            // XIAO'S REGION (XiaoRegion): where every character's branch meets, just before the weapon base is computed, `lui at,0x01F0;
+            // lw a0,0x6668(at)` → `jal` cat_load.s's reserve entry, which allocates the region when s5 (the character) is Xiao and
+            // redoes both words. The Divine Beast cat loads into it.
+            new(0x01DBA894, 0x3C0101F0, MipsAsm.Jal(ElfCave.CatLoadReserve), "Xiao's region: LoadChara2 → the reserve entry (jal)"),
+            new(0x01DBA898, 0x8C246668, 0x00000000, "Xiao's region: its displaced lw a0 (now the entry's own delay slot)"),
             // The ALLY'S MANAGER (the summoned pockle): the dungeon's three calls on the floor's monster manager go through ally_manager.s, which makes
             // each again on a private manager (CodeCaves.AllyManager) while one is set (ElfAllyPatches writes the cave).
             new(0x01DB749C, 0x0C077550, MipsAsm.Jal(DeadMcCave.AllyStep), "ally manager: motionDrive's jal Step__12CMonstorUnitFi → cave"),

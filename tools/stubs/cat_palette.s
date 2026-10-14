@@ -1,6 +1,6 @@
 # cat_palette.s — the Super Steve cape and mask take the EQUIPPED WEAPON'S ELEMENT colour, natively.
 # Assembled at 0x01FB2700 (ElfCave.CatPalette). The six colours are the first six words; the code starts at +0x18,
-# which is what the copy-queue cave calls once per dungeon frame.
+# which is what the loader cave (cat_load.s) calls once per dungeon frame.
 #
 # WHY NATIVE. Nothing crosses PINE per frame and the colour is right on the cat's first drawn frame. The C#
 # version re-walked the texture manager BY NAME every half second — up to 195 round trips — and wrote a kilobyte

@@ -228,21 +228,19 @@ namespace Dark_Cloud_Improved_Version
         // already carry runtime-written words (WaterRedraw, the blocks below), so a PINE write here cannot
         // fault the way one into a code page does. Inside the ModReserved heap-tail claim, so it stays clean.
         //
-        // ── CatCopyQueue / CatCopyPairs: the cat's mesh-copy job queue (0x21FAE620, 0x910 B; its pair table sits at 0x21FAFCC0) ──
-        /// <summary>The cat's mesh-copy QUEUE (ElfCave.CatCopyQueue reads it). Data, not code, in the runtime-data span.
-        /// +0x00 job count (0 = idle), jobs from +0x10, 0x30 B each: src, dst, size, then two (src, size, dst) rebase specs.</summary>
-        internal const long CatCopyQueue      = 0x21FAE620;
-        internal const uint CatCopyQueueGuest = 0x01FAE620;
-        internal const int  CatCopyQueueJobs  = 48;            // 48 × 0x30 + 0x10 = 0x910 B of the span below — the
-                                                               // texture relocation needs one job per block per moved texture
-        internal const int  CatCopyJobStride  = 0x30;
-        // The jobs end at +0x910 (0x21FAEF30), just short of BorrowedShotBlock (0x21FAEF40). A find/replace job's old→new pair
-        // table is NOT after them: the job names it (+0x10), and it lives at CatCopyPairs.
-        /// <summary>How many old→new pairs a sweep can carry. MUST cover every name in CatTextures.CatTextureNames —
-        /// there are TEN. A name that does not fit is silently dropped, and a dropped name's register keeps pointing into her
-        /// old block (catcape is one the MASK draws with: dropped, the mask draws black). The count is checked against this
-        /// rather than truncated.</summary>
-        internal const int  CatCopyMaxPairs   = 16;                                           // × 16 B at CatCopyPairs
+        // ── CatLoad: the cat loader's request block (0x21FAE620, 0x80 B; 0x21FAE6A0 .. 0x21FAEF40 free) ──
+        /// <summary>The request block ElfCave.CatLoad answers (tools/stubs/cat_load.s). The mod writes the pack path and S, then the
+        /// request; the cave writes everything else. The reserve entry (LoadChara2) clears the status, W and the region on every load.</summary>
+        internal const long CatLoad        = 0x21FAE620;
+        internal const int  CatLoadStatus  = 0x00;   // mod: 1 = load, 3 = unload; cave: 2 = loaded, 0 = unloaded / nothing, −1 = refused
+        internal const int  CatLoadRegion  = 0x04;   // reserve: the region's base (0 = Xiao is not the character loaded)
+        internal const int  CatLoadUnits   = 0x08;   // reserve: its size in 16-byte units
+        internal const int  CatLoadVram    = 0x0C;   // cave: W, block 0x21's base (0 = no VRAM held)
+        internal const int  CatLoadAlloc   = 0x10;   // cave: the region's CDataAlloc2 {base, —, used, max}; used = the units the load took
+        internal const int  CatLoadCursor  = 0x20;   // cave: the texture cursor before W
+        internal const int  CatLoadBlocks  = 0x24;   // mod: S, the pack's VRAM blocks (CatPackBakes.CatVramBlocks)
+        internal const int  CatLoadRoot    = 0x28;   // cave: the cat's root as loaded (0 = none) — slot 1 is the cat's only while it holds this
+        internal const int  CatLoadPath    = 0x40;   // mod: the pack's path, NUL-terminated (≤ 0x40 B)
 
         // ── BorrowedShotBlock: the borrowed shot config and its carve state (0x21FAEF40, 0x2C0 B) ──
         /// <summary>The borrowed shot config in use (ElfCave.BorrowedShotsEnter keeps it entered in the main-character effect
@@ -595,9 +593,7 @@ namespace Dark_Cloud_Improved_Version
         /// enemy window w blocks nothing (7 = none of its windows).</summary>
         internal const long GuardMask   = 0x21FAFCB0;   // 16 B
 
-        /// <summary>The cat copy queue's old→new pair table (16 B each, CatCopyMaxPairs of them): a find/replace job names it.</summary>
-        internal const long CatCopyPairs      = 0x21FAFCC0;   // 0x100 B
-        internal const uint CatCopyPairsGuest = 0x01FAFCC0;
+        // 0x21FAFCC0 .. 0x21FAFDC0 (0x100 B) free
 
         /// <summary>The points the engine carries with units (DebugInfoCave.Follow, every frame): FollowCount entries of FollowStride,
         /// each +0 the source (guest address of a position: x, height, y; 0 = off), +4 the destination (guest), +8/+0xC/+0x10 the

@@ -37,7 +37,7 @@
     sw    $ra, 0x0010($sp)
     sw    $s0, 0x0014($sp)
     sw    $s1, 0x0018($sp)
-    jal   0x01FB1E30               # PropPelletFollow → CatCopyQueue → CatPelletFollow → step__5CSHOT(pool), as before
+    jal   0x01FB1E30               # PropPelletFollow → CatLoad → CatPelletFollow → step__5CSHOT(pool), as before
     nop
     lui   $s0, 0x01FA
     ori   $s0, $s0, 0xEF40         # the block

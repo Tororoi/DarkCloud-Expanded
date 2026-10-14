@@ -21,13 +21,13 @@ namespace Dark_Cloud_Improved_Version
     /// lifetime. The flight is driven frame-by-frame by a native cave (tools/stubs/cat_pellet_follow.s); this class
     /// arms it, picks targets, plants the damage and owns the look.
     ///
-    /// Where the cat comes from: the ISO bake (tools/iso_patch/build_cat_pack.py) grafts the s86 cat rig into Xiao's
-    /// dungeon pack c04b.chr as 37 `cat_` nodes that sit UNPARENTED in her frame array — the engine never draws,
-    /// skins or DMAs them — plus a second motion channel (KEY_START 64: stand, ready, run, take-off, leap, land,
-    /// walk, float, sit) that only ever plays on the copy. So whenever Xiao is in a dungeon the cat's mesh, textures
-    /// and clips are already resident in her tree. Summoning it follows the Angel Gear / Mirage recipe: deep-copy the
-    /// subtree into the mod's caves, give the copy its own skin buffers and motion channel, host it in a dungeon
-    /// chara slot, and let the engine step and draw it natively. Her own model is never touched.
+    /// Where the cat comes from: the ISO bake (CatPackBakes) builds it as a character pack of its own,
+    /// dun/monstor/dbcat.chr — the s86 cat rig with the wings, the mask and the Super Steve cape, and one motion channel
+    /// (KEY_START 64: stand, ready, run, take-off, leap, land, walk, float, sit). Whenever the floor loads Xiao, LoadChara2
+    /// sets aside a region of the character pool behind her (XiaoRegion), and when she draws a weapon with a look on a
+    /// floor the machine loads the pack into dungeon chara slot 1 inside it (ElfCave.CatLoad: SetupBaseModel's own
+    /// sequence). The engine then steps and draws it natively; this class hides the meshes the look does not wear and
+    /// drives the slot. Her own model is never touched.
     /// </summary>
     internal static class DivineBeastTitle
     {
@@ -39,15 +39,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int  Slot   = 1;                 // DungeonCharaDraw host (0 = Mirage clone, 3 = Angel Gear slingshot)
         internal const int  CharCopySize = 0xD60, MotionStructSize = 0xC0;
         internal const int  TickMs = 16;
-        /// <summary>How long after arming the build waits for the texture manager to settle. The cat's VRAM window is claimed
-        /// by writing a block's base and top DIRECTLY rather than through the allocator, so claiming it before the manager has
-        /// finished handing out addresses lets later textures land on top of it.</summary>
+        /// <summary>How long after arming the load waits for the texture manager to settle. The cat's VRAM span is claimed under
+        /// the manager's cursor by the loader, which refuses while any texture block reaches into it, so loading before the manager
+        /// has finished handing out addresses costs a refusal and a retry.</summary>
         private const double SettleSeconds = 1.0;
 
-        // The cat's motion channel on HER (build_cat_pack.py: MOTION 1 in c04b.chr's base.cfg, KEY_START 64; track
-        // bone ids are relative to the cat root, which is the copy's node 0).
-        internal const int  CatChannel = 1;
-        internal const int  MaxTreeNodes = 160;         // her array: 79 body + 37 cat (+ headroom for the scan)
+        // The cat pack's motion channel (MOTION 0, KEY_START 64).
         internal const int  KeyBase = 64, KeyCount = 9;
         internal const int  KeyStand = 64, KeyReady = 65, KeyRun = 66, KeyTakeOff = 67, KeyLeap = 68, KeyLand = 69, KeyWalk = 70, KeyFloat = 71, KeySit = 72;   // walk = s86 KEY 2 at 1.0; float = the town ladder jump's vertical leap (e04c04cat #5); sit = s86 KEY 1
         internal const float  MoveFrac      = 0.20f;    // ground speed after the landing, as a fraction of the pellet's speed; below this it loses enemies
@@ -69,10 +66,8 @@ namespace Dark_Cloud_Improved_Version
         // ten-unit body on stairs rides on its uphill end (front paws ≈ z 2, hind paws ≈ z −2 in cat space).
         internal const float  ProbeFront    = 3f, ProbeBack = 2f;
         internal const string CatRootName = "catroot";
-        internal const float  HideScale   = 0.001f;     // must match build_cat_pack.py HIDE_SCALE
         internal const int    ChanKeyStart = 0x3E0;     // CCharacter: channel[i] first key id (CommandKEY_START)
         internal const int    ChanKeyEnd   = 0x400;     // CCharacter: channel[i] key id end (CommandMOTION_END)
-        internal const int    MotListHead  = 0x04;      // MOTION_TYPE +0x04 → the .mot track list (shared, read-only)
         internal const int    ShadowModel  = 0xC0;      // CCharacter: shadow rig root (CommandSHADOW_MODEL); 0 = no shadow
         internal const int    ShadowSlotBase = 0xC40;   // CCharacter: shadow channel[i] ptr (ShadowStep__10CCharacter)
         // CNPCharacter tail (Initialize__12CNPCharacter 0x1569E0 / ClearSeq 0x156350 / SetFootSound / SetEvent)
@@ -144,9 +139,9 @@ namespace Dark_Cloud_Improved_Version
         private static DateTime _holdStart;
         private static double _holdSeconds;
 
-        // The copy.
-        internal static uint  _liveRoot, _copyRoot;
-        internal static int   _nodeCount, _catIndex;
+        // The cat in slot 1.
+        internal static uint  _liveRoot, _copyRoot;          // Xiao's model root at the load; the cat's (slot 1 + 0xBC)
+        internal static int   _nodeCount;
         internal static int   _key = -1;
         internal static float _alpha = 1f;
         // Flight state (world: x, h = height, y).
@@ -180,8 +175,9 @@ namespace Dark_Cloud_Improved_Version
         private const string CapeTexture = "catcape";  // the cape AND the mask draw from it (wing_bake.MASK_TEX)
         /// <summary>The element glow: ONE 8-bit disc carrying all six colours, repainted by ElfCave.CatGlowPalette the way
         /// the cape is — 5,184 B for every colour, against 16,448 B for a single 32-bit disc. The colours live in
-        /// build_cat_pack.GLOW_ELEMENTS, not here: tune them there and re-bake.</summary>
-        private const string ElementGlowDisc = "catglowp";
+        /// build_cat_pack.GLOW_ELEMENTS, not here: tune them there and re-bake. The cat's own copy, in its reserved VRAM span (the one in
+        /// Xiao's pack shares her block's pages, which her own textures reuse while she draws).</summary>
+        private const string ElementGlowDisc = CatPackBakes.CatGlowName;
         // Per weapon: the Divine Beast Title keeps its blue glow, cyan tint and NO wings; the Angel Shooter wears the wings
         // with a WHITE glow and a neutral add; the Angel Gear the wings with a GOLD glow and a gold-white add. Every look
         // draws the SAME 8-bit disc, differing only in the palette row (PalRow → CatBlock.CatGlowPalRow; the rows themselves
@@ -242,11 +238,10 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly string[] WingMeshNodes = { "cat_rwingm", "cat_lwingm" };   // build_cat_pack / wing_bake.MESH_NAMES
         internal const string MaskNodeName = "cat_mask";                                    // wing_bake.MASK_NODE — the Super Steve
         internal static int _maskMeshIdx = -1;                                              // cat's domino mask, rigid to cat_kao
-        internal static long _maskVisual;                                                   // …and its own copied CVisualMDT
+        internal static long _maskVisual;                                                   // …and its CVisualMDT (MMU address)
         internal const string CapeNodeName = "cat_cape", CapeAnchorName = "cat_sebone2";     // wing_bake.CAPE_NODE / cat_wings.CAPE_ANCHOR
-        /// <summary>The cape's body-collision capsules, in the order the .clo lists them — IN STEP WITH cat_wings.CAPE_BOUNDS.
-        /// Every BOUND in the record names the cape node (the only name that resolves in HER tree at load); at spawn each cloned
-        /// CBound is re-pointed at the cat copy's own bone, so the capsules ride the cat's spine and the cape drapes over it.</summary>
+        /// <summary>The cape's body-collision capsules, in the order the .clo lists them — IN STEP WITH CatCapeBake.CapeBounds, which
+        /// names each BOUND's bone in the cat pack, so the capsules ride the cat's spine and the cape drapes over it.</summary>
         internal static readonly string[] CapeBoundBones = { "cat_sebone2", "cat_sebone1", "cat_kosibone", "cat_kao" };
         internal static readonly List<int> _wingMeshIdx = new List<int>();
         internal const float  HeadFallbackHeight = 6f;
@@ -263,8 +258,8 @@ namespace Dark_Cloud_Improved_Version
         internal static bool Wields() => Looks.ContainsKey(LookKeyFor(Memory.ReadUShort(WeaponHave.BattleWeaponRecord)));   // Super Steve's looks have NEGATIVE keys
 
         /// <summary>Xiao's Divine Beast Title thread: hands every tick to <see cref="Drive"/> while she wields a weapon with a look, Super
-        /// Steve's spheres included, and stands the cat down once when it goes. The cat has exactly ONE driver: a spawn is hundreds of
-        /// writes and a machine-side copy, and a second thread stepping in mid-way (Super Steve's loop, when the weapon changed under a
+        /// Steve's spheres included, and stands the cat down once when it goes. The cat has exactly ONE driver: a spawn is a machine-side
+        /// load and hundreds of writes, and a second thread stepping in mid-way (Super Steve's loop, when the weapon changed under a
         /// look thread) corrupted the copy and once took the game down — so Super Steve does not pulse this one. The tick holds the cat
         /// itself through the PAUSE screen and the menus, so nothing is gated here.</summary>
         public static void SpiritBeastEffect()
@@ -323,18 +318,15 @@ namespace Dark_Cloud_Improved_Version
                 else
                 {
                     Resume();
-                    WatchHerCatChannel();
-                                if (Active && ++_texCheckTick >= 30)
+                    if (Active && ++_texCheckTick >= 30)
                     {
                         _texCheckTick = 0;
                         CheckTexturesStillOurs();
-                        CheckGuards();                                             // anything overwriting the copy's caves is named, once
                         if (Active && _look.Cape) WatchElementLook(force: true);   // re-assert the colour if the entries were remade
                     }
                     if (_armedSince == DateTime.MinValue) _armedSince = GameClock.Now;
-                    // Built once, hidden, after the switch or menu has settled — her cat textures are still registering for
-                    // a moment. Not the real guard: Spawn refuses and retries while they are absent from the manager, so
-                    // arriving early costs a retry rather than a broken cat.
+                    // Loaded once, hidden, after the switch or menu has settled — the texture manager is still handing out
+                    // addresses for a moment, and the loader refuses while a block reaches into the cat's VRAM span.
                     if (!Active && (GameClock.Now - _armedSince).TotalSeconds >= SettleSeconds) SpawnResident();
                     TrackCharge();
                     if (_native) PollCave(); else WatchPellets();
@@ -418,7 +410,7 @@ namespace Dark_Cloud_Improved_Version
             var look = ElementLooks[e];
             Array.Copy(look.Tint, _capeTint, 3);                   // the cape and mask keep their authored per-element ambient
             Array.Copy(ElementAmbient, _catTint, 3);               // the CAT alone is the same under every element
-            // The TEXTURE colour is the cave's when this ISO has one (ElfCave.CatPalette, called from the copy-queue cave
+            // The TEXTURE colour is the cave's when this ISO has one (ElfCave.CatPalette, called from the loader cave's tail
             // every dungeon frame): it reads the element itself, so the cape is right even with the app closed — and the
             // mod stops re-walking the texture manager by name, which cost up to 195 round trips per re-assert. The TINT
             // stays here: it rides the fade the mod already drives.
@@ -435,8 +427,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Point the glow cave at this look: the palette ROW it should paint (CatGlowPalRow), the disc to bind —
-        /// always the same one — and CatGlowReady = 0 so it binds again, since the copy's texture entries are remade per
-        /// spawn.</summary>
+        /// always the same one — and CatGlowReady = 0 so it binds again.</summary>
         internal static void WriteGlowName()
         {
             // EVERY look draws the same 8-bit disc and differs only in the palette row the cave paints into it. Row 0
@@ -480,7 +471,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void TintCape()
         {
             if (_capeObj == 0) { Memory.WriteUInt(CatBlock.CatCapeCloth, 0); return; }
-            Array.Copy(ElementLooks[ElementNow()].Tint, _capeTint, 3);   // seed before the first write: SpawnCape calls this
+            Array.Copy(ElementLooks[ElementNow()].Tint, _capeTint, 3);   // seed before the first write: AdoptCape calls this
             WriteCapeTint(1f);                                           // before WatchElementLook has run
             Memory.WriteUInt(CatBlock.CatCapeCloth, Memory.ToGuest(_capeObj));
             Log($"cape tint: ambient ({_capeTint[0]:F0},{_capeTint[1]:F0},{_capeTint[2]:F0}) for its draw alone, as a delta off the cat's ({_look.Tint[0]:F0},{_look.Tint[1]:F0},{_look.Tint[2]:F0})");
@@ -561,10 +552,10 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>Build the copy once per floor/character and keep it RESIDENT but hidden (opacity 0, scale 0, the
-        /// fall pose looping) so a charged shot has nothing left to build — the cave shows it on the pellet's birth
-        /// frame: the growth must start the very frame the pellet is created. A failed spawn is
-        /// retried after a pause rather than every tick.</summary>
+        /// <summary>Load the cat once per floor, party switch, menu or weapon change and keep it RESIDENT but hidden (opacity 0,
+        /// scale 0, the fall pose looping) so a charged shot has nothing left to load — the cave shows it on the pellet's birth
+        /// frame: the growth must start the very frame the pellet is created. A failed load is retried after a pause rather
+        /// than every tick.</summary>
         private static void SpawnResident()
         {
             if (_spawnFailedAt != DateTime.MinValue && (GameClock.Now - _spawnFailedAt).TotalSeconds < 5) return;
@@ -583,9 +574,9 @@ namespace Dark_Cloud_Improved_Version
             if (!_look.Wings) hide.AddRange(_wingMeshIdx);
             if (!_look.Cape && _maskMeshIdx >= 0) hide.Add(_maskMeshIdx);
             HideMeshes(hide, !_look.Wings && !_look.Cape ? "wings and mask" : !_look.Wings ? "wings" : "mask");
-            GoLive();                                                                      // the engine may step the copy only now: nothing of hers is reachable from it
-            if (_look.Cape) { SpawnCape(); MaskTint(); WatchElementLook(force: true); }   // colour before the first frame draws
-            Log($"look for weapon {_weapon}: glow row {(_look.Cape ? "element" : _look.PalRow.ToString())}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy), mask {(_look.Cape ? "on" : "off")} (n{_maskMeshIdx})");
+            if (_look.Cape) { AdoptCape(); MaskTint(); WatchElementLook(force: true); }   // sized and coloured before the first frame steps or draws it
+            GoLive();                                                                      // the engine steps and draws the cat only now
+            Log($"look for weapon {_weapon}: glow row {(_look.Cape ? "element" : _look.PalRow.ToString())}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes), mask {(_look.Cape ? "on" : "off")} (n{_maskMeshIdx})");
             _native = (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew;
             if (!_native && !_nativeWarned) { _nativeWarned = true; Log("pellet-catcher cave not in this ISO (re-patch) — using the thread follower"); }
             if (_native) { Memory.WriteInt(CatBlock.CatPelletSlot, 0); Memory.WriteInt(CatBlock.CatState, 0); }
@@ -609,16 +600,17 @@ namespace Dark_Cloud_Improved_Version
 
         private const  int HitElemEvery = 6;          // ticks between element-drift checks (~100 ms at TickMs 16)
         private static int _hitElemTick;
-        /// <summary>Re-assert everything the engine or another system could take back: the copy's model pointer, position,
-        /// scale, opacity, facing and motion key (all except those the cave owns mid-flight), and the cat's own light —
-        /// Draw__10CCharacter adds CharaTint (+0xCE0) to the scene ambient on a 0..255 scale where the dungeon's key lights
-        /// are ~100-120, scaled here by the fade so the cat dims as it goes. Despawns if her model changed underneath us.
-        /// Runs every tick in all three active states, so anything that must hold regardless of state belongs here.</summary>
+        /// <summary>Re-assert everything the engine or another system could take back: position, scale, opacity, facing and
+        /// motion key (all except those the cave owns mid-flight), and the cat's own light — Draw__10CCharacter adds CharaTint
+        /// (+0xCE0) to the scene ambient on a 0..255 scale where the dungeon's key lights are ~100-120, scaled here by the fade
+        /// so the cat dims as it goes. Stands the cat down when her model changed or the load is gone (a floor load or a party
+        /// switch forgets it and takes slot 1's model away). Runs every tick in all three active states, so anything that must
+        /// hold regardless of state belongs here.</summary>
         internal static void Maintain()
         {
-            if ((Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel)) != _liveRoot)
+            if (Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel) != _liveRoot || !StillLoaded())
             {
-                Log("her model changed — cat despawned");
+                Log("her model or the cat's load changed — cat down");
                 Despawn();
                 return;
             }
@@ -652,7 +644,6 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteVec3(s + CCharacter.CharaTint, _catTint[0] * lit, _catTint[1] * lit, _catTint[2] * lit);   // ambient ADD, per weapon (Looks) and per element
             if (_capeObj != 0) WriteCapeTint(lit);                                  // the cape rides the same fade, one step further red
             Memory.WriteVec3(s + CCharacter.CharRot, 0f, _yaw, 0f);   // Euler x, yaw, z
-            Memory.WriteUInt (s + CCharacter.CharModel, _copyRoot);
             if (!_caveOwns) Memory.WriteInt(s + CCharacter.MotionId, _key);      // the cave sets leap/land/run keys on its own frames
             Memory.WriteInt  (s + DungeonCharaDraw.CharaActive, 1);
             Memory.WriteInt  (s + DungeonCharaDraw.CharaMotionA, 1);
@@ -664,9 +655,9 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (Mailbox.MirageSceneGate, 1);
         }
 
-        /// <summary>Take the cat off screen: unregister the draw slot, zero its opacity and model pointer, detach the cape
-        /// cloth list (it lives in the mod's cave and must never be left on a slot handed back), disarm the cave and return
-        /// the textures to her block. Frees nothing — the copy, its meshes and its caves stay allocated for the next spawn.</summary>
+        /// <summary>Take the cat off screen: disarm the cave, unregister the draw slot and zero its opacity — only while slot 1 still
+        /// holds the cat, since an event's character may have taken it — and ask the loader to unload (slot 1's model, block 0x21 and
+        /// its VRAM span). The region itself stays Xiao's until the next LoadChara2; the next load reuses it.</summary>
         internal static void Despawn()
         {
             if (!Active) return;
@@ -678,19 +669,20 @@ namespace Dark_Cloud_Improved_Version
                 _pelletSlot = -1;
             }
             long s = SlotAddr();
-            Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 0);
-            Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)Slot * 4, 1);
-            Memory.WriteInt  (s + DungeonCharaDraw.CharaActive, 0);
-            Memory.WriteInt  (s + DungeonCharaDraw.CharaMotionA, 0);
-            Memory.WriteFloat(s + CCharacter.NpcOpacity, 0f);
-            Memory.WriteUInt (s + CCharacter.CharModel, 0);
-            Memory.WriteInt  (s + CCharacter.ClothList, 0); _capeObj = 0; _capeRest = null;        // the cape list lives in OUR cave: never leave it on a slot we hand back
-            Memory.WriteUInt (CatBlock.CatCapeCloth, 0);                // …and the recolour cave stops matching a dead pointer
-            RetagCatTextures(SlotTextureGroup, HerTextureBlock);
+            if (Memory.ReadGuestPtr(s + CCharacter.CharModel) == _copyRoot)   // an event's character may hold slot 1 now: leave it be
+            {
+                Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 0);
+                Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)Slot * 4, 1);
+                Memory.WriteInt  (s + DungeonCharaDraw.CharaActive, 0);
+                Memory.WriteInt  (s + DungeonCharaDraw.CharaMotionA, 0);
+                Memory.WriteFloat(s + CCharacter.NpcOpacity, 0f);
+            }
+            _capeObj = 0; _capeRest = null;
+            Memory.WriteUInt (CatBlock.CatCapeCloth, 0);                // the recolour cave stops matching a dead pointer
+            Unload();                                                   // the cave takes slot 1's model away and block 0x21 with it
             Active = false; _key = -1; _target = -1; _weapon = -1;
             if (!SlingshotProp.Active) Memory.WriteInt(Mailbox.MirageSceneGate, 2);   // after Active=false: Mirage's loop owns it again
-            _lastDespawn = GameClock.Now;
-            Log("cat copy down");
+            Log("cat down");
         }
 
         // ─────────────────────────────────────────── the hit ───────────────────────────────────────────────

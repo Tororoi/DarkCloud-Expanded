@@ -135,7 +135,7 @@ namespace Dark_Cloud_Improved_Version
             PatchWhpBill(fs, ElfOff);                    // a weapon-HP bill the mod posts (CodeCaves.WhpBill) taken by the engine's own drain — SwordDmgCheck1 — once a frame (the chain's tail)
             PatchLungeGravity(fs, ElfOff);               // the charge lunge's gravity × (1 + CodeCaves.LungeGravityExtra): the seed cave + its main hook (the dun hook is in DunPatches)
             PatchSolarBladeTint(fs, ElfOff);              // the Sun Sword's blade too (BladeTint): the rigid-mesh class's DrawVu1, into the mask cave's body
-            PatchCatCopyQueue(fs, ElfOff);                // the cat's mesh copy runs inside the machine instead of over PINE
+            PatchCatLoad(fs, ElfOff);                     // the cat loads natively into chara slot 1, in Xiao's region (the LoadChara2 hook in DunPatches)
             PatchPropPelletFollow(fs, ElfOff);            // a chara-slot prop on one of Xiao's pellets — the Matador's charged shot (the hook in DunPatches now lands here)
             PatchBorrowedShotsEnter(fs, ElfOff);            // a species' shot config, borrowed by an ability, entered into every floor's shot pack (dun.bin hook in DunPatches)
             PatchSharedShots(fs, ElfOff);                 // the monster shot pack's five slots shared among every config a floor needs (the step hook in DunPatches)

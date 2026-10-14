@@ -25,8 +25,9 @@ reserved by growing one allocation in `LoadChara2` (`DunPatches`, `AllyBlock.Uni
 weapon pool starts, so it is found from the pool counters without a stored pointer. It is rebuilt (and empty) on every `LoadChara2`:
 a floor change or a character switch.
 
-Only Ruby's branch reserves it so far (`AllyArmed` 4, the summoner check in `blockaddr`). Xiao's pool has no room for it while the
-Divine Beast cat is baked into her pack (3.79 MB of the 4.37 MB heap), so Super Steve's Pocklekul sphere waits on the cat moving out.
+Only Ruby's branch reserves it so far (`AllyArmed` 4, the summoner check in `blockaddr`). Xiao has a room of her own behind her data
+(`XiaoRegion`, made by `cat_load.s`'s reserve entry on the same LoadChara2 path), where the Divine Beast cat loads on demand; Super
+Steve's Pocklekul sphere is to share it.
 
 **The manager's unused slots hold the small parts.** The copied manager is only used for slot 0, and nothing in the engine writes the
 other slots after the summon's reset (it resets units and per-slot tables, never the monster bodies or the model slots; step, draw,

@@ -91,7 +91,7 @@ namespace Dark_Cloud_Improved_Version
         /// then places it every frame (head on the pellet, growth scale, sprite fade) until that pellet ends.</summary>
         internal const uint CatPelletFollow    = 0x01FB0D90;   // 4256 B → 0x1FB1E30 (PropPelletFollow follows directly) (frame 0x80, sq/lq saves)
         /// <summary>A chara-slot prop on one of Xiao's pellets (tools/stubs/prop_pellet_follow.s): the Matador's charged shot.
-        /// The hook's target (DunPatches.CatFollowHookNew): calls CatCopyQueue — the cat's chain, which performs the
+        /// The hook's target (DunPatches.CatFollowHookNew): calls CatLoad — the cat's chain, which performs the
         /// displaced step__5CSHOT — then places chara slot 3 on the pellet Mailbox.PropFollowSlot names.</summary>
         internal const uint PropPelletFollow   = 0x01FB1E30;   // 156 B → 0x1FB1ECC
         /// <summary>Keeps the borrowed shot config in BorrowedShotBlock entered in the MAIN-CHARACTER effect instance
@@ -128,9 +128,13 @@ namespace Dark_Cloud_Improved_Version
         // 0x01FB22A8..0x1FB22C0 (24 B) FREE — the band's last gap
         internal const uint CatCapeTint        = 0x01FB22C0;   // 176 B → 0x1FB2370: the cape's cloth draws under its own ambient
         internal const uint CatMaskTint        = 0x01FB2370;   // 228 B → 0x1FB2454: the mask's MESH does too, via a private vtable
-        internal const uint CatCopyQueue       = 0x01FB2480;   // 584 B → 0x1FB26C8: the cat's mesh copy, done inside the machine; its tail also calls CatPalette
+        /// <summary>The cat's native loader (tools/stubs/cat_load.s): its step entry rides the once-per-frame chain and loads or
+        /// unloads the cat pack into chara slot 1 on CodeCaves.CatLoad's request (its tail also calls CatPalette and CatGlowPalette);
+        /// its reserve entry (<see cref="CatLoadReserve"/>) is LoadChara2's hook that makes Xiao's region.</summary>
+        internal const uint CatLoad            = 0x01FB2480;   // 620 B → 0x1FB26EC
+        internal const uint CatLoadReserve     = CatLoad + 0x1F8;
         /// <summary>The cape/mask element colour, repainted in the machine (cat_palette.s). The six colours are the
-        /// cave's first six words and the CODE starts at +0x18 — that offset is what the copy-queue cave calls.</summary>
+        /// cave's first six words and the CODE starts at +0x18 — that offset is what the loader cave (CatLoad) calls.</summary>
         internal const uint CatPalette         = 0x01FB2700;   // 344 B → 0x1FB2858: the colour table, then the code
         internal const uint CatPaletteEntry    = CatPalette + 0x18;   // the entry point, past the colour table
         /// <summary>The GLOW disc's six per-element palettes: 512 B each, in element order (00 Fire … 05 None). Pure
