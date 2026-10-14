@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading;
 using static Dark_Cloud_Improved_Version.CatCape;
 using static Dark_Cloud_Improved_Version.CatFlight;
-using static Dark_Cloud_Improved_Version.CatCopy;
+using static Dark_Cloud_Improved_Version.CatSlot;
 using static Dark_Cloud_Improved_Version.CatTextures;
 
 namespace Dark_Cloud_Improved_Version
@@ -239,7 +239,7 @@ namespace Dark_Cloud_Improved_Version
         internal const string MaskNodeName = "cat_mask";                                    // wing_bake.MASK_NODE — the Super Steve
         internal static int _maskMeshIdx = -1;                                              // cat's domino mask, rigid to cat_kao
         internal static long _maskVisual;                                                   // …and its CVisualMDT (MMU address)
-        internal const string CapeNodeName = "cat_cape", CapeAnchorName = "cat_sebone2";     // wing_bake.CAPE_NODE / cat_wings.CAPE_ANCHOR
+        internal const string CapeNodeName = "cat_cape";                                     // the cloth's frame in the cat pack (CatCapeBake)
         /// <summary>The cape's body-collision capsules, in the order the .clo lists them — IN STEP WITH CatCapeBake.CapeBounds, which
         /// names each BOUND's bone in the cat pack, so the capsules ride the cat's spine and the cape drapes over it.</summary>
         internal static readonly string[] CapeBoundBones = { "cat_sebone2", "cat_sebone1", "cat_kosibone", "cat_kao" };

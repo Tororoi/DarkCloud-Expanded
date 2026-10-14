@@ -605,7 +605,7 @@ namespace Dark_Cloud_Improved_Version
         /// packet + MDT into the MeshCave, internal refs re-based, single-buffered.</summary>
         private static bool CopyMesh()
         {
-            long cave = CodeCaves.PropMeshCave; long caveGuest = CodeCaves.PropMeshCave - 0x20000000;   // above the cat's meshes (both can be up on the Angel Gear)
+            long cave = CodeCaves.PropMeshCave; long caveGuest = CodeCaves.PropMeshCave - 0x20000000;   // the top of the MeshCave, under its track cave
             long caveEnd = TrackCave;                       // top TrackCaveSize bytes hold the cloned track list
             int copied = 0;
             for (int i = 0; i < _nodeCount; i++)

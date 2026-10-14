@@ -1,7 +1,7 @@
 using System;
 using System.Text;
 using static Dark_Cloud_Improved_Version.DivineBeastTitle;
-using static Dark_Cloud_Improved_Version.CatCopy;
+using static Dark_Cloud_Improved_Version.CatSlot;
 
 namespace Dark_Cloud_Improved_Version
 {

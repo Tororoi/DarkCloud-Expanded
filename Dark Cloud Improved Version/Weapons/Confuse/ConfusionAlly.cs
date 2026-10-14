@@ -143,8 +143,8 @@ namespace Dark_Cloud_Improved_Version
             _ringRead = count;
         }
 
-        // DIAGNOSTIC: one line per swing window of the ally's — the frames it was recorded in, how near its sphere came to an enemy's
-        // body, and whether it planted
+        // DIAGNOSTIC (behind DebugDiagnostics): one line per swing window of the ally's — the frames it was recorded in, how near its
+        // sphere came to an enemy's body, and whether it planted
         private const int SwingGapFrames = 6;
         private static int _swingFrames, _swingFirst, _swingLast, _swingSlot = -1;
         private static float _swingEdge = float.MaxValue, _swingRadius;
@@ -152,6 +152,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static void OpenSwingWindow(int frame, float radius)
         {
+            if (!DebugDiagnostics.Enabled) return;
             if (_swingFrames > 0 && ((frame - _swingLast) & 0xFFFF) > SwingGapFrames) CloseSwingWindow();
             if (_swingFrames == 0) { _swingFirst = frame; _swingPlanted = false; }
             if (_swingFrames == 0 || frame != _swingLast) _swingFrames++;
@@ -160,6 +161,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static void NoteSwing(int v, float edge)
         {
+            if (!DebugDiagnostics.Enabled) return;
             if (edge < _swingEdge) { _swingEdge = edge; _swingSlot = v; }
         }
 

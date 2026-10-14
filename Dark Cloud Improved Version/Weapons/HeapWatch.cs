@@ -8,9 +8,9 @@ namespace Dark_Cloud_Improved_Version
     /// share ONE CDataAlloc2 pool (210000 × 16 B vanilla, 273400 × 16 = 4.37 MB with DunPatches' raise) and an overflow is a
     /// SILENT spin — Alloc__14CDataAlloc2&lt;1&gt;Fi is printf + while(true), i.e. a freeze — so the counters and the background
     /// reads are logged whenever they change and the last line before a freeze is the verdict. Also tracks the effects pool's
-    /// high-water mark, since enemy projectiles allocate from whatever the chara data leaves. Pure logging: it runs only with
-    /// <see cref="DebugDiagnostics.Enabled"/>, but for <see cref="Footprint"/> (one line per character load) and <see cref="Peaks"/> (a line
-    /// per new session peak of a dungeon pool), always. Started once with the game (<see cref="Start"/>), every 50 ms on a dungeon floor.</summary>
+    /// high-water mark, since enemy projectiles allocate from whatever the chara data leaves, the active character's footprint (one line
+    /// per character load) and each dungeon pool's session peak. Pure logging: it runs only with <see cref="DebugDiagnostics.Enabled"/>.
+    /// Started once with the game (<see cref="Start"/>), every 50 ms on a dungeon floor.</summary>
     internal static class HeapWatch
     {
         private const string Tag = "[HeapWatch] ";
@@ -31,11 +31,10 @@ namespace Dark_Cloud_Improved_Version
                 int sleep = IdleMs;
                 try
                 {
-                    Peaks();
-                    if (Player.InDungeonFloor())
+                    if (DebugDiagnostics.Enabled)
                     {
-                        Footprint();
-                        if (DebugDiagnostics.Enabled) { sleep = WatchMs; Tick(); }
+                        Peaks();
+                        if (Player.InDungeonFloor()) { sleep = WatchMs; Footprint(); Tick(); }
                     }
                 }
                 catch (Exception e) { Log("tick failed: " + e.Message); sleep = 1000; }

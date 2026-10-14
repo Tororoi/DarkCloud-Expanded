@@ -12,7 +12,7 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>The cat in chara slot 1: its pack loaded by the machine into Xiao's region (ElfCave.CatLoad), the loaded tree read back,
     /// the look's meshes hidden and the slot set up to draw. One of the <see cref="DivineBeastTitle"/> classes, which share their members
     /// through using static.</summary>
-    internal static class CatCopy
+    internal static class CatSlot
     {
         /// <summary>The pack the cave loads (CatPackBakes.CatPackChr, in LoadFile's spelling).</summary>
         private static readonly string PackPath = CatPackBakes.CatPackChr.Replace('\\', '/');

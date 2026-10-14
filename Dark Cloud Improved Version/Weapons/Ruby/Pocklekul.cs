@@ -47,16 +47,19 @@ namespace Dark_Cloud_Improved_Version
             }
             uint seen = Memory.ReadUInt(CodeCaves.AllyEvent);
             bool armed = false, wasUp = false, latched = Memory.ReadInt(CodeCaves.AllyLatch) != 0;
-            int fullAt = -1, latchAt = -1;   // the vblanks the guard's charge filled and the summon began at (−1: not yet)
+            int fullAt = -1, latchAt = -1;   // DIAGNOSTIC: the vblanks the guard's charge filled and the summon began at (−1: not yet)
             while (InHand())
             {
                 // armed only once the target redirect is (else the pockle's "player" would be the summoner)
                 if (!armed && TargetRedirectCaves.Armed) { Memory.WriteInt(CodeCaves.AllyArmed, ch + 1); armed = true; }
                 // the guard's charge complete (the brain latches it at 60 frames): the stock charge flash, unless one already stands
                 bool latch = Memory.ReadInt(CodeCaves.AllyLatch) != 0;
-                int guard = Memory.ReadInt(CodeCaves.AllyGuard), vblank = Memory.ReadInt(VBlankCount);
-                if (guard >= ChargeFrames) { if (fullAt < 0) fullAt = vblank; } else if (!latch) fullAt = latchAt = -1;
-                if (latch && !latched) latchAt = vblank;
+                if (DebugDiagnostics.Enabled)
+                {   // DIAGNOSTIC: the vblanks the charge filled and the summon began at, for the delay between them (logged at the summon)
+                    int guard = Memory.ReadInt(CodeCaves.AllyGuard), vblank = Memory.ReadInt(VBlankCount);
+                    if (guard >= ChargeFrames) { if (fullAt < 0) fullAt = vblank; } else if (!latch) fullAt = latchAt = -1;
+                    if (latch && !latched) latchAt = vblank;
+                }
                 if (latch && !latched && armed && Memory.ReadUInt(CodeCaves.AllyManager) == 0) Player.FlashChargeComplete();
                 latched = latch;
                 uint ev = Memory.ReadUInt(CodeCaves.AllyEvent);
@@ -77,7 +80,8 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
                 bool up = ConfusionAlly.Up;
-                if (up)
+                if (up && !DebugDiagnostics.Enabled) Confusion.Tick();
+                else if (up)
                 {   // DIAGNOSTIC: how long a friendly-fire pass takes — a pass slower than an attack's hit window lets it pass unseen
                     long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
                     Confusion.Tick();

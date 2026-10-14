@@ -159,7 +159,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The Super Steve cat's MASK under the cape's ambient. Unlike every other cave here this one patches NO hook
         /// site: a mesh draws through a C++ virtual call, so there is no `jal` to take. The bytes just have to exist, and
-        /// CatCopy.MaskTint reaches them at runtime by giving the mask's own copied CVisualMDT a private vtable whose
+        /// CatSlot.MaskTint reaches them at runtime by giving the mask's own copied CVisualMDT a private vtable whose
         /// two DrawVu1 slots point in here. Nothing else in the game can arrive at it.</summary>
         internal static void PatchCatMaskTint(FileStream fs, Func<uint, long> ElfOff)
         {

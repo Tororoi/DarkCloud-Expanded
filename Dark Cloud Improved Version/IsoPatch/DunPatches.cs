@@ -77,31 +77,16 @@ namespace Dark_Cloud_Improved_Version
             new(0x01DC01A4, 0x24421B20, LockOnTableWord1, "lock-on factor table → mod copy (addiu, SetNearLockOnTarget)"),
             new(0x01DC07C0, 0x3C0201DC, LockOnTableWord0, "lock-on factor table → mod copy (lui, setTargetCursor)"),
             new(0x01DC07C4, 0x24421B20, LockOnTableWord1, "lock-on factor table → mod copy (addiu, setTargetCursor)"),
-            // CHARACTER HEAP: the dungeon's character + weapons + shot-effect data share ONE CDataAlloc2 pool that
-            // GameInit carves from the 27 MB global buffer as 210000 × 16 B = 3.36 MB, and an overflow is a silent
-            // spin (Alloc__14CDataAlloc2: printf + while(true)). Vanilla Xiao already sits within ~150 KB of that
-            // ceiling; the cat baked into her pack (build_cat_pack.py) needs ~300 KB more. The global buffer is FULL
-            // by design (reset base 50,010 + GameInit's carves 1,256,006 + read buffer 280,000 + 2 × 37,700 packet
-            // buffers + 25,000 ≈ 1,688,000 of 1,690,000 units — raising the heap alone black-screened the dungeon),
-            // so the 30,000 units come out of the dungeon READ buffer (SetPacketReadBuffer(0x9344, 280000) at the
-            // end of GameInit): 4.48 → 4.00 MB. Its real demand is bounded: the largest single dungeon file is a
-            // 3.86 MB map pack, and the longest staged menu chain (Xiao's party switch: dunmenu5 + portraits + her
-            // ~2.5 MB pack + weapons + effect) reaches ~3.9 MB. Measured (flat textures): Xiao+cat chara
-            // 3,216,400 + weapons 227,168 + effects 70,128 = 3,513,696; the real cat textures add ~127,000.
-            // The WINGS: the cat's wing bones/meshes/keys/textures cost another ~220 KB in this pool (chara
-            // 3,400,336 → 3,620,496 measured), and the pool is shared with the weapons (~216 KB) and the floor's shot effects
-            // (70-190 KB): 240000 units overflowed by 67-190 KB → a silent spin on the switch to Xiao. The allocator's own
-            // counter (HeapWatch, GlobalPoolUsed 0x21C74980) shows the global buffer at 26,616,000 of
-            // 27,039,984 B in every log — 26,499 units unused (which is exactly why +30,000 alone black-screened and the
-            // read-buffer cut was needed) — so the heap takes 20,000 more of them: 260000 units = 4.16 MB, leaving 6,499
-            // units (104 KB) of global slack. The literal 210000 is `lui r,3; ori r,r,0x3450` at four sites (carve, the two
-            // remaining-room computations, a memory-map printf): 260000 = 0x3F7A0 = ori 0xF7A0 (lui 3 unchanged). 280000 is
-            // `lui v0,4; ori a1,v0,0x45C0` → 250000 = `lui v0,3; ori a1,v0,0xD090`.
-            // The MASK: 260000 units was not enough for it (48 B free on the freeze), so the heap took 5,000 more units out of the
-            // global buffer, leaving 23,984 B of it. 265000 = 0x40B28 no longer fits the `ori` alone, so each site's `lui r2,3` goes to 4.
-            // The ALLY BLOCK (Super Steve's Pocklekul in Xiao's pool, the cat loaded on demand) takes 8,400 more units from the floor
-            // system script's pool (p870, below): 273400 = 0x42BF8. With GameInit's 64-unit rounding the heap grows by 8,384 units and
-            // p870 shrinks by 8,384, so every pool carved after p870 stays where it was.
+            // CHARACTER HEAP: the dungeon's character + weapons + shot-effect data share ONE CDataAlloc2 pool (CharaModelBuffer) that
+            // GameInit carves from the 27 MB global buffer; an overflow is a silent spin (Alloc__14CDataAlloc2: printf + while(true)).
+            // Vanilla 210000 units (3.36 MB); here 273400 (4.37 MB): the character, then Ruby's ally block or Xiao's region (XiaoRegion:
+            // the Divine Beast cat or the pockle), then the weapons and the floor's shot effects (peaks with Xiao ≈ 240 KB and ≈ 190 KB,
+            // HeapWatch). The global buffer is full by design, so the 63,400 units come from three places: the dungeon read buffer
+            // (30,000, the two words below), the global buffer's slack (25,000 — 1,499 units, 23,984 B, stay free; the allocator's own
+            // counter is GlobalPoolUsed 0x21C74980) and the floor system script's pool (8,400, p870 below — with GameInit's 64-unit
+            // rounding the heap grows by 8,384 units and p870 shrinks by 8,384, so every pool carved after p870 stays where it was).
+            // The literal is `lui r,3; ori r,r,0x3450` at the carve and the two remaining-room computations: 273400 = 0x42BF8, so each
+            // `lui` goes to 4 and each `ori` to 0x2BF8.
             new(0x01DAC334, 0x3C020003, 0x3C020004, "character heap → 273400 units (GameInit carve, lui)"),
             new(0x01DB9A84, 0x3C020003, 0x3C020004, "character heap → 273400 units (LoadWeapon2 remaining, lui)"),
             new(0x01DBA8AC, 0x3C020003, 0x3C020004, "character heap → 273400 units (LoadChara2 remaining, lui)"),
@@ -131,6 +116,9 @@ namespace Dark_Cloud_Improved_Version
             // …and a full event's start (the floor system script's kind 1, which empties the monsters' textures and shot pack): its debug
             // printf's jal → ally_hooks.s's full, which ends a standing ally first (ElfAllyPatches writes the cave).
             new(0x01DB4A30, 0x0C0411A6, MipsAsm.Jal(DeadSifElfCave.AllyFullEvent), "ally: a full event's printf → its end (the monsters' textures emptied)"),
+            // The dungeon READ buffer (SetPacketReadBuffer at the end of GameInit, `lui v0,4; ori a1,v0,0x45C0`): 4.48 → 4.00 MB for the
+            // character heap. Its demand is bounded: the largest single dungeon file is a 3.86 MB map pack, and the longest staged menu
+            // chain (a party switch: dunmenu5 + portraits + the character's pack + weapons + effect) reaches ~3.9 MB.
             new(0x01DAC460, 0x3C020004, 0x3C020003, "dungeon read buffer 280000 → 250000 units (lui)"),
             new(0x01DAC464, 0x344545C0, 0x3445D090, "dungeon read buffer 280000 → 250000 units (ori)"),
             // Divine Beast cat: the dungeon step loop's once-per-frame `jal step__5CSHOT` (a0 = player shot pool)
@@ -199,9 +187,9 @@ namespace Dark_Cloud_Improved_Version
         internal const uint CatFollowHookOrig = 0x0C06AF44;                                   // jal 0x1ABD10
         // …and it lands on the shot-slot sharing cave's step (preloads a monster shot config into a free slot of the pack), which
         // calls BorrowedShotsEnter (keeps a borrowed shot config entered in the main-character effect instance), which
-        // calls PropPelletFollow (the Matador's charged shot), which calls the COPY-QUEUE cave — that services the cat's mesh
-        // copy when one is pending and jumps on to CatPelletFollow, where the displaced step__5CSHOT runs — then each places
-        // its own thing. Every frame with nothing to do the chain reads a few zero words and falls straight through.
+        // calls PropPelletFollow (the Matador's charged shot), which calls the cat loader (ElfCave.CatLoad) — that answers a load
+        // or unload request when one is pending and jumps on to CatPelletFollow, where the displaced step__5CSHOT runs — then each
+        // places its own thing. Every frame with nothing to do the chain reads a few zero words and falls straight through.
         internal const uint CatFollowHookNew  = 0x0C000000u | (DebugInfoCave.SharedShotsStep >> 2);
         internal const long CatFollowHookAddrMmu = 0x20000000L + CatFollowHookAddr;
 

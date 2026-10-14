@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 r"""Divine Beast Title "cat shot" — bake Xiao's cat rig INTO her dungeon character pack.
 
+STATUS: only glow_palettes() is live — tools/build_resources.py calls it to write Resources/isoPatch/data/catGlowPalettes.bin
+(--palettes does the same by hand). Everything else here is the LEGACY authoring model of the cat's first design, baked into
+Xiao's c04b.chr; the patch no longer does that. The app's bake is IsoPatch/CatPackBakes.cs, which builds the cat as a pack of its
+own (dun\monstor\dbcat.chr) that the cat loader (tools/stubs/cat_load.s) loads into chara slot 1 — it is no longer a port of
+this module, and assemble()'s output no longer matches what the patch writes.
+
 Host = `dun\mainchara\c04b.chr` (base.cfg), the pack every dungeon loads whenever Xiao is the active character
 (LoadChara2 → LoadPackData2 into the 3.36 MB character heap). The cat rides along as 37 extra nodes in her frame
 ARRAY that are never linked into her tree (parent -1 → SetParent(frame, NULL): no draw, skinning or DMA while
@@ -27,9 +33,8 @@ What goes in (from gedit\s86\chara\c04cat.chr — the cat rig with the leap clip
 Runtime (Weapons/Xiao/DivineBeastCat.cs) finds `catroot` in her live tree, deep-copies the cat subtree into the
 clone caves, un-hides it and drives it with keys 64..69.
 
-The bake the app runs at patch time is IsoPatch/CatPackBakes.cs (with WingBake.cs and CatWings.cs), a byte-exact port of
-this module and its two companions; this stays as the AUTHORING model — the cat viewer (a dev tool outside the repo) runs
-assemble() in memory to show what the bake builds — and as the generator of the glow palette blob the build embeds.
+The cat viewer (a dev tool outside the repo) runs assemble() in memory to show the wings and cape on the cat; the wing and
+cape geometry it shows is still what CatWingGraft.cs / CatGraftEncoder.cs bake (see their own notes), the pack layout around it is not.
 
 Usage:
   python3 tools/iso_patch/build_cat_pack.py --dc-dir "$DC1_DATA_DIR" --out /tmp/c04b_cat.chr   # dev build

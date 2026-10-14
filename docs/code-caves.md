@@ -222,10 +222,10 @@ and grew past +0x100 — which is `AiStubBase`. Clip frames, range, hit slot and
 by, the AI stubs. The words moved as a block (same offsets, new base) to the spare span at `0x1FB4000`
 (`CatBlock.CatBase`). A feature that needs more than a few words gets its own block, never a bigger mailbox.
 
-**The pair table over the shot block.** The cat copy queue's find/replace pair table once sat directly after its jobs,
-which end at `0x21FAEF30` — 16 bytes short of `BorrowedShotBlock`. Every cat build wrote the texture pairs over the
-borrowed shot's config: Babel's shockwave never entered, and a re-request built the effect from the trashed config and
-crashed. The table lives at `CatCopyPairs`, named by the job.
+**A table placed "just after" its neighbour.** A job queue's pair table was once placed directly after the jobs, 16 bytes
+short of `BorrowedShotBlock`, and every build wrote it over the borrowed shot's config: Babel's shockwave never entered,
+and a re-request built the effect from the trashed config and crashed. Every block here gets its own named constant and
+its size, never an address computed from the end of another.
 
 **Unbounded growth inside the band.** Two silent overruns shaped the "capacity lives with the cave" rule: HarderEnemyAI's
 stubs grew unbounded toward `PtrTable` (now capped at 32 slots), and the clone's per-bone buffers, sized for Ungaga's

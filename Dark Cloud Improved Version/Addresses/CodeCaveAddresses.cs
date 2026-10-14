@@ -177,19 +177,17 @@ namespace Dark_Cloud_Improved_Version
         // The feature is dormant (EnemyModelInjector.Enabled == false) and must be given a
         // scanner-verified cave from this file before it is ever switched on.
 
-        // ── MeshCave / PropCat: the clone's software-skinned meshes, shared between the cat and the prop (0x21F56400 .. 0x21FAE400) ──
+        // ── MeshCave: software-skinned meshes (0x21F56400 .. 0x21FAE400) — the Mirage clone's from the bottom, the slingshot prop's at the top ──
         /// <summary>Software-skinned meshes. Sized for the WORST CASE character — GORO at 0x57B30 — so ALL SIX
         /// are clonable.</summary>
         internal const long MeshCave       = 0x21F56400;
         internal const long MeshCaveGuest  = 0x01F56400;
         internal const int  MeshCaveSize   = 0x58000;    // → ends 0x21FAE400, 0x5F00 clear of the band top (0x1FB4300)
 
-        // ── The Divine Beast cat and the Angel Gear slingshot prop are up TOGETHER (both arm on the Angel Gear):
-        //    the cat keeps the BOTTOM of the motion / FrameInf / BoneMtx / mesh caves, the prop the TOP (under the prop's own
-        //    0x1000 track cave at the very top of the MeshCave). Sizes: the prop is ≤ 8 nodes (WeaponCave), the cat 47 + 1. ──
+        // ── The slingshot prop (SlingshotProp, BladeProp) keeps the TOP of the motion / FrameInf / BoneMtx / mesh caves: its meshes
+        //    under its own 0x1000 track cave at the very top of the MeshCave. It is ≤ 8 nodes (WeaponCave). ──
         internal const int  PropMeshReserve       = 0xC000;                                             // the prop's mesh region
-        internal const long CatMeshCaveEnd        = MeshCave + MeshCaveSize - 0x1000 - PropMeshReserve;  // the cat's meshes end here
-        internal const long PropMeshCave          = CatMeshCaveEnd;
+        internal const long PropMeshCave          = MeshCave + MeshCaveSize - 0x1000 - PropMeshReserve;
         /// <summary>Inside the prop's 0x1000 track cave at the top of the MeshCave (its cloned tracks below +0x800, their key table at
         /// +0x800): 20 × vec4 (x, height, y, w) at +0xC00 — the Angel Gear shield ring's per-enemy "where the player is" positions,
         /// referenced by the AI redirect <see cref="PtrTable"/> (16-byte aligned: sceVu0CopyVector copies a quadword).</summary>
@@ -198,19 +196,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int  PropFrameInfCaveSize  = 0x800;                                              // 9 × 0xD0 = 0x750
         internal const long PropFrameInfCave      = FrameInfCave + FrameInfCaveSize - PropFrameInfCaveSize;
         internal const long PropFrameInfCaveGuest = FrameInfCaveGuest + FrameInfCaveSize - PropFrameInfCaveSize;
-        internal const int  CatFrameInfCaveSize   = FrameInfCaveSize - PropFrameInfCaveSize;              // 0x4800 → 88 bones
         internal const int  PropBoneMtxCaveSize   = 0x280;                                              // 10 × 0x40
         internal const long PropBoneMtxCave       = BoneMtxCave + BoneMtxCaveSize - PropBoneMtxCaveSize;
-        internal const int  CatBoneMtxCaveSize    = BoneMtxCaveSize - PropBoneMtxCaveSize;                // 0x1680 → 90 bones
         internal const int  PropMotionSlot0       = 4;                                                  // the prop's channels sit at MotionCave slots 4..7
-        // ── The cat's OVERFLOW mesh space: with the wings the cat's copies need ~407 KB (skin 0x30 + 2×0x180E0 +
-        //    0xB2B0, each wing 0x30 + 2×0x7B60 + ~0x3300, + 16 B/vertex of skin sources) — more than the whole MeshCave. The
-        //    cat borrows CharacterClone's cloth caves (ClothObjCave .. MotionCave, 0x23F00 B) for SECOND VU buffers and the
-        //    skin sources: a cloth clone (the town ally switch, Mirage's Ungaga clone) can never be up while Xiao's cat is —
-        //    the cat exists only while Xiao is the active dungeon character, and Mirage tears down on a party swap. ──
-        internal const long CatOverflowCave      = ClothObjCave;
-        internal const long CatOverflowCaveGuest = ClothObjCave - 0x20000000;
-        internal const int  CatOverflowCaveSize  = (int)(MotionCave - ClothObjCave);                        // 0x23F00
 
         // ── 0x21FB4000 .. 0x21FB4300 (guest 0x01FB4000, 0x300 B, top of the MeshCave margin) ─────────────
         // +0x00 (4 B) holds the shallow-fishing bobber-anchor global (FishLineShallow.BobberPtr, FishingAddresses.cs):

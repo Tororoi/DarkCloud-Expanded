@@ -1,5 +1,9 @@
 """Bake the wing graft (tools/lib/cat_wings.py, build_winged_cat) into the cat pack as real disc data — the authoring model of
-IsoPatch/WingBake.cs, which the app runs at patch time (byte-exact port); build_cat_pack.assemble() runs this for dev builds.
+IsoPatch/CatWingGraft.cs; build_cat_pack.assemble() runs this for dev builds.
+
+STATUS: LEGACY. It grafts onto the cat as baked into Xiao's c04b.chr (build_cat_pack.py's first design). The app's patch builds
+the cat as a pack of its own (IsoPatch/CatPackBakes.cs, which carries the graft over cat-relative), so this module's output is
+no longer what the patch writes; nothing in the build calls it.
 
 The viewer authors the wings in its own skinning model (per-bone positions p0/p1 per vertex, some of them fitted to TWO
 poses at once). The engine's skinner (MotionProc2, docs/custom-fish-pipeline.md §3) is plain linear blend skinning: one

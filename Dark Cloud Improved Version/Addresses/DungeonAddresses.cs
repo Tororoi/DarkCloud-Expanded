@@ -263,7 +263,7 @@ namespace Dark_Cloud_Improved_Version
 
     /// <summary>Xiao's room at the end of the character pool, made by LoadChara2 whenever she is the character loaded (ElfCave.CatLoad's
     /// reserve entry, hooked at dun 0x1DBA894): the weapon and effect counters start after it, so it lasts until the next LoadChara2 (a floor
-    /// or a party switch). The Divine Beast cat loads into it on demand (CatCopy, through the same cave's step entry). Its size is
+    /// or a party switch). The Divine Beast cat loads into it on demand (CatSlot, through the same cave's step entry). Its size is
     /// <see cref="Units"/>, or what the pool has left past <see cref="Spare"/> when that is less (the cave records it).</summary>
     internal static class XiaoRegion
     {

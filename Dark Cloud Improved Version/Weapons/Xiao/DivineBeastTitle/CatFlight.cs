@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading;
 using static Dark_Cloud_Improved_Version.DivineBeastTitle;
 using static Dark_Cloud_Improved_Version.CatCape;
-using static Dark_Cloud_Improved_Version.CatCopy;
+using static Dark_Cloud_Improved_Version.CatSlot;
 using static Dark_Cloud_Improved_Version.CatTextures;
 
 namespace Dark_Cloud_Improved_Version
