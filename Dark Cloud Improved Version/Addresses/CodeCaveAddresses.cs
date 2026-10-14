@@ -216,7 +216,7 @@ namespace Dark_Cloud_Improved_Version
         // already carry runtime-written words (WaterRedraw, the blocks below), so a PINE write here cannot
         // fault the way one into a code page does. Inside the ModReserved heap-tail claim, so it stays clean.
         //
-        // ── CatLoad: the cat loader's request block (0x21FAE620, 0x80 B; 0x21FAE6A0 .. 0x21FAEF40 free) ──
+        // ── CatLoad: the cat loader's request block (0x21FAE620, 0x80 B) ──
         /// <summary>The request block ElfCave.CatLoad answers (tools/stubs/cat_load.s). The mod writes the pack path and S, then the
         /// request; the cave writes everything else. The reserve entry (LoadChara2) clears the status, W and the region on every load.</summary>
         internal const long CatLoad        = 0x21FAE620;
@@ -229,6 +229,21 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CatLoadBlocks  = 0x24;   // mod: S, the pack's VRAM blocks (CatPackBakes.CatVramBlocks)
         internal const int  CatLoadRoot    = 0x28;   // cave: the cat's root as loaded (0 = none) — slot 1 is the cat's only while it holds this
         internal const int  CatLoadPath    = 0x40;   // mod: the pack's path, NUL-terminated (≤ 0x40 B)
+
+        // ── CrystalArrows: the Crystal Ring's arrow homing (0x21FAE6A0, 0x10 B), read by ruby_arrows.s every frame ──
+        /// <summary>+0 arm (≠ 0: the second instance's borrowed arrows are homed), +4 the guest address of the target's position
+        /// (x, height, y; 0 = none: they fly on), +8 the height added to it (float). Written by CrystalRing.</summary>
+        internal const long CrystalArrows       = 0x21FAE6A0;
+        internal const int  CrystalArrowsArm    = 0x00, CrystalArrowsTarget = 0x04, CrystalArrowsLift = 0x08;
+
+        // ── ElementLock: a weapon held to one element (0x21FAE6B0, 4 B), read by element_menu.s `valid` and the weapon menu's
+        //    WeaponMenuCheckEnableSetElem (ElfElementMenuPatches.PatchElementLock) ──
+        /// <summary>+0 the item held (s16; 0 = none), +2 the element it is held to (s16, 0..4): the D-pad picker offers only that
+        /// element while it is the live weapon, and the weapon menu refuses any other with warning 9 (WeaponDescriptions swaps its
+        /// text). Written by CrystalRing.</summary>
+        internal const long ElementLock        = 0x21FAE6B0;
+        internal const int  ElementLockItem    = 0x00, ElementLockElement = 0x02;
+        // 0x21FAE6B4 .. 0x21FAEF40 free
 
         // ── BorrowedShotBlock: the borrowed shot config and its carve state (0x21FAEF40, 0x2C0 B) ──
         /// <summary>The borrowed shot config in use (ElfCave.BorrowedShotsEnter keeps it entered in the main-character effect

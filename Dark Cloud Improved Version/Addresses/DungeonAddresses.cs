@@ -261,6 +261,22 @@ namespace Dark_Cloud_Improved_Version
         internal const int ModelAlloc = 0x00, ScriptAlloc = 0x10, SideAlloc = 0x90, AllocUsed = 0x08, AllocCap = 0x0C;
     }
 
+    /// <summary>The floor's dungeon events (CDungeonEventMan at *NowEventMan, gp sbss 0x2A34C0 → DngEventMan 0x01DF36B0 or UraEventMan
+    /// 0x01DF5EB0 on a back floor): 96 live records of 0x40 from +0x1000, each +0 → its definition (CDungeonEvent: +0x2C the character
+    /// it answers to, +0x30 the element key), +0x10 its world position (x, height, y), +0x34 switched on, +0x38 enabled. Ruby's door
+    /// crystals are the PT_HIT_MARKER events with character 3: CheckCollisionDataHit (0x1CCBA0) opens one when a hit owned by Ruby
+    /// (+0x58 = 3) whose +0x60 equals the key lands within its radius (3.0) of the position.</summary>
+    internal static class DungeonEvents
+    {
+        internal const long NowEventManPtr = 0x202A34C0;
+        internal const int  Records = 0x1000, RecordStride = 0x40, RecordCount = 96;
+        internal const int  RecDef = 0x00, RecPos = 0x10, RecSwitch = 0x34, RecEnabled = 0x38;
+        internal const int  DefChara = 0x2C;
+        /// <summary>BtRubyDoorKey (sbss 0x2A3470): the element (0 Fire … 4 Holy) every Ruby door crystal on the floor takes, rolled
+        /// at the floor cfg's load — the key the crystals' events carry and the colour their script shows.</summary>
+        internal const long RubyDoorKey = 0x202A3470;
+    }
+
     /// <summary>Xiao's room at the end of the character pool, made by LoadChara2 whenever she is the character loaded (ElfCave.CatLoad's
     /// reserve entry, hooked at dun 0x1DBA894): the weapon and effect counters start after it, so it lasts until the next LoadChara2 (a floor
     /// or a party switch). The Divine Beast cat loads into it on demand (CatSlot, through the same cave's step entry). Its size is

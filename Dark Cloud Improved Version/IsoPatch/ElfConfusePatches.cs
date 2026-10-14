@@ -77,13 +77,14 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The second main-character effect instance stepped and drawn beside the live one while
         /// CodeCaves.SecondEffectLive is set: two caves in DebugInfomationIF's body, each `Fn(a0 = the live instance, as the
-        /// site loaded it)` then, flag set, `Fn(0x01E97BC0)`. DunPatches points the dungeon loop's two `jal` sites at them.</summary>
+        /// site loaded it)` then, flag set, `Fn(0x01E97BC0)` — the step through ruby_arrows.s, which homes the Crystal Ring's arrows
+        /// and then steps. DunPatches points the dungeon loop's two `jal` sites at them.</summary>
         internal static void PatchSecondEffect(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint Step = 0x001AC180, Draw = 0x001ABF20, Second = 0x01E97BC0;
             HiLo(CodeCaves.SecondEffectLiveGuest, out uint fhi, out uint flo);
             uint stars = 0;                                     // the continuation the cave being written jumps to
-            uint[] Cave(uint fn) => new[]
+            uint[] Cave(uint fn, uint secondFn) => new[]
             {
                 0x27BDFFF0u,                                    //  0 addiu sp,sp,-0x10
                 0xAFBF0000u,                                    //  1 sw    ra,0(sp)
@@ -95,17 +96,17 @@ namespace Dark_Cloud_Improved_Version
                 0x00000000u,                                    //  7   nop
                 0x3C040000u | (Second >> 16),                   //  8 lui   a0,HI(the second instance)
                 0x34840000u | (Second & 0xFFFFu),               //  9 ori   a0,a0,LO
-                Jal(fn),                                        // 10 jal   Fn
+                Jal(secondFn),                                  // 10 jal   Fn — for the step, ruby_arrows.s, which homes the Crystal Ring's arrows first
                 0x00000000u,                                    // 11   nop
                 J(stars),                                       // 12 done: j StarsStep/StarsDraw (the resident stars, then the epilogue)
                 0x00000000u,                                    // 13   nop
                 0x00000000u,                                    // 14
                 0x00000000u,                                    // 15
             };
-            foreach (var (cave, fn, starsCave) in new[] { (DebugIfCave.SecondEffectStep, Step, DebugItemCave.StarsStep), (DebugIfCave.SecondEffectDraw, Draw, DebugItemCave.StarsDraw) })
+            foreach (var (cave, fn, second, starsCave) in new[] { (DebugIfCave.SecondEffectStep, Step, DeadClipScreenCave.RubyArrows, DebugItemCave.StarsStep), (DebugIfCave.SecondEffectDraw, Draw, Draw, DebugItemCave.StarsDraw) })
             {
                 stars = starsCave;
-                WriteWords(fs, ElfOff, cave, Cave(fn), DebugIfCave.Host + DebugIfCave.HostSpan, "The second-effect caves do not fit their host (DebugInfomationIF).");
+                WriteWords(fs, ElfOff, cave, Cave(fn, second), DebugIfCave.Host + DebugIfCave.HostSpan, "The second-effect caves do not fit their host (DebugInfomationIF).");
                 uint[] tail = StarsTail(fn, construct: starsCave == DebugItemCave.StarsStep);
                 uint limit = starsCave == DebugItemCave.StarsStep ? DebugItemCave.StarsDraw : DebugItemCave.DrawHost;
                 WriteWords(fs, ElfOff, starsCave, tail, limit, "The stars step/draw caves overlap.");

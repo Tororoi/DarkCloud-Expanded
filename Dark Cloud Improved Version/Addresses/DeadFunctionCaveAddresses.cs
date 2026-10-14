@@ -167,8 +167,8 @@ namespace Dark_Cloud_Improved_Version
         internal const uint ElementMenuTrig  = ElementMenuHead, ElementMenuXKey = ElementMenuHead + 0x58, ElementMenuStart = ElementMenuHead + 0xD4;
         /// <summary>…and its TAIL in the Draw host after the claimed `jr ra; nop`: the "wepicon" name (+0), the draw cave (+0xC), the
         /// element test, pre (+0x14C) and close (+0x16C).</summary>
-        internal const uint ElementMenuSheetName = DrawHost + 0x8;    // 0x22B5B8, 424 B → 0x22B760 (the Draw host ends at 0x22B7B4)
-        internal const uint ElementMenuDraw  = DrawHost + 0x14, ElementMenuPre = ElementMenuSheetName + 0x14C, ElementMenuClose = ElementMenuSheetName + 0x16C;
+        internal const uint ElementMenuSheetName = DrawHost + 0x8;    // 0x22B5B8, 460 B → 0x22B784 (the Draw host ends at 0x22B7B4)
+        internal const uint ElementMenuDraw  = DrawHost + 0x14, ElementMenuPre = ElementMenuSheetName + 0x170, ElementMenuClose = ElementMenuSheetName + 0x190;
         internal const uint DrawHostEnd          = DrawHost + 516;
     }
 
@@ -370,8 +370,21 @@ namespace Dark_Cloud_Improved_Version
     internal static class DeadDiskReadyCave
     {
         internal const uint Host = 0x0010B2F8, HostSpan = 504, VanillaWord0 = 0x27BDFF60;   // `addiu sp,sp,-0xA0`
-        /// <summary>tools/stubs/crystal_home.s: one flying ice arrow turned towards the player.</summary>
-        internal const uint CrystalHome = Host + 0x8;   // 0x10B300, 496 B → 0x10B4F0 (the host is full)
+        /// <summary>tools/stubs/crystal_home.s: one flying ice arrow turned towards its target — the player (<see cref="CrystalHome"/>,
+        /// the Crystal Gemron's) or a2's (x, height, y) (<see cref="CrystalHomeTo"/>, the Crystal Ring's).</summary>
+        internal const uint CrystalHome = Host + 0x8;   // 0x10B300, 492 B → 0x10B4EC (4 B left)
+        internal const uint CrystalHomeTo = CrystalHome + 0x28;
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The bodies of <c>sceVu0ClipScreen</c>, <c>sceVu0ClipScreen3</c>, <c>sceVu0ClipAll</c> and <c>sceVpu0Reset</c> (416 B from 0x122130,
+    /// main ELF): no jal, j, pointer or lui/lo pair reaches any of them in the ELF's loaded image, DUN.BIN or TITLE.BIN (proved
+    /// 2026-10-14). ElfWeaponPatches.PatchRubyArrows turns the first two words into `jr ra; li v0,0`.</summary>
+    internal static class DeadClipScreenCave
+    {
+        internal const uint Host = 0x00122130, HostSpan = 416, VanillaWord0 = 0x4BE0012C;   // a VU0 macro op
+        /// <summary>tools/stubs/ruby_arrows.s: the Crystal Ring's ice arrows homed before the second instance steps.</summary>
+        internal const uint RubyArrows = Host + 0x8;
         internal const uint End = Host + HostSpan;
     }
 

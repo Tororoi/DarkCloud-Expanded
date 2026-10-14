@@ -91,6 +91,24 @@ namespace Dark_Cloud_Improved_Version
         static ushort[] _acquiredResists;
         static volatile bool _acquiredResistsActive;
 
+        // ── Weapon-menu warning 9 (help 0xAB = entry 87, before the weapon block: the same ordinal in every allmenu variant): Ruby's
+        // "an element can't be removed" refusal, which the weapon menu also gives a weapon held to its element (CodeCaves.ElementLock,
+        // ElfElementMenuPatches.PatchElementLock). Swapped to the curse's text while the cursed Crystal Ring is the menu's selection
+        // (CrystalRing.MenuTick). Both encode inside the entry's 46-word span. ──
+        const int ElementWarningEntry = 87;
+        const string ElementWarningVanilla = "\nAttribute cannot be\nremoved from this\nweapon.";
+        const string ElementWarningCurse   = "\nElement can't be\nselected due to\ncurse.";
+        static ushort[] _elemWarnVanilla, _elemWarnCurse;
+        static volatile bool _elemWarnCurseActive;
+
+        /// <summary>Swaps the weapon menu's element warning between vanilla and the Crystal Ring's curse text.</summary>
+        public static void SetElementWarningCurse(bool curse)
+        {
+            if (_elemWarnCurseActive == curse) return;
+            _elemWarnCurseActive = curse;
+            _lastCnt = -1;
+        }
+
         /// <summary>Selects which Status Break hint text the menu shows: the 7 Branch Sword
         /// version (+7 / 77%) or vanilla (60%). Called by SevenBranchSword.SevenfoldRiteEffect as the
         /// weapon-menu selection changes; a change forces a repatch on the next tick.</summary>
@@ -128,6 +146,8 @@ namespace Dark_Cloud_Improved_Version
             _hintVanilla = Encode(StatusBreakHintVanilla);
             _hintSeven   = Encode(StatusBreakHintSeven);
             _acquiredResists = Encode(BreakAcquiredResists);
+            _elemWarnVanilla = Encode(ElementWarningVanilla);
+            _elemWarnCurse   = Encode(ElementWarningCurse);
             _patches = new List<Patch>();
             foreach (WeaponData[] family in new[] { ToanWeapons.All, XiaoWeapons.All, GoroWeapons.All,
                                                     RubyWeapons.All, UngagaWeapons.All, OsmondWeapons.All })
@@ -240,7 +260,8 @@ namespace Dark_Cloud_Improved_Version
 
             // Dynamic system entries (allmenu banks only — the shop bank doesn't contain them):
             // the Status Break hint (47) and the SynthSphere "acquired" line (179), each swapped
-            // between vanilla and its 7 Branch Sword text. Targets are exact-span replacements;
+            // between vanilla and its 7 Branch Sword text, and the element warning (87), swapped
+            // to the Crystal Ring's curse text. Targets are exact-span replacements;
             // a span mismatch means an unexpected bank layout and the entry is skipped.
             var dynamicEntries = new (int Ordinal, ushort[] Target, bool NonVanilla)[]
             {
@@ -248,6 +269,7 @@ namespace Dark_Cloud_Improved_Version
                                              _hintVanilla.Length), _hintSevenActive),
                 (BreakAcquiredEntry, _acquiredResistsActive ? PadTo(_acquiredResists, _acquiredVanilla.Length)
                                                             : _acquiredVanilla, _acquiredResistsActive),
+                (ElementWarningEntry, _elemWarnCurseActive ? PadTo(_elemWarnCurse, _elemWarnVanilla.Length) : _elemWarnVanilla, _elemWarnCurseActive),
             };
             if (delta == 0)
             {

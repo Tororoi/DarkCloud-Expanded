@@ -164,6 +164,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ObjMotSpd  = 0xC60;     // -1.0f = keyframe rate
         internal const int  ObjMotFlag = 0xC64;     // Set: 4 on the flying phase
         internal const int  ObjMotId   = 0xC68;     // motion id
+        internal const int  CfgSpeed = 0x1C;                           // BT_SHOT_EFFECT: the flight speed (units a frame; the Crystal Gemron's arrow steers at it)
         internal const int  CfgFlags = 0x40, CfgRadiusFlying = 0x2C;   // BT_SHOT_EFFECT: the element/attribute word (→ entry +0x50); the flying radius
         internal const int  CfgElementBits = 0x1F;                     // CfgFlags: 1 Fire, 2 Ice, 4 Thunder, 8 Wind, 16 Holy; 0x100+ are ailments
         // The per-phase damage radius the step plants with EVERY frame the phase lasts (cfg +0x28 + phase × 4): 0 muzzle, 1 flying,

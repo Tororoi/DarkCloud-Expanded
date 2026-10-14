@@ -1,5 +1,7 @@
 # crystal_home.s — one flying ice arrow steered after the Ice Queen's korinoya. Assembled at 0x0010B300 (DeadDiskReadyCave.
-# CrystalHome: the dead sceCdDiskReady body); crystal_shots.s calls it with a0 = the pack object, a1 = the sub-shot.
+# CrystalHome: the dead sceCdDiskReady body), two entries, a0 = the CSHOT_EFFECT, a1 = the sub-shot:
+#   home    (+0x00) — the player, 10.1 above his feet (crystal_shots.s, the Crystal Gemron's arrows);
+#   home_to (+0x28) — a2 = the target (x, height, y) (ruby_arrows.s: the Crystal Ring's arrows on an enemy or a door crystal).
 # The korinoya re-aims at the player while he is within 60 degrees of where it points (`_CHK_USER_INNER_PRODUCT(60)`) and turns
 # its body towards him by a fixed 0.12 radian a frame (`_SET_ROTATION(…, 0.12)`: AngleInterpolate's fixed step); outside the cone it
 # flies on as it points. Here the arrow points along its flight (velocity +0x9F40 + sub-shot × 0x10): the target is the player
@@ -8,6 +10,22 @@
 # config's flight speed (+0x1C). EE rules (tools/lib/mips_asm.py): comparisons go by the sign bit of a difference (keystone's c.lt.s
 # carries the wrong condition code), sqrt.s is hand-encoded with its operand in ft, and a nop follows each mtc1 its next FPU op reads.
 
+home:
+    lui   $t0, 0x4121
+    ori   $t0, $t0, 0x999A         # 10.1
+    mtc1  $t0, $f6
+    lui   $t9, 0x01EA
+    ori   $t9, $t9, 0x1D20         # CharaMain
+    lwc1  $f3, 0x0010($t9)
+    lwc1  $f4, 0x0014($t9)
+    lwc1  $f5, 0x0018($t9)
+    b     common
+    add.s $f4, $f4, $f6            # (delay) the target
+home_to:
+    lwc1  $f3, 0x0000($a2)
+    lwc1  $f4, 0x0004($a2)
+    lwc1  $f5, 0x0008($a2)
+common:                            # f3..f5 = the target
     addiu $sp, $sp, -0x70
     sw    $ra, 0x0000($sp)
     sw    $s1, 0x0008($sp)
@@ -22,7 +40,11 @@
     addu  $s2, $a0, $t0            # the sub-shot's character, at +0x11C0
     lw    $t0, 0x0000($a0)         # the config
     lwc1  $f15, 0x001C($t0)        # its flight speed
-    addu  $t7, $zero, $zero        # 1 once the arrow has turned: its model is faced anew
+    lui   $t0, 0x3F00              # 0.5: the cone's cosine, 60 degrees
+    mtc1  $t0, $f14
+    lui   $t0, 0x3DF5
+    ori   $t0, $t0, 0xC28F         # 0.12: the chord turned a frame
+    mtc1  $t0, $f16
     lwc1  $f0, -0x60C0($s1)        # the flight
     lwc1  $f1, -0x60BC($s1)
     lwc1  $f2, -0x60B8($s1)
@@ -34,20 +56,10 @@
     .word 0x460A0284               # sqrt.s $f10, $f10 (EE: the operand in ft — keystone's form reads $f0)
     mfc1  $t0, $f10
     beq   $t0, $zero, ret          # no direction to keep
-    nop
+    addu  $t7, $zero, $zero        # (delay) 1 once the arrow has turned: its model is faced anew
     div.s $f0, $f0, $f10           # u: where it points
     div.s $f1, $f1, $f10
     div.s $f2, $f2, $f10
-    lui   $t9, 0x01EA
-    ori   $t9, $t9, 0x1D20         # CharaMain
-    lwc1  $f3, 0x0010($t9)
-    lwc1  $f4, 0x0014($t9)
-    lwc1  $f5, 0x0018($t9)
-    lui   $t0, 0x4121
-    ori   $t0, $t0, 0x999A         # 10.1
-    mtc1  $t0, $f6
-    nop                            # (mtc1's latency: the next FPU op would read the old $f6)
-    add.s $f4, $f4, $f6            # the target
     lwc1  $f6, 0x11D0($s2)         # the arrow
     lwc1  $f7, 0x11D4($s2)
     lwc1  $f8, 0x11D8($s2)
@@ -59,7 +71,7 @@
     add.s $f9, $f9, $f10
     mul.s $f10, $f5, $f5
     add.s $f9, $f9, $f10
-    .word 0x46090244               # sqrt.s $f9, $f9 (EE ft form): |d| (never 0: the arrow's contact ends it 13 short of him)
+    .word 0x46090244               # sqrt.s $f9, $f9 (EE ft form): |d| (never 0: the arrow's contact ends it short of its target)
     div.s $f3, $f3, $f9            # w = d / |d|
     div.s $f4, $f4, $f9
     div.s $f5, $f5, $f9
@@ -68,14 +80,10 @@
     add.s $f12, $f12, $f13
     mul.s $f13, $f2, $f5
     add.s $f12, $f12, $f13         # u · w: the cosine
-    lui   $t0, 0x3F00              # 0.5: 60 degrees
-    mtc1  $t0, $f13
-    nop
-    sub.s $f12, $f12, $f13
+    sub.s $f12, $f12, $f14
     mfc1  $t0, $f12
     bltz  $t0, fly                 # outside the cone: on as it points
-    nop
-    sub.s $f6, $f3, $f0            # e = w − u
+    sub.s $f6, $f3, $f0            # (delay) e = w − u (the flight overwrites it)
     sub.s $f7, $f4, $f1
     sub.s $f8, $f5, $f2
     mul.s $f10, $f6, $f6
@@ -84,15 +92,11 @@
     mul.s $f11, $f8, $f8
     add.s $f10, $f10, $f11
     .word 0x460A0284               # sqrt.s $f10, $f10 (EE ft form): |e|, the chord still to turn
-    lui   $t0, 0x3DF5
-    ori   $t0, $t0, 0xC28F         # 0.12
-    mtc1  $t0, $f11
-    nop
-    sub.s $f12, $f11, $f10
+    sub.s $f12, $f16, $f10
     mfc1  $t0, $f12
     bltz  $t0, step
-    div.s $f11, $f11, $f10         # (delay) the share of e to turn: 0.12 / |e| …
-    lui   $t0, 0x3F80              # … or, within a step, all of it: face him
+    div.s $f11, $f16, $f10         # (delay) the share of e to turn: 0.12 / |e| …
+    lui   $t0, 0x3F80              # … or, within a step, all of it: face the target
     mtc1  $t0, $f11
     nop
 step:

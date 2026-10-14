@@ -101,11 +101,13 @@ namespace Dark_Cloud_Improved_Version
             ReplaceWord(fs, ElfOff, (uint)(table + ShotEffectPack.IcePrisonConfig * 4), 0u, DeadIoctlCave.IcePrisonConfig, "shot config table entry 35");
             foreach (var (bin, first, at, end, host) in new[] {
                 ("crystalPrison.bin", 0x080461EAu, DeadIoctlCave.CrystalPrison, DeadIoctlCave.End, "sceIoctl"),
-                ("crystalHome.bin",   0x27BDFF90u, DeadDiskReadyCave.CrystalHome, DeadDiskReadyCave.End, "sceCdDiskReady"),
+                ("crystalHome.bin",   0x3C084121u, DeadDiskReadyCave.CrystalHome, DeadDiskReadyCave.End, "sceCdDiskReady"),
                 ("crystalShots.bin",  0x27BDFF80u, DeadApplyNCmdCave.CrystalShots, DeadApplyNCmdCave.End, "sceCdApplyNCmd") })
             {
                 byte[] stub = Embedded(bin);
                 if (stub.Length == 0 || (stub.Length & 3) != 0 || U32(stub, 0) != first) throw new IOException($"{bin} malformed ({stub.Length} B) or stale — reassemble its .s.");
+                if (at == DeadDiskReadyCave.CrystalHome && U32(stub, (int)(DeadDiskReadyCave.CrystalHomeTo - at)) != 0xC4C30000u)   // lwc1 f3,0(a2)
+                    throw new IOException("crystalHome.bin has no home_to entry at DeadDiskReadyCave.CrystalHomeTo — reassemble crystal_home.s.");
                 WriteBytes(fs, ElfOff, at, stub, end, $"{bin} overruns the {host} body");
             }
         }

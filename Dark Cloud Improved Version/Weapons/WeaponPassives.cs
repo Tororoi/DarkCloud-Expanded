@@ -10,7 +10,7 @@ namespace Dark_Cloud_Improved_Version
     {
         private const string Tag = "[WeaponPassives] ";
 
-        /// <summary>One game-loop tick (50 ms). The six passives, in this order.</summary>
+        /// <summary>One game-loop tick (50 ms). The passives, in this order.</summary>
         internal static void Tick()
         {
             // Buster Sword "Buster Boost" absorb watcher — runs in every mode (self-gated to
@@ -31,6 +31,9 @@ namespace Dark_Cloud_Improved_Version
             CrysKnife.CircleAmplifierEffect();
             // Secret Armlet "Favoured Circles" — ownership passive: the circle table's favour word while the armlet is owned (self-gated 1 Hz).
             SecretArmlet.FavouredCirclesEffect();
+            // Crystal Ring — the ring held to Ice unless its curse was cured (the element lock, its records, the weapon menu's
+            // curse warning); every mode, since the weapon menu and the bag exist everywhere.
+            CrystalRing.MenuTick();
         }
     }
 }

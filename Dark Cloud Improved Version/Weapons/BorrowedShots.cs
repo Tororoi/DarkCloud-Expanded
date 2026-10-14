@@ -57,6 +57,8 @@ namespace Dark_Cloud_Improved_Version
         /// reserved for it is only slightly larger than what it needs — a floor whose pool is nearly full can still fit it.</summary>
         private static readonly Dictionary<string, int> KnownUnits = new Dictionary<string, int>
         {
+            ["_i_boll"] = 19867,   // the Crystal Ring's ice arrow (korinoya): UNMEASURED — its pack (66,960 B) is smaller than every effect here, so
+                                   // the smallest's figure bounds it; replace with the log's figure after its first entry
             ["t_boll"] = 19867, ["i_boll"] = 20540, ["f_boll_3"] = 21167, ["e115a_ex"] = 21235, ["b_boll"] = 21695, ["e114a_ex"] = 23822,
         };
         private const int ReserveMargin = 1024;
@@ -421,7 +423,8 @@ namespace Dark_Cloud_Improved_Version
         /// <param name="reload">Frames of silence after each plant. The default outlasts any flight, so with the flying radius
         /// zeroed the impact's first frame is the one plant; a shot that plants IN FLIGHT (a flying radius set) wants a short one,
         /// or its first frame's plant — beside the shooter, hitting nothing — silences the rest of the flight.</param>
-        internal static bool Fire(BorrowedEffect fx, float x, float h, float y, float vx, float vh, float vy, int damage, int life, int owner = Player.XiaoId, bool plant = true, byte reload = PlantReload)
+        /// <param name="userCol">The hit's user id (+0xA070 → the collision entry's +0x60): what a Ruby door crystal compares with its key.</param>
+        internal static bool Fire(BorrowedEffect fx, float x, float h, float y, float vx, float vh, float vy, int damage, int life, int owner = Player.XiaoId, bool plant = true, byte reload = PlantReload, int userCol = 0)
         {
             if (!Entered(fx)) return false;
             byte[] cfg = fx.Cfg;
@@ -449,7 +452,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteVec3  (dirA, vx, vh, vy);
             Memory.WriteInt   (inst + ShotEffectPack.OffWait + j * 4, life);
             Memory.WriteInt   (inst + ShotEffectPack.OffDamage + j * 4, damage);
-            Memory.WriteInt   (inst + ShotEffectPack.OffUserCol + j * 4, 0);
+            Memory.WriteInt   (inst + ShotEffectPack.OffUserCol + j * 4, userCol);
             Memory.WriteUShort(inst + ShotEffectPack.OffOwner + j * 2, (ushort)owner);
             Memory.WriteUShort(inst + ShotEffectPack.OffAttr2 + j * 2, 0);
             Memory.WriteUShort(inst + ShotEffectPack.OffA060 + j * 2, 0xFFFF);

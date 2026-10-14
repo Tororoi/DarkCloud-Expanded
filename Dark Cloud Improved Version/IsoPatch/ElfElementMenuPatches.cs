@@ -50,5 +50,45 @@ namespace Dark_Cloud_Improved_Version
             ReplaceWord(fs, ElfOff, DrawSite,   DrawVanilla,   Jal(DebugItemCave.ElementMenuDraw),  "the quick-change menu's cell draw");
             ReplaceWord(fs, ElfOff, LockOffSite, LockOffVanilla, 0u, "the quick-change menu's lock-off");
         }
+
+        // WeaponMenuCheckEnableSetElem (0x1FC110): the weapon menu's element pick. Its head jumps to the lock test, which sits in the
+        // function's own tail where its two debug printfs were (the guard before them now branches straight to the epilogue).
+        private const uint LockHeadSite  = 0x001FC130;   // lb v0,0x16(a0) / bne v0,a2,+0x13 / nop
+        private const uint LockGuardSite = 0x001FC1B8;   // beq s2,zero,epilogue — before the printfs
+        private const uint LockSite      = 0x001FC1C0;   // the printfs (14 words) → the lock test
+
+        /// <summary>The weapon menu refuses, with warning 9 (the warning Ruby's "an element can't be removed" uses; WeaponDescriptions
+        /// gives it the curse's text), any element but the one <see cref="CodeCaves.ElementLock"/> holds its item to. Ruby taking off
+        /// that element stays the retail refusal. The D-pad picker reads the same word (element_menu.s `valid`).</summary>
+        internal static void PatchElementLock(FileStream fs, Func<uint, long> ElfOff)
+        {
+            ReplaceWords(fs, ElfOff, LockHeadSite,
+                new uint[] { 0x80820016, 0x14460013, 0x00000000 },
+                new uint[] {
+                    0x10000023,                    // b     lock
+                    0x80820016,                    // lb    v0,0x16(a0)        (delay) best_elem
+                    0x14460012,                    // bne   v0,a2,0x1FC184     (its delay slot is the next word, lh a0,0(s2))
+                }, "WeaponMenuCheckEnableSetElem's head", (0x001FC13C, 0x86440000));
+            ReplaceWord(fs, ElfOff, LockGuardSite, 0x12400010, 0x10000010, "WeaponMenuCheckEnableSetElem's printf guard");
+            ReplaceWords(fs, ElfOff, LockSite,
+                new uint[] { 0x82450016, 0x3C02002A, 0x2444D8C8, 0x0C0411A6, 0x00000000, 0x82430016, 0x24020005,
+                             0x10620007, 0x00000000, 0x00711021, 0x80450017, 0x3C02002A, 0x2444D8E0, 0x0C0411A6 },
+                new uint[] {
+                    0x3C0801FB,                    // lock: lui t0,0x01FB
+                    0x8509E6B0,                    // lh    t1,-0x1950(t0)     ElementLock: the item held (0 = none)
+                    0x848A0000,                    // lh    t2,0(a0)           weapon->item_no
+                    0x152AFFDA,                    // bne   t1,t2,0x1FC138     not it: as retail
+                    0x8509E6B2,                    // lh    t1,-0x194E(t0)     (delay) the element it is held to
+                    0x1126FFD8,                    // beq   t1,a2,0x1FC138     that element: as retail
+                    0x00000000,                    // nop
+                    0x2402000B,                    // li    v0,0xB
+                    0x3C0101DA,                    // lui   at,0x01DA
+                    0xA422EA7C,                    // sh    v0,-0x1584(at)     WepMenu.state = WARNING
+                    0x24020009,                    // li    v0,9
+                    0xA022EA78,                    // sb    v0,-0x1588(at)     WepMenu.warning_no = 9
+                    0x10000002,                    // b     0x1FC1FC           the epilogue
+                    0x24100001,                    // li    s0,1               (delay) refused
+                }, "WeaponMenuCheckEnableSetElem's printfs", (0x001FC1FC, 0x72001628));
+        }
     }
 }

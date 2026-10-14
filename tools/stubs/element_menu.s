@@ -201,9 +201,20 @@ draw_tex:
     j     0x0022CF90
     nop
 
-# ── valid: a0 = element 0..5 → v0 = 1 when it is on offer. Stones need an amount on the weapon; None is barred for Ruby's
+# ── valid: a0 = element 0..5 → v0 = 1 when it is on offer. A live weapon held to one element (CodeCaves.ElementLock @0x01FAE6B0:
+#    +0 item, +2 element) offers that element alone; otherwise stones need an amount on the weapon, and None is barred for Ruby's
 #    armlets and Osmond's machine-gun mode (they always carry an element). ──
 valid:
+    lui   $t1, 0x01FB
+    lh    $t2, -0x1950($t1)        # ElementLock: the item held (0 = none)
+    lui   $t3, 0x01EA
+    lh    $t3, 0x7590($t3)         # the live weapon
+    bne   $t2, $t3, valid_free
+    lh    $t2, -0x194E($t1)        # (delay) the element it is held to
+    xor   $v0, $t2, $a0
+    jr    $ra
+    sltiu $v0, $v0, 1              # (delay)
+valid_free:
     sltiu $t0, $a0, 5
     beq   $t0, $zero, valid_none
     nop

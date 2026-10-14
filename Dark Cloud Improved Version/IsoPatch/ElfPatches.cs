@@ -107,6 +107,7 @@ namespace Dark_Cloud_Improved_Version
             PatchFishLineSplit(fs, ElfOff);               // fishing rope: per-segment rest length (distpAbove/distpBelow) split at anchor 18
             PatchStiltsHeal(fs, ElfOff);
             PatchBaitKeep(fs, ElfOff);                    // Blessed Bait: the two bait-loss rolls fail while CodeCaves.BaitKeep is set (a Blessing Gun owned)
+            ElfElementMenuPatches.PatchElementLock(fs, ElfOff);   // the weapon menu holds a locked weapon (the cursed Crystal Ring) to its element
             ElfElementMenuPatches.PatchElementMenu(fs, ElfOff);   // the dungeon quick-change menu as the weapon's element picker on D-pad UP (the overlay hooks are in DunPatches)
                   // Brownboo stilts: re-upload scene bank 1 after FishLineDraw, before the waterside redraw (v4; chains the water-redraw jal)
             PatchCatPelletFollow(fs, ElfOff);             // Divine Beast cat: native pellet follower cave (the dun.bin hook is in DunPatches)
@@ -168,7 +169,8 @@ namespace Dark_Cloud_Improved_Version
             ElfSpeciesPatches.PatchFlashSlot(fs, ElfOff);          // the machine-gun hit flash's size and alpha per slot (5.0 / 0x80 baked) and the Bomb Gemron's fuse spark, frame-timed in the draw
             ElfSoundPatches.PatchMonsterBank(fs, ElfOff);          // each randomized floor's monster bank built from the sounds of the species on it (the dun hook is in DunPatches)
             PatchXiaoBuildUp(fs, ElfOff);                 // Xiao's build-up tree: Hardshooter → Double Impact only, Double Impact → Matador only
-            PatchRubyBuildUp(fs, ElfOff);                 // Ruby's: Platinum Ring → Crystal / Thorn Armlet, Thorn Armlet → Destruction only, Pocklekul → Fairy / Goddess / Satan's
+            PatchRubyBuildUp(fs, ElfOff);
+            PatchRubyArrows(fs, ElfOff);                  // the Crystal Ring's arrows homed (called from the second-effect step cave)                 // Ruby's: Platinum Ring → Crystal / Thorn Armlet, Thorn Armlet → Destruction only, Pocklekul → Fairy / Goddess / Satan's
             PatchFishingPrizeSlingshot(fs, ElfOff);       // the fishing prize exchange sells the Flamingo for 1000 FP (vanilla: the Matador for 1400)
             PatchMapCarveRemainder(fs, ElfOff);           // the monster pool = the (grown) map carve minus the floor's map data (DunPatches grows the carve)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched

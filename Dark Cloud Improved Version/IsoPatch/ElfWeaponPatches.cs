@@ -172,6 +172,24 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>The Crystal Ring's arrow homing (tools/stubs/ruby_arrows.s) in the dead sceVu0ClipScreen..sceVpu0Reset bodies: the first
+        /// two words become `jr ra; li v0,0`, the cave follows. The second-effect step cave calls it for the second instance
+        /// (ElfConfusePatches.PatchSecondEffect).</summary>
+        internal static void PatchRubyArrows(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Host = DeadClipScreenCave.Host;
+            byte[] b = Embedded("rubyArrows.bin");
+            // Shape: opens `lui t0,0x01FB` (the arm block), calls crystal_home.s's home_to, ends `j Step__12CSHOT_EFFECT; nop`.
+            if (b.Length % 4 != 0 || U32(b, 0) != 0x3C0801FBu || !ContainsWord(b, Jal(DeadDiskReadyCave.CrystalHomeTo)) || U32(b, b.Length - 8) != J(0x001AC180))
+                throw new IOException($"rubyArrows.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            uint w0 = RdU32(fs, ElfOff(Host));
+            if (w0 != DeadClipScreenCave.VanillaWord0 && w0 != 0x03E00008u)
+                throw new IOException($"sceVu0ClipScreen at 0x{Host:X} is not vanilla (0x{w0:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+            WrU32(fs, ElfOff(Host), 0x03E00008u);                        // jr ra
+            WrU32(fs, ElfOff(Host + 4), 0x24020000u);                    // li v0,0
+            WriteBytes(fs, ElfOff, DeadClipScreenCave.RubyArrows, b, DeadClipScreenCave.End, "rubyArrows.bin overruns the sceVu0ClipScreen bodies.");
+        }
+
         /// <summary>Ruby's build-up tree, baked into the same word (bit k = the weapon 331 + k): Platinum Ring → Crystal Ring or Thorn Armlet
         /// (vanilla: Crystal Ring or Fairy Ring), Thorn Armlet → Destruction Ring alone (vanilla: Platinum Ring), Pocklekul → Fairy Ring,
         /// Goddess Ring or Satan's Ring (vanilla: Fairy Ring). Bandit's Ring keeps its vanilla Crystal Ring or Pocklekul.</summary>
