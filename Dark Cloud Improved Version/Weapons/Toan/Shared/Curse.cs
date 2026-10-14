@@ -6,13 +6,13 @@ using System.Threading.Tasks;
 namespace Dark_Cloud_Improved_Version
 {
     // ── The curse machinery Evilcise (Jealous Soul) and Maneater (Blood Price) share — also driven by Super Steve for Xiao ──
-    /// <summary>The three per-character status/HP addresses a curse effect writes. Status BITS
-    /// and the 3600-frame duration are character-independent (see ToanState); only these
-    /// addresses differ between Toan and, e.g., Xiao.</summary>
+    /// <summary>The per-character status/HP addresses a curse effect writes. The status BITS are character-independent (see
+    /// ToanState); only these addresses differ between Toan and, e.g., Xiao. A curse needs no timer: CUserStatus::ailment_frames
+    /// counts down only while Freeze or Stamina is set.</summary>
     internal readonly struct CurseAddrs
     {
-        public readonly int Status, StatusTimer, Hp;
-        public CurseAddrs(int status, int statusTimer, int hp) { Status = status; StatusTimer = statusTimer; Hp = hp; }
+        public readonly int Status, Hp;
+        public CurseAddrs(int status, int hp) { Status = status; Hp = hp; }
     }
 
     /// <summary>Per-wielder curse state (no shared statics), so the Toan thread and the Super

@@ -21,7 +21,7 @@ namespace Dark_Cloud_Improved_Version
         internal readonly int thirst;             // float
         internal readonly int thirstMax;          // float
         internal readonly int status;             // ushort bitfield: 02 Near Death, 04 Freeze, 08 Stamina, 16 Poison, 32 Curse, 64 Goo
-        internal readonly int statusTimer;        // ushort: frames left on the status
+        internal readonly int statusTimer;        // short: frames left on Freeze / Stamina (CUserStatus::ailment_frames)
         internal readonly int currentWeaponSlot;  // byte: equipped bag slot 0-9
 
         internal Character(int id)
@@ -33,7 +33,7 @@ namespace Dark_Cloud_Improved_Version
             thirst            = PlayerAddresses.ThirstArray      + id * PlayerAddresses.WordStride;
             thirstMax         = PlayerAddresses.ThirstMaxArray   + id * PlayerAddresses.WordStride;
             status            = PlayerAddresses.StatusArray      + id * PlayerAddresses.WordStride;
-            statusTimer       = PlayerAddresses.StatusTimerArray + id * PlayerAddresses.WordStride;
+            statusTimer       = PlayerAddresses.StatusTimerArray + id * PlayerAddresses.TimerStride;
             currentWeaponSlot = (int)DngStatusData.EquippedSlotAddr(id);
         }
 

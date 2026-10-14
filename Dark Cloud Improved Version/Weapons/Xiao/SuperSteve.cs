@@ -143,7 +143,7 @@ namespace Dark_Cloud_Improved_Version
         public static void SphereInheritanceEffect()
         {
             var ssSun = new SunSword.SunHarvestState(EnemyAddresses.FloorSlots.Count);
-            var xiaoCurse = new CurseAddrs(Player.Xiao.status, Player.Xiao.statusTimer, Player.Xiao.hp);
+            var xiaoCurse = new CurseAddrs(Player.Xiao.status, Player.Xiao.hp);
             var ssEvilcise = new CurseState();
             var ssManeater = new CurseState();
             var xiaoTuna = new FrozenTuna.FrozenTunaWielder(Player.XiaoId, Player.Xiao.hp, Player.Xiao.maxHP,

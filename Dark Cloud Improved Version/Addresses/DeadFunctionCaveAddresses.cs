@@ -336,7 +336,7 @@ namespace Dark_Cloud_Improved_Version
         internal const uint Host = 0x0010A1D0, HostSpan = 0x2F0, VanillaWord0 = 0x27BDFF50;   // `addiu sp,sp,-0xB0`
         /// <summary>tools/stubs/bomb_tint.s (ElfSpeciesPatches.PatchBombTint): the Bomb Gemron's big bomb reddening as its fuse burns,
         /// reached only through the private vtable BombGemron gives the bomb's visual (two entries: +0 the uint* DrawVu1, +0xC the packet one).</summary>
-        internal const uint BombTint = Host;   // 244 B → 0x10A2C4
+        internal const uint BombTint = Host;   // 240 B → 0x10A2C0
         /// <summary>tools/stubs/freeze_break.s (ElfDamagePatches.PatchFreezeBreak): a hit breaks the player's freeze — BtCheckDamageProc's
         /// one StatusErrCheck call (dun 0x1DBB1F4, DunPatches) comes here.</summary>
         internal const uint FreezeBreak = Host + 0x190;   // 0x10A360, 96 B → 0x10A3C0 (0x10A340–0x10A360 before it is free)
@@ -371,7 +371,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x0010B2F8, HostSpan = 504, VanillaWord0 = 0x27BDFF60;   // `addiu sp,sp,-0xA0`
         /// <summary>tools/stubs/crystal_home.s: one flying ice arrow turned towards the player.</summary>
-        internal const uint CrystalHome = Host + 0x8;   // 0x10B300, 420 B → 0x10B4A4
+        internal const uint CrystalHome = Host + 0x8;   // 0x10B300, 496 B → 0x10B4F0 (the host is full)
         internal const uint End = Host + HostSpan;
     }
 
@@ -381,7 +381,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x0010BBC8, HostSpan = 512, VanillaWord0 = 0x27BDFF50;   // `addiu sp,sp,-0xB0`
         /// <summary>tools/stubs/crystal_shots.s: the Crystal Gemron's shots driven before each monster-pack object's step.</summary>
-        internal const uint CrystalShots = Host + 0x8;   // 0x10BBD0, 492 B → 0x10BDBC
+        internal const uint CrystalShots = Host + 0x8;   // 0x10BBD0, 496 B → 0x10BDC0 (8 B left)
         internal const uint End = Host + HostSpan;
     }
 

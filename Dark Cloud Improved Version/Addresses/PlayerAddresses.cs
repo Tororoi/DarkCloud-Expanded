@@ -58,10 +58,10 @@ namespace Dark_Cloud_Improved_Version
         internal const int ThirstArray      = 0x21CDD850;   // float[6],  stride 4   (status block +0x4304)
         internal const int ThirstMaxArray   = 0x21CDD838;   // float[6],  stride 4   (status block +0x42EC)
         internal const int StatusArray      = 0x21CDD814;   // ushort read, stride 4 (status block +0x42C8): 02 Near Death, 04 Freeze, 08 Stamina, 16 Poison, 32 Curse, 64 Goo
-        internal const int StatusTimerArray = 0x21CDD824;   // ushort read, stride 4 (status block +0x42D8): frames left on the status
+        internal const int StatusTimerArray = 0x21CDD82C;   // short[6], stride 2 (status block +0x42E0, CUserStatus::ailment_frames): frames left
+                                                            // on Freeze / Stamina — it counts down only while one of those is set, and at 0 the
+                                                            // game clears EVERY ailment of that character
+        internal const int TimerStride      = 2;
         internal const int WordStride       = 4;
-        // NOTE: StatusArray + 4*id for Ungaga/Osmond lands on StatusTimerArray's Toan/Xiao words, and Osmond's status
-        // timer lands on Toan's ThirstMaxArray word. These are the addresses the six character classes always used
-        // (kept byte-for-byte); the overlap is flagged, not resolved.
     }
 }

@@ -23,7 +23,7 @@ namespace Dark_Cloud_Improved_Version
         public static void BloodPriceEffect()
         {
             var st = new CurseState();
-            var target = new CurseAddrs(ToanState.Status, ToanState.StatusTimer, ToanState.Hp);
+            var target = new CurseAddrs(ToanState.Status, ToanState.Hp);
             while (Player.InDungeonFloor())
             {
                 byte toanSlot = Memory.ReadByte(WeaponHave.InventoryEquipSlotAddr);
@@ -63,7 +63,6 @@ namespace Dark_Cloud_Improved_Version
                 if (!st.WasNearDeath)
                 {
                     Memory.WriteUShort(a.Status, (ushort)(cur | ToanState.StatusCurse));
-                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
                 }
                 return;
             }
@@ -75,7 +74,6 @@ namespace Dark_Cloud_Improved_Version
                 st.Resolved = false; st.WasNearDeath = false; st.LastFloor = currentFloor;
                 cur = Memory.ReadUShort(a.Status);
                 Memory.WriteUShort(a.Status, (ushort)(cur | ToanState.StatusCurse));
-                Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
             }
 
             cur = Memory.ReadUShort(a.Status);
@@ -87,22 +85,11 @@ namespace Dark_Cloud_Improved_Version
                 if (!st.Resolved)
                 {
                     Memory.WriteUShort(a.Status, (ushort)(cur | ToanState.StatusCurse));
-                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
                 }
             }
-            else if (!st.Resolved)
+            else if (!st.Resolved && (cur & ToanState.StatusCurse) == 0)
             {
-                if ((cur & ToanState.StatusCurse) == 0)
-                {
-                    st.Resolved = true;   // cleansed — no penalty, stays off this floor
-                }
-                else if ((cur & unchecked((ushort)~(ToanState.StatusNearDeath | ToanState.StatusCurse))) == 0)
-                {
-                    // Keep the curse alive by refreshing the (shared) status timer — but only while
-                    // curse is the sole timed status, so a poison/freeze/goo being waited out is
-                    // never extended. If the timer expires alongside such a status the curse lapses.
-                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
-                }
+                st.Resolved = true;   // cleansed — no penalty, stays off this floor
             }
 
             // Blood Price: 1 HP -> 1 WHP per second while in the native low-WHP warning state.

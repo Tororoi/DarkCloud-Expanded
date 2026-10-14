@@ -18,7 +18,7 @@ namespace Dark_Cloud_Improved_Version
         public static void JealousSoulEffect()
         {
             var st = new CurseState();
-            var target = new CurseAddrs(ToanState.Status, ToanState.StatusTimer, ToanState.Hp);
+            var target = new CurseAddrs(ToanState.Status, ToanState.Hp);
             while (Player.InDungeonFloor())
             {
                 byte toanSlot = Memory.ReadByte(WeaponHave.InventoryEquipSlotAddr);
@@ -56,7 +56,6 @@ namespace Dark_Cloud_Improved_Version
                 if (!st.WasNearDeath)
                 {
                     Memory.WriteUShort(a.Status, (ushort)(cur | ToanState.StatusCurse));
-                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
                 }
                 return;
             }
@@ -68,7 +67,6 @@ namespace Dark_Cloud_Improved_Version
                 st.Resolved = false; st.WasNearDeath = false; st.LastFloor = currentFloor;
                 cur = Memory.ReadUShort(a.Status);
                 Memory.WriteUShort(a.Status, (ushort)((cur & ToanState.StatusNearDeath) | ToanState.StatusCurse));
-                Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
             }
 
             cur = Memory.ReadUShort(a.Status);
@@ -80,7 +78,6 @@ namespace Dark_Cloud_Improved_Version
                 if (!st.Resolved)
                 {
                     Memory.WriteUShort(a.Status, (ushort)(cur | ToanState.StatusCurse));
-                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
                 }
             }
             else if (!st.Resolved)
@@ -90,14 +87,12 @@ namespace Dark_Cloud_Improved_Version
                     // Curse removed externally (holy water) — penalize.
                     st.Resolved = true;
                     Memory.WriteUShort(a.Status, (ushort)(cur | ToanState.StatusPoison));
-                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
                     Memory.WriteUShort(a.Hp, 1);
                 }
                 else
                 {
                     // Curse active: strip other statuses and refresh timer.
                     Memory.WriteUShort(a.Status, (ushort)((cur & ToanState.StatusNearDeath) | ToanState.StatusCurse));
-                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
                 }
             }
         }

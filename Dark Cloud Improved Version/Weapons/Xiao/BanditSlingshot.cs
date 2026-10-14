@@ -12,9 +12,9 @@ namespace Dark_Cloud_Improved_Version
     /// Steal ability (a 10 % roll per hit in CheckDmg); the game spawns the stolen item as a CStealItem that flies to
     /// Xiao, and the item's "acquired" notice gets a second line: "[enemy]'s projectile is now yours".
     ///
-    /// Bandit's Ring gives Ruby the same for her QUICK shots: the driver here finds the steal, the victim and the notice for her
-    /// too, with the config entered into the second main-character instance (<see cref="BanditsRing.StolenInstance"/>) and each
-    /// quick shot replaced by <see cref="BanditsRing.ReplaceQuickShots"/>. Super Steve carrying either weapon's SynthSphere has
+    /// Bandit's Ring gives Ruby the same for her FULL charge: the driver here finds the steal, the victim and the notice for her
+    /// too, with the config entered into the second main-character instance (<see cref="BanditsRing.StolenInstance"/>) and a full
+    /// charge's orbs replaced by <see cref="BanditsRing.ReplaceFullCharge"/>. Super Steve carrying either weapon's SynthSphere has
     /// Xiao's version.
     ///
     /// The proc is seen in the CStealItem pool (<see cref="StealItemPool"/>, eight slots: a slot's state leaving −1),
@@ -71,8 +71,9 @@ namespace Dark_Cloud_Improved_Version
             if (floor != _floor) { Forget(); _floor = floor; for (int i = 0; i < StealSlots; i++) _stealState[i] = -1; }
             WatchSteals();
             if (_noticeRestoreAt <= GameClock.Now) RestoreNotice();
-            if (_effect == null) return;
-            if (Player.CurrentCharacterNum() == Player.RubyId) BanditsRing.ReplaceQuickShots(_effect); else FirePellets();   // Ruby's quick shots, or Xiao's pellets
+            bool ruby = Player.CurrentCharacterNum() == Player.RubyId;
+            if (_effect == null) { if (ruby) BanditsRing.ReleaseLive(); return; }
+            if (ruby) BanditsRing.ReplaceFullCharge(_effect); else FirePellets();   // Ruby's full charge, or Xiao's pellets
         }
 
         /// <summary>Whether a weapon record carries the ability: the Bandit Slingshot, Bandit's Ring, or Super Steve with
