@@ -23,15 +23,35 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Ungaga with the Scorpion, or Xiao with Super Steve and a Scorpion sphere.</summary>
         internal static bool Wielded() => UngagaWeapon.WieldsOrSphere(Items.scorpion);
 
+        private static bool _on;
+
+        /// <summary>One tick: a poison that took hold since the last one cures the wielder and feeds the weapon. The first tick only takes
+        /// each slot's state, so an enemy already poisoned when it came out is not counted. <paramref name="active"/> false holds.</summary>
+        internal static void Drive(bool active)
+        {
+            if (!active) return;
+            if (!_on)
+            {
+                _on = true;
+                for (int s = 0; s < _poisoned.Length; s++) _poisoned[s] = Poisoned(s);   // already poisoned when it came out: not this weapon's
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "venom: its poison landing cures the wielder's and feeds the weapon half the enemy's ABS");
+                return;
+            }
+            Tick();
+        }
+
+        /// <summary>The weapon, the sphere or the floor went.</summary>
+        internal static void Stop() => _on = false;
+
+        /// <summary>Ungaga's Scorpion thread: hands every tick to <see cref="Drive"/> while it is in hand (Super Steve's loop drives its sphere's).</summary>
         public static void VenomEffect()
         {
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "venom: its poison landing cures the wielder's and feeds the weapon half the enemy's ABS");
-            for (int s = 0; s < _poisoned.Length; s++) _poisoned[s] = Poisoned(s);   // already poisoned when it came out: not this weapon's
             while (Wielded() && Player.InDungeonFloor())
             {
-                if (!Player.CheckDunIsPausedOrMenu()) Tick();
+                Drive(!Player.CheckDunIsPausedOrMenu());
                 Thread.Sleep(TickMs);
             }
+            Stop();
         }
 
         private static bool Poisoned(int slot) => Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.PoisonPeriod)) != 0;
