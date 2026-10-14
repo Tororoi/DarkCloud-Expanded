@@ -190,7 +190,7 @@ namespace Dark_Cloud_Improved_Version
 
         internal static readonly Dictionary<int, WeaponBoostData> sunWeaponBoosts = new Dictionary<int, WeaponBoostData>
         {
-            { Items.platinumring, new WeaponBoostData { WeaponId = Items.platinumring, Attack = 30, Ice = 40, AntiRock = 40, Special2 = 0x02 } },
+            { Items.platinumring, new WeaponBoostData { WeaponId = Items.platinumring, Attack = 30, Holy = 40, AntiRock = 40, Special2 = 0x02 } },
         };
 
         // =====================================================================

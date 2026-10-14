@@ -168,6 +168,7 @@ namespace Dark_Cloud_Improved_Version
             ElfSpeciesPatches.PatchFlashSlot(fs, ElfOff);          // the machine-gun hit flash's size and alpha per slot (5.0 / 0x80 baked) and the Bomb Gemron's fuse spark, frame-timed in the draw
             ElfSoundPatches.PatchMonsterBank(fs, ElfOff);          // each randomized floor's monster bank built from the sounds of the species on it (the dun hook is in DunPatches)
             PatchXiaoBuildUp(fs, ElfOff);                 // Xiao's build-up tree: Hardshooter → Double Impact only, Double Impact → Matador only
+            PatchRubyBuildUp(fs, ElfOff);                 // Ruby's: Platinum Ring → Crystal / Thorn Armlet, Thorn Armlet → Destruction only, Pocklekul → Fairy / Goddess / Satan's
             PatchFishingPrizeSlingshot(fs, ElfOff);       // the fishing prize exchange sells the Flamingo for 1000 FP (vanilla: the Matador for 1400)
             PatchMapCarveRemainder(fs, ElfOff);           // the monster pool = the (grown) map carve minus the floor's map data (DunPatches grows the carve)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched

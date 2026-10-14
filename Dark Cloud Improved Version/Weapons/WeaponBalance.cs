@@ -209,30 +209,32 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort((WeaponTable.Attack + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.goldring - WeaponTable.GoldRingId)))), 15);  //Attack set to 15
                 Memory.WriteUShort((WeaponTable.Magic + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.goldring - WeaponTable.GoldRingId)))), 30);   //Magic set to 30
 
-                //Bandit's Ring
-                Memory.WriteUShort((WeaponTable.Attack + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.banditsring - WeaponTable.GoldRingId)))), 30);      //Attack set to 30
-                Memory.WriteUShort((WeaponTable.MaxAttack + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.banditsring - WeaponTable.GoldRingId)))), 50);   //Max Attack set to 50
-                Memory.WriteUShort((WeaponTable.Magic + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.banditsring - WeaponTable.GoldRingId)))), 20);       //Magic set to 20
-                // Memory.WriteInt((WeaponTable.BuildUp + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.banditsring - WeaponTable.GoldRingId)))), 8200);      //Sets build-up branches to both Crystal Ring and Thorn Armlet
-
                 //Platinum Ring
-                Memory.WriteUShort((WeaponTable.Attack + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.platinumring - WeaponTable.GoldRingId)))), 23); //Attack set to 23
+                Memory.WriteUShort((WeaponTable.Ice + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.platinumring - WeaponTable.GoldRingId)))), 0);     //Ice set to 0
+                Memory.WriteUShort((WeaponTable.Holy + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.platinumring - WeaponTable.GoldRingId)))), 20);   //Holy set to 20
+
+                //Crystal Ring
+                Memory.WriteUShort((WeaponTable.Ice + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.crystalring - WeaponTable.GoldRingId)))), 20);    //Ice set to 20
+                Memory.WriteUShort((WeaponTable.Holy + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.crystalring - WeaponTable.GoldRingId)))), 0);    //Holy set to 0
 
                 //Pocklekul
                 Memory.WriteUShort((WeaponTable.Attack + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.pocklekul - WeaponTable.GoldRingId)))), 28);      //Attack set to 28
                 Memory.WriteUShort((WeaponTable.Magic + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.pocklekul - WeaponTable.GoldRingId)))), 28);       //Magic set to 28
                 Memory.WriteUShort((WeaponTable.Holy + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.pocklekul - WeaponTable.GoldRingId)))), 0);         //Holy set to 0
-                Memory.WriteUShort((WeaponTable.BuildUp + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.pocklekul - WeaponTable.GoldRingId)))), 8256);   //Sets build-up branches to both Fairy Ring and Thorn Armlet
 
                 //Thorn Armlet
-                Memory.WriteUShort((WeaponTable.MaxAttack + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.thornarmlet - WeaponTable.GoldRingId)))), 90);   //Max Attack set to 90
-                Memory.WriteUShort((WeaponTable.MaxMagic + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.thornarmlet - WeaponTable.GoldRingId)))), 72);  //Max Magic set to 72
+                Memory.WriteUShort((WeaponTable.MaxAttack + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.thornarmlet - WeaponTable.GoldRingId)))), 70);   //Max Attack set to 70
+                Memory.WriteUShort((WeaponTable.MaxMagic + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.thornarmlet - WeaponTable.GoldRingId)))), 65);  //Max Magic set to 65
                 Memory.WriteUShort((WeaponTable.StoneBreaker + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.thornarmlet - WeaponTable.GoldRingId)))), 20);     //Stone Breaker set to 20
                 Memory.WriteUShort((WeaponTable.BeastBuster + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.thornarmlet - WeaponTable.GoldRingId)))), 20);     //Beast Buster set to 20
-                Memory.WriteUShort((WeaponTable.BuildUp + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.thornarmlet - WeaponTable.GoldRingId)))), 128);  //Sets build-up branches to Destruction Ring
+
+                //Destruction Ring
+                Memory.WriteUShort((WeaponTable.Attack + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.destructionring - WeaponTable.GoldRingId)))), 60);     //Attack set to 60
+                Memory.WriteUShort((WeaponTable.MetalBreaker + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.destructionring - WeaponTable.GoldRingId)))), 40);  //Metal Breaker set to 40
+                Memory.WriteUShort((WeaponTable.MaxMagic + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.destructionring - WeaponTable.GoldRingId)))), 140);  //Max Magic set to 140
 
                 //Athenas Armlet
-                Memory.WriteByte((WeaponTable.Effect2 + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.athenasarmlet - WeaponTable.DaggerId)))), 32);     //Adds ABS up effect
+                Memory.WriteByte((WeaponTable.Effect2 + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.athenasarmlet - WeaponTable.GoldRingId)))), 32);     //Adds ABS up effect
 
                 //Goddess Ring
                 Memory.WriteByte((WeaponTable.Effect2 + (WeaponTable.RubyOffset + (WeaponTable.Stride * (Items.goddessring - WeaponTable.GoldRingId)))), 8);      //Heal

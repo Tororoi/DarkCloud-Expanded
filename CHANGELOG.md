@@ -151,7 +151,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 | Crabby Hermit | — | Opal |
 | Mr. Blare | — | Blessing Gun |
 
-**Boosted weapons:** Platinum Ring (Steel Giant) → ATK+30, Ice+40, Anti-Rock+40, Durable
+**Boosted weapons:** Platinum Ring (Steel Giant) → ATK+30, Holy+40, Anti-Rock+40, Durable
 
 #### Dungeon 4 — Moon Sea
 
@@ -394,10 +394,11 @@ Abilities marked come from the upstream mod; everything else is this fork's.
 
 **Ruby**
 - **Gold Ring** — Attack set to 15, Magic set to 30
-- **Platinum Ring** — Attack set to 23
+- **Platinum Ring** — Holy 20 instead of Ice 20
+- **Crystal Ring** — Ice 20 instead of Holy 20
 - **Pocklekul** — Attack set to 28, Magic set to 28, Holy removed
-- **Bandit's Ring** — Attack set to 30, Max Attack set to 50, Magic set to 20
-- **Thorn Armlet** — Max attack 90, max magic 72, Stone Breaker and Beast Buster set to 20
+- **Thorn Armlet** — Max attack 70, max magic 65, Stone Breaker and Beast Buster set to 20
+- **Destruction Ring** — Attack set to 60, Metal Breaker set to 40, Max Magic set to 140
 
 **Ungaga**
 - **All weapons** — +10 Attack, +10 Max Attack, +15 Endurance
@@ -506,18 +507,18 @@ Frozen Tuna ★
 
 ### Ruby
 
-> **Mod changes:** Thorn Armlet now builds to Destruction Ring only (was Platinum Ring). Pocklekul gains a second path to Thorn Armlet.
+> **Mod changes:** Platinum Ring builds up to Crystal Ring or Thorn Armlet (was Crystal Ring or Fairy Ring). Thorn Armlet builds up to Destruction Ring only (was Platinum Ring). Pocklekul builds up to Fairy Ring, Goddess Ring or Satan's Ring (was Fairy Ring).
 
 ```
 Platinum Ring ─┬─ Crystal Ring ─┬─ Goddess Ring → Athena's Armlet → Secret Armlet ★
                │                └─ Satan's Ring → Mobius Ring ★
-               └─ Fairy Ring → Destruction Ring → Mobius Ring ★
+               └─ Thorn Armlet → Destruction Ring → Mobius Ring ★
 
 Bandit's Ring ─┬─ Crystal Ring ─┬─ Goddess Ring → Athena's Armlet → Secret Armlet ★
                │                └─ Satan's Ring → Mobius Ring ★
-               ├─ Goddess Ring → Athena's Armlet → Secret Armlet ★
                └─ Pocklekul ─┬─ Fairy Ring → Destruction Ring → Mobius Ring ★
-                              └─ Thorn Armlet → Destruction Ring → Mobius Ring ★
+                             ├─ Goddess Ring → Athena's Armlet → Secret Armlet ★
+                             └─ Satan's Ring → Mobius Ring ★
 ```
 
 ---

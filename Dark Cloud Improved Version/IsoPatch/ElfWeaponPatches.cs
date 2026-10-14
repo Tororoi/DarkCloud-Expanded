@@ -172,6 +172,24 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>Ruby's build-up tree, baked into the same word (bit k = the weapon 331 + k): Platinum Ring → Crystal Ring or Thorn Armlet
+        /// (vanilla: Crystal Ring or Fairy Ring), Thorn Armlet → Destruction Ring alone (vanilla: Platinum Ring), Pocklekul → Fairy Ring,
+        /// Goddess Ring or Satan's Ring (vanilla: Fairy Ring). Bandit's Ring keeps its vanilla Crystal Ring or Pocklekul.</summary>
+        internal static void PatchRubyBuildUp(FileStream fs, Func<uint, long> ElfOff)
+        {
+            foreach (var (item, vanilla, ours, what) in new[]
+            {
+                (Items.platinumring, 0x00000048u, 0x00002008u, "Platinum Ring → Crystal Ring, Thorn Armlet"),
+                (Items.thornarmlet,  0x00000010u, 0x00000080u, "Thorn Armlet → Destruction Ring"),
+                (Items.pocklekul,    0x00000040u, 0x00000160u, "Pocklekul → Fairy Ring, Goddess Ring, Satan's Ring"),
+            })
+            {
+                uint addr = (uint)(WeaponTable.BuildUp - 0x20000000 + WeaponTable.RubyOffset + WeaponTable.Stride * (item - WeaponTable.GoldRingId));
+                ReplaceWord(fs, ElfOff, addr, vanilla, ours,   // {what}
+                            cur => $"Build-up word of weapon {item} at 0x{addr:X} is 0x{cur:X}, not vanilla 0x{vanilla:X} — unmodified Dark Cloud (USA) ISO expected.");
+            }
+        }
+
         /// <summary>The Steel Slingshot's level-up bonus is +2 endurance instead of +1 and twice the max-WHP roll (tools/stubs/
         /// steel_level_up.s, after the pellet-sprite cave in DebugInfomationDraw's body): one add per stat in the commit routine
         /// and the item-use routine becomes a call into the cave, which reads the record's item id and does the vanilla add for
