@@ -1,11 +1,11 @@
-# ally_follow.s — the summoned ally with no enemy to fight walks beside Ruby. Assembled at 0x001176D8 (DeadSifRpcCave: the dead
+# ally_follow.s — the summoned ally with no enemy to fight walks beside the summoner (the active character). Assembled at 0x001176D8 (DeadSifRpcCave: the dead
 # sceSifSetRpcQueue..sceSifRemoveRpcQueue bodies), its turn and clip (after #SPLIT) at 0x0011EEA0 (DeadMcCave, after ally_manager.s).
 # ally_brain.s calls it once a frame while its script is parked (CodeCaves.AllyHold, park below), a0 = its block (the manager at + 0x100, its unit 0's
-# CCharacter at + 0x1FDD0). The point 16 u to Ruby's right is written to the block's idle point (+0x30, what its pointer-table entry names
+# CCharacter at + 0x1FDD0). The point 16 u to the summoner's right is written to the block's idle point (+0x30, what its pointer-table entry names
 # while it idles); its height is the floor's (Step's ground keeps it). Farther than 3 u it walks there (clip 1, its rate 0.68 × its speed:
-# d × 0.08 held to 0.5..2.4 u a frame, a step no longer than a sixth of the way; clip 16, its run, at its own rate while Ruby runs —
-# her motion 1), facing the point; there, it idles (clip 0 at its own
-# rate) facing Ruby's way. The facing is its unit's own turn (Step's, as _SET_ROTATION asks it), never a write to the model.
+# d × 0.08 held to 0.5..2.4 u a frame, a step no longer than a sixth of the way; clip 16, its run, at its own rate while the summoner runs —
+# the summoner's motion 1), facing the point; there, it idles (clip 0 at its own
+# rate) facing the summoner's way. The facing is its unit's own turn (Step's, as _SET_ROTATION asks it), never a write to the model.
 
 follow:
     addiu $sp, $sp, -0x40
@@ -21,7 +21,7 @@ follow:
     ori   $t0, $t0, 0xFDD0         # (ori is zero-extended: the plain upper half)
     addu  $s1, $s0, $t0            # its CCharacter (block + 0x1FDD0)
     lui   $t0, 0x01EA
-    lwc1  $f20, 0x1D84($t0)        # Ruby's yaw
+    lwc1  $f20, 0x1D84($t0)        # the summoner's yaw
     jal   0x0011D6B0               # cosf
     mov.s $f12, $f20
     mov.s $f21, $f0
@@ -30,13 +30,13 @@ follow:
     lui   $t0, 0x4180
     mtc1  $t0, $f1                 # 16.0
     lui   $t0, 0x01EA
-    lwc1  $f2, 0x1D30($t0)         # Ruby x
+    lwc1  $f2, 0x1D30($t0)         # the summoner's x
     lwc1  $f3, 0x1D34($t0)         #      height
     lwc1  $f4, 0x1D38($t0)         #      y
     mul.s $f5, $f21, $f1
     sub.s $f5, $f2, $f5            # x − cos·16
     mul.s $f6, $f0, $f1
-    add.s $f6, $f4, $f6            # y + sin·16: her right (facing is (sin, cos))
+    add.s $f6, $f4, $f6            # y + sin·16: the summoner's right (facing is (sin, cos))
     swc1  $f5, 0x30($s0)           # the idle point
     swc1  $f3, 0x34($s0)
     swc1  $f6, 0x38($s0)
@@ -60,7 +60,7 @@ follow:
     lui   $t0, 0xBF80
     mtc1  $t0, $f12                # its clip's own rate
     mul.s $f10, $f0, $f9
-    add.s $f13, $f7, $f10          # it faces Ruby's way: a point 10 u ahead of it along her facing (x + sin·10…
+    add.s $f13, $f7, $f10          # it faces the summoner's way: a point 10 u ahead of it along that facing (x + sin·10…
     mul.s $f10, $f21, $f9
     add.s $f14, $f8, $f10          # …y + cos·10)
     or    $a0, $zero, $zero        # clip 0 (idle)
@@ -115,11 +115,11 @@ stok:
     mul.s $f12, $f2, $f1
     addiu $a0, $zero, 1            # clip 1 (walk)…
     lui   $t0, 0x01EA
-    lw    $t1, 0x2988($t0)         # Ruby's motion
-    addiu $t2, $zero, 1            # her run
+    lw    $t1, 0x2988($t0)         # the summoner's motion
+    addiu $t2, $zero, 1            # the summoner's run
     bne   $t1, $t2, wclip
     lui   $t0, 0xBF80              # (delay)
-    mtc1  $t0, $f12                # …or, while Ruby runs, clip 16 (its run) at its own rate
+    mtc1  $t0, $f12                # …or, while the summoner runs, clip 16 (its run) at its own rate
     addiu $a0, $zero, 16
 wclip:
     bal   clip

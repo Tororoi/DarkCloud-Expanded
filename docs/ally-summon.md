@@ -20,10 +20,23 @@ call as before, then makes it again on the private manager with `NowMonstorUnit`
 
 ## The block
 
-The manager, the ally's script arena and its model need 1.2 MB. They live in a block at the end of the summoner's character pool,
-reserved by growing one allocation in `LoadChara2` (`DunPatches`, `PockleBlock.Units` = 75,000 units). The block ends where the
+The manager, the ally's script arena and its model take 996,096 B. They live in a block at the end of the summoner's character pool,
+reserved by growing one allocation in `LoadChara2` (`DunPatches`, `AllyBlock.Units` = 62,256 units). The block ends where the
 weapon pool starts, so it is found from the pool counters without a stored pointer. It is rebuilt (and empty) on every `LoadChara2`:
 a floor change or a character switch.
+
+Only Ruby's branch reserves it so far (`AllyArmed` 4, the summoner check in `blockaddr`). Xiao's pool has no room for it while the
+Divine Beast cat is baked into her pack (3.79 MB of the 4.37 MB heap), so Super Steve's Pocklekul sphere waits on the cat moving out.
+
+**The manager's unused slots hold the small parts.** The copied manager is only used for slot 0, and nothing in the engine writes the
+other slots after the summon's reset (it resets units and per-slot tables, never the monster bodies or the model slots; step, draw,
+shadow, view level and the move checks skip any unit that is not active). So the script arena sits in model slots 1..8 (manager +
+0x35B0, 108,672 B), and the pockle's textures and script copy in monster slots 1..15 (manager + 0x231E0, 203,760 B): `ally_load.s`
+hooks `SetupBaseModel` at three instructions to give the pack loader's IMG allocator and the script copy the side allocator, then the
+model allocator back for the shot entries. It tells the ally's load from a floor's by its allocator, which sits 0x100 below its
+manager. Its meshes, motions and shot data stay in the model room, which is sized to the largest pockle's floor footprint less its
+textures and script (Thursday, 37,288 units) after `PockleMotionBake`, which trims every pockle's motions to their KEY windows. Each
+summon logs how full the three rooms got (`[Pocklekul] <name>'s rooms`).
 
 | Offset | What |
 |---|---|
@@ -38,9 +51,9 @@ a floor change or a character switch.
 | +0x70 | which species (0..7) |
 | +0x74 | frames since the summon (growth) |
 | +0x80 | aim point |
-| +0x100 | the manager (0x60750 bytes) |
-| +0x60850 | script arena (1,875 units) |
-| +0x67D80 | the model (0xBD20 units, to the block's end) |
+| +0x90 | side allocator (textures and script copy) |
+| +0x100 | the manager (0x60750 bytes): script arena at +0x35B0 (1,875 units), side room at +0x231E0 (12,735 units) |
+| +0x60850 | the model room (37,547 units, to the block's end at +0xF3300) |
 
 ## Summoning
 
@@ -67,6 +80,9 @@ Then:
 - **Target:** the locked-on enemy, else the one it had, else the enemy nearest the summoner. The pointer-table entry names a point
   inside the enemy's nearest hit sphere (`ally_aim.s`). A large enemy's root sits deep inside its body, where the ally's approach and
   the block rule never let it get close enough to swing.
+- **Its last move:** when its enemy goes, a move of its own (an attack, a guard, a flinch) plays out first (`ally_settle.s`): its AI
+  keeps running, its "player" set 32 times as far past the summoner as it stands from them so its next choice is a walk, until its clip
+  is idle or walk (180 frames at the most).
 - **No enemy:** its script is parked on a YIELD each frame (`park`: `ScriptRunning` 1, the saved PC on YIELD records, speed 0) while
   `Step` keeps animating, moving and hurting it. It walks to the summoner's side (`ally_follow.s`, direct position steps, walk or run
   clip) and faces through the unit's own turn (+0x70 point, +0x84 rate). When an enemy appears, `release` restarts its AI from label
@@ -77,8 +93,10 @@ Then:
 ## The end
 
 When its block is gone or belongs to another floor, when it is disarmed, when the summoner leaves, when an event takes the floor,
-when its script has killed it (unit 0 back to state −1), or when it is left behind, `ally_despawn.s` runs. It clears `AllyManager`
-first, so nothing rides the manager any more, then the hold and its pointer-table entry. On the floor it was summoned on, it
+when its script has killed it (unit 0 back to state −1), or when it is left behind, `ally_despawn.s` runs. A full event (the floor
+system script's kind 1) runs it too, from `ally_hooks.s` full at dun 0x1DB4A30: the engine is about to empty the monsters' texture
+group, the shot pack and the monster pool for the event. The despawn clears `AllyManager` first, so nothing rides the manager any
+more, then the hold and its pointer-table entry. On the floor it was summoned on, it
 empties the texture entries its load added, puts group 42's VRAM ends back, and empties the shot-pack slots its load filled
 (`ally_shots.s` clear) when they still hold its configs.
 
@@ -87,8 +105,13 @@ empties the texture entries its load added, puts group 42's VRAM ends back, and 
 The engine never tests one monster against another, so every hit between the ally and the floor's enemies is a mod-planted pool
 entry (`ConfusionAlly`, run from the Confusion tick; `AttackScan` reads the pool and the shot pack):
 
-- **Its swings** go into the pool with mask 0 (`ally_hooks.s` swing at `CheckDmg` 0x1DA098), so they never hit the player. Owner 200
-  with mask 0 identifies them exactly. A swing touching an enemy plants a player-form hit on that enemy, owned by the summoner: it
+- **Every attack sphere is recorded per frame.** While the ally stands, `ally_hooks.s` swing (at `CheckDmg`'s `jal Set`, 0x1DA098)
+  hands each sphere `CheckDmg` places — the ally's and the floor enemies' — to `ally_record.s`, which appends it to the swing ring in
+  the ally manager's unused model slots (manager + 0xAB00: a count, then 256 records of centre, radius, damage, reaction, flags and
+  `(vblank << 16) | (mask << 8) | who`). The app tests every recorded frame, so a short hit window is never missed between its passes
+  (an app pass sees only some frames, and none while it stalls); the summon zeroes the ring.
+- **Its swings** go into the pool with mask 0 (`ally_record.s`), so they never hit the player. Owner 200 with mask 0 identifies them
+  exactly. A swing touching an enemy plants a player-form hit on that enemy, owned by the summoner: it
   gets the kill and the ABS. The damage is the swing's own, over the summoner's ranged distance factor.
 - **Its shots** are stamped slot 0's. They are told apart from floor slot 0's by which unit they are first seen nearer, then swept
   against the enemies and taken through the engine's own contact.
@@ -111,9 +134,12 @@ entry (`ConfusionAlly`, run from the Confusion tick; `AttackScan` reads the pool
 | `ally_grow.s` | after the turn, 0x11EF4C | growth table; YIELD records |
 | `ally_brain.s` (+ summon tail) | sceDmaSendN.. 0x10C7D0 (tail 0x1203D0) | per frame: charge, summon, validate, target, idle |
 | `ally_aim.s` | sceDmaWatch.. 0x10CD20 | the aim point |
+| `ally_settle.s` | sceCdGetDiskType.. 0x10B5A8 | its last move finished before it idles |
+| `ally_record.s` | after ally_settle, 0x10B648 | every attack sphere recorded per frame into the swing ring |
 | `ally_despawn.s` | sceSifGetOtherData 0x117080 | the end |
+| `ally_load.s` | after ally_despawn, 0x117180 | `SetupBaseModel`'s three hooks: the load spread over the block |
 | `ally_shots.s` | sceSifLoadElfPart.. 0x1191A0 | shot-pack slots in and out |
-| `ally_hooks.s` | after ally_shots, 0x1192E4 | swing mask, hit mask, blocked, pin |
+| `ally_hooks.s` | after ally_shots, 0x1192E4 | swing mask, hit mask, blocked, pin, full event |
 | `ally_collide.s` | sceSifLoadModuleBuffer 0x118C88 | monster and player block rules |
 
 The brain is full (1,160 of 1,160 bytes); new per-frame work needs another host. `ElfAllyPatches` writes all of them and checks
@@ -129,8 +155,8 @@ Data words (`CodeCaves`): `AllyManager` 0x01FAF7F8, `AllyBlocked` 0x01FAF7FC, `A
 | 0x10 + n | summoned (species n) |
 | 2 | fell |
 | 3 | disarmed, or the summoner is not in hand |
-| 4 | block, floor or quiet floor gone |
-| 5 | no block |
+| 4 | block, floor or quiet floor gone, or a full event |
+| 5 | no block (the summoner's `LoadChara2` reserved none) |
 | 6 | no VRAM room |
 | 7 | not loaded |
 | 8 | not stood |
@@ -141,10 +167,12 @@ Data words (`CodeCaves`): `AllyManager` 0x01FAF7F8, `AllyBlocked` 0x01FAF7FC, `A
 
 These parts are specific to the Pocklekul and change for another summon:
 
-- The brain's guard charge (Ruby, R1, motion 9 or 33, 60 frames).
+- The brain's guard charge (R1, motion 9 or 33, 60 frames). `AllyArmed` holds the summoner's character id + 1, and the brain counts
+  that character's guard only. The thread flashes the summoner (the stock charge flash) when the brain latches the charge.
 - The species roll: table index 10 + day, or Hell Pockle at 54.
-- `AllyArmed` from `Pocklekul.cs`.
-- The block's size and the summoner (Ruby's `LoadChara2` branch).
+- `AllyArmed` from `Pocklekul.cs`: Ruby with the ring.
+- The block's size (the largest trimmed pockle) and its summoner (Ruby's `LoadChara2` branch).
+- `PockleMotionBake`, which trims the pockles' motions (every clip plays as before; about 46 KB less per pockle).
 - The smoke and tint. The summon smoke is shared with the Cactus (`SummonSmoke`). The tint uses the unit's palette flash state:
   target +0x130, speed +0x168, weight +0x16C, count +0x164.
 

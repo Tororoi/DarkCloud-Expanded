@@ -245,13 +245,20 @@ namespace Dark_Cloud_Improved_Version
         internal const long TickCounter = 0x202A3684;   // int, gp-0x616C
     }
 
-    /// <summary>The Pocklekul's pockle block: room that LoadChara2 sets aside at the end of the character pool for RUBY only — DunPatches
+    /// <summary>The summoned ally's block: room that LoadChara2 sets aside at the end of the character pool — for RUBY only so far: DunPatches
     /// grows the allocation of her c05_f03.chr copy by <see cref="Units"/> — so it ends where the weapons begin. The weapon and effect
     /// counters start after it and reload without touching it; the next LoadChara2 (a party switch, a floor) makes it again. The summoned
-    /// pockle lives in it: its private monster manager, script arena and model (tools/stubs/ally_brain.s lays it out).</summary>
-    internal static class PockleBlock
+    /// pockle lives in it: its private monster manager, script arena and model (tools/stubs/ally_brain.s lays it out). Xiao has no room
+    /// for one while the Divine Beast cat is baked into her pack.</summary>
+    internal static class AllyBlock
     {
-        internal const int Units = 75000;   // 1.2 MB: the head, the manager (0x60750 B), the script arena (1,875 units) and the largest pockle (Thursday, 45,935 units)
+        /// <summary>996,096 B: the head (0x100), the manager (0x60750 B — its unused slots hold the script arena, the textures and the script
+        /// copy) and the model room (37,547 units: the largest trimmed pockle's meshes, motions and shot data, from the floor footprints).
+        /// A multiple of 4 (DunPatches' rounding).</summary>
+        internal const int Units = 62256;
+        /// <summary>The block's allocators (CDataAlloc2 {base, base, used, cap}, used and cap in 16-byte units): the model room, the script
+        /// arena, the side room.</summary>
+        internal const int ModelAlloc = 0x00, ScriptAlloc = 0x10, SideAlloc = 0x90, AllocUsed = 0x08, AllocCap = 0x0C;
     }
 
     /// <summary>The dungeon's CDataAlloc2 bump pools — each {base +0, used +8, cap +0xC}, the last two in 16-byte units —

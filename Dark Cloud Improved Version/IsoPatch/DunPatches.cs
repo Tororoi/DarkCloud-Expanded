@@ -97,28 +97,35 @@ namespace Dark_Cloud_Improved_Version
             // units (104 KB) of global slack. The literal 210000 is `lui r,3; ori r,r,0x3450` at four sites (carve, the two
             // remaining-room computations, a memory-map printf): 260000 = 0x3F7A0 = ori 0xF7A0 (lui 3 unchanged). 280000 is
             // `lui v0,4; ori a1,v0,0x45C0` → 250000 = `lui v0,3; ori a1,v0,0xD090`.
-            // The MASK: 260000 units was not enough for it. HeapWatch on the freeze read chara 3,905,424 of
-            // 4,160,000 with weapons 225,232 and effects 29,296 — total 4,159,952, i.e. 48 BYTES free, and the effects pool
-            // squeezed to a 29,344 cap against a real demand of 70-190 KB. So the heap takes 5,000 more units (80,000 B) out
-            // of the global buffer, which the same log measured at 103,984 B free; 23,984 B of it is left. 265000 = 0x40B28
-            // no longer fits the `ori` alone (260000 was 0x3F7A0, still lui 3), so each site's `lui r2,3` goes to 4 as well.
-            new(0x01DAC334, 0x3C020003, 0x3C020004, "character heap → 265000 units (GameInit carve, lui)"),
-            new(0x01DB9A84, 0x3C020003, 0x3C020004, "character heap → 265000 units (LoadWeapon2 remaining, lui)"),
-            new(0x01DBA8AC, 0x3C020003, 0x3C020004, "character heap → 265000 units (LoadChara2 remaining, lui)"),
-            new(0x01DAC338, 0x34453450, 0x34450B28, "character heap 210000 → 265000 units (GameInit carve)"),
-            new(0x01DB9A88, 0x34433450, 0x34430B28, "character heap 210000 → 265000 units (LoadWeapon2 remaining)"),
-            new(0x01DBA8B0, 0x34423450, 0x34420B28, "character heap 210000 → 265000 units (LoadChara2 remaining)"),
-            // The POCKLE BLOCK (Pocklekul): LoadChara2's Ruby-only branch copies her c05_f03.chr into the character pool and allocates its
+            // The MASK: 260000 units was not enough for it (48 B free on the freeze), so the heap took 5,000 more units out of the
+            // global buffer, leaving 23,984 B of it. 265000 = 0x40B28 no longer fits the `ori` alone, so each site's `lui r2,3` goes to 4.
+            // The ALLY BLOCK (Super Steve's Pocklekul in Xiao's pool, the cat loaded on demand) takes 8,400 more units from the floor
+            // system script's pool (p870, below): 273400 = 0x42BF8. With GameInit's 64-unit rounding the heap grows by 8,384 units and
+            // p870 shrinks by 8,384, so every pool carved after p870 stays where it was.
+            new(0x01DAC334, 0x3C020003, 0x3C020004, "character heap → 273400 units (GameInit carve, lui)"),
+            new(0x01DB9A84, 0x3C020003, 0x3C020004, "character heap → 273400 units (LoadWeapon2 remaining, lui)"),
+            new(0x01DBA8AC, 0x3C020003, 0x3C020004, "character heap → 273400 units (LoadChara2 remaining, lui)"),
+            new(0x01DAC338, 0x34453450, 0x34452BF8, "character heap 210000 → 273400 units (GameInit carve)"),
+            new(0x01DB9A88, 0x34433450, 0x34432BF8, "character heap 210000 → 273400 units (LoadWeapon2 remaining)"),
+            new(0x01DBA8B0, 0x34423450, 0x34422BF8, "character heap 210000 → 273400 units (LoadChara2 remaining)"),
+            // The floor system script's pool (p870, BtSystemScriptFileBuffer's allocator 0x1F06870): BtSystemScriptLoad puts the dungeon's
+            // dun\script\d0N\event.stb in it plus ~7,180 B of script work, once per dungeon (it never grew through events or a boss floor).
+            // The largest is Divine Beast Cave's 410,128 B file → 417,312 B used (26,082 units); 26,600 keeps 518 units of margin.
+            new(0x01DAC374, 0x340588B8, 0x340567E8, "floor system script pool 35000 → 26600 units (GameInit carve)"),
+            // The ALLY BLOCK (AllyBlock): LoadChara2's Ruby-only branch copies her c05_f03.chr into the character pool and allocates its
             // size rounded up, `sra 6; addiu 1; sll 6; sra 4` — ((n >> 6) + 1) << 2 units — so `addiu 1 + Units/4; sll 2; nop` allocates
-            // PockleBlock.Units more: room in the character counter that the weapons and effects, which start after it, never reach.
-            new(0x01DBA870, 0x24420001, 0x24420000u | (uint)(1 + PockleBlock.Units / 4), "Ruby's pockle block (c05_f03 copy rounding, addiu)"),
-            new(0x01DBA874, 0x00021180, 0x00021080, "Ruby's pockle block (c05_f03 copy rounding, sll 6 → 2)"),
-            new(0x01DBA878, 0x00021103, 0x00000000, "Ruby's pockle block (c05_f03 copy rounding, sra 4 → nop)"),
-            // The ALLY'S MANAGER (Pocklekul): the dungeon's three calls on the floor's monster manager go through ally_manager.s, which makes
+            // AllyBlock.Units more: room in the character counter that the weapons and effects, which start after it, never reach.
+            new(0x01DBA870, 0x24420001, 0x24420000u | (uint)(1 + AllyBlock.Units / 4), "Ruby's ally block (c05_f03 copy rounding, addiu)"),
+            new(0x01DBA874, 0x00021180, 0x00021080, "Ruby's ally block (c05_f03 copy rounding, sll 6 → 2)"),
+            new(0x01DBA878, 0x00021103, 0x00000000, "Ruby's ally block (c05_f03 copy rounding, sra 4 → nop)"),
+            // The ALLY'S MANAGER (the summoned pockle): the dungeon's three calls on the floor's monster manager go through ally_manager.s, which makes
             // each again on a private manager (CodeCaves.AllyManager) while one is set (ElfAllyPatches writes the cave).
             new(0x01DB749C, 0x0C077550, MipsAsm.Jal(DeadMcCave.AllyStep), "ally manager: motionDrive's jal Step__12CMonstorUnitFi → cave"),
             new(0x01DAE7E8, 0x0C076334, MipsAsm.Jal(DeadMcCave.AllyDraw), "ally manager: the draw's jal DrawMonstor__12CMonstorUnitFv → cave"),
             new(0x01DADD44, 0x0C076600, MipsAsm.Jal(DeadMcCave.AllyShadow), "ally manager: the shadow pass's jal DrawShadowMonstor__12CMonstorUnitFv → cave"),
+            // …and a full event's start (the floor system script's kind 1, which empties the monsters' textures and shot pack): its debug
+            // printf's jal → ally_hooks.s's full, which ends a standing ally first (ElfAllyPatches writes the cave).
+            new(0x01DB4A30, 0x0C0411A6, MipsAsm.Jal(DeadSifElfCave.AllyFullEvent), "ally: a full event's printf → its end (the monsters' textures emptied)"),
             new(0x01DAC460, 0x3C020004, 0x3C020003, "dungeon read buffer 280000 → 250000 units (lui)"),
             new(0x01DAC464, 0x344545C0, 0x3445D090, "dungeon read buffer 280000 → 250000 units (ori)"),
             // Divine Beast cat: the dungeon step loop's once-per-frame `jal step__5CSHOT` (a0 = player shot pool)
@@ -290,7 +297,7 @@ namespace Dark_Cloud_Improved_Version
                 for (int i = b.Length; i < c.Span; i += 4) WrU32(fs, off + i, 0);   // the rest of the host: nops
                 applied++;
             }
-            progress($"Patched dun.bin ({applied} word(s): heal cadence 3 s, gauge multiplier → cave word, character heap 3.36 → 4.16 MB (read buffer + global slack), cat pellet-follower hook, cat glow hooks, guard-bypass cave over MemoryMapDump) …");
+            progress($"Patched dun.bin ({applied} word(s): heal cadence 3 s, gauge multiplier → cave word, character heap 3.36 → 4.37 MB (read buffer, global slack, system script pool), cat pellet-follower hook, cat glow hooks, guard-bypass cave over MemoryMapDump) …");
         }
     }
 }

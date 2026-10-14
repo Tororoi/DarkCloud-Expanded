@@ -117,9 +117,9 @@ cdone:
     jr    $ra
     addiu $sp, $sp, 0x20
 
-# The player's move (a0 = the floor's manager, a1 = &her position, a2 = &her velocity, a3 = a flag — MoveCheck__12CMonstorUnitFPfPfi's
+# The player's move (a0 = the floor's manager, a1 = &the player's position, a2 = &the player's velocity, a3 = a flag — MoveCheck__12CMonstorUnitFPfPfi's
 # arguments; the player_spear_block.s cave's call comes here, ElfAllyPatches): the engine's own player-against-unit block on the floor's
-# units, as before, then on the ally's manager while one stands (MoveCheck reads `this` alone), so Ruby cannot walk through it.
+# units, as before, then on the ally's manager while one stands (MoveCheck reads `this` alone), so the player cannot walk through it.
 pblock:
     addiu $sp, $sp, -0x20
     sw    $ra, 0x00($sp)

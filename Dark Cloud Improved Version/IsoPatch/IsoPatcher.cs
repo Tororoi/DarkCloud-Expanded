@@ -49,7 +49,9 @@ namespace Dark_Cloud_Improved_Version
             return Path.Combine(xdg, "PCSX2", "cheats");
         }
 
-        internal static string Patch(string stockIso, string outDir, Action<string> progress, bool publishPnach = true)
+        /// <param name="skip">Dev only (the `patch` command line's `--skip &lt;step&gt;`): post-steps left out, for a scratch ISO that
+        /// measures what a step costs.</param>
+        internal static string Patch(string stockIso, string outDir, Action<string> progress, bool publishPnach = true, ICollection<string> skip = null)
         {
             if (string.IsNullOrWhiteSpace(stockIso) || !File.Exists(stockIso))
                 throw new FileNotFoundException("Stock ISO not found. Select your Dark Cloud (USA) .iso first.");
@@ -70,6 +72,7 @@ namespace Dark_Cloud_Improved_Version
             // ELF CRC above is unaffected. Each runs AFTER the stream above is closed, on its own archive over the ISO.
             foreach (var step in IsoPostBakes.Steps)
             {
+                if (skip != null && skip.Contains(step.Name)) { progress($"skipped: {step.Name} (--skip)"); continue; }
                 progress(step.Progress);
                 using var arc = new IsoArchive(outIso, progress);
                 step.Run(arc, progress);

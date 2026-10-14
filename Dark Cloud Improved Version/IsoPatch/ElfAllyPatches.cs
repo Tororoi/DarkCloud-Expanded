@@ -5,16 +5,18 @@ using static Dark_Cloud_Improved_Version.IsoBytes;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>A summoned ally monster run by the game's own monster code (the Pocklekul's pockle), all of it native:
+    /// <summary>A summoned ally monster run by the game's own monster code (the Pocklekul's pockle, Ruby's or Xiao's through Super Steve's
+    /// sphere), all of it native:
     /// tools/stubs/ally_manager.s in the dead sceMcSetFileInfo / sceMcRename bodies (<see cref="DeadMcCave"/>), which DunPatches hooks at the
     /// dungeon's three calls on the floor's monster manager — each then made again on a private manager (CodeCaves.AllyManager) with
     /// NowMonstorUnit pointing at it, the brain run after the floor's Step; tools/stubs/ally_brain.s (<see cref="DeadDmaCave"/>, its summon in
     /// <see cref="DeadPadPressCave"/>) — the guard charge, the summon, the target, the end; tools/stubs/ally_follow.s
-    /// (<see cref="DeadSifRpcCave"/>, its turn after ally_manager.s) — the walk beside Ruby; tools/stubs/ally_grow.s (after the turn) — its
+    /// (<see cref="DeadSifRpcCave"/>, its turn after ally_manager.s) — the walk beside the summoner; tools/stubs/ally_grow.s (after the turn) — its
     /// growth as it appears; tools/stubs/ally_despawn.s
     /// (<see cref="DeadSifDataCave"/>) — the end; and tools/stubs/ally_collide.s in the dead sceSifLoadModuleBuffer body
     /// (<see cref="DeadSifCave"/>) at Step's monster-vs-monster check, so the two managers' units block each other, and at the player's
-    /// move (through the player-spear cave), so Ruby is blocked by it as by any monster.</summary>
+    /// move (through the player-spear cave), so the player is blocked by it as by any monster; tools/stubs/ally_hooks.s's full at a full
+    /// event's start (DunPatches), which ends a standing ally before the event empties the monsters' textures and shot pack.</summary>
     internal static class ElfAllyPatches
     {
         private const uint StepFn = 0x001DD540, DrawFn = 0x001D8CD0, ShadowFn = 0x001D9800;   // the floor manager's Step / DrawMonstor / DrawShadowMonstor
@@ -37,7 +39,13 @@ namespace Dark_Cloud_Improved_Version
             byte[] brain = Embedded("allyBrain.bin"), summon = Embedded("allySummon.bin");
             Require(brain, "allyBrain.bin", "ally_brain.s", MipsAsm.Jal(DeadPadPressCave.AllySummon), MipsAsm.Jal(DeadSifRpcCave.AllyFollow),
                     MipsAsm.Jal(DeadSifDataCave.AllyDespawn), MipsAsm.Jal(DeadMcCave.AllyGrow), MipsAsm.Jal(DeadSifRpcCave.AllyPark), MipsAsm.Jal(DeadSifRpcCave.AllyRelease),
-                    MipsAsm.Jal(DeadDmaWatchCave.AllyAim), MipsAsm.Jal(DeadSifElfCave.AllyPinCopy));
+                    MipsAsm.Jal(DeadDmaWatchCave.AllyAim), MipsAsm.Jal(DeadSifElfCave.AllyPinCopy), MipsAsm.Jal(DeadCdTypeCave.AllySettle));
+            byte[] settle = Embedded("allySettle.bin");
+            Require(settle, "allySettle.bin", "ally_settle.s");
+            Claim(fs, ElfOff, "sceCdGetDiskType", DeadCdTypeCave.Host, DeadCdTypeCave.VanillaWord0, settle, DeadCdTypeCave.AllyRecord);
+            byte[] record = Embedded("allyRecord.bin");
+            Require(record, "allyRecord.bin", "ally_record.s", MipsAsm.J(SetCollisionData));
+            WriteBytes(fs, ElfOff, DeadCdTypeCave.AllyRecord, record, DeadCdTypeCave.End, "allyRecord.bin overruns the sceCdGetDiskStatus body");
             byte[] aim = Embedded("allyAim.bin");
             Require(aim, "allyAim.bin", "ally_aim.s", 0x3C0A0001u, 0x354AFDE0u);   // the pockle's position: lui t2, 1 / ori t2, 0xFDE0
             Claim(fs, ElfOff, "sceDmaWatch", DeadDmaWatchCave.Host, DeadDmaWatchCave.VanillaWord0, aim, DeadDmaWatchCave.End);
@@ -79,7 +87,14 @@ namespace Dark_Cloud_Improved_Version
             // CMonstorUnit::CheckDmg's `jal Set__14CCollisionData` (the unit's open attack sphere into the pool) → ally_hooks.s: the
             // ally's goes in with mask 0, so it never hits the player.
             byte[] hooks = Embedded("allyHooks.bin");
-            Require(hooks, "allyHooks.bin", "ally_hooks.s", MipsAsm.J(SetCollisionData), MipsAsm.J(DeadSifCave.AllyCollideDone));   // blocked returns to ally_collide.s's exit
+            Require(hooks, "allyHooks.bin", "ally_hooks.s", MipsAsm.J(SetCollisionData), MipsAsm.J(DeadSifCave.AllyCollideDone),   // blocked returns to ally_collide.s's exit
+                    MipsAsm.J(DeadSifDataCave.AllyDespawn));                                                                       // full ends the ally
+            // swing's hand-encoded `bne t9, zero, ally_record.s` (its third word) must land on the recorder
+            uint bneRecord = 0x17200000u | (uint)((((int)DeadCdTypeCave.AllyRecord - (int)(DeadSifElfCave.AllySwing + 12)) >> 2) & 0xFFFF);
+            if (U32(hooks, (int)(DeadSifElfCave.AllySwing - DeadSifElfCave.AllyHooks) + 8) != bneRecord)
+                throw new IOException($"allyHooks.bin's swing does not branch to ally_record.s (expected 0x{bneRecord:X8}) — re-encode it in ally_hooks.s.");
+            if (U32(hooks, (int)(DeadSifElfCave.AllyFullEvent - DeadSifElfCave.AllyHooks)) != 0x3C0801FBu)
+                throw new IOException("allyHooks.bin has no full entry at DeadSifElfCave.AllyFullEvent — reassemble ally_hooks.s.");
             WriteBytes(fs, ElfOff, DeadSifElfCave.AllyHooks, hooks, DeadSifElfCave.End, "allyHooks.bin overruns the sceSifLoadElfPart bodies");
             uint cur = RdU32(fs, ElfOff(CheckDmgSwingSite)), toSwing = MipsAsm.Jal(DeadSifElfCave.AllySwing);
             if (cur != MipsAsm.Jal(SetCollisionData) && cur != toSwing)
@@ -90,7 +105,17 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException("allyHooks.bin has no mask entry at DeadSifElfCave.AllyMask — reassemble ally_hooks.s.");
             Hook(fs, ElfOff, CheckDmgMaskSite, LoadMask, MipsAsm.Jal(DeadSifElfCave.AllyMask));
             Hook(fs, ElfOff, CheckDmgMaskSite + 4, AndMaskPlayerHits, LoadMask);
-            Claim(fs, ElfOff, "sceSifGetOtherData", DeadSifDataCave.Host, DeadSifDataCave.VanillaWord0, despawn, DeadSifDataCave.End);
+            Claim(fs, ElfOff, "sceSifGetOtherData", DeadSifDataCave.Host, DeadSifDataCave.VanillaWord0, despawn, DeadSifDataCave.AllyLoadImg);
+            // SetupBaseModel's three hooks (ally_load.s): the ally's textures and script copy into its manager's unused monster slots.
+            byte[] load = Embedded("allyLoad.bin");
+            Require(load, "allyLoad.bin", "ally_load.s");
+            foreach (var (entry, word) in new[] { (DeadSifDataCave.AllyLoadImg, 0x262B0100u), (DeadSifDataCave.AllyLoadStb, 0x26390100u), (DeadSifDataCave.AllyLoadBack, 0x26390070u) })
+                if (U32(load, (int)(entry - DeadSifDataCave.AllyLoadImg)) != word)
+                    throw new IOException($"allyLoad.bin's entry at 0x{entry:X} moved — reassemble ally_load.s and check DeadSifDataCave.");
+            WriteBytes(fs, ElfOff, DeadSifDataCave.AllyLoadImg, load, DeadSifDataCave.End, "allyLoad.bin overruns the sceSifGetOtherData body");
+            Hook(fs, ElfOff, SetupImgAllocSite, 0x72204E28u, MipsAsm.Jal(DeadSifDataCave.AllyLoadImg));     // move t1, s1
+            Hook(fs, ElfOff, SetupStbAllocSite, 0x8E220008u, MipsAsm.Jal(DeadSifDataCave.AllyLoadStb));     // lw v0, 8(s1)
+            Hook(fs, ElfOff, SetupShotAllocSite, 0x24100002u, MipsAsm.Jal(DeadSifDataCave.AllyLoadBack));   // li s0, 2
 
             byte[] collide = Embedded("allyCollide.bin");
             if (collide.Length == 0 || (collide.Length & 3) != 0 || U32(collide, 0) != 0x27BDFFE0u || !ContainsWord(collide, MipsAsm.Jal(DebugIfCave.SpearBlock))
@@ -118,6 +143,8 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException($"the player-spear cave at 0x{DebugIfCave.PlayerSpearBlock:X} has {took} MoveCheck calls, not 1 — patch order changed?");
         }
 
+        /// <summary>SetupBaseModel's pack-loader IMG allocator, script-copy allocator read and shot-entry flag (ally_load.s).</summary>
+        private const uint SetupImgAllocSite = 0x001DFF74, SetupStbAllocSite = 0x001E00D4, SetupShotAllocSite = 0x001E0164;
         private const uint CheckDmgSwingSite = 0x001DA098, SetCollisionData = 0x001B57A0;   // CheckDmg's `jal Set__14CCollisionDataFPfiiffiiii`
         private const uint CheckDmgMaskSite = 0x001DAA7C, LoadMask = 0x8CA20048, AndMaskPlayerHits = 0x30420002;   // lw v0,0x48(a1) / andi v0,v0,2
 

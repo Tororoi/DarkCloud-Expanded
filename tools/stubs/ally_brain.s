@@ -1,29 +1,35 @@
-# ally_brain.s — the Pocklekul's pockle, once a frame: the guard charge, the summon, its target, its end. Assembled at 0x0010C7D0 (DeadDmaCave:
+# ally_brain.s — the summoned pockle (the Pocklekul's, Ruby's or Super Steve's with its sphere, Xiao's), once a frame: the guard charge,
+# the summon, its target, its end. Assembled at 0x0010C7D0 (DeadDmaCave:
 # the dead sceDmaSendN..sceDmaSendM bodies), its summon (after #SPLIT) at 0x001203D0 (DeadPadPressCave: the dead scePadInfoPressMode..
 # scePadGetSlotMax bodies). ally_manager.s calls it after the floor's CMonstorUnit::Step, a1 = Step's pause flag (nothing
-# happens on a paused frame). The weapon thread only arms it (CodeCaves.AllyArmed while the Pocklekul is in Ruby's hand); events go to
-# CodeCaves.AllyEvent ((count << 8) | code) for the app's log.
+# happens on a paused frame). The weapon thread only arms it (CodeCaves.AllyArmed = the summoner's character id + 1 while the ability
+# is in hand); events go to CodeCaves.AllyEvent ((count << 8) | code) for the app's log.
 #
-# The guard charge: Ruby (cur_chara 3) holding R1 in her guard pose (motion 9 or 33) counts frames (AllyGuard); at 60 the charge latches
-# (AllyLatch, until the guard drops) — a summon if none stands, on a quiet floor (walking mode, no menu opening, no event).
+# The guard charge: the summoner (cur_chara + 1 = AllyArmed) holding R1 in the guard pose (motion 9 or 33) counts frames (AllyGuard); at
+# 60 the charge latches (AllyLatch, until the guard drops) — a summon if none stands, on a quiet floor (walking mode, no menu opening,
+# no event).
 # Its pockle is one of eight at random: the seven days' (table index 10 + day) and Hell Pockle (54).
-# The summon (into Ruby's pockle block: the end of her character pool, PockleBlock): the floor's manager copied to block + 0x100, its script
+# The summon (into the summoner's ally block: the end of the character pool, AllyBlock — set aside by Ruby's LoadChara2 branch): the
+# floor's manager copied to block + 0x100, its script
 # table pointed at the block's own arena (entry 0; the rest null, so CleanViewMonstor resets only it) and reset; the pockle loaded by SetupBaseModel into the block's model allocator — its textures join the monsters' group 42, and the
-# entries it added and the group's VRAM ends before it are kept (CodeCaves.AllyTex) for its end — then stood 15 u in front of Ruby by
+# entries it added and the group's VRAM ends before it are kept (CodeCaves.AllyTex) for its end — then stood 15 u in front of the summoner by
 # SetupViewMonstor (both with NowMonstorUnit on its manager). Its block is stamped ("ALLY", the floor) and the manager word set: the game
 # rides it from then on.
-# While it stands: its end (ally_despawn.s) when its block is gone or another floor's, when it is disarmed or Ruby is not in hand, when
-# an event takes the floor, when its script has killed it (unit 0 back to state −1), when Ruby is more than 300 u from it. Else its
-# target: the locked-on enemy within 200 u of Ruby, else the one it had while it lives within 200 u, else the live enemy nearest her
-# within 150 u. An enemy: its pointer-table
-# entry (16) names a point inside that enemy's nearest hit sphere (ally_aim.s) and its AI runs (from label 100's top when it was idling). None: its AI is parked (AllyHold:
-# its script resumed on a YIELD each frame while Step goes on moving, animating and hitting it) and it walks beside Ruby
+# While it stands: its end (ally_despawn.s) when its block is gone or another floor's, when it is disarmed or the summoner is not in
+# hand, when an event takes the floor, when its script has killed it (unit 0 back to state −1), when the summoner is more than 300 u from
+# it. Else its target: the locked-on enemy within 200 u of the summoner, else the one it had while it lives within 200 u, else the live
+# enemy nearest the summoner within 150 u. An enemy: its pointer-table
+# entry (16) names a point inside that enemy's nearest hit sphere (ally_aim.s) and its AI runs (from label 100's top when it was idling). None: once
+# the move it is in has finished (ally_settle.s), its AI is parked (AllyHold:
+# its script resumed on a YIELD each frame while Step goes on moving, animating and hitting it) and it walks beside the summoner
 # (ally_follow.s), its entry naming the idle point there. Falling (HP 0): left to its death label.
 #
-# The block: +0x00 model allocator, +0x10 script allocator, +0x20 spawn point, +0x30 idle point, +0x40 "ALLY", +0x44 floor stamp, +0x48
-# its target slot (−1 none), +0x54 the group-42 entry mask (7 words, the summon's own), +0x70 its pockle (0..7), +0x74 its frames
-# (ally_grow.s), +0x100 its manager (0x60750 B),
-# +0x60850 its script arena (1,875 units), +0x67D80 its model (0xBD20 units, to the block's end at +0x124F80).
+# The block (996,096 B): +0x00 model allocator, +0x10 script allocator, +0x20 spawn point, +0x30 idle point, +0x40 "ALLY", +0x44 floor
+# stamp, +0x48 its target slot (−1 none), +0x54 the group-42 entry mask (7 words, the summon's own), +0x70 its pockle (0..7), +0x74 its
+# frames (ally_grow.s), +0x80 its aim point (ally_aim.s), +0x90 side allocator, +0x100 its manager (0x60750 B) — inside which the unused
+# model slots 1..8 (manager + 0x35B0, 108,672 B) hold its script arena (1,875 units) and the unused monster slots 1..15 (manager +
+# 0x231E0, 203,760 B) its side room (textures and script copy, ally_load.s) — then +0x60850 its model room (37,547 units: the largest
+# pockle's meshes, motions and shot data, PockleMotionBake-trimmed), to the block's end at +0xF3300.
 # Data words (lui 0x01FB): −0x808 AllyManager, −0x3C AllyHold, −0x38 AllyArmed, −0x34 AllyGuard, −0x30 AllyLatch, −0x2C AllyEvent;
 # CodeCaves.AllyTex 0x01FAFCA0: +0 floor stamp, +4 / +8 group 42's VRAM top / end, +0xC (first entry << 16) | entry end.
 
@@ -37,18 +43,18 @@ brain:
     bne   $a1, $zero, bdone        # a paused frame
     lui   $s0, 0x01FB              # (delay) the data words
     # ── the guard charge
-    lw    $t1, -0x38($s0)          # AllyArmed
-    beq   $t1, $zero, nocharge
+    lw    $t2, -0x38($s0)          # AllyArmed: the summoner + 1
+    beq   $t2, $zero, nocharge
     lui   $t0, 0x01CE
     lbu   $t1, -0x6AB0($t0)        # cur_chara (0x01CD9550)
-    addiu $t2, $zero, 3
-    bne   $t1, $t2, nocharge       # not Ruby
+    addiu $t1, $t1, 1
+    bne   $t1, $t2, nocharge       # not the summoner
     lui   $t0, 0x01CC
     lw    $t1, -0x3ABC($t0)        # the pad (0x01CBC544)
     andi  $t1, $t1, 0x0008         # R1
     beq   $t1, $zero, nocharge
     lui   $t0, 0x01EA
-    lw    $t1, 0x2988($t0)         # Ruby's motion
+    lw    $t1, 0x2988($t0)         # the summoner's motion
     addiu $t2, $zero, 9
     beq   $t1, $t2, guarding
     addiu $t2, $zero, 33
@@ -95,7 +101,7 @@ alive:
     addiu $s3, $s1, -0x100         # (delay) its block
     bal   blockaddr
     nop
-    bne   $v0, $s3, gone4          # Ruby's pool is not what it was
+    bne   $v0, $s3, gone4          # the character pool is not what it was
     lw    $t0, 0x40($s3)           # (delay)
     lui   $t1, 0x594C
     ori   $t1, $t1, 0x4C41
@@ -108,10 +114,10 @@ alive:
     lw    $t0, -0x38($s0)          # (delay) AllyArmed
     beq   $t0, $zero, gone
     addiu $a0, $zero, 3            # (delay) disarmed
-    lui   $t0, 0x01CE
-    lbu   $t0, -0x6AB0($t0)
-    addiu $t1, $zero, 3
-    bne   $t0, $t1, gone           # Ruby not in hand (a0 still 3)
+    lui   $t1, 0x01CE
+    lbu   $t1, -0x6AB0($t1)
+    addiu $t1, $t1, 1
+    bne   $t1, $t0, gone           # the summoner not in hand (a0 still 3)
     lw    $t0, -0x61E8($gp)        # (delay) BtEventMode
     bne   $t0, $zero, gone4
     lui   $t0, 0x0002              # (delay)
@@ -131,11 +137,11 @@ alive:
     nop
     # ── its target
     lui   $t0, 0x01EA
-    lwc1  $f0, 0x1D30($t0)         # Ruby x
+    lwc1  $f0, 0x1D30($t0)         # the summoner's x
     lwc1  $f1, 0x1D38($t0)         #      y
     lui   $t1, 0x47AF
     ori   $t1, $t1, 0xC800
-    mtc1  $t1, $f4                 # 300²: past this from Ruby it is left behind (out of the game's view of it)
+    mtc1  $t1, $f4                 # 300²: past this from the summoner it is left behind (out of the game's view of it)
     lui   $t0, 0x0002
     addu  $t0, $s1, $t0
     lwc1  $f2, -0x0320($t0)        # its x (manager + 0x1FCE0: unit 0's CCharacter + 0x10)
@@ -196,8 +202,10 @@ tpos:
     b     setp
     or    $t2, $v0, $zero          # (delay)
 idle:
-    addiu $t3, $zero, 1
-    sw    $t3, -0x3C($s0)          # AllyHold: its AI parked
+    jal   0x0010B5A8               # ally_settle.s: a move of its own finished first (else AllyHold set: its AI parked)
+    or    $a0, $s1, $zero          # (delay)
+    bne   $v0, $zero, bdone        # still finishing: its AI runs on, its "player" set
+    nop
     jal   0x001178A0               # ally_follow.s's park (each frame: Step resumes it there)
     or    $a0, $s1, $zero          # (delay)
     jal   0x001176D8               # ally_follow.s
@@ -221,7 +229,7 @@ bdone:
     jr    $ra
     addiu $sp, $sp, 0x20
 
-# a0 = a floor slot, f12 = a range², f0/f1 = Ruby's x/y: v0 = 1 when it is a live enemy that near (f13 = its distance²). a0 kept.
+# a0 = a floor slot, f12 = a range², f0/f1 = the summoner's x/y: v0 = 1 when it is a live enemy that near (f13 = its distance²). a0 kept.
 cand:
     sltiu $t5, $a0, 16
     beq   $t5, $zero, cno
@@ -262,18 +270,17 @@ cno:
     jr    $ra
     or    $v0, $zero, $zero
 
-# v0 = Ruby's pockle block (her character pool's last 0x124F80 B) when the pool ends where the weapon pool starts and her effect copy
-# sits below it, else 0. t0..t7.
+# v0 = the ally block (the character pool's last 0xF3300 B, ending where the weapon pool starts) when Ruby armed it (AllyArmed 4: her
+# LoadChara2 branch sets it aside) and her effect copy (gp−0x6214, allocated just before it) sits below it, else 0. s0 = the data words.
+# t0..t7.
 blockaddr:
-    lui   $t0, 0x01F0
-    lw    $t1, 0x6660($t0)         # the chara pool's base (0x01F06660)
-    lw    $t2, 0x6668($t0)         #               used units
-    lw    $t4, 0x6670($t0)         # the weapon pool's base
-    sll   $t2, $t2, 4
-    addu  $t3, $t1, $t2            # its end
-    bne   $t4, $t3, bno
-    lui   $t5, 0x0012              # (delay)
-    ori   $t5, $t5, 0x4F80
+    lw    $t1, -0x38($s0)          # AllyArmed
+    addiu $t2, $zero, 4
+    bne   $t1, $t2, bno            # not Ruby: no block set aside
+    lui   $t0, 0x01F0              # (delay)
+    lw    $t3, 0x6670($t0)         # the weapon pool's base: the character pool's end
+    lui   $t5, 0x000F
+    ori   $t5, $t5, 0x3300
     subu  $v0, $t3, $t5
     lw    $t6, -0x6214($gp)        # Ruby's effect copy (0x2A35DC)
     beq   $t6, $zero, bno
@@ -396,6 +403,9 @@ summon:
     lui   $a2, 0x0006
     jal   0x001033B0               # memcpy
     ori   $a2, $a2, 0x0750         # (delay)
+    ori   $t0, $zero, 0xAB00
+    addu  $t0, $s2, $t0
+    sw    $zero, 0x00($t0)         # its swing ring empty (ally_record.s)
     addiu $t0, $s1, 0x10
     sw    $t0, 0x00($s2)           # script[0]: the block's allocator
     addiu $t1, $s2, 0x04
@@ -405,21 +415,27 @@ stab:
     addiu $t1, $t1, 4
     bne   $t1, $t2, stab
     nop
-    lui   $t0, 0x0006
-    ori   $t0, $t0, 0x0850
-    addu  $t0, $s1, $t0            # its arena
+    addiu $t0, $s1, 0x36B0         # its arena: the manager's unused model slots 1..8
     sw    $t0, 0x10($s1)
     sw    $t0, 0x14($s1)
     sw    $zero, 0x18($s1)
     addiu $t1, $zero, 1875
     sw    $t1, 0x1C($s1)
+    lui   $t0, 0x0002
+    ori   $t0, $t0, 0x32E0
+    addu  $t0, $s1, $t0            # its side room: the manager's unused monster slots 1..15 (ally_load.s)
+    sw    $t0, 0x90($s1)
+    sw    $t0, 0x94($s1)
+    sw    $zero, 0x98($s1)
+    ori   $t1, $zero, 0x31BF       # 12,735 units
+    sw    $t1, 0x9C($s1)
     lui   $t0, 0x0006
-    ori   $t0, $t0, 0x7D80
-    addu  $t0, $s1, $t0            # its model room
+    ori   $t0, $t0, 0x0850
+    addu  $t0, $s1, $t0            # its model room, after the manager
     sw    $t0, 0x00($s1)
     sw    $t0, 0x04($s1)
     sw    $zero, 0x08($s1)
-    ori   $t1, $zero, 0xBD20
+    ori   $t1, $zero, 0x92AB       # 37,547 units
     sw    $t1, 0x0C($s1)
     or    $a0, $s2, $zero
     jal   0x001DF9F0               # CleanViewMonstor
@@ -472,10 +488,10 @@ sday:
     sw    $t0, 0x40($s1)           # "ALLY"
     addiu $t0, $zero, -1
     sw    $t0, 0x48($s1)           # no target yet
-    # 15 u in front of Ruby
+    # 15 u in front of the summoner
     lui   $t0, 0x01EA
     jal   0x0011D8A0               # sinf
-    lwc1  $f12, 0x1D84($t0)        # (delay) Ruby's yaw
+    lwc1  $f12, 0x1D84($t0)        # (delay) the summoner's yaw
     swc1  $f0, 0x14($sp)
     lui   $t0, 0x01EA
     jal   0x0011D6B0               # cosf

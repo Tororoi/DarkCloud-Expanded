@@ -3,13 +3,13 @@ using System;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>The poof a summon appears in: e228ex (gedit\e03's smoke, baked onto the dead dun/effect/zibaku_t) borrowed into the SECOND
-    /// main-character effect instance (<see cref="BorrowedShots"/>; Ungaga's and Ruby's are otherwise idle), burst at a spot at the
-    /// summoner's scale (0.5 for both), its one clip played at <see cref="ClipRate"/> — three times its own speed — turned to the
+    /// main-character effect instance (<see cref="BorrowedShots"/>; Ungaga's, Ruby's and Xiao's are otherwise idle), burst at a spot at
+    /// the summoner's scale (0.5 for both), its one clip played at <see cref="ClipRate"/> — three times its own speed — turned to the
     /// summoner's facing,
     /// held there (or following its summon natively: the pockle walks off in it) and faded out from frame <see cref="FadeFrom"/> to nothing at
     /// <see cref="ClipEnd"/>, where the engine retires it.
-    /// Cactus' Desert Bloom rises in it and the Pocklekul's pockle appears in it; their growths are timed on its frames
-    /// (<see cref="ClipStart"/>, <see cref="ClipRate"/>). One plays at a time: the two weapons are never wielded together.</summary>
+    /// Cactus' Desert Bloom rises in it (on Super Steve too, by its sphere) and the Pocklekul's pockle appears in it; their growths are
+    /// timed on its frames (<see cref="ClipStart"/>, <see cref="ClipRate"/>). One plays at a time: the two are never wielded together.</summary>
     internal static class SummonSmoke
     {
         private const string Tag = "[SummonSmoke] ";

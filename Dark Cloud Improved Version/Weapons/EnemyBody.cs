@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -77,6 +78,52 @@ namespace Dark_Cloud_Improved_Version
             return Math.Max(0f, best);
         }
         private const float UnposedSphere = 80f;   // a hit sphere farther than this from its own unit has not been placed this frame
+
+        /// <summary>A body's posed spheres read at once (its sphere arrays in one batch, from the centres through the active flags), for
+        /// testing many points against it without reading again: <see cref="Edge2D"/> as <see cref="NearestHitSphereEdge(Body, float, float)"/>,
+        /// <see cref="Edge3D"/> as <see cref="SegmentEdge"/> for a point. Null when it cannot be read.</summary>
+        internal sealed class Snapshot
+        {
+            private const int Span = (int)(BodyCollision.ActiveArray - BodyCollision.CentreArray) + BodyCollision.MaxBodyParts * BodyCollision.BodyPartStride;
+            private readonly List<(float x, float h, float y, float r)> _spheres = new();
+            private float _ux, _uy;
+
+            internal static Snapshot Read(Body body)
+            {
+                byte[] a = Memory.ReadBytesBatch(body.Spheres + BodyCollision.CentreArray, Span);
+                byte[] p = Memory.ReadBytesBatch(body.Pos, 12);
+                if (a == null || p == null) return null;
+                var snap = new Snapshot { _ux = BitConverter.ToSingle(p, 0), _uy = BitConverter.ToSingle(p, 8) };
+                int ra = (int)(BodyCollision.RadiusArray - BodyCollision.CentreArray), aa = (int)(BodyCollision.ActiveArray - BodyCollision.CentreArray);
+                for (int part = 0; part < BodyCollision.MaxBodyParts; part++)
+                {
+                    if (BitConverter.ToInt32(a, aa + part * BodyCollision.BodyPartStride) == 0) continue;
+                    int c = part * BodyCollision.CentreStride;
+                    float cx = BitConverter.ToSingle(a, c), ch = BitConverter.ToSingle(a, c + 4), cy = BitConverter.ToSingle(a, c + 8);
+                    if (Math.Abs(cx - snap._ux) > UnposedSphere || Math.Abs(cy - snap._uy) > UnposedSphere) continue;   // not this frame's placement
+                    snap._spheres.Add((cx, ch, cy, BitConverter.ToSingle(a, ra + part * BodyCollision.BodyPartStride)));
+                }
+                return snap;
+            }
+
+            /// <summary>The flat distance from (x, y) to the nearest posed sphere's edge (0 inside); its root less a plain radius where none is.</summary>
+            internal float Edge2D(float x, float y)
+            {
+                float best = float.MaxValue;
+                foreach (var (cx, _, cy, r) in _spheres) best = Math.Min(best, (float)Math.Sqrt((cx - x) * (cx - x) + (cy - y) * (cy - y)) - r);
+                if (best == float.MaxValue) best = (float)Math.Sqrt((_ux - x) * (_ux - x) + (_uy - y) * (_uy - y)) - BodyRadiusFallback;
+                return Math.Max(0f, best);
+            }
+
+            /// <summary>The distance from (x, h, y) to the nearest posed sphere's edge (negative inside); none posed: far.</summary>
+            internal float Edge3D(float x, float h, float y)
+            {
+                float best = float.MaxValue;
+                foreach (var (cx, ch, cy, r) in _spheres)
+                    best = Math.Min(best, (float)Math.Sqrt((cx - x) * (cx - x) + (ch - h) * (ch - h) + (cy - y) * (cy - y)) - r);
+                return best;
+            }
+        }
 
         /// <summary>How near the segment <paramref name="a"/>→<paramref name="b"/> (a shot's path since the last tick) comes to the body:
         /// the least distance from it to the surface of any of its posed hit spheres, and the segment's point there (<paramref name="at"/>).

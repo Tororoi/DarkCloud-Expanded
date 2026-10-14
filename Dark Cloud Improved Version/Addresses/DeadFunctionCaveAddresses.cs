@@ -194,8 +194,21 @@ namespace Dark_Cloud_Improved_Version
     internal static class DeadDmaCave
     {
         internal const uint Host = 0x0010C7D0, HostSpan = 1160, VanillaWord0 = 0x27BDFFA0;   // `addiu sp,sp,-0x60`
-        /// <summary>tools/stubs/ally_brain.s (ElfAllyPatches): the Pocklekul's pockle once a frame — guard charge, target, end.</summary>
+        /// <summary>tools/stubs/ally_brain.s (ElfAllyPatches): the summoned pockle once a frame — guard charge, target, end.</summary>
         internal const uint AllyBrain = Host;   // 1,160 B → 0x10CC58 (full)
+        internal const uint End = Host + HostSpan;
+    }
+
+    /// <summary>The dead sceCdGetDiskType and sceCdGetDiskStatus bodies (0x10B5A8, 336 B) — unreferenced in the loaded image, DUN.BIN
+    /// and TITLE.BIN (no jal, j, stored word or lui/addiu|ori pair reaches them; proved 2026-10-13).</summary>
+    internal static class DeadCdTypeCave
+    {
+        internal const uint Host = 0x0010B5A8, HostSpan = 336, VanillaWord0 = 0x27BDFFD0;   // `addiu sp,sp,-0x30`
+        /// <summary>tools/stubs/ally_settle.s (ElfAllyPatches): the ally's last move finished before it idles.</summary>
+        internal const uint AllySettle = Host;   // 160 B → 0x10B648
+        /// <summary>tools/stubs/ally_record.s (ElfAllyPatches): every attack sphere CheckDmg places while an ally stands, recorded per
+        /// frame into the ally's swing ring (entered from ally_hooks.s swing).</summary>
+        internal const uint AllyRecord = Host + 0xA0;   // 136 B → 0x10B6D0
         internal const uint End = Host + HostSpan;
     }
 
@@ -215,7 +228,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const uint Host = 0x001203D0, HostSpan = 688, VanillaWord0 = 0x0080302D;   // `daddu a2,a0,zero`
         /// <summary>tools/stubs/ally_brain.s's tail (after #SPLIT): the summon.</summary>
-        internal const uint AllySummon = Host;   // 628 B → 0x120644
+        internal const uint AllySummon = Host;   // 664 B → 0x120668
         internal const uint End = Host + HostSpan;
     }
 
@@ -224,7 +237,7 @@ namespace Dark_Cloud_Improved_Version
     internal static class DeadSifRpcCave
     {
         internal const uint Host = 0x001176D8, HostSpan = 552, VanillaWord0 = 0x3C030001;   // `lui v1,0x1`
-        /// <summary>tools/stubs/ally_follow.s (ElfAllyPatches): the ally with no enemy walks beside Ruby.</summary>
+        /// <summary>tools/stubs/ally_follow.s (ElfAllyPatches): the ally with no enemy walks beside the summoner.</summary>
         internal const uint AllyFollow = Host;   // 428 B → 0x117884
         /// <summary>…its park (the ally's script resumed on a YIELD while it idles) and release (its AI afresh).</summary>
         internal const uint AllyPark = Host + 0x1C8, AllyRelease = Host + 0x1F8;   // 0x1178A0, 0x1178D0; 548 B in all → 0x1178FC
@@ -241,9 +254,10 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/ally_hooks.s (ElfAllyPatches), the ally's hooks into the monster code: swing (CheckDmg's attack sphere
         /// for the ally's unit made with mask 0 — it never hits the player), mask (what the ally's unit takes), blocked (ally_collide.s's
         /// stop: a floor unit the ally's body stopped noted in CodeCaves.AllyBlocked), pin (ally_brain.s each frame: its position copied to
-        /// CodeCaves.AllyPin's).</summary>
-        internal const uint AllyHooks = Host + 0x144;   // 0x1192E4, 152 B → 0x11937C
-        internal const uint AllySwing = AllyHooks, AllyMask = AllyHooks + 0x1C, AllyBlocked = AllyHooks + 0x3C, AllyPinCopy = AllyHooks + 0x64;
+        /// CodeCaves.AllyPin's), full (a full event's start, dun 0x1DB4A30: a standing ally ends before the event empties the monsters' textures and shot pack).</summary>
+        internal const uint AllyHooks = Host + 0x144;   // 0x1192E4, 184 B → 0x11939C
+        internal const uint AllySwing = AllyHooks, AllyMask = AllyHooks + 0x1C, AllyBlocked = AllyHooks + 0x3C, AllyPinCopy = AllyHooks + 0x64,
+                            AllyFullEvent = AllyHooks + 0x98;
         internal const uint End = Host + HostSpan;
     }
 
@@ -254,6 +268,9 @@ namespace Dark_Cloud_Improved_Version
         internal const uint Host = 0x00117080, HostSpan = 344, VanillaWord0 = 0x27BDFF70;   // `addiu sp,sp,-0x90`
         /// <summary>tools/stubs/ally_despawn.s (ElfAllyPatches): the ally's end.</summary>
         internal const uint AllyDespawn = Host;   // 256 B → 0x117180
+        /// <summary>tools/stubs/ally_load.s (ElfAllyPatches): SetupBaseModel's three hooks that spread the ally's load over its block —
+        /// img (its textures' allocator), stb (its script copy's), back (the model allocator again for its shot data).</summary>
+        internal const uint AllyLoadImg = Host + 0x100, AllyLoadStb = AllyLoadImg + 0x18, AllyLoadBack = AllyLoadImg + 0x34;   // 76 B → 0x1171CC
         internal const uint End = Host + HostSpan;
     }
 

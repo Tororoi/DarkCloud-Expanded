@@ -1,14 +1,16 @@
 using System;
+using System.Linq;
 using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>The character heap logged as it changes — a diagnostic, no weapon's and no character's. Chara, weapons and effects
-    /// share ONE CDataAlloc2 pool (210000 × 16 B vanilla, 265000 × 16 = 4.24 MB with DunPatches' raise) and an overflow is a
+    /// share ONE CDataAlloc2 pool (210000 × 16 B vanilla, 273400 × 16 = 4.37 MB with DunPatches' raise) and an overflow is a
     /// SILENT spin — Alloc__14CDataAlloc2&lt;1&gt;Fi is printf + while(true), i.e. a freeze — so the counters and the background
     /// reads are logged whenever they change and the last line before a freeze is the verdict. Also tracks the effects pool's
     /// high-water mark, since enemy projectiles allocate from whatever the chara data leaves. Pure logging: it runs only with
-    /// <see cref="DebugDiagnostics.Enabled"/>. Started once with the game (<see cref="Start"/>), every 50 ms on a dungeon floor.</summary>
+    /// <see cref="DebugDiagnostics.Enabled"/>, but for <see cref="Footprint"/> (one line per character load) and <see cref="Peaks"/> (a line
+    /// per new session peak of a dungeon pool), always. Started once with the game (<see cref="Start"/>), every 50 ms on a dungeon floor.</summary>
     internal static class HeapWatch
     {
         private const string Tag = "[HeapWatch] ";
@@ -29,14 +31,55 @@ namespace Dark_Cloud_Improved_Version
                 int sleep = IdleMs;
                 try
                 {
-                    if (DebugDiagnostics.Enabled && Player.InDungeonFloor())
+                    Peaks();
+                    if (Player.InDungeonFloor())
                     {
-                        sleep = WatchMs;
-                        Tick();
+                        Footprint();
+                        if (DebugDiagnostics.Enabled) { sleep = WatchMs; Tick(); }
                     }
                 }
                 catch (Exception e) { Log("tick failed: " + e.Message); sleep = 1000; }
                 Thread.Sleep(sleep);
+            }
+        }
+
+        private static (int ch, int used) _fpSeen = (-1, -1), _fpLogged = (-1, -1);
+
+        /// <summary>The active character's model footprint — the character counter's units once LoadChara2 is done — logged once per load,
+        /// read only while walking and once it holds still for a tick (a party switch flips the character id before the model loads): what
+        /// a pack costs in the heap (Ruby's includes her ally block, AllyBlock).</summary>
+        private static void Footprint()
+        {
+            if (!Player.CheckDunIsWalkingMode()) { _fpSeen = (-1, -1); return; }
+            var now = (Player.CurrentCharacterNum(), Memory.ReadInt(DataPools.Chara + DataPools.Used));
+            if (now.Item2 <= 0 || now != _fpSeen) { _fpSeen = now; return; }
+            if (now == _fpLogged) return;
+            _fpLogged = now;
+            int cap = Memory.ReadInt(DataPools.Chara + DataPools.Cap);
+            Log($"character {now.Item1}'s pack: {now.Item2 * 16L:N0} B ({now.Item2:N0} units) of the {cap * 16L:N0} B character heap");
+        }
+
+        /// <summary>The pools whose peaks are kept: every carved pool, the weapon and effect counters inside the character heap, and the
+        /// floor system script's work allocator (BtCashBuffer: P840 on a dungeon's first floor, the monster pool's region on the rest).</summary>
+        private static readonly (long addr, string name)[] PeakPools =
+            DataPools.InCarveOrder.Concat(new[] { (DataPools.Weapon, "weapons"), (DataPools.Effect, "effects"), (DataPools.Cash, "cash") }).ToArray();
+        private const int PeakStepUnits = 256;   // a new peak is logged once it passes the last logged one by 4 KB
+        private static readonly System.Collections.Generic.Dictionary<string, int> _peak = new();
+
+        /// <summary>Each pool's session peak, logged when it rises by <see cref="PeakStepUnits"/> — with the character, the floor and the event
+        /// mode it was reached in, so an event's or a boss floor's demand shows. Runs whenever a dungeon's pools are carved (events included).</summary>
+        private static void Peaks()
+        {
+            int charaCap = Memory.ReadInt(DataPools.Chara + DataPools.Cap);
+            if (charaCap <= 0 || charaCap > 0x100000) return;                 // no dungeon carve (the town)
+            foreach (var (addr, name) in PeakPools)
+            {
+                int used = Memory.ReadInt(addr + DataPools.Used), cap = Memory.ReadInt(addr + DataPools.Cap);
+                if (used <= 0 || cap <= 0) continue;
+                if (_peak.TryGetValue(name, out int peak) && used < peak + PeakStepUnits) continue;
+                _peak[name] = used;
+                Log($"pool peak: {name} {used * 16L:N0} of {cap * 16L:N0} B — char {Player.CurrentCharacterNum()}, dungeon {Memory.ReadByte(Addresses.checkDungeon)} "
+                    + $"floor {Memory.ReadByte(Addresses.checkFloor)}, event mode {Memory.ReadInt(DungeonScriptEvent.BtEventMode)}");
             }
         }
 

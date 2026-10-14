@@ -9,10 +9,11 @@ namespace Dark_Cloud_Improved_Version
     /// tests a monster against monsters). It drops nothing when it falls but the gold its stealing swings took (<see cref="Summoned"/>,
     /// <see cref="Steal"/>). Its unit 0 plants its swings as floor slot 0 does (owner 200) but with
     /// mask 0 (tools/stubs/ally_hooks.s: they never hit the player), which tells them apart; its shots are stamped slot 0's and told
-    /// apart by the unit they are first seen nearer (<see cref="Its"/>). Each tick while it lives: its open swings and its flying shots are
-    /// tested against every live enemy, and a hit is planted on the one they reach as one of RUBY'S (<see cref="CollisionPool.PlayerHitEntry"/>:
-    /// her kill, her ABS), its damage its own over her ranged distance factor (a shot then taken through the engine's own contact). An
-    /// enemy whose HP that hit lowers — or that its body stops (<see cref="Blocked"/>) — is PROVOKED and goes after it until it falls or goes. Every enemy's open swing and every enemy shot
+    /// apart by the unit they are first seen nearer (<see cref="Its"/>). Each tick while it lives: every attack sphere placed since the last
+    /// tick, frame by frame (the swing ring, tools/stubs/ally_record.s — <see cref="Ring"/>), and its flying shots are tested against every
+    /// live enemy, and a hit is planted on the one they reach as one of the SUMMONER'S (<see cref="CollisionPool.PlayerHitEntry"/>:
+    /// their kill, their ABS), its damage its own over their ranged distance factor (a shot then taken through the engine's own contact). An
+    /// enemy whose HP that hit lowers — or that its body stops (<see cref="Blocked"/>) — is PROVOKED and goes after it until it falls or goes. Every enemy's swing (from the ring) and every enemy shot
     /// that reaches its body plant a hit on it, owner −1 (damage − defence). One per pair per ContactCooldown, withdrawn after
     /// ShellLifeSeconds like the confused enemies' (<see cref="ConfusionFriendlyFire"/>). <see cref="Confusion.Tick"/> runs it; the
     /// Pocklekul's thread ticks while a pockle stands.</summary>
@@ -28,7 +29,7 @@ namespace Dark_Cloud_Improved_Version
         private static readonly DateTime[] _lastOn = new DateTime[Slots];   // it → enemy
         private static readonly DateTime[] _lastBy = new DateTime[Slots];   // enemy → it
         private static readonly bool[]     _provoked = new bool[Slots];
-        private static readonly List<(int slot, int hp, DateTime until)> _landing = new();
+        private static readonly List<(int slot, int hp, DateTime until)> _landing = new();   // every planted hit watched for the HP it takes (slot −1: the ally)
         private static readonly ShotSweep _shots = new();                   // every floor slot's shots, its own (slot 0's) among them
         private static readonly HashSet<int> _ownShots = new();             // the keys of its own, told at first sight
 
@@ -50,8 +51,7 @@ namespace Dark_Cloud_Improved_Version
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
             Blocked(m);
-            Swings(m, pool);
-            HitsOnIt(m, pool);
+            Ring(m, pool);
             Shots(m, pool);
             Landings(m);
             for (int s = 0; s < Slots; s++)
@@ -69,7 +69,7 @@ namespace Dark_Cloud_Improved_Version
         {
             _provoked[s] = false;
             if (!IsConfused(s)) AggroTable.PointConfused(s, StbExternCmd.PlayerPosGuest);
-            if (Enemies.IsLive(s)) Log($"enemy slot {s} back on Ruby");
+            if (Enemies.IsLive(s)) Log($"enemy slot {s} back on the player");
         }
 
         /// <summary>Whether something of slot 0's at (x, y) is its: nearer its unit than floor slot 0's (or floor slot 0 not live).</summary>
@@ -83,29 +83,97 @@ namespace Dark_Cloud_Improved_Version
             return dx * dx + dy * dy <= fx * fx + fy * fy;
         }
 
-        /// <summary>Its open swings on the enemies they touch.</summary>
-        private static void Swings(long m, long pool)
+        // ── the swing ring (tools/stubs/ally_record.s): every attack sphere CheckDmg placed while the ally stands, one record a frame ──
+        private const int RingOff = 0xAB00, RingRecords = 256, RecordSize = 32, WhoAlly = 16;
+        private static uint _ringRead;                      // the records already tested (the summon zeroes the ring's count)
+
+        /// <summary>Every attack sphere recorded since the last pass, each frame's: the ally's on the live enemies it reaches (a hit planted
+        /// as one of the summoner's), each enemy's on the ally's body (a hit planted on it). One per pair per ContactCooldown. The kick
+        /// words come from the pool's open entries (CheckDmg writes them after the sphere): each attacker's latest.</summary>
+        private static void Ring(long m, long pool)
         {
-            foreach (var (_, atk) in AttackScan.OpenEntries(pool))
+            long ring = m + RingOff;
+            uint count = Memory.ReadUInt(ring);
+            if (count == _ringRead) { CloseSwingWindow(); return; }
+            if (count - _ringRead > RingRecords) _ringRead = count - RingRecords;   // fallen behind: the oldest were written over
+            byte[] recs = Memory.ReadBytesBatch(ring + 0x10, RingRecords * RecordSize);
+            if (recs == null) return;
+            byte[] allyKick = null;
+            var enemyKick = new byte[Slots][];
+            foreach (var (_, e) in AttackScan.OpenEntries(pool))
             {
-                if (BitConverter.ToInt32(atk, CollisionPool.Owner) != SwingOwner || BitConverter.ToInt32(atk, CollisionPool.Mask) != 0) continue;   // its alone (ally_hooks.s)
-                var (ax, _, ay) = AttackScan.Centre(atk);
-                float ar = AttackScan.Radius(atk);
-                int damage = AttackScan.Damage(atk);
-                if (damage <= 0 || ar <= 0f) continue;
-                for (int v = 0; v < Slots; v++)
+                if (BitConverter.ToInt32(e, CollisionPool.Owner) == SwingOwner && BitConverter.ToInt32(e, CollisionPool.Mask) == 0) allyKick = e;
+                else if (AttackScan.EnemyOwner(e) is int a and >= 0) enemyKick[a] = e;
+            }
+            var snaps = new EnemyBody.Snapshot[Slots];
+            EnemyBody.Snapshot me = null;
+            for (uint i = _ringRead; i != count; i++)
+            {
+                int o = (int)(i % RingRecords) * RecordSize;
+                float x = BitConverter.ToSingle(recs, o), h = BitConverter.ToSingle(recs, o + 4), y = BitConverter.ToSingle(recs, o + 8), r = BitConverter.ToSingle(recs, o + 12);
+                int damage = BitConverter.ToInt32(recs, o + 16), reaction = BitConverter.ToInt32(recs, o + 20), flags = BitConverter.ToInt32(recs, o + 24);
+                uint tag = BitConverter.ToUInt32(recs, o + 28);
+                int who = (int)(tag & 0xFF), mask = (int)((tag >> 8) & 0xFF), frame = (int)(tag >> 16);
+                if (damage <= 0 || r <= 0f) continue;
+                if (who == WhoAlly)
                 {
-                    if (!Enemies.IsLive(v) || (GameClock.Now - _lastOn[v]).TotalSeconds < ContactCooldown) continue;
-                    if (EnemyBody.NearestHitSphereEdge(EnemyBody.Body.Of(v), ax, ay) > ar) continue;
-                    if (!HitEnemy(pool, v, damage, AttackScan.Reaction(atk), atk)) return;
-                    Log($"its swing lands on enemy slot {v} for {damage} before defence");
-                    if ((AttackScan.Flags(atk) & StealGoldFlag) != 0 && _rng.Next(100) < StealPercent) Steal(m, v);
+                    OpenSwingWindow(frame, r);
+                    for (int v = 0; v < Slots; v++)
+                    {
+                        if (!Enemies.IsLive(v)) continue;
+                        if ((snaps[v] ??= EnemyBody.Snapshot.Read(EnemyBody.Body.Of(v))) is not { } body) continue;
+                        float edge = body.Edge2D(x, y);
+                        NoteSwing(v, edge);
+                        if (edge > r || (GameClock.Now - _lastOn[v]).TotalSeconds < ContactCooldown) continue;
+                        if (!HitEnemy(pool, v, damage, reaction, allyKick)) { _ringRead = count; return; }
+                        _swingPlanted = true;
+                        Log($"its swing lands on enemy slot {v} for {damage} before defence");
+                        if ((flags & StealGoldFlag) != 0 && _rng.Next(100) < StealPercent) Steal(m, v);
+                    }
+                }
+                else if (who < Slots && (mask & (int)CollisionPool.HurtsPlayerMask) != 0)
+                {
+                    if (!Enemies.IsLive(who) || (GameClock.Now - _lastBy[who]).TotalSeconds < ContactCooldown) continue;
+                    if ((me ??= EnemyBody.Snapshot.Read(EnemyBody.Body.Ally(m))) is null || me.Edge3D(x, h, y) > r) continue;
+                    if (!PlantOnIt(m, pool, damage, reaction, 0, enemyKick[who])) { _ringRead = count; return; }
+                    _lastBy[who] = GameClock.Now;
+                    Log($"enemy slot {who}'s swing lands on the pockle for {damage} before defence");
                 }
             }
+            _ringRead = count;
         }
 
-        /// <summary>A hit planted on enemy <paramref name="v"/> as one of Ruby's — her ranged distance factor undone (CheckDmg scales a
-        /// ranged character's hit by her distance to it: ≤ 20 × 1.5, from 50 down to × 0.5) — watched for the HP it takes.</summary>
+        // DIAGNOSTIC: one line per swing window of the ally's — the frames it was recorded in, how near its sphere came to an enemy's
+        // body, and whether it planted
+        private const int SwingGapFrames = 6;
+        private static int _swingFrames, _swingFirst, _swingLast, _swingSlot = -1;
+        private static float _swingEdge = float.MaxValue, _swingRadius;
+        private static bool _swingPlanted;
+
+        private static void OpenSwingWindow(int frame, float radius)
+        {
+            if (_swingFrames > 0 && ((frame - _swingLast) & 0xFFFF) > SwingGapFrames) CloseSwingWindow();
+            if (_swingFrames == 0) { _swingFirst = frame; _swingPlanted = false; }
+            if (_swingFrames == 0 || frame != _swingLast) _swingFrames++;
+            _swingLast = frame; _swingRadius = radius;
+        }
+
+        private static void NoteSwing(int v, float edge)
+        {
+            if (edge < _swingEdge) { _swingEdge = edge; _swingSlot = v; }
+        }
+
+        private static void CloseSwingWindow()
+        {
+            if (_swingFrames == 0) return;
+            Log($"its swing window closed: radius {_swingRadius:F1}, {_swingFrames} frames recorded over {((_swingLast - _swingFirst) & 0xFFFF) + 1}, "
+                + $"nearest enemy slot {_swingSlot} body edge {_swingEdge:F1} away — " + (_swingPlanted ? "planted" : "no contact"));
+            _swingFrames = 0; _swingEdge = float.MaxValue; _swingSlot = -1;
+        }
+
+        /// <summary>A hit planted on enemy <paramref name="v"/> as one of the summoner's (Ruby or Xiao, both ranged) — the ranged distance
+        /// factor undone (CheckDmg scales a ranged character's hit by their distance to it: ≤ 20 × 1.5, from 50 down to × 0.5) — watched for
+        /// the HP it takes.</summary>
         private static bool HitEnemy(long pool, int v, int damage, int reaction, byte[] kickFrom)
         {
             EnemyBody.BodyCentre(EnemyBody.Body.Of(v), out float cx, out float ch, out float cy, out _);
@@ -118,7 +186,7 @@ namespace Dark_Cloud_Improved_Version
             int hp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(v, EnemySlotOffsets.Hp));
             if (PlantShell(pool, hit) < 0) return false;
             _lastOn[v] = GameClock.Now;
-            if (!_provoked[v]) _landing.Add((v, hp, GameClock.Now.AddSeconds(ProvokeWindowSeconds)));
+            _landing.Add((v, hp, GameClock.Now.AddSeconds(ProvokeWindowSeconds)));
             return true;
         }
 
@@ -145,6 +213,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteUShort(m + Unit + EnemySlotOffsets.DropsItems, 0);
             Memory.WriteInt(m + Unit + EnemySlotOffsets.Abs, 0);
             Memory.WriteInt(m + Unit + EnemySlotOffsets.StolenGold, 0);
+            _ringRead = 0;                                                    // the summon zeroed its swing ring
+            _swingFrames = 0; _swingEdge = float.MaxValue; _swingSlot = -1;
         }
 
         /// <summary>An enemy its body stopped (the native block rule notes it in CodeCaves.AllyBlocked) goes after it, as one it hit does.</summary>
@@ -167,38 +237,27 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>An enemy its hit took HP from goes after it.</summary>
+        /// <summary>Each planted hit's outcome within <see cref="ProvokeWindowSeconds"/>: the HP it took, logged (or that it took none);
+        /// an enemy whose HP it lowered is provoked.</summary>
         private static void Landings(long m)
         {
             for (int k = _landing.Count - 1; k >= 0; k--)
             {
                 var (v, hp, until) = _landing[k];
-                if (_provoked[v] || !Enemies.IsLive(v)) { _landing.RemoveAt(k); continue; }
-                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(v, EnemySlotOffsets.Hp)) < hp)
+                bool ally = v < 0;
+                if (!ally && !Enemies.IsLive(v)) { _landing.RemoveAt(k); continue; }
+                int now = ally ? Memory.ReadInt(m + Unit + UnitHp) : Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(v, EnemySlotOffsets.Hp));
+                string who = ally ? "the pockle" : $"enemy slot {v}";
+                if (now < hp)
                 {
                     _landing.RemoveAt(k);
-                    Provoke(m, v, "hit by");
+                    Log($"  → {who} lost {hp - now} HP");
+                    if (!ally && !_provoked[v]) Provoke(m, v, "hit by");
                 }
-                else if (GameClock.Now >= until) _landing.RemoveAt(k);
+                else if (GameClock.Now >= until) { _landing.RemoveAt(k); Log($"  → {who} lost no HP"); }
             }
         }
 
-        /// <summary>Every enemy's open swing that reaches its body (its own, mask 0, are no enemy's): a hit on it.</summary>
-        private static void HitsOnIt(long m, long pool)
-        {
-            var me = EnemyBody.Body.Ally(m);
-            foreach (var (_, atk) in AttackScan.OpenEntries(pool))
-            {
-                int attacker = AttackScan.EnemyOwner(atk);
-                if (attacker < 0 || !Enemies.IsLive(attacker) || (GameClock.Now - _lastBy[attacker]).TotalSeconds < ContactCooldown) continue;
-                var c = AttackScan.Centre(atk);
-                float ar = AttackScan.Radius(atk);
-                int damage = AttackScan.Damage(atk);
-                if (damage <= 0 || ar <= 0f || EnemyBody.SegmentEdge(me, c, c, out _) > ar) continue;
-                if (!PlantOnIt(m, pool, damage, AttackScan.Reaction(atk), 0, atk)) return;
-                _lastBy[attacker] = GameClock.Now;
-                Log($"enemy slot {attacker}'s swing lands on the pockle for {damage} before defence");
-            }
-        }
 
         /// <summary>Every live flying shot, swept along its path since the last tick: its own (a slot-0 shot first seen nearer it than
         /// floor slot 0) against the live enemies, an enemy's against its body. A hit is planted and the shot taken through the engine's
@@ -247,7 +306,10 @@ namespace Dark_Cloud_Improved_Version
             I(CollisionPool.Mask, AllyHitMask);                                                       // its CheckDmg alone takes it (ally_hooks.s mask)
             I(0x4C, reaction); I(CollisionPool.Element, (int)element);
             if (kickFrom != null) AttackScan.CopyKick(kickFrom, hit);
-            return PlantShell(pool, hit) >= 0;
+            int hp = Memory.ReadInt(m + Unit + UnitHp);
+            if (PlantShell(pool, hit) < 0) return false;
+            _landing.Add((-1, hp, GameClock.Now.AddSeconds(ProvokeWindowSeconds)));
+            return true;
         }
 
         private static void Log(string msg) => Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + msg);

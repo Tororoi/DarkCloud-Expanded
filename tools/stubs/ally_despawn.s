@@ -1,6 +1,7 @@
 # ally_despawn.s — the summoned ally's end. Assembled at 0x00117080 (DeadSifDataCave: the dead sceSifGetOtherData body). ally_brain.s
-# calls it, a0 = the event code (2 fallen, 3 disarmed / Ruby not in hand, 4 its block or floor gone / an event, 8 not stood). The manager
-# word goes first (the game stops riding it), then the hold; its pointer-table entry (16) names the player again. On the floor it was
+# calls it, a0 = the event code (2 fallen, 3 disarmed / the summoner not in hand, 4 its block or floor gone / an event, 8 not stood), and
+# so does ally_hooks.s's full event. The manager word goes first (the game stops riding it), then the hold; its pointer-table entry (16)
+# names the player again. On the floor it was
 # summoned on (CodeCaves.AllyTex's stamp) the texture entries its load added to the monsters' group 42 are emptied and the group's VRAM
 # top and end put back — kept outside its block, so a character change that overwrote the block still cleans them — and the shot
 # configs its load entered into the floor's shot pack taken back out (ally_shots.s clear). Caller-saved registers.

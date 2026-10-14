@@ -3,7 +3,7 @@
 # DunPatches points the dungeon's three calls on the floor's manager here — motionDrive's `jal Step__12CMonstorUnitFi` (0x1DB749C), the
 # draw's `jal DrawMonstor__12CMonstorUnitFv` (0x1DAE7E8) and the shadow pass's `jal DrawShadowMonstor__12CMonstorUnitFv` (0x1DADD44):
 # each makes the call as before; after the floor's Step the ally's brain runs (tools/stubs/ally_brain.s, once a frame: the guard charge,
-# the summon, its target, its end, its walk beside Ruby); then — while CodeCaves.AllyManager (0x01FAF7F8) holds a manager — the call is
+# the summon, its target, its end, its walk beside the summoner); then — while CodeCaves.AllyManager (0x01FAF7F8) holds a manager — the call is
 # made again on that manager with NowMonstorUnit (gp−0x6320) pointing at it, since every script command reads NowMonstorUnit.
 
 step_entry:
@@ -45,7 +45,7 @@ rdraw:
     nop
     lw    $t3, -0x00C0($t1)        # its block's magic (block + 0x40, the manager at + 0x100)
     lui   $t4, 0x594C
-    ori   $t4, $t4, 0x4C41         # "ALLY": gone with Ruby's pool (a character change) → not ridden
+    ori   $t4, $t4, 0x4C41         # "ALLY": its block overwritten → not ridden
     bne   $t3, $t4, done
     nop
     lw    $t2, -0x6320($gp)        # NowMonstorUnit
