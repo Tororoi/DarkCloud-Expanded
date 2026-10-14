@@ -88,6 +88,9 @@ namespace Dark_Cloud_Improved_Version
             int units = Memory.ReadInt(req + CodeCaves.CatLoadUnits);
             if (!Memory.IsValidGuest(region)) { Log($"no region for the cat: LoadChara2 did not make one on this floor ({units * 16:N0} B of room)"); return false; }
             if (units < XiaoRegion.CatMinUnits) { Log($"Xiao's region is {units * 16:N0} B, under the {XiaoRegion.CatMinUnits * 16:N0} B the cat may need — not loading it"); return false; }
+            // Xiao's region is the summoned pockle's block too (Super Steve's Pocklekul sphere): never loaded over one that stands.
+            if (Memory.ReadUInt(CodeCaves.AllyManager) != 0 && Memory.ReadInt(CodeCaves.AllyArmed) == Player.XiaoId + 1)
+            { Log("a pockle stands in Xiao's region — not loading the cat"); return false; }
             // Slot 1 is one of the NPC slots the floor's event scripts load characters into: while one of theirs is there, wait.
             uint held = Memory.ReadGuestPtr(SlotAddr() + CCharacter.CharModel);
             if (held != 0 && held != Memory.ReadUInt(req + CodeCaves.CatLoadRoot)) { Log($"slot 1 holds an event's character (0x{held:X}) — not loading the cat"); return false; }

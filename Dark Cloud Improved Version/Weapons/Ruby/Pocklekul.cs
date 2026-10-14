@@ -102,13 +102,15 @@ namespace Dark_Cloud_Improved_Version
             SummonSmoke.End();
         }
 
-        /// <summary>The effect this ring wants in Ruby's SECOND main-character instance (idle but for the Bandit's Ring's stolen shots): the
-        /// summon smoke, whenever it is in her hand.</summary>
+        /// <summary>The effect this ring wants in the summoner's SECOND main-character instance (Ruby's idle but for the Bandit's Ring's
+        /// stolen shots, Xiao's idle): the summon smoke, whenever it is in hand.</summary>
         internal static BorrowedEffect WantedShot() => Wielded() ? SummonSmoke.Effect() : null;
 
-        /// <summary>Ruby with the Pocklekul (the only summoner with an ally block so far: AllyBlock).</summary>
+        /// <summary>Ruby with the Pocklekul, or Xiao with Super Steve carrying its sphere — the two summoners with an ally block (AllyBlock:
+        /// Ruby's LoadChara2 branch grows hers, Xiao's sits in her region, XiaoRegion, whenever the Divine Beast cat is not loaded in it).</summary>
         internal static bool Wielded()
-            => Player.CurrentCharacterNum() == Player.RubyId && Player.Weapon.GetCurrentWeaponId() == Items.pocklekul;
+            => (Player.CurrentCharacterNum() == Player.RubyId && Player.Weapon.GetCurrentWeaponId() == Items.pocklekul)
+            || SuperSteve.Wields(Items.pocklekul);
 
         /// <summary>The pockle appears in Cactus' poof: at its spawn point (its block's +0x20 — the manager's −0xE0), turned to the summoner's facing,
         /// and pinned to it natively (CodeCaves.AllyPin: ally_hooks.s copies its position to the smoke's every frame) so it stays in the smoke
@@ -163,7 +165,7 @@ namespace Dark_Cloud_Improved_Version
             2 => "the pockle fell",
             3 => "the pockle went (the Pocklekul or its summoner left the hand)",
             4 => "the pockle went (its floor changed, its block was overwritten, or an event took the floor)",
-            5 => "no summon: no ally block (the summoner's character pool lacks it — a disc patched before the Pocklekul?)",
+            5 => "no summon: no ally block (the summoner's character pool lacks it — Xiao's region too small or holding the cat, or a disc patched before the Pocklekul)",
             6 => "no summon: no VRAM room for its picture in the monsters' texture group",
             7 => "no summon: the pockle's model did not load",
             8 => "no summon: the pockle did not stand",

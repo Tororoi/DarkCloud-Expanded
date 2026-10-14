@@ -9,7 +9,7 @@
 # 60 the charge latches (AllyLatch, until the guard drops) — a summon if none stands, on a quiet floor (walking mode, no menu opening,
 # no event).
 # Its pockle is one of eight at random: the seven days' (table index 10 + day) and Hell Pockle (54).
-# The summon (into the summoner's ally block: the end of the character pool, AllyBlock — set aside by Ruby's LoadChara2 branch): the
+# The summon (into the summoner's ally block: the end of the character pool, AllyBlock — Ruby's LoadChara2 branch or Xiao's region): the
 # floor's manager copied to block + 0x100, its script
 # table pointed at the block's own arena (entry 0; the rest null, so CleanViewMonstor resets only it) and reset; the pockle loaded by SetupBaseModel into the block's model allocator — its textures join the monsters' group 42, and the
 # entries it added and the group's VRAM ends before it are kept (CodeCaves.AllyTex) for its end — then stood 15 u in front of the summoner by
@@ -107,7 +107,7 @@ alive:
     ori   $t1, $t1, 0x4C41
     bne   $t0, $t1, gone4          # its block overwritten
     nop
-    bal   stamp
+    jal   0x0027D460               # ally_stamp.s: the floor stamp
     nop
     lw    $t0, 0x44($s3)
     bne   $v0, $t0, gone4          # another floor
@@ -270,19 +270,20 @@ cno:
     jr    $ra
     or    $v0, $zero, $zero
 
-# v0 = the ally block (the character pool's last 0xF3300 B, ending where the weapon pool starts) when Ruby armed it (AllyArmed 4: her
-# LoadChara2 branch sets it aside) and her effect copy (gp−0x6214, allocated just before it) sits below it, else 0. s0 = the data words.
-# t0..t7.
+# v0 = the ally block (the character pool's last 0xF3300 B, ending where the weapon pool starts) when its summoner set one aside, else 0:
+# Ruby (AllyArmed 4) — her LoadChara2 branch grows her copy, and her effect copy (gp−0x6214, allocated just before it) sits below it;
+# Xiao (AllyArmed 2) — her region (XiaoRegion: cat_load.s's request block +4, 0x01FAE624) holds it whole and the Divine Beast cat is not
+# loaded in it (its status +0, 2 = loaded). s0 = the data words. t0..t7.
 blockaddr:
-    lw    $t1, -0x38($s0)          # AllyArmed
-    addiu $t2, $zero, 4
-    bne   $t1, $t2, bno            # not Ruby: no block set aside
-    lui   $t0, 0x01F0              # (delay)
+    lui   $t0, 0x01F0
     lw    $t3, 0x6670($t0)         # the weapon pool's base: the character pool's end
     lui   $t5, 0x000F
     ori   $t5, $t5, 0x3300
     subu  $v0, $t3, $t5
-    lw    $t6, -0x6214($gp)        # Ruby's effect copy (0x2A35DC)
+    lw    $t1, -0x38($s0)          # AllyArmed
+    addiu $t2, $zero, 4
+    bne   $t1, $t2, bxiao          # not Ruby
+    lw    $t6, -0x6214($gp)        # (delay) Ruby's effect copy (0x2A35DC)
     beq   $t6, $zero, bno
     sltu  $t7, $t6, $v0            # (delay)
     bne   $t7, $zero, bok
@@ -291,20 +292,18 @@ bno:
     or    $v0, $zero, $zero
 bok:
     jr    $ra
-    nop
-
-# v0 = the floor stamp: (dungeon << 16) | (floor << 8) | back floor. t0..t3.
-stamp:
-    lbu   $t0, -0x625C($gp)        # checkDungeon (0x2A3594)
-    lui   $t1, 0x01CE
-    lbu   $t1, -0x6AB2($t1)        # checkFloor (0x01CD954E)
-    lbu   $t2, -0x633C($gp)        # the back-floor flag (0x2A34B4)
-    sll   $t0, $t0, 16
-    sll   $t1, $t1, 8
-    or    $v0, $t0, $t1
-    sltu  $t2, $zero, $t2
+bxiao:
+    addiu $t2, $zero, 2            # (bok's delay slot, harmless there)
+    bne   $t1, $t2, bno            # nobody with a block
+    lui   $t4, 0x01FB              # (delay)
+    lw    $t6, -0x19DC($t4)        # Xiao's region (0 = none made)
+    beq   $t6, $zero, bno
+    sltu  $t7, $v0, $t6            # (delay) the block starts below it: the region is too small
+    bne   $t7, $zero, bno
+    lw    $t6, -0x19E0($t4)        # (delay) the cat loader's status
+    addiu $t6, $t6, -2
     jr    $ra
-    or    $v0, $v0, $t2
+    movz  $v0, $zero, $t6          # (delay) the cat loaded in it: no block
 
 # a0 = an event code: AllyEvent = ((count + 1) << 8) | code. t0, t1.
 note:
@@ -478,7 +477,7 @@ sday:
     sw    $v0, -0x354($t5)         # AllyTex + 0xC: its entries
     jal   0x001191E0               # ally_shots.s after: the shot configs it entered, kept for its end
     nop
-    jal   stamp
+    jal   0x0027D460               # ally_stamp.s: the floor stamp
     nop
     lui   $t5, 0x01FB
     sw    $v0, -0x360($t5)         # AllyTex + 0: this floor's

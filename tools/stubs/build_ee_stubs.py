@@ -73,6 +73,7 @@ STUBS = [
     ('bait_keep.s',              'weapons/baitKeep.bin',             0x27D230),
     ('species_lookup.s',         'enemies/speciesLookup.bin',        0x27D2F8),
     ('flash_slot.s',             'weapons/flashSlot.bin',            0x27D320),    # main ELF: dead SmoothRest body after the species lookup (ElfSpeciesPatches.PatchFlashSlot): the machine-gun flash's size and bone pin per slot    # main ELF: dead SmoothRest body after the Ruby cave (ElfSpeciesPatches): the species table's extension rows
+    ('ally_stamp.s',             'ally/allyStamp.bin',            0x27D460),    # main ELF: dead SmoothRest body's free tail after the flash slot (ElfAllyPatches): the pockle block's floor stamp
     ('blow_dir.s',               'combat/blowDir.bin',              0x10A7D8),    # main ELF: the dead sceCdGetToc body (DunPatches): an item bomb throws the player away from its blast
     ('bomb_radius.s',            'enemies/bombRadius.bin',           0x10A880),    # main ELF: the dead sceCdGetToc body after the blow direction (ElfSpeciesPatches.PatchBombRadius): a shot config's own blast radius
     ('fuse_capture.s',           'enemies/fuseCapture.bin',          0x10A910),    # main ELF: the dead sceCdGetToc body after the blast radius (ElfSpeciesPatches.PatchFuseCapture): each Bomb Gemron's wick, captured in the monster draw

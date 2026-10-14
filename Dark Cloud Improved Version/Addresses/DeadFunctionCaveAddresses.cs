@@ -427,6 +427,8 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>tools/stubs/flash_slot.s (ElfSpeciesPatches.PatchFlashSlot): the machine-gun hit flash's size and alpha per slot, and a
         /// pinned slot's whole spark (alight, cells, burst requests, the blast cutoff, the bone placement), timed in game frames.</summary>
         internal const uint FlashSlot     = 0x0027D320;   // 316 B → 0x27D45C
+        /// <summary>tools/stubs/ally_stamp.s (ElfAllyPatches): the summoned pockle's floor stamp, called from ally_brain.s's brain and summon.</summary>
+        internal const uint AllyStamp     = 0x0027D460;   // 40 B → 0x27D488
         internal const uint End          = 0x0027D49C;
     }
 }

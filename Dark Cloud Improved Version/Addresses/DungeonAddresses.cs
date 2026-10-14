@@ -245,11 +245,11 @@ namespace Dark_Cloud_Improved_Version
         internal const long TickCounter = 0x202A3684;   // int, gp-0x616C
     }
 
-    /// <summary>The summoned ally's block: room that LoadChara2 sets aside at the end of the character pool — for RUBY only so far: DunPatches
-    /// grows the allocation of her c05_f03.chr copy by <see cref="Units"/> — so it ends where the weapons begin. The weapon and effect
+    /// <summary>The summoned ally's block: room that LoadChara2 sets aside at the end of the character pool — for Ruby, DunPatches grows the
+    /// allocation of her c05_f03.chr copy by <see cref="Units"/>; for Xiao it is the end of her region (<see cref="XiaoRegion"/>) — so it ends
+    /// where the weapons begin. The weapon and effect
     /// counters start after it and reload without touching it; the next LoadChara2 (a party switch, a floor) makes it again. The summoned
-    /// pockle lives in it: its private monster manager, script arena and model (tools/stubs/ally_brain.s lays it out). Xiao's room is
-    /// <see cref="XiaoRegion"/>.</summary>
+    /// pockle lives in it: its private monster manager, script arena and model (tools/stubs/ally_brain.s lays it out).</summary>
     internal static class AllyBlock
     {
         /// <summary>996,096 B: the head (0x100), the manager (0x60750 B — its unused slots hold the script arena, the textures and the script

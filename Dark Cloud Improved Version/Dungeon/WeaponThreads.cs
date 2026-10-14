@@ -332,6 +332,7 @@ namespace Dark_Cloud_Improved_Version
                     if (CrossHinder.CrossHinderWielded()) Ensure(ref crossHinderThread, CrossHinder.SanctifierEffect);   // Sanctifier, for a Cross Hinder sphere
                     Ensure(ref gladiusThread, Gladius.Wielded, Gladius.JacketHunterEffect);   // Jacket Hunter, for a Gladius sphere
                     Ensure(ref crysKnifeThread, CrysKnife.Wielded, CrysKnife.CrystalAffinityEffect);   // Crystal Affinity, for a Crysknife sphere (its circle passive is ownership's, not the sphere's)
+                    Ensure(ref pocklekulThread, Pocklekul.Wielded, Pocklekul.PockleSummonEffect);   // the pockle summon, for a Pocklekul sphere (its block in Xiao's region)
                     break;
 
                 case Items.matador:
