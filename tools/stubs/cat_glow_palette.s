@@ -9,13 +9,13 @@
 #
 # WHY THE TABLE IS COPIED STRAIGHT DOWN. The GS reads a PSMT8 palette in CSM1 order, which exchanges bits 3 and 4 of the
 # index — and nothing de-swizzles it on the way: EnterTexture (0x1313B0) memcpy's the file's 1024 B to CTexture+0x48 and
-# ReloadTexture blits them to VRAM verbatim (qwc 0x40). So build_cat_pack gives the disc only indices the permutation
+# ReloadTexture blits them to VRAM verbatim (qwc 0x40). So GlowDisc (the C# bake) gives the disc only indices the permutation
 # LEAVES ALONE — the 128 whose bits 3 and 4 match — and the 128 words of each table land at those same CLUT words:
 # eight words, skip sixteen, eight words, repeated eight times. The disc needs 115 levels, so they all fit.
 #
 # THE TABLES are NINE 512-byte blocks at 0x01FB2880 (ElfCave.CatGlowPalTables) — rows 0-5 the elements, 6-8 the Divine
 # Beast Title / Angel Shooter / Angel Gear looks — written at PATCH time by
-# ElfPatches.PatchCatGlowPalettes from a blob build_cat_pack --palettes bakes off the same index map as the disc itself.
+# ElfCatPatches.PatchCatGlowPalettes from GlowDisc.PalettesFrom the user's disc, off the same index map as the disc itself.
 # Patch-time data in a code page is fine; a RUNTIME write here would SIGBUS PCSX2 (see the Mailbox note).
 #
 # INPUTS — static addresses, clear of the dungeon pools that move with the character heap (see DungeonPools):
@@ -31,7 +31,7 @@
 # transparent rim and is identical in all six ramps, so this reads the BRIGHTEST level instead — table slot 114, which the
 # index map puts at CLUT index 226. Holding the element's core colour already means there is nothing to do, and an entry
 # rebuilt by a script-event wipe comes back carrying the baked "None" ramp and repaints itself. ⚠ Both offsets are baked
-# into the two `lw`s below; build_cat_pack.glow_palettes asserts the level count and the six colours that make them valid.
+# into the two `lw`s below; GlowDisc.Palettes asserts the level count and the distinct brightest colours that make them valid.
 #
 # Leaf routine — calls nothing, touches only $t registers, returns through $ra, so it needs no frame.
 

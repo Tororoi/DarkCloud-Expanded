@@ -137,10 +137,9 @@ namespace Dark_Cloud_Improved_Version
         /// cave's first six words and the CODE starts at +0x18 — that offset is what the loader cave (CatLoad) calls.</summary>
         internal const uint CatPalette         = 0x01FB2700;   // 344 B → 0x1FB2858: the colour table, then the code
         internal const uint CatPaletteEntry    = CatPalette + 0x18;   // the entry point, past the colour table
-        /// <summary>The GLOW disc's six per-element palettes: 512 B each, in element order (00 Fire … 05 None). Pure
-        /// DATA, written at patch time by ElfCatPatches.PatchCatGlowPalettes from the blob `build_cat_pack.py --palettes`
-        /// bakes off the same index map as the disc — regenerate BOTH together, or the ramp will not match the
-        /// pixels. Patch-time data in a code page is fine; a RUNTIME write here would SIGBUS PCSX2.</summary>
+        /// <summary>The GLOW disc's nine palettes: 512 B each, in row order (00 Fire … 05 None, then the three weapon looks). Pure
+        /// DATA, written at patch time by ElfCatPatches.PatchCatGlowPalettes from GlowDisc.PalettesFrom the user's disc, off the same
+        /// index map as the discs the bakes build. Patch-time data in a code page is fine; a RUNTIME write here would SIGBUS PCSX2.</summary>
         internal const uint CatGlowPalTables   = 0x01FB2880;   // 4608 B → 0x1FB3A80 (9 rows: 6 elements + 3 weapon looks)
         internal const uint CatGlowPalette     = 0x01FB3A80;   // the cave that copies one table into the disc's CLUT
         internal const uint MirageHazeDraw     = 0x01FB3C40;   // 152 B → 0x1FB3CD8: one more raster, at the Mirage clone (dun hook in DunPatches)

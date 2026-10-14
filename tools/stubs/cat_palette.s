@@ -6,8 +6,8 @@
 # version re-walked the texture manager BY NAME every half second — up to 195 round trips — and wrote a kilobyte
 # whenever the element changed.
 #
-# HOW. build_cat_pack.flat_tim2 bakes the cape texture as 32x32 pixels that are ALL palette index 0 followed by 256
-# identical entries, so the whole cape is ONE palette entry — and the mask SHARES catcape (wing_bake.MASK_TEX), so
+# HOW. CatPackBakes.FlatTim2 bakes the cape texture as 32x32 pixels that are ALL palette index 0 followed by 256
+# identical entries, so the whole cape is ONE palette entry — and the mask SHARES catcape (CatGraftEncoder.MaskTex), so
 # both change together. Repaint the manager's own palette copy (CTexture entry +0x48) and the dungeon draw loop
 # re-uploads the cat's texture group before it draws the slot, so the colour lands on the next frame. This is the
 # same live-recolour path WeaponTextureSwap uses on Super Steve.

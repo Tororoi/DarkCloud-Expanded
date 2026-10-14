@@ -202,17 +202,16 @@ namespace Dark_Cloud_Improved_Version
             WriteBytes(fs, ElfOff, CaveAddr, b, ElfCave.NextFree, "catPalette.bin overruns its cave — move ElfCave.NextFree.");
         }
 
-        /// <summary>The GLOW disc's six per-element palettes: pure DATA, 512 B each in element order (00 Fire … 05 None).
-        /// Baked by `build_cat_pack.py --palettes` off the SAME luminance index map as the disc it colours, so the two are
-        /// regenerated together — a table built against a different map paints the right colours onto the wrong levels.</summary>
-        internal static void PatchCatGlowPalettes(FileStream fs, Func<uint, long> ElfOff)
+        /// <summary>The GLOW disc's nine palettes: pure DATA, 512 B each in row order (00 Fire … 05 None, then the three weapon looks).
+        /// <paramref name="palettes"/> is GlowDisc.PalettesFrom the user's own disc — built off the SAME luminance index map as the disc it
+        /// colours, which the bakes build from the same picture, so the two always match.</summary>
+        internal static void PatchCatGlowPalettes(FileStream fs, Func<uint, long> ElfOff, byte[] palettes)
         {
             const uint CaveAddr = ElfCave.CatGlowPalTables;
             const int Expected = 9 * 128 * 4;         // nine rows (6 elements + 3 weapon looks) x the 128 permutation-safe CLUT words
-            byte[] b = Embedded("catGlowPalettes.bin", "Embedded data missing: catGlowPalettes.bin (run build_cat_pack.py --palettes and rebuild)");
-            if (b.Length != Expected)
-                throw new IOException($"catGlowPalettes.bin is {b.Length} B, expected {Expected} — re-run build_cat_pack.py --palettes.");
-            WriteBytes(fs, ElfOff, CaveAddr, b, ElfCave.CatGlowPalette, "catGlowPalettes.bin overruns its table cave — the stub starts right after it.");
+            if (palettes == null || palettes.Length != Expected)
+                throw new IOException($"the glow palettes are {palettes?.Length ?? 0} B, expected {Expected}.");
+            WriteBytes(fs, ElfOff, CaveAddr, palettes, ElfCave.CatGlowPalette, "the glow palettes overrun their table cave — the stub starts right after it.");
         }
 
         /// <summary>The element GLOW's palette, repainted in the machine (tools/stubs/cat_glow_palette.s). Rides the same

@@ -365,21 +365,6 @@ namespace Dark_Cloud_Improved_Version
             catch (Exception) { return false; }
         }
 
-        /// <summary>The nine glow ramps reach the game as an EMBEDDED resource (Resources/isoPatch/data/catGlowPalettes.bin, written into the ELF by
-        /// ElfCatPatches.PatchCatGlowPalettes). The pack is re-baked on every patch, but that .bin is regenerated only by the build
-        /// (tools/build_resources.py), so a bake whose ramps no longer match the embedded blob is refused: the glow would keep its OLD colours
-        /// while every diagnostic reported success.</summary>
-        private static void RefuseIfPaletteBlobStale(byte[] glowBytes)
-        {
-            byte[] blob = ElfCaveWriter.TryEmbedded("catGlowPalettes.bin");
-            if (blob == null) return;
-            var img = ChrPack.Parse(glowBytes).Find("fire.img");
-            if (img == null) return;
-            if (!blob.AsSpan().SequenceEqual(GlowDisc.Palettes(new ImgBank(img.Payload).Block(GlowDisc.SourcePicture))))
-                throw new IOException("GlowDisc.Elements has changed but Resources/isoPatch/data/catGlowPalettes.bin has not. The patch writes that .bin, so the glow would keep its OLD colours. "
-                                      + "Rebuild the mod with the extracted disc available (tools/build_resources.py regenerates the .bin), then patch again.");
-        }
-
         /// <summary>The post-step: the earlier weapon-pack bake reverted if the ISO carries it; the cat's pack built from the ISO's own
         /// files into its claimed entry (<see cref="CatPackChr"/>) and her pack rebuilt from its vanilla record with the glow disc —
         /// both redirected into the DATA.DAT tail only when they differ from what the ISO holds. Idempotent.</summary>
@@ -403,7 +388,6 @@ namespace Dark_Cloud_Improved_Version
                 arc.SetSlot(name, vanilla);
                 log($"reverted {name} to its vanilla record (earlier weapon-pack bake removed)");
             }
-            RefuseIfPaletteBlobStale(arc.Read(GlowDisc.SourcePack));
             byte[] van0 = arc.ReadAt(HostVanilla.Item1, (int)HostVanilla.Item2);
             if (HasCat(van0) || ChrPack.Parse(van0).Find(HostMds) == null) throw new IOException("c04b.chr's vanilla bytes are not where expected — refusing");
             arc.Claim(CatPackDonor, CatPackChr);

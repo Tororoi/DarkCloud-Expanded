@@ -53,7 +53,7 @@ namespace Dark_Cloud_Improved_Version
             return b;
         }
 
-        internal static uint ElfPatchAndCrc(FileStream fs, Rec elf)
+        internal static uint ElfPatchAndCrc(FileStream fs, Rec elf, byte[] glowPalettes)
         {
             long elfIso = (long)elf.Ext * SectorBytes;
             byte[] eh = Rd(fs, elfIso, 0x34);
@@ -154,7 +154,7 @@ namespace Dark_Cloud_Improved_Version
             ElfAllyPatches.PatchAllyManager(fs, ElfOff);  // the Pocklekul's pockle, all native: a private monster manager stepped / drawn / shadowed after the floor's, its brain, summon, walk and end
             PatchFlameSpacing(fs, ElfOff);                // Osmond's flamethrower reach from a mailbox word (the Skunk doubles it)
             PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
-            PatchCatGlowPalettes(fs, ElfOff);             // the six glow ramps (data) …
+            PatchCatGlowPalettes(fs, ElfOff, glowPalettes);             // the six glow ramps (data) …
             PatchMirageHazeDraw(fs, ElfOff);              // Mirage: the heat shimmer drawn at the clone itself (dun.bin hook in DunPatches)
             PatchSuperSteveIconDraw(fs, ElfOff);          // Super Steve: the attached sphere's weapon icon over Steve on the dungeon HUD (dun.bin hooks in DunPatches)
             PatchCatGlowPalette(fs, ElfOff);              // … and the cave that paints one of them into the 8-bit glow disc

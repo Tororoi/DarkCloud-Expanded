@@ -262,7 +262,7 @@ namespace Dark_Cloud_Improved_Version
 
             // 6) ELF boot-cave + CRC
             progress("Patching the boot loader …");
-            return ElfPatchAndCrc(fs, recs["SCUS_971.11"]);
+            return ElfPatchAndCrc(fs, recs["SCUS_971.11"], GlowDisc.PalettesFrom(arc.Read(GlowDisc.SourcePack)));   // the glow's palettes, from this disc
         }
 
         // ── pnach: copy the mod's own A5C05C78.pnach into the PCSX2 cheats folder as <CRC>.pnach ──

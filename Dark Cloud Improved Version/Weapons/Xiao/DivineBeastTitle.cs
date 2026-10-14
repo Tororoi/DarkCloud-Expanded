@@ -82,14 +82,14 @@ namespace Dark_Cloud_Improved_Version
         internal const int    GrowFrames    = 6;        // the same, in frames, for the native follower (60 fps)
         internal const float  Gravity       = 0.05f;    // units/frame² — the pounce arc
         internal const float  FallGravity   = 0.08f;    // units/frame² — the fall off the pellet's line at full size (cave)
-        // The land clip is s86 c04cat motion 7, frames 215..227 (KEY 69 in build_cat_pack.py keeps the absolute frames):
+        // The land clip is s86 c04cat motion 7, frames 215..227 (KEY 69 in CatPackBakes.CatKeys keeps the absolute frames):
         // the paws first touch the ground at 219 — that is where the forward momentum stops; at 227 the run begins.
         internal const float  LandStopFrame = 219f, LandEndFrame = 227f;   // the paws touch at 219 (the land clip's lead-in aligns it with the touchdown)
         // The WINGED cat pounces from 50 units, and keeps
         // re-aiming at the target past the apex until it has fallen halfway from the apex to the floor (the cave's height
         // rule, CatBlock.CatTrackHalf). Dormant chest-mimics keep the 30-unit range.
         private const float  PounceRangeWinged = 50f;
-        private const float  LandClipStart = 215f, LandClipSpeed = 0.36f;   // KEY 69 in build_cat_pack.py (frames/frame)
+        private const float  LandClipStart = 215f, LandClipSpeed = 0.36f;   // KEY 69 in CatPackBakes.CatKeys (frames/frame)
         // The clip lowers the cat itself (hips 5.5 → 4.6 over 215..219), so it must start this many frames BEFORE the
         // physical touchdown for the paws to meet the floor at 219; the cave predicts the touchdown from the fall.
         internal const float  LandLeadFrames = (LandStopFrame - LandClipStart) / LandClipSpeed;
@@ -172,16 +172,16 @@ namespace Dark_Cloud_Improved_Version
         internal const int    GlowFlags = 2;            // 1 = the steady glow pair (18 × 9 at 1.0), 2 = the flickering flame sprite (45 × 22.5 at 1.0), 3 = both (two sizes → two glows)
         internal const float  GlowLift  = 0f;           // units added to the glow's height (negative lowers it)
         internal const float  GlowPull  = 5.0f;         // how far toward the camera the sprite is pulled (the torches use 15 to clear their wall; the cat only needs to clear its own body)
-        private const string CapeTexture = "catcape";  // the cape AND the mask draw from it (wing_bake.MASK_TEX)
+        private const string CapeTexture = "catcape";  // the cape AND the mask draw from it (CatGraftEncoder.MaskTex)
         /// <summary>The element glow: ONE 8-bit disc carrying all six colours, repainted by ElfCave.CatGlowPalette the way
         /// the cape is — 5,184 B for every colour, against 16,448 B for a single 32-bit disc. The colours live in
-        /// build_cat_pack.GLOW_ELEMENTS, not here: tune them there and re-bake. The cat's own copy, in its reserved VRAM span (the one in
+        /// GlowDisc (its Elements and looks), not here: tune them there and patch again. The cat's own copy, in its reserved VRAM span (the one in
         /// Xiao's pack shares her block's pages, which her own textures reuse while she draws).</summary>
         private const string ElementGlowDisc = CatPackBakes.CatGlowName;
         // Per weapon: the Divine Beast Title keeps its blue glow, cyan tint and NO wings; the Angel Shooter wears the wings
         // with a WHITE glow and a neutral add; the Angel Gear the wings with a GOLD glow and a gold-white add. Every look
         // draws the SAME 8-bit disc, differing only in the palette row (PalRow → CatBlock.CatGlowPalRow; the rows themselves
-        // are build_cat_pack.GLOW_LOOKS 6-8). Wings are two mesh nodes the copy hides by zeroing their geometry.
+        // are GlowDisc's looks, rows 6-8). Wings are two mesh nodes the copy hides by zeroing their geometry.
         internal sealed class WeaponLook { public int PalRow; public float[] Tint; public bool Wings; public bool Cape; public float Range = PounceRange; public bool Track; public float Scale = 1.0f; }
         private const int SuperSteveShooterKey = -2, SuperSteveGearKey = -3;   // Super Steve's look per sphere, keyed privately so a sphere swap rebuilds the copy
         // Super Steve: the BLUE cat of the Divine Beast Title, with a red cape. The mask's red cannot come from here — a
@@ -216,12 +216,12 @@ namespace Dark_Cloud_Improved_Version
         /// the same for every element — <see cref="ElementAmbient"/>.</summary>
         private sealed class ElementLook { public string Name; public byte[] Rgb; public float[] Tint; }
         /// <summary>The authored per-element appearance. ⚠ Each element's look is split across two files: the cape/mask
-        /// colour and ambient here, its GLOW colour in build_cat_pack.GLOW_ELEMENTS (row per element) — tuning an element
-        /// means touching both, and the glow half needs a re-bake and an ISO re-patch.</summary>
+        /// colour and ambient here, its GLOW colour in GlowDisc.Elements (row per element) — tuning an element
+        /// means touching both, and the glow half needs an ISO re-patch.</summary>
         private static readonly ElementLook[] ElementLooks =
         {
             // Every element binds the SAME disc (ElementGlowDisc) and differs only in the palette the cave paints into
-            // it — so the glow colour is tuned in build_cat_pack.GLOW_ELEMENTS, not by naming a different texture here.
+            // it — so the glow colour is tuned in GlowDisc.Elements, not by naming a different texture here.
             new ElementLook { Name = "Fire",    Rgb = new byte[] { 128,  15,   0 }, Tint = new[] { 80f, 20f, 10f } },
             new ElementLook { Name = "Ice",     Rgb = new byte[] {   9,  45, 104 }, Tint = new[] { 12f, 40f, 48f } },
             new ElementLook { Name = "Thunder", Rgb = new byte[] { 180,  148,  0 }, Tint = new[] { 34f, 31f,  6f } },
@@ -235,8 +235,8 @@ namespace Dark_Cloud_Improved_Version
         private static readonly float[] ElementAmbient = { 20f, 20f, 20f };
         private const int  NoElement = 5;                // elementHUD: 00 Fire, 01 Ice, 02 Thunder, 03 Wind, 04 Holy, 05 None
         private static int _weapon = -1;                                    // the weapon the resident copy was built for
-        internal static readonly string[] WingMeshNodes = { "cat_rwingm", "cat_lwingm" };   // build_cat_pack / wing_bake.MESH_NAMES
-        internal const string MaskNodeName = "cat_mask";                                    // wing_bake.MASK_NODE — the Super Steve
+        internal static readonly string[] WingMeshNodes = { "cat_rwingm", "cat_lwingm" };   // CatGraftEncoder.MeshNames
+        internal const string MaskNodeName = "cat_mask";                                    // CatGraftEncoder.MaskNode — the Super Steve
         internal static int _maskMeshIdx = -1;                                              // cat's domino mask, rigid to cat_kao
         internal static long _maskVisual;                                                   // …and its CVisualMDT (MMU address)
         internal const string CapeNodeName = "cat_cape";                                     // the cloth's frame in the cat pack (CatCapeBake)
@@ -380,7 +380,7 @@ namespace Dark_Cloud_Improved_Version
         // ── the cape, mask and GLOW follow the equipped weapon's ELEMENT ───────────────────────────────────
         // The colours are authored in ElementLooks, beside the per-weapon looks; what follows is the plumbing
         // that reads the element and the live slots it fills.
-        private const byte CapeAlpha = 0x80;             // PS2 convention: 0x80 = fully opaque, as build_cat_pack bakes it
+        private const byte CapeAlpha = 0x80;             // PS2 convention: 0x80 = fully opaque, as CatPackBakes bakes it
         /// <summary>Xiao's weapon-slot 0 element byte (<see cref="WeaponRecord.ElementHud"/>), + 0xF8 per bag slot. It lives in
         /// the status block, well clear of the dungeon pools, so it needs no DungeonPools resolution.</summary>
         private static readonly long XiaoElementHud = WeaponRecord.Address(Player.XiaoId, 0, WeaponRecord.ElementHud);
@@ -438,11 +438,11 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CatBlock.CatGlowReady, 0);
         }
 
-        /// <summary>Paint the flat texture's palette. build_cat_pack.flat_tim2 bakes the cape as 32×32 pixels that are ALL
+        /// <summary>Paint the flat texture's palette. CatPackBakes.FlatTim2 bakes the cape as 32×32 pixels that are ALL
         /// palette index 0 followed by 256 identical entries, so the whole cape is ONE palette entry: repainting the manager's
         /// own copy recolours it live, because the dungeon draw loop re-uploads the cat's texture group before drawing the
         /// slot — the same live-recolour path the palette caves use. Writing all 256 entries also makes it immune to CLUT
-        /// ordering. The mask SHARES catcape (wing_bake.MASK_TEX), so it follows with no work of its own. Cheap to re-assert:
+        /// ordering. The mask SHARES catcape (CatGraftEncoder.MaskTex), so it follows with no work of its own. Cheap to re-assert:
         /// one 4-byte read, and the 1 KB write only when the colour is not already there (a script event can wipe the
         /// entries, and they come back from the pack).</summary>
         private static bool PaintCapePalette(byte[] rgb)
